@@ -1,0 +1,523 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r187 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r187%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604261323.k3QDNql9025346%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000208.html">
+   <LINK REL="Next"  HREF="000210.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r187 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r187%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604261323.k3QDNql9025346%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r187 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record">krater at berlios.de
+       </A><BR>
+    <I>Wed Apr 26 15:23:52 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000208.html">[Plantlore-dev]Fwd:AW: AW: BioCASE Provider Software - character encoding
+</A></li>
+        <LI>Next message: <A HREF="000210.html">[Plantlore-dev] r188 - in trunk/src/net/sf/plantlore: client client/publication common/record l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#209">[ date ]</a>
+              <a href="thread.html#209">[ thread ]</a>
+              <a href="subject.html#209">[ subject ]</a>
+              <a href="author.html#209">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-26 15:23:47 +0200 (Wed, 26 Apr 2006)
+New Revision: 187
+
+Added:
+   trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/Builder.java
+   trunk/src/net/sf/plantlore/client/export/Director.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+Log:
+Further improvements to the Export package.
+(However, it doesn't work properly yet, due to a problem with HibernateDBLayer.next(int). )
+
+Modified: trunk/src/net/sf/plantlore/client/export/Builder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -41,6 +41,9 @@
+ 	 */
+ 	void part(Record arg) throws IOException;
+ 	
++	
++	void part(Record... args) throws IOException;
++	
+ 	/** 
+ 	 * Make adjustments needed after the output of the current record is completed.
+ 	 * This method is called right after the &lt;code&gt;writeRecord()&lt;/code&gt;. 
+
+Modified: trunk/src/net/sf/plantlore/client/export/Director.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -1,7 +1,10 @@
+ package net.sf.plantlore.client.export;
+ 
+ import java.io.IOException;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
+ 
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.record.*;
+@@ -32,10 +35,9 @@
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	
+ 	private Builder build;
+-	private SelectQuery query;
+ 	private Selection selection;
+ 	private DBLayer database;
+-	
++	private int result;
+ 
+ 	/**
+ 	 * Create a new export Director. The Director iterates over the results 
+@@ -48,17 +50,31 @@
+ 	 * @param database	The database layer that will carry out the execution of the query.
+ 	 * @param selection	The set of selected records.
+ 	 */
+-	public Director(Builder builder, SelectQuery query, DBLayer database, Selection selection) {
+-		this.build = builder; this.query = query; this.database = database;
++	public Director(Builder builder, int result, DBLayer database, Selection selection) {
++		this.build = builder; this.result = result; this.database = database;
+ 		this.selection = selection;
+ 	}
+ 	
+ 	
++	private static Object[] NO_PARAM = new Object[0];
++	
++	
++	private void buildPart(Record record) throws IOException {
++		build.part(record);
++		for(String key : record.getForeignKeys()) {
++			Method getter = Template.getMethod(record.getClass(), key);
++			try {
++				buildPart( (Record) getter.invoke( record, NO_PARAM ) );
++			}
++			catch(IllegalAccessException e) {}
++			catch(InvocationTargetException e) {}
++		}
++	}
++	
++	
+ 	/** Execute the exporting procedure as described. */
+ 	public void run() {
+ 		try {
+-			// The result identifier.
+-			int result = database.executeQuery( query );
+ 			long count = 0; // how many records were exported
+ 			
+ 			logger.info(&quot;Export begins...&quot;);
+@@ -66,18 +82,23 @@
+ 			// Create the header of the file (some opening tags possibly).
+ 			build.header();
+ 			// Iterate over the result of the query.
+-			for(int i = 0; i &lt; database.getNumRows( result ); i++) {
+-				Record[] records = (Record[]) database.next( result );
+-				if( !selection.contains( records[0] ) ) continue; // is it selected?
++			
++			int rows = database.getNumRows( result );
++			for(int i = 0; i &lt; rows; i++) {
++				Object[] records = database.next( result );
++				Record record = (Record) records[0];
++				if( !selection.contains( record ) ) continue; // is it selected?
+ 				
+ 				count++;
+ 				// Write down this record.
+ 				build.startRecord();
+ 				
+ 				// Parse the record.
+-				//build.writeRecord( records );
++				buildPart( record );
+ 				
++				// Occurrence -&gt; AuthorOccurrences &amp; Authors
+ 				
++				
+ 				build.finishRecord();
+ 			}
+ 			// Create the footer of the file (some closing tags possibly).
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -1,8 +1,10 @@
+ package net.sf.plantlore.client.export;
+ 
++import java.lang.reflect.Method;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
++import java.util.Hashtable;
+ 
+ import net.sf.plantlore.common.record.*;
+ 
+@@ -31,7 +33,39 @@
+ 			Metadata.class, Occurrence.class, Phytochorion.class,
+ 			Plant.class, Publication.class, Territory.class,
+ 			Village.class };
++	
++	
++	private static Hashtable&lt;String,Method&gt; getters;
++	
++	
++	public static Method getMethod(Class table, String column) {
++		return getters.get(table+&quot;.&quot;+column);
++	}
+ 		
++	static {
++		for( Class table : Template.BASIC_TABLES)
++			try {
++				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getColumns();
++				for(String column : columns)  
++					getters.put(table+&quot;.&quot;+column, getter(table, column));
++			} 
++			catch(IllegalAccessException e) { e.printStackTrace(); }
++			catch(InstantiationException e) { e.printStackTrace(); }
++	}
++	
++	
++	private static Method getter(Class table, String column) {
++		try {
++			StringBuilder s = new StringBuilder(&quot;get&quot; + column); 
++			s.setCharAt(3, Character.toUpperCase(s.charAt(3)));
++			
++			return table.getMethod( s.toString(), new Class[0] );
++		} catch(NoSuchMethodException e) { e.printStackTrace(); }
++		return null;
++	}
++	
++	
++		
+ 	/** 
+ 	 * @return The table that is central (primary) to the current query. 
+ 	 */
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -34,6 +34,7 @@
+ 	
+ 	private ArrayList&lt;Record&gt; cache = new ArrayList&lt;Record&gt;(20);
+ 	private ArrayList&lt;Author&gt; authors = new ArrayList&lt;Author&gt;(10);
++	private ArrayList&lt;AuthorOccurrence&gt; authocc = new ArrayList&lt;AuthorOccurrence&gt;(10);
+ 	
+ 	private Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt; properties = 
+ 		new Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt;(20);
+@@ -56,13 +57,13 @@
+ 				properties.put(table, methods);
+ 				// Check if these properties (columns) are set to be exported. 
+ 				for(String column : columns)  
+-					if( !tmp.isSet(table, column) ) // yes -&gt; store the getter
++					if( tmp.isSet(table, column) ) // yes -&gt; store the getter
+ 						try {
+ 							methods.add( table.getMethod( methodName(column), new Class[0] ) );
+-						} catch(NoSuchMethodException e) {}
++						} catch(NoSuchMethodException e) { e.printStackTrace(); }
+ 			} 
+-			catch(IllegalAccessException e) {}
+-			catch(InstantiationException e) {}
++			catch(IllegalAccessException e) { e.printStackTrace(); }
++			catch(InstantiationException e) { e.printStackTrace(); }
+ 	}
+ 	
+ 	
+@@ -77,34 +78,47 @@
+ 	
+ 	
+ 	public void startRecord() throws IOException {
+-		 cache.clear(); authors.clear(); first = true;
++		 cache.clear(); authors.clear(); authocc.clear(); first = true;
+ 	}
+ 	
+ 	
+ 	public void finishRecord() throws IOException {
+-		if(authors.size() == 0)
+-			for(Record record : cache) write( record );
++		if(authors.size() + authocc.size() == 0)
++			for(Record record : cache) { 
++				write( record );
++				output.write(NEWLINE);
++			}
+ 		else
+-			for(Author author : authors) {
++			for(int i = 0; i &lt; Math.max(authors.size(), authocc.size()); i++) {
+ 				for(Record record : cache) write( record );
+-				write( author );
++				if(!authors.isEmpty()) write( authors.get(i) );
++				if(!authocc.isEmpty()) write( authocc.get(i) );
++				output.write(NEWLINE);
++				first = true;
+ 			}
+-		
+-		output.write(NEWLINE);		
+ 	}
+ 	
+ 	
+ 	public void part(Record record) throws IOException {
+-		if(record instanceof Author) authors.add( (Author) record);
++		if(record instanceof Author) authors.add( (Author) record );
++		else if(record instanceof AuthorOccurrence) authocc.add( (AuthorOccurrence) record );
+ 		else cache.add(record);
+ 	}
+ 	
+ 	
++	public void part(Record... records) throws IOException {
++		for(Record r : records) 
++			part( r );		
++	}
++	
++	
+ 	/**
+ 	 * Send the &lt;code&gt;value&lt;/code&gt; in the CSV format
+ 	 * to the output.
+ 	 */ 
+ 	protected void w(Object value) throws IOException {
++		if( value == null ) return; // no value means no output 
++		
+ 		StringBuilder r = new StringBuilder( value.toString() );
+ 		boolean containsDoubleQuote = r.indexOf(DOUBLEQUOTE) &gt;= 0, 
+ 			containsDelimiter = r.indexOf(DELIMITER) &gt;= 0,
+@@ -150,8 +164,8 @@
+ 				if( !first ) output.write(DELIMITER); else first = false;
+ 				w( value );
+ 			} 
+-			catch(IllegalAccessException e) {}
+-			catch(InvocationTargetException e) {}
++			catch(IllegalAccessException e) { e.printStackTrace(); }
++			catch(InvocationTargetException e) { e.printStackTrace(); }
+ 	}
+ 	
+ 
+
+Added: trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -0,0 +1,37 @@
++package net.sf.plantlore.client.export.builders;
++
++import java.io.IOException;
++
++import net.sf.plantlore.client.export.Builder;
++import net.sf.plantlore.common.record.Record;
++
++public class TrainingBuilder implements Builder {
++	
++	private int i = 0;
++
++	public void header() throws IOException {
++		System.out.println(&quot;Training Builder engaged.&quot;);		
++	}
++
++	public void footer() throws IOException {
++		System.out.println(&quot;Training Builder disengaged.&quot;);
++	}
++
++	public void startRecord() throws IOException {
++		System.out.println(&quot; [&quot; + i + &quot;].starts &quot;);
++	}
++
++	public void part(Record arg) throws IOException {
++		System.out.println(&quot;  &#9642; &quot; + arg.getClass().getSimpleName() );
++	}
++
++	public void part(Record... args) throws IOException {
++		for(Record r : args) part( r );
++	}
++
++	public void finishRecord() throws IOException {
++		System.out.println(&quot; [&quot; + i + &quot;].ends &quot;);
++		i++;
++	}
++
++}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -71,6 +71,11 @@
+     			DATECREATE, DATEMODIFIED );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list(TECHNICALCONTACTNAME, CONTENTCONTACTNAME, DATASETTITLE, 
++    			SOURCEINSTITUTIONID, SOURCEID, DATECREATE, DATEMODIFIED);
++    }
++    
+     /**
+      *   Get metadata id
+      *   @return id of the metadata
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -77,7 +77,14 @@
+     			UPDATEDWHEN, METADATA, NOTE );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	ArrayList&lt;String&gt; nn = getForeignKeys();
++    	nn.remove(PUBLICATION);
++    	nn.addAll( list(UNITIDDB, UNITVALUE, YEARCOLLECTED, CREATEDWHEN, UPDATEDWHEN) );
++    	return nn;
++    }
+     
++    
+     /** Creates a new instance of OccurrenceRecord */
+     public Occurrence() {
+         
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -40,6 +40,10 @@
+     	return list( ID, CODE, NAME );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list(CODE, NAME);
++    }
++    
+     /**
+      *   Get phytochorion id
+      *   @return id of the phytochorion
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -51,6 +51,10 @@
+     			CZECHNAME, SYNONYMS, NOTE, SURVEYTAXID );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list( SURVEYTAXID, TAXON, SCIENTIFICNAMEAUTHOR );
++    }
++    
+     /**
+      *   Get plant id
+      *   @return id of the plant
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -53,6 +53,10 @@
+     			JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL, URL, NOTE );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list(REFERENCECITATION);
++    }
++    
+     /**
+      *   Get publication id
+      *   @return id of the publication
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -39,7 +39,12 @@
+ 	}
+ 	
+ 	
++	public ArrayList&lt;String&gt; getNN() {
++		ArrayList&lt;String&gt; nn = getForeignKeys();
++		return nn;
++	}
+ 	
++	
+ 	protected static ArrayList&lt;String&gt; list(String... values) {
+ 		if(values == null) return new ArrayList&lt;String&gt;(0);
+ 		ArrayList&lt;String&gt; list = new ArrayList&lt;String&gt;(values.length);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -38,6 +38,10 @@
+     	return list( ID, NAME );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list(NAME);
++    }
++    
+     /**
+      *   Get territory id
+      *   @return id of the territory
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-25 17:01:24 UTC (rev 186)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-26 13:23:47 UTC (rev 187)
+@@ -36,6 +36,10 @@
+     	return list( ID, NAME );
+     }
+     
++    public ArrayList&lt;String&gt; getNN() {
++    	return list(NAME);
++    }
++    
+     /**
+      *   Get village id
+      *   @return id of the village
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000208.html">[Plantlore-dev]Fwd:AW: AW: BioCASE Provider Software - character encoding
+</A></li>
+	<LI>Next message: <A HREF="000210.html">[Plantlore-dev] r188 - in trunk/src/net/sf/plantlore: client client/publication common/record l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#209">[ date ]</a>
+              <a href="thread.html#209">[ thread ]</a>
+              <a href="subject.html#209">[ subject ]</a>
+              <a href="author.html#209">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

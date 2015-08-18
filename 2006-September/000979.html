@@ -1,0 +1,681 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r708 - in trunk/src/net/sf/plantlore:	client/createdb common/exception l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r708%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/createdb%20common/exception%20l10n%20server&In-Reply-To=%3C200609061438.k86EcEL3003968%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000978.html">
+   <LINK REL="Next"  HREF="000980.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r708 - in trunk/src/net/sf/plantlore:	client/createdb common/exception l10n server</H1>
+    <B>kovo at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r708%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/createdb%20common/exception%20l10n%20server&In-Reply-To=%3C200609061438.k86EcEL3003968%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r708 - in trunk/src/net/sf/plantlore:	client/createdb common/exception l10n server">kovo at mail.berlios.de
+       </A><BR>
+    <I>Wed Sep  6 16:38:14 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000978.html">[Plantlore-dev] r707 - trunk/installer
+</A></li>
+        <LI>Next message: <A HREF="000980.html">[Plantlore-dev] r709 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/tree client/resources common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#979">[ date ]</a>
+              <a href="thread.html#979">[ thread ]</a>
+              <a href="subject.html#979">[ subject ]</a>
+              <a href="author.html#979">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-09-06 16:38:13 +0200 (Wed, 06 Sep 2006)
+New Revision: 708
+
+Modified:
+   trunk/src/net/sf/plantlore/client/createdb/CreateDB.java
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Create database updated. It is possible to create more databases now. Create DB GUI modified a little (only postgresql database system can be used)
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDB.java	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDB.java	2006-09-06 14:38:13 UTC (rev 708)
+@@ -15,6 +15,7 @@
+ import net.sf.plantlore.client.login.Login;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.l10n.L10n;
++import org.hibernate.JDBCException;
+ 
+ /**
+  * CreateDB is a CreationTask factory. 
+@@ -47,7 +48,6 @@
+ 	
+ 	private MainConfig config;
+ 	private DBInfo info;
+-	private boolean leaveEmpty = false;
+ 	private DBLayerFactory factory = null;
+ 	private DBLayer currentDBLayer; 
+ 		        
+@@ -69,9 +69,8 @@
+ 	 * @param identifier	The name of the database that will be created.
+ 	 * @param leaveEmpty		True if the immutable tables shall remain empty. 
+ 	 */
+-	public void setDBInfo(String alias, String engine, int port, String identifier, boolean leaveEmpty) {
++	public void setDBInfo(String alias, String engine, int port, String identifier) {
+ 		info = new DBInfo(alias, null, 0, engine, port, identifier, &quot;&quot;, new String[Login.MAX_NAMES]);
+-		this.leaveEmpty = leaveEmpty; 
+ 	}
+ 	
+ 	/**
+@@ -104,7 +103,7 @@
+ 	public synchronized Task createCreationTask(String username, String password) {
+ 		// Set the first user name to the Administrator of the database.
+ 		info.getUsers()[0] = username;
+-		return new CreationTask(info, username, password, leaveEmpty);
++		return new CreationTask(info, username, password);
+ 	}
+ 	
+ 	
+@@ -131,106 +130,96 @@
+ 		 * @param password	The password protecting that account.
+ 		 * @param leaveEmpty		Leave the immutable tables empty (do not fill them).
+ 		 */
+-		public CreationTask(DBInfo dbinfo, String name, String password, boolean leaveEmpty) {
++		public CreationTask(DBInfo dbinfo, String name, String password) {
+ 			this.dbinfo = dbinfo;
+ 			this.name = name;
+ 			this.password = password;
+-			this.leaveEmpty = leaveEmpty;
+ 		}
+ 		
+-		@Override
+-		public Object task() throws Exception {
+-			
+-			try {
+-				if(isCanceled()) {
+-					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
+-                                }				
+-                                                               
+-				// Create a new database layer ~ ask the DBLayerFactory to create it for us..
+-				logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + dbinfo.getHost() + &quot;:&quot; + dbinfo.getPort());
+-				setStatusMessage(L10n.getString(&quot;Login.Connecting&quot;) );
+-                                factory = RMIDBLayerFactory.getDBLayerFactory();
+-				currentDBLayer = factory.create(dbinfo);
+-				if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }		
+-                                logger.debug(&quot;Connection successful.&quot;);
+-				
+-				// Initialize the database layer.
+-				setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
+-				logger.debug(&quot;Initializing that DBLayer.&quot;);				
+-                                // Connect to template1 database. TODO: this should not be hardcoded
+-				currentDBLayer.initializeNewDB(&quot;template1&quot;, name, password);
+-				if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
+-				logger.debug(&quot;Initialization successful. Connected to template1 database&quot;);
+-                                
+-                                // Create users in the database
+-                                setStatusMessage(L10n.getString(&quot;CreateDB.CreatingUsers&quot;) );                                
+-                                currentDBLayer.executeSQLScript(DBLayer.CREATE_USERS, dbinfo.getDatabaseIdentifier(), name, password);
+-                                logger.debug(&quot;Database &quot;+dbinfo.getDatabaseIdentifier()+&quot; users created successfuly&quot;);
+-                                
+-                                // Create new database
+-                                setStatusMessage(L10n.getString(&quot;CreateDB.CreatingDatabase&quot;) );                                
+-                                currentDBLayer.createDatabase(dbinfo.getDatabaseIdentifier());
+-                                logger.debug(&quot;New database created succesfully&quot;);
+-
+-                                // Disconnect - destroy DBLayer
+-                                factory.destroy(currentDBLayer);
+-                                logger.debug(&quot;Disconnected from the database template1&quot;);
+-                                
+-                                // Connect to the newly created database
+-				currentDBLayer = factory.create(dbinfo);
+-				if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }
+-				logger.debug(&quot;Connection successful.&quot;);
+-				setStatusMessage( L10n.getString(&quot;Login.Connected&quot;) );
+-				
+-				// Initialize the database layer.
+-				setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
+-				logger.debug(&quot;Initializing that DBLayer.&quot;);
+-				
+-				currentDBLayer.initializeNewDB(dbinfo.getDatabaseIdentifier(), name, password);
+-				if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
+-				logger.debug(&quot;Initialization successful. Connected to database &quot;+dbinfo.getDatabaseIdentifier());
+-                                
+-                                // Create tables in the new database
+-				setStatusMessage(L10n.getString(&quot;CreateDB.CreatingTables&quot;));                                
+-                                currentDBLayer.executeSQLScript(DBLayer.CREATE_TABLES, dbinfo.getDatabaseIdentifier(), name, password);
+-                                logger.debug(&quot;New database tables created&quot;);
+-                                // Disconnect - destroy DBLayer
+-                                factory.destroy(currentDBLayer);
+-                                logger.debug(&quot;Disconnected from the database &quot;+dbinfo.getDatabaseIdentifier());
+-                                
+-				/*
+-				 * TODO:
+-				 * 
+-				 * HERE GOES YOUR CODE THAT PERFORMS 
+-				 * 1. THE CONNECTION TO THE DATABASE ENGINE
+-				 *    You should use inormation stored in dbinfo and the stored name and password.
+-				 *    See HibernateDBLayer.initialize().
+-				 * 2. THE CREATION OF THE NEW DATABASE
+-				 *    Here it is up to you, I have no idea what should be done here.
+-				 *    Creation of all tables and roles + user admin with some default password +
+-				 *    neccessary columns (history).
+-				 * 3. PRE-FILLING THE DATABASE WITH SOME VALUES
+-				 *    Polluting the database with all villages, plants, territories, and phytochoria.
+-				 *    This may be optional - only if leaveEmpty is true.
+-				 * 
+-				 * Everything you want do, do it here in the CreationTask!
+-				 *  
+-				 */
+-
+-			} 
+-			catch (Exception e) {
+-				logger.error(&quot;The creation of the database failed! &quot; + e.getMessage());			
+-				// Re-throw the exception so that the view is updated as well.
+-				throw e;
+-			}
+-			
+-			// Everything went fine.
+-			addDBInfoPermanently( dbinfo );
+-			logger.info(&quot;The creation of a new database was successful.&quot;);
+-			
+-			fireStopped(null);
+-			return null;
+-		}
++                @Override
++                        public Object task() throws Exception {
++                    if(isCanceled()) {
++                        throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
++                    }
++                    
++                    // Create a new database layer ~ ask the DBLayerFactory to create it for us..
++                    logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + dbinfo.getHost() + &quot;:&quot; + dbinfo.getPort());
++                    setStatusMessage(L10n.getString(&quot;Login.Connecting&quot;) );
++                    factory = RMIDBLayerFactory.getDBLayerFactory();
++                    currentDBLayer = factory.create(dbinfo);
++                    if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }
++                    logger.debug(&quot;Connection successful.&quot;);
++                    
++                    // Initialize the database layer.
++                    setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
++                    logger.debug(&quot;Initializing that DBLayer.&quot;);
++                    // Connect to template1 database. TODO: this should not be hardcoded
++                    currentDBLayer.initializeNewDB(&quot;template1&quot;, name, password);
++                    if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
++                    logger.debug(&quot;Initialization successful. Connected to template1 database&quot;);
++                    
++                    // Create users in the database
++                    setStatusMessage(L10n.getString(&quot;CreateDB.CreatingUsers&quot;) );
++                    currentDBLayer.executeSQLScript(DBLayer.CREATE_USERS, dbinfo.getDatabaseIdentifier(), name, password);
++                    logger.debug(&quot;Database &quot;+dbinfo.getDatabaseIdentifier()+&quot; users created successfuly&quot;);
++                    
++                    // Create new database
++                    setStatusMessage(L10n.getString(&quot;CreateDB.CreatingDatabase&quot;) );
++                    currentDBLayer.createDatabase(dbinfo.getDatabaseIdentifier());
++                    logger.debug(&quot;New database created succesfully&quot;);
++                    
++                    // Disconnect - destroy DBLayer
++                    factory.destroy(currentDBLayer);
++                    logger.debug(&quot;Disconnected from the database template1&quot;);
++                    
++                    // Connect to the newly created database
++                    currentDBLayer = factory.create(dbinfo);
++                    if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }
++                    logger.debug(&quot;Connection successful.&quot;);
++                    setStatusMessage( L10n.getString(&quot;Login.Connected&quot;) );
++                    
++                    // Initialize the database layer.
++                    setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
++                    logger.debug(&quot;Initializing that DBLayer.&quot;);
++                    
++                    currentDBLayer.initializeNewDB(dbinfo.getDatabaseIdentifier(), name, password);
++                    if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
++                    logger.debug(&quot;Initialization successful. Connected to database &quot;+dbinfo.getDatabaseIdentifier());
++                    
++                    // Create tables in the new database
++                    setStatusMessage(L10n.getString(&quot;CreateDB.CreatingTables&quot;));
++                    currentDBLayer.executeSQLScript(DBLayer.CREATE_TABLES, dbinfo.getDatabaseIdentifier(), name, password);
++                    logger.debug(&quot;New database tables created&quot;);
++                    // Disconnect - destroy DBLayer
++                    factory.destroy(currentDBLayer);
++                    logger.debug(&quot;Disconnected from the database &quot;+dbinfo.getDatabaseIdentifier());
++                    
++                            /*
++                             * TODO:
++                             *
++                             * HERE GOES YOUR CODE THAT PERFORMS
++                             * 1. THE CONNECTION TO THE DATABASE ENGINE
++                             *    You should use inormation stored in dbinfo and the stored name and password.
++                             *    See HibernateDBLayer.initialize().
++                             * 2. THE CREATION OF THE NEW DATABASE
++                             *    Here it is up to you, I have no idea what should be done here.
++                             *    Creation of all tables and roles + user admin with some default password +
++                             *    neccessary columns (history).
++                             * 3. PRE-FILLING THE DATABASE WITH SOME VALUES
++                             *    Polluting the database with all villages, plants, territories, and phytochoria.
++                             *    This may be optional - only if leaveEmpty is true.
++                             *
++                             * Everything you want do, do it here in the CreationTask!
++                             *
++                             */
++                    
++                    // Everything went fine.
++                    addDBInfoPermanently( dbinfo );
++                    logger.info(&quot;The creation of a new database was successful.&quot;);
++                    
++                    fireStopped(null);
++                    return null;
++                }
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java	2006-09-06 14:38:13 UTC (rev 708)
+@@ -43,7 +43,6 @@
+ 					engine = ((javax.swing.JTextField)view.databaseEngine.getEditor().getEditorComponent()).getText(),
+ 					identifier = view.databaseIdentifier.getText(),
+ 					alias = view.databaseAlias.getText();
+-				boolean leaveEmpty = view.leaveEmpty.isSelected();
+ 				int port = -1;
+ 				try { 
+ 					port = Integer.parseInt(view.databasePort.getText());
+@@ -59,7 +58,7 @@
+ 					return;
+ 				}
+ 				
+-				model.setDBInfo(alias, engine, port, identifier, leaveEmpty); 
++				model.setDBInfo(alias, engine, port, identifier); 
+ 				authView.setVisible(true);
+ 			}
+ 		});
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form	2006-09-06 14:38:13 UTC (rev 708)
+@@ -73,11 +73,11 @@
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseEngine&quot; pref=&quot;149&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                  &lt;Component id=&quot;databaseEngine&quot; pref=&quot;154&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databasePort&quot; pref=&quot;76&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;databasePort&quot; pref=&quot;81&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+@@ -113,6 +113,7 @@
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databasePort&quot;&gt;
+           &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;5432&quot;/&gt;
+             &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+               &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabasePortTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+             &lt;/Property&gt;
+@@ -135,6 +136,7 @@
+             &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+               &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabaseTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+             &lt;/Property&gt;
++            &lt;Property name=&quot;enabled&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -157,24 +159,16 @@
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;11&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;databaseAlias&quot; alignment=&quot;0&quot; pref=&quot;278&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;0&quot; pref=&quot;278&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                      &lt;/Group&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace min=&quot;10&quot; pref=&quot;10&quot; max=&quot;10&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;leaveEmpty&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
++                      &lt;Component id=&quot;jLabel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jLabel4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;11&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;databaseAlias&quot; alignment=&quot;0&quot; pref=&quot;288&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;0&quot; pref=&quot;288&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+@@ -191,8 +185,6 @@
+                       &lt;Component id=&quot;jLabel4&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;leaveEmpty&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+@@ -216,27 +208,6 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JCheckBox&quot; name=&quot;leaveEmpty&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;CreateDB.LeaveEmpty&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-            &lt;/Property&gt;
+-            &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;CreateDB.LeaveEmptyTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-            &lt;/Property&gt;
+-            &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+-              &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
+-                &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
+-              &lt;/Border&gt;
+-            &lt;/Property&gt;
+-            &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
+-              &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+-            &lt;/Property&gt;
+-          &lt;/Properties&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel5&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java	2006-09-06 14:38:13 UTC (rev 708)
+@@ -56,7 +56,6 @@
+         jPanel2 = new javax.swing.JPanel();
+         jLabel4 = new javax.swing.JLabel();
+         databaseIdentifier = new javax.swing.JTextField();
+-        leaveEmpty = new javax.swing.JCheckBox();
+         jLabel5 = new javax.swing.JLabel();
+         databaseAlias = new javax.swing.JTextField();
+         next = new javax.swing.JButton();
+@@ -69,11 +68,13 @@
+ 
+         jLabel2.setText(L10n.getString(&quot;Login.DatabasePort&quot;));
+ 
++        databasePort.setText(&quot;5432&quot;);
+         databasePort.setToolTipText(L10n.getString(&quot;Login.DatabasePortTT&quot;));
+ 
+         databaseEngine.setEditable(true);
+         databaseEngine.setModel(new javax.swing.DefaultComboBoxModel(new String[] { &quot;postgresql&quot;, &quot;firebirdsql&quot;, &quot;mysql&quot;, &quot;oraclesql&quot; }));
+         databaseEngine.setToolTipText(L10n.getString(&quot;Login.DatabaseTT&quot;));
++        databaseEngine.setEnabled(false);
+ 
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+         jPanel1.setLayout(jPanel1Layout);
+@@ -83,11 +84,11 @@
+                 .addContainerGap()
+                 .add(jLabel1)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(databaseEngine, 0, 149, Short.MAX_VALUE)
++                .add(databaseEngine, 0, 154, Short.MAX_VALUE)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jLabel2)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(databasePort, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 76, Short.MAX_VALUE)
++                .add(databasePort, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 81, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel1Layout.setVerticalGroup(
+@@ -106,11 +107,6 @@
+ 
+         databaseIdentifier.setToolTipText(L10n.getString(&quot;Login.DatabaseIdentifierTT&quot;));
+ 
+-        leaveEmpty.setText(L10n.getString(&quot;CreateDB.LeaveEmpty&quot;));
+-        leaveEmpty.setToolTipText(L10n.getString(&quot;CreateDB.LeaveEmptyTT&quot;));
+-        leaveEmpty.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+-        leaveEmpty.setMargin(new java.awt.Insets(0, 0, 0, 0));
+-
+         jLabel5.setText(L10n.getString(&quot;Login.Alias&quot;));
+ 
+         databaseAlias.setToolTipText(L10n.getString(&quot;Login.AliasTT&quot;));
+@@ -120,19 +116,14 @@
+         jPanel2Layout.setHorizontalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel2Layout.createSequentialGroup()
++                .addContainerGap()
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel2Layout.createSequentialGroup()
+-                        .addContainerGap()
+-                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jLabel5)
+-                            .add(jLabel4))
+-                        .add(11, 11, 11)
+-                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(databaseAlias, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 278, Short.MAX_VALUE)
+-                            .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 278, Short.MAX_VALUE)))
+-                    .add(jPanel2Layout.createSequentialGroup()
+-                        .add(10, 10, 10)
+-                        .add(leaveEmpty)))
++                    .add(jLabel5)
++                    .add(jLabel4))
++                .add(11, 11, 11)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(databaseAlias, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 288, Short.MAX_VALUE)
++                    .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 288, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+         jPanel2Layout.setVerticalGroup(
+@@ -145,8 +136,6 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(jLabel4)
+                     .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(leaveEmpty)
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+@@ -208,7 +197,6 @@
+     private javax.swing.JLabel jLabel5;
+     private javax.swing.JPanel jPanel1;
+     private javax.swing.JPanel jPanel2;
+-    protected javax.swing.JCheckBox leaveEmpty;
+     protected javax.swing.JButton next;
+     // End of variables declaration//GEN-END:variables
+     
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-09-06 14:38:13 UTC (rev 708)
+@@ -169,6 +169,9 @@
+             	case ERROR_OTHER:
+             		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Other&quot;);
+             		break;
++                case ERROR_CREATEDB:
++                        this.errorInfo = L10n.getString(&quot;DBLayer.Error.CreateDB&quot;);
++                        break;
+             	default:
+             		throw new IllegalArgumentException(L10n.getString(&quot;Error.ImproperUse&quot;));
+             	}
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-06 14:38:13 UTC (rev 708)
+@@ -785,6 +785,7 @@
+ DBLayer.Error.DiskFull=The hard drive is full.
+ DBLayer.Error.OutOfMemory=There is not enough memory to complete the request.
+ DBLayer.Error.MaxConnections=Too many users are connected to the database.
++DBLayer.Error.CreateDB=Creation of new database was not successful. Please make sure that database system is properly installed and that the database doesn't exist yet.
+ DBLayer.Error.Other=The reason is unknown.
+ 
+ Error.IncorrectXMLFile=The file format is corrupted.
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-06 14:34:29 UTC (rev 707)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-06 14:38:13 UTC (rev 708)
+@@ -13,6 +13,7 @@
+ import java.rmi.server.Unreferenced;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
++import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.sql.Statement;
+ import java.util.Date;
+@@ -369,10 +370,8 @@
+         } else {
+         	touchRecord(data);
+         }
+-        
+         // Check whether we have sufficient rights.
+         checkRights(data, operation);
+-
+         // Perform the Operation.
+         Transaction tx = null;
+ 
+@@ -383,7 +382,6 @@
+         try {            
+             // Begin transaction, if it is required. If not, the `tx` stays null.
+             if(useOwnTransaction) tx = session.beginTransaction();
+-            
+             // Make changes in the database.
+             switch(operation) {
+                 case INSERT:
+@@ -909,7 +907,7 @@
+             ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());                        
+             throw ex;
+         } catch (HibernateException e) {
+-            this.rollbackTransaction();            
++            this.rollbackTransaction();    
+             logger.fatal(&quot;Cannot commit database transaction&quot;);
+             DBLayerException ex = new DBLayerException(&quot;Exception.CommitTransaction&quot;);
+             ex.setError(ex.ERROR_TRANSACTION, e.getMessage());
+@@ -2053,7 +2051,7 @@
+         }        
+         try {
+             Connection conn = txSession.connection();                    
+-            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; + this.userPrefix + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
++            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; + this.userPrefix + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);
+             pstmt.execute();
+             PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; + this.userPrefix + name);   
+             pstmtGrant.execute();
+@@ -2205,27 +2203,51 @@
+                     break;
+         }
+         // Check whether we are connected and obtain a session
+-        checkConnection();     
+-        // Read the script file from resources
+-        StringBuffer sql = new StringBuffer();
++        checkConnection();  
++        // Open new session
++        Session session = sessionFactory.openSession();
++        // Obtain JDBC connection from session
++        Connection con = session.connection();                
++        // Read the script file from resources - check the existing roles first. If the roles exist, 
++        // skip this step completely
++        boolean skipRoles = false;
+         try {
+-            ClassLoader cl = HibernateDBLayer.class.getClassLoader();
+-            URL sqlfile = cl.getResource(file);
+-            BufferedReader in = new BufferedReader(new InputStreamReader(sqlfile.openStream()));
+-            String str;
+-            while ((str = in.readLine()) != null) {
+-                sql.append(str);
+-            }
+-            in.close();
+-        } catch (IOException e) {
+-            // Deal with I/O Exception
+-            logger.error(&quot;I/O Exception caught. Cannot read sql script from file. Details: &quot;+e.getMessage());
++            if (scriptid == DBLayer.CREATE_USERS) {        
++                Statement st = con.createStatement();
++                st.execute(&quot;SELECT count(*) AS rolecount FROM pg_roles WHERE rolname = 'plantlore_role_admin'&quot;);
++                ResultSet rs = st.getResultSet();
++                rs.next();
++                int rolecount = rs.getInt(&quot;rolecount&quot;);
++                if (rolecount &gt; 0) {
++                    skipRoles = true;
++                }
++            }        
++        } catch (SQLException e) {
++            // Close session
++            session.close();
++            // Deal with the exception
++            logger.error(&quot;SQLException caught while executing SQL script. Details: &quot;+e.getMessage()+&quot;; SQL State: &quot;+e.getSQLState());
+             throw new DBLayerException(L10n.getString(&quot;Error.CreateDatabase&quot;), DBLayerException.ERROR_CREATEDB, e);
+         }
+-        // Open new session
+-        Session session = sessionFactory.openSession();
+-        // Obtain JDBC connection from session
+-        Connection con = session.connection();        
++        StringBuffer sql = new StringBuffer();
++        if (!skipRoles) {
++            try {
++                ClassLoader cl = HibernateDBLayer.class.getClassLoader();
++                URL sqlfile = cl.getResource(file);
++                BufferedReader in = new BufferedReader(new InputStreamReader(sqlfile.openStream()));
++                String str;
++                while ((str = in.readLine()) != null) {
++                    sql.append(str);
++                }
++                in.close();
++            } catch (IOException e) {
++                // Close session
++                session.close();
++                // Deal with I/O Exception
++                logger.error(&quot;I/O Exception caught. Cannot read sql script from file. Details: &quot;+e.getMessage());
++                throw new DBLayerException(L10n.getString(&quot;Error.CreateDatabase&quot;), DBLayerException.ERROR_CREATEDB, e);
++            }
++        }
+         // In case we are creating users, add statement to create first user for accesing plantlore
+         if (scriptid == DBLayer.CREATE_USERS) {
+             sql.append(&quot;CREATE USER &quot;+dbname+&quot;_&quot;+username+&quot; PASSWORD '&quot;+password+&quot;';&quot;);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000978.html">[Plantlore-dev] r707 - trunk/installer
+</A></li>
+	<LI>Next message: <A HREF="000980.html">[Plantlore-dev] r709 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/tree client/resources common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#979">[ date ]</a>
+              <a href="thread.html#979">[ thread ]</a>
+              <a href="subject.html#979">[ subject ]</a>
+              <a href="author.html#979">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

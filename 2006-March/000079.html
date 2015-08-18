@@ -1,0 +1,1270 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r80 - trunk/src/net/sf/plantlore/client/history
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r80%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200603291358.k2TDwplV013797%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000078.html">
+   <LINK REL="Next"  HREF="000080.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r80 - trunk/src/net/sf/plantlore/client/history</H1>
+    <B>Lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r80%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200603291358.k2TDwplV013797%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r80 - trunk/src/net/sf/plantlore/client/history">Lada at berlios.de
+       </A><BR>
+    <I>Wed Mar 29 15:58:51 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000078.html">[Plantlore-dev] r79 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000080.html">[Plantlore-dev] r81 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#79">[ date ]</a>
+              <a href="thread.html#79">[ thread ]</a>
+              <a href="subject.html#79">[ subject ]</a>
+              <a href="author.html#79">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: Lada
+Date: 2006-03-29 15:58:50 +0200 (Wed, 29 Mar 2006)
+New Revision: 80
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+Log:
+historie
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-03-28 22:58:39 UTC (rev 79)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-03-29 13:58:50 UTC (rev 80)
+@@ -3,15 +3,22 @@
+  */
+ package net.sf.plantlore.client.history;
+ 
++import java.rmi.RemoteException;
++import java.util.ArrayList;
+ import java.util.Observable;
+-
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.client.dblayer.query.Query;
+-import net.sf.plantlore.client.dblayer.query.SelectQuery;
++//import net.sf.plantlore.client.dblayer.query.SelectQuery;
++import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.client.dblayer.result.Result;
++import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.HistoryRecord;
++import net.sf.plantlore.common.record.HistoryChange;
++import net.sf.plantlore.common.record.HistoryColumn;
+ 
++
+ import org.apache.log4j.Logger;
+ 
+ 
+@@ -22,24 +29,34 @@
+ public class History extends Observable {
+ 
+ 	/** Instance of a logger */
+-    private Logger logger;
+-
++    private Logger logger;   
+     /** Exception with details about an error */
+     private DBLayerException error = null;
+     /** Instance of a database management object */
+     private DBLayer database;   
++    /** Constant with default number of rows to display */
++    private static final int DEFAULT_DISPLAY_ROWS = 5;    
++    /** Actual number of rows to display */
++    private int displayRows = DEFAULT_DISPLAY_ROWS;   
++    /** Index of the first record shown in the table */
++    private int currentFirstRow;
+     
+-    //result - searchig history for rocord
+-    private Result resultHistory;
+-    private Object[][] historyData;
+-
++    //*******Informations about searching Result from database*****//
++    /** Result of the search query */
++    private int resultId = 0;
++    /** Data (results of a search query) displayed in the table */
++    private Object[][] editHistoryData;
++    /** List of data (results of a search query) displayed in the table */
++    private ArrayList editHistoryDataList;
++   
++    //**************Informations about HistoryRecord*************//
+     /** Name of the table where value was changed*/
+ 	private String tableName;  
+ 	/** Name of the column where value was changed*/
+ 	private String columnName;
+ 	/** Unique value identified record. 
+ 	 * Foring key referenced to table TOCCURRENCES */	
+-	private int occurrenceId;
++	private Integer occurrenceId;
+ 	/**Unique value identified record in table where value was changed */
+ 	private int recordId;
+ 	/** Operation whitch was used*/   
+@@ -53,92 +70,233 @@
+    /** Name of user who did changed*/
+ 	private String nameUser;
+ 
+-	//Informations about occurrences
++	//**************Informations about occurrences***************//
++	/** Name of plant for specified occurrenc*/
+ 	private String namePlant;
++	/** Name of author for specified occurrenc*/
+ 	private String nameAuthor;
++	/** Informaciton about location for specified occurrenc*/
+ 	private String location;
+ 	
++	//***********************************************************//
++	 private static final Integer INSERT = 1;
++	 private static final Integer EDIT = 2;
++	 private static final Integer EDITINSERT = 3;
++	 private static final Integer DELETE = 4;
++	
+     
+-    /** Creates a new instance of History 
+-     *  
+-     *  v konstruktoru predame jednotlive informace, ktere chceme zobrazit o nalezu
++    /**  
++     *  Creates a new instance of History 
++     *  @param database Instance of a database management object
++     *  @param namePlant Name of plant for specified occurrence
++     *  @param nameAuthor Name of author for specified occurrence
++     *  @param location Informaciton about location for specified occurrence
+      * */
+     public History(DBLayer database, String namePlant, String nameAuthor, String location, int idOcc)
+     {
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+        this.database = database;	
+        
++       setOccurrenceId(0);
+        setOccurrenceId(idOcc);
+        setNamePlant(namePlant);
+        setNameAuthor(nameAuthor);
+        setLocation(location);
+ 	   
+-	   //dohledani historie zmen pro nalez s id occurrenceId
+-	   searchHistoryData(occurrenceId);
++       //Searching for information about data entries concerned with specified occurrence
++       searchInsertInfo(occurrenceId);
++	   //Searching for information about data editing concerned with specified occurrence
++	   searchEditHistory(occurrenceId);
++	   //Process results of a search &quot;edit&quot; query 
++	   processEditResult(1,displayRows);
+     }	
+ 
+     /**
+-     * Tato funkce dohleda data ulozene v historii pro nalez urceni id 
+-     * 
+-     * @param idOccurrence
++     *  Searches for information about data entries concerned with specified occurrence.
++     *  @param idOccurrence Unique value identified occurrence
+      */
++    public void searchInsertInfo(Integer occurrenceId) {
+      
+-    public void searchHistoryData(Integer idOccurrence)
+-    {
+-    	String idOcc = new String();
+-/*    	
+-    	 // Create new Select query
+-        Query query = new SelectQuery();
+-        query.setType(DBMapping.HISTORYRECORD);
+-        query.addWhere(&quot;occurrenceId&quot;,&quot;=&quot;,idOcc.valueOf(idOccurrence));
+-        query.addOrderby(&quot;when&quot;, &quot;ASC&quot;);
+-        
+-        Result result = null;
++       // Create new Select query
++       SelectQuery query = null;
++       try {
++       	    query = database.createQuery(HistoryChange.class);
++       } catch(RemoteException e) {
++       	    System.err.println(&quot;RemoteException- searchInsertInfo(), createQuery&quot;);       	  
++       }
++       if (occurrenceId &gt; 0 ) {
++           //query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, occurrenceId, null);      
++           //query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.INSERT, null);     
++    	   query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OPERATION, null, this.EDIT.toString(), null);
++       }
++       
++       int resultIdInsert = 0;
++       try {
++           // Execute query                    
++           resultIdInsert = database.executeQuery(query);        
++       } catch (DBLayerException e) {
++           // Log and set an error                   
++           logger.error(&quot;Searching history (inserting) failed. Unable to execute search query.&quot;);
++           //setError(e);
++           // setError(&quot;Searching history failed. Please contact your administrator.&quot;);
++       } catch (RemoteException e) {
++		   // TODO 
++		   //e.printStackTrace();
++    	   System.err.println(&quot;RemoteException- searchInsertInfo(), executeQuery&quot;);
++	} finally {
++    	   logger.debug(&quot;Searching history (inserting) ends successfully&quot;);
++           // Save &quot;insert&quot; history data
++           setInsertResult(resultIdInsert);                    
++       }              
++    }
++    
++    
++    /**     
++     * Searches for information about data editing concerned with specified occurrence.
++     * @param idOccurrence Unique value identified occurrence
++     */
++     
++    public void searchEditHistory(Integer occurrenceId)
++    {  
++    	
++        //Create new Select query
++        SelectQuery query = null;
+         try {
+-            // Execute query
+-            result = database.executeQuery(query);        
++        	    query = database.createQuery(HistoryChange.class);
++        } catch(RemoteException e) {
++        	    System.err.println(&quot;RemoteException- searchEditHistory(), createQuery&quot;);       	  
++        }
++        if (occurrenceId &gt; 0) {
++            //query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OCCURRENCE, null, occurrenceId.toString(), null);      
++            query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OPERATION, null, this.EDIT.toString(), null);
++            //query.addOrder(PlantloreConstants.DIRECT_DESC, HistoryChange.WHEN); 
++        }
++    	
++        int resultIdEdit = 0;
++        try {
++            // Execute query                    
++            resultIdEdit = database.executeQuery(query);        
+         } catch (DBLayerException e) {
+             // Log and set an error                   
+-            logger.error(&quot;Searching history failed. Unable to execute search query.&quot;);
+-            //setError(e);           
+-        } finally {                              
+-            // Save history data
+-        	logger.debug(&quot;Searching history ends successfully&quot;);
+-            saveResult(result);                
+-        }      
+- */
++            logger.error(&quot;Searching history (editing) failed. Unable to execute search query.&quot;);
++            //setError(e);
++            // setError(&quot;Searching history failed. Please contact your administrator.&quot;);
++        } catch (RemoteException e) {
++ 		   // TODO 
++ 		   //e.printStackTrace();
++     	   System.err.println(&quot;RemoteException- searchInsertInfo(), executeQuery&quot;);
++	 	} finally {
++	 		logger.debug(&quot;Searching history (editing) ends successfully&quot;);
++        	// Save &quot;edit&quot; history data
++            setEditResult(resultIdEdit);                  
++	 	}              
+     }
+     
+-    /**
+-     * 
+-     * @param result
++
++    
++    /**     
++     * Sets information about data (date, name of user) entries concerned with specified occurrence 
++     * @param result result of a database operation INSERT. Result has one row.
+      */
+-    public void saveResult(Result result) {
+-    	this.resultHistory = result;
+-    	int from = 0;
+-    	int to = result.getNumRows();
+-/*    	
+-    	logger.debug(&quot;Retrieving query results.&quot;);
++    public void setInsertResult(int resultIdInsert) {
++   	    	
++    	//if (getResultRows() &gt; 1) {
++    		// Log an error                   
++        //    logger.error(&quot;Too many results for inserting query.&quot;);  
++    	//}
++            	
++    	logger.debug(&quot;Retrieving query results.&quot;); 
++    	Object[] objectHistory = null;
+         try {
+-            // Retrieve selected row interval
+-            Object[] objectHistory = database.more(this.resultHistory, from, to);  
+-            int countResutl = objectHistory.length;
+-            logger.debug(&quot;Results retrieved. Count: &quot;+ countResutl);
+-            
+-            System.out.println(objectHistory);
+-
++        	 // Retrieve selected row interval         	
++         	try {
++         		objectHistory = database.more(resultIdInsert, 1, 1);  
++         	} catch(RemoteException e) {
++             	System.err.println(&quot;RemoteException- setInsertResult, more&quot;);
++             	logger.debug(&quot;RemoteException- setInsertResult, more&quot;);
++             	return;
++             }           	
++            this.when = ((HistoryChange)objectHistory[1]).getWhen();
++            this.nameUser = ((HistoryChange)objectHistory[0]).WHO;
++           
+         } catch (DBLayerException e) {
+             // Log and set error in case of an exception
+-            logger.error(&quot;Processing search results failed: &quot;+e.toString());            
+-        }
+-  */  	
++            logger.error(&quot;Processing search (inserting) results failed: &quot;+e.toString());            
++        } finally { 
++        	logger.debug(&quot;Sets 'insert' data ends successfully. When= &quot; + this.when + &quot; &quot;);        	
++        }        
+     }
+     
++    /**
++     * Process results of a search query. Retrieves results using the database management object (DBLayer) and stores them in the data field of the class. 
++     * @param from number of the first row to retrieve
++     * @param to number of rows to retrieve 
++     */
++    public void processEditResult(int from, int count) {
++    	
++    	if (this.resultId != 0) {
++            //logger.debug(&quot;Rows in the result: &quot;+getResultRows());
++            logger.debug(&quot;Max available rows: &quot;+(from+count-1));
++           
++            // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
++            //int to = Math.min(getResultRows(), from+count-1);
++            int to = 2;
++            if (to == 0) {
++                this.editHistoryDataList = new ArrayList();                
++            } else {
++                logger.debug(&quot;Retrieving query results: &quot;+from+&quot; - &quot;+to);
++                try {                	 
++                     // Retrieve selected row interval 
++                	Object[] objectHistory;
++                 	try {
++                 		objectHistory = database.more(resultId, from, to);  
++                 	} catch(RemoteException e) {
++                     	System.err.println(&quot;RemoteException- processEditResult, more&quot;);
++                     	logger.debug(&quot;RemoteException- processEditResult, more&quot;);
++                     	return;
++                     }                   
++                    int countResult = objectHistory.length;  
++                    logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);
++                    // Create storage for the results
++                    this.editHistoryDataList = new ArrayList();
++                    // Cast the results to the HistoryRecord objects
++                    for (int i=0; i&lt;countResult; i++ ) {
++                    	editHistoryDataList.add((HistoryChange)objectHistory[i]);
++                    }                    
++                } catch (DBLayerException e) {
++                    // Log an error in case of an exception
++                    logger.error(&quot;Processing search results failed: &quot;+e.toString());            
++                } finally { 
++                	logger.debug(&quot;Sets 'edut' data ends successfully&quot;);
++                	//Update current first displayed row (only if data retrieval was successful)
++                    setCurrentFirstRow(from);                    
++                }               
++            }
++        }         
++    }
++    
++    /**
++     *      
++     * @return Object[][] with data values for displaying in the table
++     */
+     public Object[][] getData() {
+- 	    historyData = new Object[][]{{new Boolean(false),&quot;12.01.2006&quot;,&quot;Lada&quot;,&quot;village&quot;,&quot;Stritez&quot;, &quot;Slavice&quot;},
+-		          {new Boolean(false),&quot;12.01.2006&quot;,&quot;Lada&quot;,&quot;village&quot;,&quot;Stritez&quot;, &quot;Slavice&quot;}};
+-
+-    	return this.historyData;
++    	
++    	//int count = editHistoryDataList.size();
++    	int count = 2;
++        editHistoryData = new Object[count][6];
++    	for (int i=0; i &lt; count; i++) {
++    		editHistoryData[i][0] = new Boolean(false);
++    	    editHistoryData[i][1] = ((HistoryChange)editHistoryDataList.get(i)).getWhen();
++    	    editHistoryData[i][2] = ((HistoryChange)editHistoryDataList.get(i)).getWho().getFirstName();
++    	    //editHistoryData[i][3] = ((HistoryChange)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++    	    //editHistoryData[i][4] = ((HistoryChange)editHistoryDataList.get(i)).getOldValue();
++    	    //editHistoryData[i][5] = ((HistoryChange)editHistoryDataList.get(i)).getNewValue();
++    	    editHistoryData[i][3] = &quot;xx&quot;;
++    	    editHistoryData[i][4] = &quot;xx&quot;;
++    	    editHistoryData[i][5] = &quot;xx&quot;;
++    	}  
++    	return this.editHistoryData;
++    	
+     }
+     
+ 
+@@ -149,8 +307,9 @@
+      * bude volana z CTR po stisku klavesy
+      * jako parametr dostane seznam oznacenych zmen, ktere se maji vratit
+      * 
++     * jde o update database :-)
+      */
+-    public void undo()
++    public void updateOlderChanges(int idResult)
+     {
+     	
+     }
+@@ -169,23 +328,100 @@
+     {
+     	
+     }
++
++          
++
++    //****************************//
++    //****Get and set metods*****//
++    //**************************//
+     
++    
+     /**
+-     *  overeni, zda nechce vratit starsi zmenu aniz by chtel vratit mladsi
+-     *  nebo spise, pokud oznaci starsi v tu chvili se mu oznaci i ty mlatsi pro
+-     *  stejeny atribut
++     *  Set result of a database operation. This is used only for search operations.
++     *  @param int 
+      */
+-    public void checkCorrectMark()
+-    {
+-    	
++    public void setEditResult(int resultIdEdit) {
++        this.resultId = resultIdEdit;
+     }
++    
++    /**
++     *  Get results of last database operation. This is used only for search operations.
++     *  @return 
++     */
++    public int getEditResult() {
++        return this.resultId;
++    }
+        
++    public int getResultRows() {
++    	int resultCount = 0;
++        if (resultId != 0) try {
++        	resultCount = database.getNumRows(resultId);        	
++        } catch(RemoteException e) {
++        	System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++        }
++        return resultCount;
++    }
+     
+-    //****************************//
+-    //****Get and set metods*****//
+-    //**************************//
++    /**
++     *  Set an error flag (message).
++     *  @param msg  message explaining the error which occured
++     */
++    public void setError(DBLayerException e) {
++        this.error = e;
++    }
+     
++    /**
++     *  Checks whether an error flag is set.
++     *  return true if an error occured and error message is available, false otherwise
++     */
++    public boolean isError() {
++        if (this.error != null) {
++            return true;
++        } else {
++            return false;
++        }
++    }
++    
++    /**
++     *  Get error message for the error which occured
++     *  @return message explaining the error which occured
++     */
++    public DBLayerException getError() {
++        return this.error;
++    }
++    
++    /**
++     *  Get index of the first row currently displayed in the list of record changes. This is an index in the results returned by a search query.
++     *  @return index of the first row currently displayed in the list of history
++     */
++    public int getCurrentFirstRow() {
++        return this.currentFirstRow;
++    }
++    
++    /**
++     *  Set index of the forst row currently displayed in the list of record changes. This is an index in the results returned by a search query.
++     *  @param row index of the first row currently displayed in the list of history
++     */
++    public void setCurrentFirstRow(int row) {
++        this.currentFirstRow = row;
++    }    
+ 
++    /**
++     *  Get number of rows to be displayed on one page.
++     *  @return number of rows to be displayed per page
++     */
++    public int getDisplayRows() {
++        return this.displayRows;
++    }
++    
++    /**
++     *  Set number of rows to be displayed on one page
++     *  @param rows number of rows ro be displayed per page
++     */
++    public void setDisplayRows(int rows) {
++        this.displayRows = rows;
++    }
++    
+    public String getNamePlant() {
+ 		  return this.namePlant;
+ 	   }
+@@ -261,7 +497,7 @@
+ 	 *   Get identifier of the record whitch was changed
+ 	 *   @return identifier of the record whitch was changed
+ 	 */
+-	public int getRecordId() {
++	public int getId() {
+ 	   return this.recordId;
+ 	}
+ 
+@@ -269,7 +505,7 @@
+ 	 *   Set identifier of the record whitch was changed
+ 	 *   @param recordId string containing identifier of the record whitch was changed
+ 	 */
+-	public void setRecordId(int recordId) {
++	public void setId(int recordId) {
+ 	   this.recordId = recordId;
+ 	}
+ 	  
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-03-28 22:58:39 UTC (rev 79)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-03-29 13:58:50 UTC (rev 80)
+@@ -7,9 +7,12 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.WindowEvent;
+ import java.awt.event.WindowListener;
++import java.beans.PropertyChangeEvent;
++import java.beans.PropertyChangeListener;
+ 
+ import net.sf.plantlore.client.Settings;
+ import net.sf.plantlore.client.SettingsView;
++import net.sf.plantlore.common.*;
+ 
+ 
+ import org.apache.log4j.Logger;
+@@ -38,8 +41,8 @@
+         view.addNextButtonListener(new nextButtonListener());
+         view.addSelectAllButtonListener(new selectAllButtonListener());
+         view.addUnselectAllButtonListener(new unselectAllButtonListener());
+-        view.addUnselectAllButtonListener(new unselectAllButtonListener());
+-        view.addUndoToButtonListener(new undoToButtonListener());
++        view.addUndoSelectedButtonListener(new undoSelectedButtonListener());
++        view.rowSetPropertyChangeListener(new rowSetDisplayChangeListener());
+     }
+     
+     /** 
+@@ -49,7 +52,7 @@
+    class okButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {       
+-           view.dispose();           
++           view.close();           
+        }
+    }
+   
+@@ -60,7 +63,7 @@
+    class cancelButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   view.dispose();
++    	   view.close();
+        }
+    }
+    
+@@ -70,7 +73,8 @@
+     */
+    class helpButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {
++       {    	  
++    	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
+        }
+    }
+@@ -82,7 +86,18 @@
+    class previousButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-          
++    	   //   Call processResults only if we don't see the first page (should not happen, button should be disabled)
++    	   logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
++           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
++           logger.debug(&quot;display rows: &quot;+ view.getTable().getRowCount());
++           if (model.getCurrentFirstRow() &gt; 1) {
++               int firstRow = Math.max(model.getCurrentFirstRow()- model.getDisplayRows(), 1);
++               model.processEditResult(firstRow, model.getDisplayRows()); 
++               if (model.getCurrentFirstRow() &gt; 1){
++               }
++               view.getTable().setModel(new HistoryTableModel(model.getData()));
++               //view.repaint();
++           }                           
+        }
+    }
+    
+@@ -93,7 +108,15 @@
+    class nextButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-          
++    	   //Call processResults only if we don't see the last page (should not happen, button should be disabled)
++           logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
++           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
++           logger.debug(&quot;display rows: &quot;+ model.getDisplayRows());
++           if (model.getCurrentFirstRow()+ view.getTable().getRowCount()&lt;=model.getResultRows()) {
++               model.processEditResult(model.getCurrentFirstRow()+ model.getDisplayRows(), view.getTable().getRowCount());
++               view.getTable().setModel(new HistoryTableModel(model.getData()));
++               //view.repaint();
++           }                       
+        }
+    }
+    
+@@ -104,13 +127,14 @@
+    class selectAllButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   int countRow = view.getTable().getRowCount();
++    	   logger.debug(&quot;selectAll&quot;);
++    	   int countRow = view.getTable().getRowCount();    	  
+            for (int row=0; row &lt; countRow; row++)
+-           {
+-         	  //System.out.println(view.getTable().getValueAt(row, 0));         	
+-         	  view.getTable().setValueAt(true, row, 0);           	
++           {         	     	
++         	  view.getTable().setValueAt(true, row, 0);            	  
+            } 
+-           view.repaint();
++           //view.repaint(); ... neni potreba zaridi to funkce modelu 
++           //setValueAt volanim funkce fireTableCellUpdated(row, column) 
+        }
+    }
+    
+@@ -121,13 +145,13 @@
+    class unselectAllButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   int countRow = view.getTable().getRowCount();
++    	   logger.debug(&quot;unselectAll&quot;);
++    	   int countRow = view.getTable().getRowCount();    	   
+            for (int row=0; row &lt; countRow; row++)
+-           {
+-         	  //System.out.println(view.getTable().getValueAt(row, 0));         	  
+-         	  view.getTable().setValueAt(false, row, 0);           	
++           {        	        	  
++         	  view.getTable().setValueAt(false, row, 0);          	  
+            }
+-           view.repaint();
++           //view.repaint();
+        }
+    }
+    
+@@ -138,20 +162,32 @@
+    class undoSelectedButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-          
++    	   int countRow = view.getTable().getRowCount();     	   
++           for (int row=countRow-1; row &gt; 0; row--)
++           {           	  
++         	  if (view.getTable().getValueAt(row, 0).equals(true)) {
++         		 System.out.println(&quot;undo&quot;);    
++         		 // provedeni zmeny pro danou polozku 
++         		 //- pokud neni joz ITEM v listu!!! - OSETRIT
++         		 model.updateOlderChanges(model.getCurrentFirstRow() + row);  
++         		 //model.setUpdateListItem(row, 3); ... list zmenenych ITEM
++         	  }
++         	  // projit resultID pro firstRow to 0 a overit pokud je tu ITEM z menenych polozek, 
++         	  // tak ji tez smazat z historie
++           }
+        }
+    }
+-   
++    
++
+    /**
+     * 
+-    *
+     */
+-   class undoToButtonListener implements ActionListener {
+-       public void actionPerformed(ActionEvent actionEvent)
+-       {
+-          
+-       }
++   class rowSetDisplayChangeListener implements PropertyChangeListener {
++	   public void propertyChange(PropertyChangeEvent e) {
++		   if (view.getDisplayRows() &gt; 0) {
++			   System.out.println(view.getDisplayRows());			  
++			   //zatim nefunguje jak by melo !!!
++		   }
++	   }
+    }
+-    
+-
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-03-28 22:58:39 UTC (rev 79)
++++ trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-03-29 13:58:50 UTC (rev 80)
+@@ -4,13 +4,17 @@
+ import javax.swing.JCheckBox;
+ import javax.swing.table.AbstractTableModel;
+ 
++import net.sf.plantlore.client.dblayer.result.Result;
++
+ /** 
+- *
++ * Implements a table model for the history data.
+  * @author Lada
+  */
+ public class HistoryTableModel extends AbstractTableModel
+ {
++	/** Names of the columns */
+     private String[] columnNames = {&quot;Mark&quot;, &quot;Date&quot;, &quot;User&quot;, &quot;Item&quot;, &quot;Old value&quot;, &quot;New value&quot;};
++    /** Data values displayed in the table*/
+     private Object[][] data;
+ 
+     public final static int MARK = 0;
+@@ -25,13 +29,21 @@
+     {    	
+     }
+ 
+-    /** Creates a new instance of HistoryTableModel with data*/
++    /** 
++     *  Creates a new instance of HistoryTableModel with the specified data values  
++     *  @param tableData data values 
++     */
+     public HistoryTableModel(Object[][] tableData)
+     {
+     	data = tableData;
+-    }
+-    
+-    //povoleni editace sloupce pro vyber radku
++    }    
++   
++    /** 
++     *  Allows to edit of the MARK cell.
++     *  @param row index of row
++     *  @param column index of column
++     *  @return true for MARK cell and false for other cells
++     */
+     public boolean isCellEditable(int row, int column) 
+     {
+     	if (column == MARK )
+@@ -40,36 +52,89 @@
+     	}
+     	return false;
+     }
+-    
+-    //pro zmenu hodnoty v tabulce
++       
++    /**
++     * Sets the value of the given cell.
++     * @param value value of cell 
++     * @param row index of row
++     * @param column index of column
++     */
+     public void setValueAt(Object value, int row, int column)
+     {
+         data[row][column] = value;
++        if (column == 0) {
++        	if ((Boolean)value){        	    
++        	    selectYounger(row, column);        	    
++        	} else {        		
++        		selectOlder(row, column);
++        	}
++        }
++        //repaint view - with new value
++        this.fireTableCellUpdated(row, column);
+     }
+- 
+-    //vyzadam si hodnotu dane polozky
++
++    public void selectYounger(int row, int column){
++    	String item = (String)getValueAt(row, 3);
++    	for(int i=0; i &lt; row; i++) {
++    		if (item.equals(getValueAt(i,3))) {
++    			setValueAt(true,i,0);
++    			System.out.print(&quot;oznaceno &quot; +i + &quot; \n&quot; );
++    		}
++    	}
++    }
++    
++    public void selectOlder(int row, int column){
++    	String item = (String)getValueAt(row, 3);
++    	for(int i=row+1; i &lt; data.length; i++) {
++    		if (item.equals(getValueAt(i,3))) {
++    			setValueAt(false,i,0);
++    			System.out.print(&quot;odznaceno &quot; +i + &quot; \n&quot; );
++    		}
++    	}
++    }
++    
++    /**
++     * Gets the value of the given cell.
++     * @param row index of row
++     * @param column index of column
++     */
+     public Object getValueAt(int row, int column)
+     {
+         return data[row][column];
+     }    
+     
+-    //vyzadam si pocet zobrazenych radku
++    /** 
++     * Gets number of rows in the actual HistoryTableModel
++     * @return the number of rows in the HistoryTableModel.
++     */
+     public int getRowCount()
+     {
+         return data.length;
+     }
+     
++    /**   
++     * Gets number of columns in the actual HistoryTableModel
++     * @return the number of columns in the HistoryTableModel.
++     */
+     public int getColumnCount()
+     {
+         return columnNames.length;
+     }
+ 
++    /**
++     * Gets the name of the specified column
++     * @param column index of column
++     * @return the name of the specified column.
++     */
+     public String getColumnName(int column){
+         return columnNames[column];
+     }
+-    
+-    //nastaveni datoveho typu pro jednotlive sloupce
+-    //implicitne je zobrazovan string
++     
++    /**
++     * Gets right Class for Boolean Object in the MARK column, Date Object in the DATE column and String Object in other columns. 
++     * @param column index of column
++     * @return the Class for Object instances in the specified column.
++     */
+     public Class getColumnClass(int column) {
+     	Class dataType = super.getColumnClass(column);
+     	if (column == MARK){
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-03-28 22:58:39 UTC (rev 79)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-03-29 13:58:50 UTC (rev 80)
+@@ -6,6 +6,7 @@
+ import java.awt.GridBagLayout;
+ import java.awt.event.ActionListener;
+ import java.awt.event.WindowListener;
++import java.beans.PropertyChangeListener;
+ import java.util.Observable;
+ import java.util.Observer;
+ import javax.swing.AbstractAction;
+@@ -13,6 +14,8 @@
+ import javax.swing.JButton;
+ import javax.swing.JCheckBox;
+ import javax.swing.JComboBox;
++import javax.swing.JFormattedTextField;
++import javax.swing.JFrame;
+ import javax.swing.JRadioButton;
+ import javax.swing.JDialog;
+ import javax.swing.JLabel;
+@@ -34,9 +37,12 @@
+  * @author Lada
+  *
+  */
+-public class HistoryView extends JDialog implements Observer {
++public class HistoryView implements Observer {
+ 
+-	private History model;
++	//Dialog
++	private JDialog historyDialog;
++	//History model
++	private History model;	
+ 	//Panels
+     private JPanel buttonsPane;
+     private JPanel infoRecordPanel;
+@@ -53,6 +59,11 @@
+     private JLabel locationValueLabel;
+     private JLabel dateValueLabel;
+     private JLabel insertWhoValueLabel;
++    private JLabel displayRowsText;    
++    private JLabel countResultText;
++    private JLabel countResutl;
++    //JFormattedTextField
++    private JFormattedTextField displayRows;
+     //JTable
+     private JTable tableEditList;
+     private DefaultTableModel tableModel;
+@@ -69,15 +80,19 @@
+     private JButton okButton;
+     private JButton cancelButton;
+     private JButton helpButton;
++    //data
++    private Object[][] data;
+     
+-    
+     /** Creates a new instance of HistoryView */
+-    public HistoryView(History model)
+-    {
+-        this.model = model;
++    public HistoryView(History model, JFrame owner)
++    {    	
++        this.model = model; 
++        historyDialog = new JDialog(owner, &quot;History&quot;, true);
++        historyDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
++        historyDialog.setVisible(false);
+         init();
+     }
+-
++    
+     public void update(Observable observable, Object object)
+     {
+     } 
+@@ -88,18 +103,13 @@
+      *
+      */
+     private void init()
+-    {
+-    	//Set properties of this dialog
+-    	setTitle(L10n.getString(&quot;History&quot;));
+-    	setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);    	
+-        setSize(700,600);
+-        setVisible(false);
++    {    
+         
+         //initialization of the subPanel
+         initButtonsPane();
+         
+         //Layout (JDialog)
+-        setLayout(new GridBagLayout());
++        historyDialog.setLayout(new GridBagLayout());
+         GridBagConstraints gbConstraints;       
+         gbConstraints = new GridBagConstraints();
+             
+@@ -115,7 +125,7 @@
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         gbConstraints.anchor = GridBagConstraints.NORTH;
+         gbConstraints.fill = GridBagConstraints.BOTH;  
+-        add(infoRecordPanel, gbConstraints);
++        historyDialog.add(infoRecordPanel, gbConstraints);
+          
+         //Add panel with information about record created
+         infoInsertPanel = new JPanel();
+@@ -129,7 +139,7 @@
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         gbConstraints.anchor = GridBagConstraints.NORTH;
+         gbConstraints.fill = GridBagConstraints.BOTH;  
+-        add(infoInsertPanel, gbConstraints);
++        historyDialog.add(infoInsertPanel, gbConstraints);
+         
+         //Add panel with list of changes
+         infoEditPanel = new JPanel();
+@@ -143,7 +153,7 @@
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         gbConstraints.anchor = GridBagConstraints.NORTH;
+         gbConstraints.fill = GridBagConstraints.BOTH;  
+-        add(infoEditPanel, gbConstraints);
++        historyDialog.add(infoEditPanel, gbConstraints);
+         
+         //Add panel with ok, cancle and help buttons
+         gbConstraints.gridy = 3;
+@@ -152,7 +162,7 @@
+         gbConstraints.weightx = 1.0;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         gbConstraints.anchor = GridBagConstraints.SOUTHEAST;
+-        add(buttonsPane, gbConstraints);
++        historyDialog.add(buttonsPane, gbConstraints);
+        
+         // Add labels to the infoRecordPanel panel
+         nameLabel = new JLabel();
+@@ -227,7 +237,8 @@
+         infoInsertPanel.add(dateLabel, gbConstraints);    
+         
+         dateValueLabel = new JLabel();
+-        dateValueLabel.setText(&quot;getCreateWhen()&quot;);        
++        //dateValueLabel.setText(model.getWhen().toString());        
++        dateValueLabel.setText(&quot;model.getWhen().toString()&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+         gbConstraints.gridy = 0;       
+@@ -247,7 +258,7 @@
+         infoInsertPanel.add(insertWhoLabel, gbConstraints);
+         
+         insertWhoValueLabel = new JLabel();
+-        insertWhoValueLabel.setText(&quot;getCreateWho()&quot;);   
++        insertWhoValueLabel.setText(model.getNameUser());   
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+         gbConstraints.gridy = 1;
+@@ -260,17 +271,17 @@
+         //!!!pro velke mnozstvi dat je lepsi pouzit AbstractTableModel, ktera umoznuje postupne nacitani do pameti
+         // defaultTableModel vytvari odkazy na vsechny zapouzdrene informace
+         
+-        Object[][] data = model.getData();
+-          
++        data = model.getData();
++        
+         tableEditList = new JTable(new HistoryTableModel(data));
+-        TableColumnModel tcm = tableEditList.getColumnModel();
+-        TableColumn tc = tcm.getColumn(HistoryTableModel.MARK);
+-        tc.setCellEditor(new MyCheckBoxEditor());
++        //nejsou potreba :-)
++        //TableColumnModel tcm = tableEditList.getColumnModel();
++        //TableColumn tc = tcm.getColumn(HistoryTableModel.MARK);        
++        //tc.setCellEditor(new MyCheckBoxEditor());
+         tableEditList.setPreferredScrollableViewportSize(new java.awt.Dimension(500, 100)); 
+         tableEditList.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+-        jsp = new JScrollPane(tableEditList);                     
+-
+-        
++        jsp = new JScrollPane(tableEditList);     
++                
+         gbConstraints = new java.awt.GridBagConstraints();
+         gbConstraints.gridx = 0;
+         gbConstraints.gridy = 0;
+@@ -278,7 +289,7 @@
+         gbConstraints.fill = java.awt.GridBagConstraints.BOTH;
+         gbConstraints.weightx = 1;        
+         gbConstraints.weighty = 0.7;  
+-        gbConstraints.gridheight = 6;
++        gbConstraints.gridheight = 7;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         jsp.setMinimumSize(new java.awt.Dimension(500, 100));        
+         jsp.setPreferredSize(new java.awt.Dimension(500, 100));        
+@@ -287,31 +298,13 @@
+         jsp.setViewportView(tableEditList); 
+         
+         //Add buttons to the infoEditPanel panel       
+-        previousButton = new JButton(&quot;Previous&quot;);
+-        gbConstraints = new GridBagConstraints();
+-        gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 4;   
+-        gbConstraints.weighty = 0.1; 
+-        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+-        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+-        previousButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+-        previousButton.setPreferredSize(new java.awt.Dimension(110, 25));
+-        infoEditPanel.add(previousButton, gbConstraints);
+         
+-        nextButton = new JButton(&quot;Next&quot;);
+-        gbConstraints = new GridBagConstraints();
+-        gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 5;         
+-        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+-        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+-        nextButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+-        nextButton.setPreferredSize(new java.awt.Dimension(110, 25));
+-        infoEditPanel.add(nextButton, gbConstraints);
+                 
+         selectAllButton = new JButton(&quot;Select all&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 0;        
++        gbConstraints.gridy = 0;       
++        gbConstraints.gridwidth = 2;
+         gbConstraints.anchor = java.awt.GridBagConstraints.NORTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         selectAllButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+@@ -321,40 +314,97 @@
+         unselectAllButton = new JButton(&quot;Unselect all&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 1;        
++        gbConstraints.gridy = 1;       
++        gbConstraints.gridwidth = 2;
+         gbConstraints.anchor = java.awt.GridBagConstraints.NORTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         unselectAllButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+         unselectAllButton.setPreferredSize(new java.awt.Dimension(110, 25));
+         infoEditPanel.add(unselectAllButton, gbConstraints);
+         
+-        undoSelectedButton = new JButton(&quot;Undo selected secord&quot;);
++        undoSelectedButton = new JButton(&quot;Undo selected&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 2;        
++        gbConstraints.gridy = 2;     
++        gbConstraints.gridwidth = 2;
+         gbConstraints.anchor = java.awt.GridBagConstraints.NORTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         undoSelectedButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+         undoSelectedButton.setPreferredSize(new java.awt.Dimension(110, 25));
+         infoEditPanel.add(undoSelectedButton, gbConstraints);
+         
+-        undoToButton = new JButton(&quot;Undo to selected record&quot;);
++        countResultText = new JLabel();
++        countResultText.setText(&quot;Total results:&quot;); 
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 3;        
+-        gbConstraints.anchor = java.awt.GridBagConstraints.NORTH;
++        gbConstraints.gridy = 3;   
++        gbConstraints.weighty = 0.1;         
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+-        undoToButton.setMinimumSize(new java.awt.Dimension(110, 25));        
+-        undoToButton.setPreferredSize(new java.awt.Dimension(110, 25));
+-        infoEditPanel.add(undoToButton, gbConstraints);
++        infoEditPanel.add(countResultText, gbConstraints);
++                
++        Integer countRes = model.getResultRows();
++        countResutl = new JLabel();
++        countResutl.setText(countRes.toString()); 
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 2;
++        gbConstraints.gridy = 3;       
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(5, 0, 5, 5);
++        infoEditPanel.add(countResutl, gbConstraints);
+         
+-    }   
++        displayRowsText = new JLabel();
++        displayRowsText.setText(&quot;Rows to display:&quot;); 
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 1;
++        gbConstraints.gridy = 4;       
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
++        infoEditPanel.add(displayRowsText, gbConstraints);
++        
++        displayRows = new JFormattedTextField();
++        displayRows.setValue(model.getDisplayRows());
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 2;
++        gbConstraints.gridy = 4;           
++        gbConstraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(0, 5, 5, 5);
++        infoEditPanel.add(displayRows, gbConstraints);
++        
++        previousButton = new JButton(&quot;Previous&quot;);
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 1;
++        gbConstraints.gridy = 5;            
++        gbConstraints.gridwidth = 2;
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
++        previousButton.setMinimumSize(new java.awt.Dimension(110, 25));        
++        previousButton.setPreferredSize(new java.awt.Dimension(110, 25));
++        infoEditPanel.add(previousButton, gbConstraints);
++        
++        nextButton = new JButton(&quot;Next&quot;);
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 1;
++        gbConstraints.gridy = 6;  
++        gbConstraints.gridwidth = 2;
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
++        nextButton.setMinimumSize(new java.awt.Dimension(110, 25));        
++        nextButton.setPreferredSize(new java.awt.Dimension(110, 25));
++        infoEditPanel.add(nextButton, gbConstraints);
++        
++    }     
++ 
++
++    public void close() {
++        historyDialog.dispose();
++    }
+     
+-    //editace bunky v tabulce
+-    public class MyCheckBoxEditor extends DefaultCellEditor {
+-        public MyCheckBoxEditor() {
+-            super(new JCheckBox());
+-        }               
++    public void show() {
++        historyDialog.setSize(800,600);
++        historyDialog.setLocationRelativeTo(null);
++        historyDialog.setVisible(true);
+     }
+     
+     public JTable getTable()
+@@ -362,6 +412,14 @@
+     	return this.tableEditList;
+     }
+     
++    public Integer getDisplayRows() {
++        return (Integer)displayRows.getValue();
++    }
++    
++    public void setDisplayRows(int value) {
++        this.displayRows.setValue(value);
++    }  
++    
+     /** 
+     *  Constructs the buttons pane.
+     */
+@@ -388,15 +446,7 @@
+        buttonsPane.add(helpButton);
+    }
+    
+-   
+-   /** Adds a listener to the whole window events.
+-   *
+-   */
+-  public void addListener(WindowListener wl) 
+-  {
+-      addWindowListener(wl);
+-  }  
+-  
++
+   public void addOkButtonListener(ActionListener al) {
+      okButton.addActionListener(al);     
+   }  
+@@ -429,7 +479,7 @@
+       undoSelectedButton.addActionListener(al);
+   }
+   
+-  public void addUndoToButtonListener(ActionListener al) {
+-      undoToButton.addActionListener(al);
+-  }
++  void rowSetPropertyChangeListener(PropertyChangeListener pcl) {
++	  displayRows.addPropertyChangeListener(pcl);
++  }  
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000078.html">[Plantlore-dev] r79 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000080.html">[Plantlore-dev] r81 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#79">[ date ]</a>
+              <a href="thread.html#79">[ thread ]</a>
+              <a href="subject.html#79">[ subject ]</a>
+              <a href="author.html#79">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

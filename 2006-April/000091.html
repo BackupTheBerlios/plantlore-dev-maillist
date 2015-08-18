@@ -1,0 +1,1098 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r92 - trunk/src/net/sf/plantlore/client/history
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r92%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200604020733.k327X4o8025524%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000090.html">
+   <LINK REL="Next"  HREF="000092.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r92 - trunk/src/net/sf/plantlore/client/history</H1>
+    <B>Lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r92%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200604020733.k327X4o8025524%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r92 - trunk/src/net/sf/plantlore/client/history">Lada at berlios.de
+       </A><BR>
+    <I>Sun Apr  2 09:33:04 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000090.html">[Plantlore-dev] r91 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000092.html">[Plantlore-dev] r93 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#91">[ date ]</a>
+              <a href="thread.html#91">[ thread ]</a>
+              <a href="subject.html#91">[ subject ]</a>
+              <a href="author.html#91">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: Lada
+Date: 2006-04-02 09:33:00 +0200 (Sun, 02 Apr 2006)
+New Revision: 92
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+Log:
+Update history (for record). Repair next, previous add function for Undo selected.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-04-02 07:25:41 UTC (rev 91)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-04-02 07:33:00 UTC (rev 92)
+@@ -5,6 +5,8 @@
+ 
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
++import java.util.Date;
++import java.util.Hashtable;
+ import java.util.Observable;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.DBLayerException;
+@@ -13,11 +15,18 @@
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.client.dblayer.result.Result;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Phytochorion;
++import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.common.record.Publication;
++import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.HistoryRecord;
+ import net.sf.plantlore.common.record.HistoryChange;
+ import net.sf.plantlore.common.record.HistoryColumn;
++import net.sf.plantlore.common.record.Village;
+ 
+ 
+ import org.apache.log4j.Logger;
+@@ -36,11 +45,13 @@
+     /** Instance of a database management object */
+     private DBLayer database;   
+     /** Constant with default number of rows to display */
+-    private static final int DEFAULT_DISPLAY_ROWS = 5;    
++    private static final int DEFAULT_DISPLAY_ROWS = 2;    
+     /** Actual number of rows to display */
+     private int displayRows = DEFAULT_DISPLAY_ROWS;   
+     /** Index of the first record shown in the table */
+     private int currentFirstRow;
++    /** Information about current display rows*/
++    private String displayRow;
+     
+     //*******Informations about searching Result from database*****//
+     /** Result of the search query */
+@@ -50,9 +61,15 @@
+     /** List of data (results of a search query) displayed in the table */
+     private ArrayList editHistoryDataList;
+    
+-    //**************Informations about HistoryRecord*************//
+-    /** */
+-    private Occurrence tmpOccurrence;
++    //********************* ***************************************//
++    private Occurrence occurrence;
++    private Habitat habitat;
++	private Publication publication;
++	private Village village;
++	private Phytochorion phytochorion;
++	private Territory territory;
++	
++    //	**************Informations about HistoryRecord*************//
+     /** Name of the table where value was changed*/
+ 	private String tableName;  
+ 	/** Name of the column where value was changed*/
+@@ -62,10 +79,12 @@
+ 	private Integer occurrenceId;
+ 	/**Unique value identified record in table where value was changed */
+ 	private int recordId;
++	/**Unique value identified record before changed */
++	private int oldRecordId;
+ 	/** Operation whitch was used*/   
+ 	private String operation;
+ 	/** Date and time when the reccord was changed*/
+-	private java.util.Date when;	
++	private java.util.Date when = new Date();	
+ 	/** Old value of attribute*/    
+ 	private String oldValue;
+ 	/** New value of attribute*/
+@@ -81,12 +100,11 @@
+ 	/** Informaciton about location for specified occurrenc*/
+ 	private String location;
+ 	
+-	//***********************************************************//
+-	 private static final Integer INSERT = 1;
+-	 private static final Integer EDIT = 2;
+-	 private static final Integer EDITINSERT = 3;
+-	 private static final Integer DELETE = 4;
+-	
++	 //********************************************************//
++	 /** Mapping of entities */
++     private Hashtable publicationHash;
++     private Hashtable habitatHash;
++     private Hashtable occurrenceHash;  
+     
+     /**  
+      *  Creates a new instance of History 
+@@ -100,11 +118,9 @@
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+        this.database = database;	
+        
+-       tmpOccurrence = new Occurrence();
+-       tmpOccurrence.setId(idOcc);
++       occurrence = new Occurrence();
++       occurrence.setId(idOcc);
+        
+-       //setOccurrenceId(0);
+-       //setOccurrenceId(idOcc);
+        setNamePlant(namePlant);
+        setNameAuthor(nameAuthor);
+        setLocation(location);
+@@ -130,10 +146,11 @@
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException- searchInsertInfo(), createQuery&quot;);       	  
+        }
++       // Create aliases for table tHistoryChange.      
++       //query.createAlias(&quot;user&quot;, &quot;us&quot;);
++       query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, occurrence, null);
++       query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, HistoryChange.HISTORYCHANGE_INSERT, null);
+        
+-    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, tmpOccurrence, null);
+-    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.EDIT, null);
+-       
+        int resultIdInsert = 0;
+        try {
+            // Execute query                    
+@@ -164,16 +181,20 @@
+     {  
+     	    	
+         //Create new Select query
+-        SelectQuery query = null;
++        SelectQuery query = null;       
++
++    	//  Select data from tHistory table
+         try {
+-        	    query = database.createQuery(HistoryChange.class);
+-        } catch(RemoteException e) {
+-        	    System.err.println(&quot;RemoteException- searchEditHistory(), createQuery&quot;);       	  
+-        }
+-       
+-    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, tmpOccurrence, null);
+-        query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.EDIT, null);
+-        //query.addOrder(PlantloreConstants.DIRECT_DESC, HistoryChange.WHEN);        
++			query = database.createQuery(HistoryRecord.class);
++		} catch (RemoteException e) {
++			System.err.println(&quot;RemoteException- searchEditHistory(), createQuery&quot;);
++		}
++        // Create aliases for table tHistoryChange.      
++        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);        
++        // Add restriction to CUNITVALUE column of tOccurence table
++        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.operation&quot;, null, 2, null);
++        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.occurrence&quot;, null, occurrence, null);    	
++        query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);        
+     	
+         int resultIdEdit = 0;
+         try {
+@@ -218,9 +239,13 @@
+              	System.err.println(&quot;RemoteException- setInsertResult, more&quot;);
+              	logger.debug(&quot;RemoteException- setInsertResult, more&quot;);
+              	return;
+-             }           	
+-            //this.when = ((HistoryChange)objectHistory[0]).getWhen();
+-            //this.nameUser = ((HistoryChange)objectHistory[0]).WHO;
++             }   
++         	Object[] objHis = (Object[])objectHistory[0]; 
++         	//setWhen(((HistoryChange)objHis[0]).getWhen());
++         	//setNameUser(((HistoryChange)objHis[0]).getWho().getWholeName());
++         	
++            this.when = ((HistoryChange)objHis[0]).getWhen();
++            this.nameUser = ((HistoryChange)objHis[0]).getWho().getWholeName();
+            
+         } catch (DBLayerException e) {
+             // Log and set error in case of an exception
+@@ -232,26 +257,28 @@
+     
+     /**
+      * Process results of a search query. Retrieves results using the database management object (DBLayer) and stores them in the data field of the class. 
+-     * @param from number of the first row to retrieve
+-     * @param to number of rows to retrieve 
++     * @param fromTable number of the first row to show in table. Number of the first row to retraieve is 1.
++     * @param count number of rows to retrieve 
+      */
+-    public void processEditResult(int from, int count) {
++    public void processEditResult(int fromTable, int count) {
+     	
+     	if (this.resultId != 0) {
+-            logger.debug(&quot;Rows in the result: &quot;+getResultRows());
+-            logger.debug(&quot;Max available rows: &quot;+(from+count-1));
++    		int currentRow = getResultRows();
++            logger.debug(&quot;Rows in the result: &quot;+currentRow);
++            logger.debug(&quot;Max available rows: &quot;+(fromTable+count-1));
+            
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+-            int to = Math.min(getResultRows(), from+count-1);           
++            int to = Math.min(currentRow, fromTable+count-1);           
+             if (to == 0) {
+                 this.editHistoryDataList = new ArrayList();                
+             } else {
+-                logger.debug(&quot;Retrieving query results: &quot;+from+&quot; - &quot;+to);
++                logger.debug(&quot;Retrieving query results: 1 - &quot;+to);
++                setCurrentDisplayRow(fromTable+ &quot;-&quot; + to);
+                 try {                	 
+                      // Retrieve selected row interval 
+                 	Object[] objectHistory;
+                  	try {
+-                 		objectHistory = database.more(resultId, from, to);  
++                 		objectHistory = database.more(this.resultId, 1, to);  
+                  	} catch(RemoteException e) {
+                      	System.err.println(&quot;RemoteException- processEditResult, more&quot;);
+                      	logger.debug(&quot;RemoteException- processEditResult, more&quot;);
+@@ -262,41 +289,42 @@
+                     // Create storage for the results
+                     this.editHistoryDataList = new ArrayList();
+                     // Cast the results to the HistoryRecord objects
+-                    for (int i=0; i&lt;countResult; i++ ) {
+-                    	editHistoryDataList.add((HistoryChange)objectHistory[i]);
+-                    }                    
++                    for (int i=0; i&lt;countResult; i++ ) {                    							
++						Object[] objHis = (Object[])objectHistory[i];
++                        this.editHistoryDataList.add((HistoryRecord)objHis[0]);
++                    }                     
+                 } catch (DBLayerException e) {
+                     // Log an error in case of an exception
+                     logger.error(&quot;Processing search results failed: &quot;+e.toString());            
+                 } finally { 
+                 	logger.debug(&quot;Sets 'edit' data ends successfully&quot;);
+                 	//Update current first displayed row (only if data retrieval was successful)
+-                    setCurrentFirstRow(from);                    
++                    setCurrentFirstRow(fromTable);                    
+                 }               
+             }
+         }         
+     }
+     
+     /**
+-     *      
++     * z db vzdy ziskame vysledek od 1 do &quot;to&quot; - tato funkce nacte data pro zobrazeni 
++     * ve view (data, ktere v dane chvili uvidi uzivatel).  
+      * @return Object[][] with data values for displaying in the table
+      */
+     public Object[][] getData() {
+-    	
+-    	//int count = editHistoryDataList.size();
+-    	
+-    	int count = 2;
+-        editHistoryData = new Object[count][6];
+-    	for (int i=0; i &lt; count; i++) {
+-    		editHistoryData[i][0] = new Boolean(false);
+-    	    editHistoryData[i][1] = ((HistoryChange)editHistoryDataList.get(i)).getWhen();
+-    	    editHistoryData[i][2] = ((HistoryChange)editHistoryDataList.get(i)).getWho().getFirstName();
+-    	    //editHistoryData[i][3] = ((HistoryChange)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
+-    	    //editHistoryData[i][4] = ((HistoryChange)editHistoryDataList.get(i)).getOldValue();
+-    	    //editHistoryData[i][5] = ((HistoryChange)editHistoryDataList.get(i)).getNewValue();
+-    	    editHistoryData[i][3] = &quot;xx&quot;;
+-    	    editHistoryData[i][4] = &quot;xx&quot;;
+-    	    editHistoryData[i][5] = &quot;xx&quot;;
++    	    	
++    	int countResult = editHistoryDataList.size();
++    	int firstRow = getCurrentFirstRow();
++    	int countRow = countResult - firstRow + 1;
++    	int ii = 0;
++        editHistoryData = new Object[countRow][6];
++    	for (int i=firstRow-1; i &lt; countResult; i++) {
++    		editHistoryData[ii][0] = new Boolean(false);
++    	    editHistoryData[ii][1] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWhen();
++    	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();
++    	    editHistoryData[ii][3] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++    	    editHistoryData[ii][4] = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++    	    editHistoryData[ii][5] = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
++    	    ii++;
+     	}  
+     	return this.editHistoryData;
+     	
+@@ -312,32 +340,467 @@
+      * 
+      * jde o update database :-)
+      */
+-    public void updateOlderChanges(int idResult)
+-    {
++    public void updateOlderChanges(ArrayList markResult)
++    {    	
++    	//Occurrence occurrence = new Occurrence(); ... uz jsme si tento objek vytvorili v konsturktoru 
++    	habitat = new Habitat();
++    	publication = new Publication();
++    	village = new Village();
++    	phytochorion = new Phytochorion();
++    	territory = new Territory(); 
+     	
++    	//Inicalization of hashTable
++    	initOccurrenceHash();
++    	initHabitatHash();
++    	initPublicationHash();
++    	
++    
++        	
++    	//number of selected rows
++    	int countMark = markResult.size();
++    	//take from older record to younger record
++    	for( int i=countMark-1; i &gt;= 0; i--) {
++    		logger.debug(&quot;Number of selected row: &quot;+markResult.get(i));
++    		tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    		columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++    		
++    		if (tableName.equals(&quot;Occurrence&quot;)){
++    			
++    			//Get a specified number from occurrence mapping.
++    			int value;
++    			if (occurrenceHash.containsKey(columnName)) {
++    				 value = (Integer)occurrenceHash.get(columnName); 
++    	        } else {
++    	             value = 0;
++    	        }
++        	    
++    			//Init oldRecordId
++    			oldRecordId = 0;
++    			
++    			//Save new value for the column
++    			switch (value) {
++	                case 1: //Taxon  
++	                	//test, zda starsi hodnota byla pro occurrence nastavena 
++	                	//(info o mladsi zmene bude uz jen vymazano s tabulky historie} 
++	                	if ( occurrence.getPlant() == null ){
++	                		oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++		                	//recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++		                	//oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++		                	//newValue = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
++		                	/* 
++		                	 * oldValue a newValue nepotrebujeme ...pro Taxon nam staci znat jak se zmenilo jeho ID
++		                	 * pro occurrence nepotrebujem ani recordID, protoze to je stejne s occurrenceID - jen 
++		                	 * bychom mohli otestovat, zda to je opravdu stejne, kdyz ne tak vznikla nekde pri ukladani
++		                	 * dat do historie chyba
++		                	 * 
++		                	 * if (occurrence.getId() != recordId) {
++		                	 *     loggerr.error(&quot;Incorrect identifier for OCCURRENCE&quot;);
++		                	 *  }
++		                	 *  
++		                	 * ?? kdyz se nasledovne priradi a nasledne ulozi plant, bude to spravne????	       
++		                	 */
++		                	Plant plant = new Plant();
++		                	plant.setId(oldRecordId);
++		                	occurrence.setPlant(plant);	
++		                	/*
++		                	 * po zmene plant je potreba projit jeste vysledky od 1 do currentFirstRow nebo SELECT s posminkou
++		                	 * pokud v te dobe doslo jeste ke zmnene Plant, tak je potreba tuto zmenu vymazat z historie
++		                	 * a upozornit na to uzivatele, ze kdyz pozaduje vratit zmnenu k datu xxx, tak budou zruseny
++		                	 * i zmeny z datumu yyy, atd..
++		                	 */
++	                	} else {
++	                		//zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                    break;
++	                case 2: //Year	
++	                	if (occurrence.getYearCollected() == 0) {
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++		                	occurrence.setYearCollected(Integer.parseInt(oldValue));
++	                	}else {
++	                		//zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}	                	
++	                	break;
++	                case 3: //Month 
++	                	if (occurrence.getMonthCollected() == 0) {
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                		occurrence.setMonthCollected(Integer.parseInt(oldValue));
++	                	} else {
++	                		// zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                    break;
++	                case 4: //Day	                	
++	                	if (occurrence.getDayCollected() == 0) {
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++		                	occurrence.setDayCollected(Integer.parseInt(oldValue));
++	                	} else {
++	                		// zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                	break;
++	                case 5: //Time 	                	
++	                	if (occurrence.getTimeCollected() == null) {
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();	                	
++		                	//occurrence.setTimeCollected(Integer.parseInt(oldValue));
++	                	} else {
++	                		// zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                    break;
++	                case 6: //Source	                	
++	                	if (occurrence.getDataSource() == null) {
++		                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++		                	occurrence.setDataSource(oldValue);
++	                	} else {
++	                		//zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                	break;
++	                case 7: //Herbarium
++	                	if (occurrence.getHerbarium() == null){
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                		occurrence.setHerbarium(oldValue);
++	                	} else {
++	                		//zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                    break;
++	                case 8: //Note occurrence	
++	                	if (occurrence.getNote() == null) {	                			            
++	                		oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                		occurrence.setNote(oldValue);
++	                	} else {
++	                		//zavolame smazani zaznamu v historii (tHistory a s otestovanim z tHistoryChange)
++	                	}
++	                	break;
++	                default:            
++	                    logger.error(&quot;No column defined for name &quot;+ columnName);	                   
++    			}  	
++    		} else if (tableName.equals(&quot;Habitat&quot;) || tableName.equals(&quot;Village&quot;)
++    				   || tableName.equals(&quot;Territory&quot;) || tableName.equals(&quot;Phytochorion&quot;)){
++    			
++    			// Get a specified number from habitat mapping.
++    			int value;
++    			if (habitatHash.containsKey(columnName)) {
++    				value = (Integer)habitatHash.get(columnName); 
++    	        } else {
++    	             value = 0;
++    	        }    
++    			
++    			// Init oldRecordId
++    			oldRecordId = 0;
++    			
++    			// Save new value for the column        		
++     			switch (value) {
++ 	                case 1:  //Quadrant    
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	habitat.setQuadrant(oldValue);
++	                	}
++	                	
++	                	/*
++	                	 * Pro konkretni OCCURRENCE je stejne recordId ... pokud by doslo k jeho zmene, tak by byla 
++	                	 * zaznamenana v polozce oldRecordId - ve chvili kdy dojde k teto zmene, tak se to musi osetrit
++	                	 * 1. v tOccurrence zmenit polozku cHabitat (s odmazanim daneho zaznamu v tHabitats to bude asi 
++	                	 *    slozitejsi,protoze se na nej muzou jiz odkazovat dalsi zaznamy --&gt; neodmazavat nebo otestovat
++	                	 *    a pak teprve odmazat (maze se nastavenim priznaku CDELETE)) 
++	                	 * 2. v tOccurrence nemenit polozku cHabitat -- tak to nepujde
++	                	 * 
++	                	 * 
++	                	 *  
++	                	 */
++ 	                    break;
++ 	                case 2: //Place description
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	habitat.setDescription(oldValue);
++	                	}	                	
++ 	                	break;
++ 	                case 3:  //Country
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	habitat.setCountry(oldValue);
++	                	}	
++	                	
++ 	                    break;
++ 	                case 4: //Altitude
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	//habitat.setAltitude(Integer.parseInt(oldValue));
++	                	}	
++	                	
++ 	                	break;
++ 	                case 5:  //Latitude  
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	//habitat.setLatitude(Integer.parseInt(oldValue));
++	                	}	
++	                	
++ 	                    break;
++ 	                case 6: //Longitude
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	//habitat.setLongitude(Integer.parseInt(oldValue));
++	                	}	
++ 	                	break;
++ 	                case 7: //Nearest bigger seat  	
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);	                		       		
++	                		village.setName(oldValue);
++		                	habitat.setNearestVillage(village);
++	                	}	
++ 	                    break;
++ 	                case 8: //Phytochorion
++ 	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);	                		              		
++	                		phytochorion.setName(oldValue);
++		                	habitat.setPhytochorion(phytochorion);
++	                	}	
++ 	                	break;
++ 	               case 9: //Phytochorion code
++ 	            	    recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);	                		              		
++	                		phytochorion.setCode(oldValue);
++		                	habitat.setPhytochorion(phytochorion);
++	                	}
++	                	break;
++	                case 10:  //Territory        
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);	                		              		
++	                		territory.setName(oldValue);
++		                	habitat.setTerritory(territory);
++	                	}
++	                    break;
++	                case 11: //Note habitat
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		habitat.setId(recordId);
++		                	habitat.setNote(oldValue);
++	                	}	
++	                	break;
++ 	                default:            
++ 	                    logger.error(&quot;No column defined for name &quot;+ columnName);	                   
++     			}  	
++    		} else if (tableName.equals(&quot;Publication&quot;)){
++    			
++    			// Get a specified number from publication mapping.
++    			int value;
++    			if (publicationHash.containsKey(columnName)) {
++    				value = (Integer)publicationHash.get(columnName); 
++    	        } else {
++    	             value = 0;
++    	        }
++    			
++    			// Init oldRecordId
++    			oldRecordId = 0;    			
++    			
++    			// Save new value for the column    			         		
++    			switch (value) {
++	                case 1: //Collection     
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setCollectionName(oldValue);
++	                	}	
++	                    break;
++	                case 2: //Year of publication
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setCollectionYearPublication(Integer.parseInt(oldValue));
++	                	}	
++	                	break;
++	                case 3: //Journal  
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setJournalName(oldValue);
++	                	}	
++	                    break;
++	                case 4: //Author of journal
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setJournalAuthorName(oldValue);
++	                	}	
++	                	break;
++	                case 5: //Reference citation = collectionName + collectionYearPublication + journalName + journalAuthorName
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setReferenceCitation(oldValue);
++	                	}	
++	                    break;
++	                case 6: //Reference detail
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setReferenceDetail(oldValue);
++	                	}	
++	                	break;
++	                case 7: //URL    
++	                	recordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getRecordId();
++ 	                	oldRecordId = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOldRecordId();
++	                	oldValue = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
++	                	if (oldRecordId != 0 ){
++	                		//musime zavolat funkci, ktera to osetri
++	                	}else {
++	                		publication.setId(recordId);
++		                	publication.setUrl(oldValue);
++	                	}	
++	                    break;	                
++	                default:            
++	                    logger.error(&quot;No column defined for name &quot;+ columnName);	                   
++    			}  	
++    		} else {
++    			logger.equals(&quot;No table defined&quot;);
++    		}    			
++    		
++    	}
++    	//number of rows in result
++    	int countResult = editHistoryDataList.size();
++    	for( int i=0; i&lt;countResult; i++) {
++    		
++    	}
+     }
++
+     
+-    /**
+-     * Tato funkce bude overovat prava, zda dany uzivatel ma
+-     * pravo provest UNDO - spravne by se uzivateli nevela
+-     * historie zobrazit pokud nema prava, takze overeni prav
+-     * musi byt volano jiz v konstruktoru nebo na miste, kde 
+-     * se vola undo pro dany zaznam, coz by bylo asi nejlogictejsi
+-     * !!! OVERIT TUTO MYSLENKU 
+-     * pokud to tak bude, tak po zavolani historie vime, ze je autor nebo ma prava
+-     * jeste je tu otazka, zda editace od admina zakaze zruseni teto editace neadminem 
+-     */
+-    public void checkRight()
+-    {
+-    	
++     //***************************//
++    //****Init Hashtable*********//
++    //**************************//
++    
++    private void initOccurrenceHash() {
++        occurrenceHash = new Hashtable(9); 
++        occurrenceHash.put(&quot;Taxon&quot;,1);
++        occurrenceHash.put(&quot;Year&quot;,2);
++        occurrenceHash.put(&quot;Month&quot;,3);
++        occurrenceHash.put(&quot;Day&quot;,4);
++        occurrenceHash.put(&quot;Time&quot;,5);           
++        occurrenceHash.put(&quot;Source&quot;,6);
++        occurrenceHash.put(&quot;Herbarium&quot;,7);        
++        occurrenceHash.put(&quot;Note occurrence&quot;,8);
++        //isoDataTimeBegin je slozena s Year + Month + Day + Time ... mela by se zmenit vzdy, kdyz
++        // dojde ke zmene nektere z techto polozek ... jak to nejlepe zaridit???
++        occurrenceHash.put(&quot;isoDataTimeBegin&quot;,9);
++        /*
++         * Jak se bude chovat cUpdateWhen, cUpdateWho v historii - asi se nastavi 
++         * cas vyvolani undo v historii a uzivatel, ktery to vyvolal
++         */
++        //occurrenceHash.put(&quot;cUpdateWhen&quot;,10);
++        //occurrenceHash.put(&quot;cUpdateWho&quot;,11);
++    }    
++    
++    private void initHabitatHash() {
++        habitatHash = new Hashtable(11);        
++        habitatHash.put(&quot;Quadrant&quot;,1);
++        habitatHash.put(&quot;Place description&quot;,2);
++        habitatHash.put(&quot;Country&quot;,3);
++        habitatHash.put(&quot;Altitude&quot;,4);
++        habitatHash.put(&quot;Latitude&quot;,5);
++        habitatHash.put(&quot;Longitude&quot;,6);      
++        habitatHash.put(&quot;Nearest bigger seat&quot;,7);      
++        habitatHash.put(&quot;Phytochorion&quot;,8);
++        habitatHash.put(&quot;Phytochorion code&quot;,9);
++        habitatHash.put(&quot;Territory&quot;,10);
++        habitatHash.put(&quot;Note habitat&quot;,11);
+     }
+-
+-          
+-
++    
++    private void initPublicationHash() {
++        publicationHash = new Hashtable(7);                       
++        publicationHash.put(&quot;Collection&quot;,1);
++        publicationHash.put(&quot;Year of publication&quot;,2);
++        publicationHash.put(&quot;Journal&quot;,3);
++        publicationHash.put(&quot;Author of journal&quot;,4);
++        publicationHash.put(&quot;Reference citation&quot;,5);
++        publicationHash.put(&quot;Reference detail&quot;,6);
++        publicationHash.put(&quot;URL&quot;,7);
++    }
++    
+     //****************************//
+     //****Get and set metods*****//
+     //**************************//
+     
++     public String getCurrentDisplayRows() {
++		  return this.displayRow;		  
++	   }
++
++	 public void setCurrentDisplayRow(String displayRow) {
++		  this.displayRow = displayRow;		  
++	 } 
++     
+     
+     /**
+      *  Set result of a database operation. This is used only for search operations.
+@@ -541,8 +1004,8 @@
+ 	*   Set date and time when the reccord was changed
+ 	*   @param when date and time when the reccord was changed
+ 	*/            
+-    public void setWhen(java.util.Date when) {
+-	  this.when = when;
++    public void setWhen(java.util.Date when) {    	
++    	this.when = when;    	 
+     }     	  
+  
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-04-02 07:25:41 UTC (rev 91)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-04-02 07:33:00 UTC (rev 92)
+@@ -9,6 +9,7 @@
+ import java.awt.event.WindowListener;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.util.ArrayList;
+ 
+ import net.sf.plantlore.client.Settings;
+ import net.sf.plantlore.client.SettingsView;
+@@ -87,16 +88,19 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+     	   //   Call processResults only if we don't see the first page (should not happen, button should be disabled)
++    	   logger.debug(&quot;FIRST&quot;);
+     	   logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+            logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ view.getTable().getRowCount());
++           logger.debug(&quot;display rows: &quot;+ view.getTable().getRowCount());      
+            if (model.getCurrentFirstRow() &gt; 1) {
+                int firstRow = Math.max(model.getCurrentFirstRow()- model.getDisplayRows(), 1);
+                model.processEditResult(firstRow, model.getDisplayRows()); 
+                if (model.getCurrentFirstRow() &gt; 1){
+                }
+                view.getTable().setModel(new HistoryTableModel(model.getData()));
+-               //view.repaint();
++               int from = model.getCurrentFirstRow();
++               int to = from + view.getTable().getRowCount() - 1;
++               view.setCurrentRowsInfo(from + &quot;-&quot; + to);
+            }                           
+        }
+    }
+@@ -108,14 +112,18 @@
+    class nextButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   //Call processResults only if we don't see the last page (should not happen, button should be disabled)
++    	   //Call processResults only if we don't see the last page
++    	   logger.debug(&quot;NEXT&quot;);
+            logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+            logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+            logger.debug(&quot;display rows: &quot;+ model.getDisplayRows());
++           logger.debug(&quot;num rows in table (view) &quot;+ view.getTable().getRowCount());          
+            if (model.getCurrentFirstRow()+ view.getTable().getRowCount()&lt;=model.getResultRows()) {
+                model.processEditResult(model.getCurrentFirstRow()+ model.getDisplayRows(), view.getTable().getRowCount());
+-               view.getTable().setModel(new HistoryTableModel(model.getData()));
+-               //view.repaint();
++               view.getTable().setModel(new HistoryTableModel(model.getData()));  
++               int from = model.getCurrentFirstRow();
++               int to = from + view.getTable().getRowCount() - 1;
++               view.setCurrentRowsInfo(from + &quot;-&quot; + to);
+            }                       
+        }
+    }
+@@ -132,9 +140,7 @@
+            for (int row=0; row &lt; countRow; row++)
+            {         	     	
+          	  view.getTable().setValueAt(true, row, 0);            	  
+-           } 
+-           //view.repaint(); ... neni potreba zaridi to funkce modelu 
+-           //setValueAt volanim funkce fireTableCellUpdated(row, column) 
++           }       
+        }
+    }
+    
+@@ -150,8 +156,7 @@
+            for (int row=0; row &lt; countRow; row++)
+            {        	        	  
+          	  view.getTable().setValueAt(false, row, 0);          	  
+-           }
+-           //view.repaint();
++           }           
+        }
+    }
+    
+@@ -162,19 +167,17 @@
+    class undoSelectedButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   int countRow = view.getTable().getRowCount();     	   
+-           for (int row=countRow-1; row &gt; 0; row--)
++    	   int countRow = view.getTable().getRowCount(); 
++    	   //list with number of selected rows
++    	   ArrayList markRows = new ArrayList();
++           for (int row=0; row &lt; countRow; row++)
+            {           	  
+          	  if (view.getTable().getValueAt(row, 0).equals(true)) {
+-         		 System.out.println(&quot;undo&quot;);    
+-         		 // provedeni zmeny pro danou polozku 
+-         		 //- pokud neni joz ITEM v listu!!! - OSETRIT
+-         		 model.updateOlderChanges(model.getCurrentFirstRow() + row);  
+-         		 //model.setUpdateListItem(row, 3); ... list zmenenych ITEM
+-         	  }
+-         	  // projit resultID pro firstRow to 0 a overit pokud je tu ITEM z menenych polozek, 
+-         	  // tak ji tez smazat z historie
++         		 System.out.println(&quot;undo &quot;+ row); 
++         		 markRows.add(row);         		          		          		
++         	  }     
+            }
++           model.updateOlderChanges(markRows);    	   
+        }
+    }
+     
+@@ -184,10 +187,24 @@
+     */
+    class rowSetDisplayChangeListener implements PropertyChangeListener {
+ 	   public void propertyChange(PropertyChangeEvent e) {
+-		   if (view.getDisplayRows() &gt; 0) {
+-			   System.out.println(view.getDisplayRows());			  
+-			   //zatim nefunguje jak by melo !!!
+-		   }
+-	   }
++           // Save old value
++           int oldValue = model.getDisplayRows();
++           // Check whether new value &gt; 0
++           if (view.getDisplayRows() &lt; 1) {
++               view.setDisplayRows(oldValue);
++               return;
++           }
++           // Set new value in the model
++           model.setDisplayRows(view.getDisplayRows());
++           logger.debug(&quot;New display rows: &quot;+view.getDisplayRows());
++           // If neccessary reload search results
++           if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
++               model.processEditResult(model.getCurrentFirstRow(), view.getDisplayRows());
++               view.getTable().setModel(new HistoryTableModel(model.getData()));
++               int from = model.getCurrentFirstRow();
++               int to = from + view.getTable().getRowCount() - 1;
++               view.setCurrentRowsInfo(from + &quot;-&quot; + to);               
++           }
++       }        	   
+    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-04-02 07:25:41 UTC (rev 91)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-04-02 07:33:00 UTC (rev 92)
+@@ -62,6 +62,9 @@
+     private JLabel displayRowsText;    
+     private JLabel countResultText;
+     private JLabel countResutl;
++    private JLabel currentRowsInfoText;
++    private JLabel currentRowsInfo;
++    
+     //JFormattedTextField
+     private JFormattedTextField displayRows;
+     //JTable
+@@ -236,9 +239,8 @@
+         gbConstraints.insets = new java.awt.Insets(0, 10, 0, 0);
+         infoInsertPanel.add(dateLabel, gbConstraints);    
+         
+-        dateValueLabel = new JLabel();
+-        //dateValueLabel.setText(model.getWhen().toString());        
+-        dateValueLabel.setText(&quot;model.getWhen().toString()&quot;);
++        dateValueLabel = new JLabel();        
++        dateValueLabel.setText(model.getWhen().toString());
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+         gbConstraints.gridy = 0;       
+@@ -288,8 +290,8 @@
+         gbConstraints.anchor = java.awt.GridBagConstraints.CENTER;
+         gbConstraints.fill = java.awt.GridBagConstraints.BOTH;
+         gbConstraints.weightx = 1;        
+-        gbConstraints.weighty = 0.7;  
+-        gbConstraints.gridheight = 7;
++        gbConstraints.weighty = 0.65;  
++        gbConstraints.gridheight = 8;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         jsp.setMinimumSize(new java.awt.Dimension(500, 100));        
+         jsp.setPreferredSize(new java.awt.Dimension(500, 100));        
+@@ -340,7 +342,7 @@
+         gbConstraints.gridy = 3;   
+         gbConstraints.weighty = 0.1;         
+         gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+-        gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
++        gbConstraints.insets = new java.awt.Insets(0, 5, 5, 5);
+         infoEditPanel.add(countResultText, gbConstraints);
+                 
+         Integer countRes = model.getResultRows();
+@@ -353,11 +355,29 @@
+         gbConstraints.insets = new java.awt.Insets(5, 0, 5, 5);
+         infoEditPanel.add(countResutl, gbConstraints);
+         
++        currentRowsInfoText = new JLabel();
++        currentRowsInfoText.setText(&quot;Displayed:&quot;); 
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 1;
++        gbConstraints.gridy = 4;                  
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(0, 5, 5, 5);
++        infoEditPanel.add(currentRowsInfoText, gbConstraints);
++                        
++        currentRowsInfo = new JLabel();
++        currentRowsInfo.setText(model.getCurrentDisplayRows()); 
++        gbConstraints = new GridBagConstraints();
++        gbConstraints.gridx = 2;
++        gbConstraints.gridy = 4;       
++        gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
++        gbConstraints.insets = new java.awt.Insets(5, 0, 5, 5);
++        infoEditPanel.add(currentRowsInfo, gbConstraints);
++        
+         displayRowsText = new JLabel();
+         displayRowsText.setText(&quot;Rows to display:&quot;); 
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 4;       
++        gbConstraints.gridy = 5;       
+         gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+         infoEditPanel.add(displayRowsText, gbConstraints);
+@@ -366,7 +386,7 @@
+         displayRows.setValue(model.getDisplayRows());
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 2;
+-        gbConstraints.gridy = 4;           
++        gbConstraints.gridy = 5;           
+         gbConstraints.fill = java.awt.GridBagConstraints.HORIZONTAL;
+         gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+         gbConstraints.insets = new java.awt.Insets(0, 5, 5, 5);
+@@ -375,7 +395,7 @@
+         previousButton = new JButton(&quot;Previous&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 5;            
++        gbConstraints.gridy = 6;            
+         gbConstraints.gridwidth = 2;
+         gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+@@ -386,7 +406,7 @@
+         nextButton = new JButton(&quot;Next&quot;);
+         gbConstraints = new GridBagConstraints();
+         gbConstraints.gridx = 1;
+-        gbConstraints.gridy = 6;  
++        gbConstraints.gridy = 7;  
+         gbConstraints.gridwidth = 2;
+         gbConstraints.anchor = java.awt.GridBagConstraints.SOUTH;
+         gbConstraints.insets = new java.awt.Insets(5, 5, 5, 5);
+@@ -412,6 +432,12 @@
+     	return this.tableEditList;
+     }
+     
++    /** */
++    public void setCurrentRowsInfo(String displayedRows)
++    {
++    	this.currentRowsInfo.setText(displayedRows);
++    }
++    
+     public Integer getDisplayRows() {
+         return (Integer)displayRows.getValue();
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000090.html">[Plantlore-dev] r91 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000092.html">[Plantlore-dev] r93 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#91">[ date ]</a>
+              <a href="thread.html#91">[ thread ]</a>
+              <a href="subject.html#91">[ subject ]</a>
+              <a href="author.html#91">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

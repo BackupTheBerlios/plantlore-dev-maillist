@@ -1,0 +1,366 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r218 - in trunk/src/net/sf/plantlore: client/history l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r218%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/history%20l10n&In-Reply-To=%3C200605051657.k45GvRoa025042%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000249.html">
+   <LINK REL="Next"  HREF="000251.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r218 - in trunk/src/net/sf/plantlore: client/history l10n</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r218%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/history%20l10n&In-Reply-To=%3C200605051657.k45GvRoa025042%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r218 - in trunk/src/net/sf/plantlore: client/history l10n">lada at berlios.de
+       </A><BR>
+    <I>Fri May  5 18:57:27 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000249.html">[Plantlore-dev] r217 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+        <LI>Next message: <A HREF="000251.html">[Plantlore-dev] zapis ze schuzky
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#250">[ date ]</a>
+              <a href="thread.html#250">[ thread ]</a>
+              <a href="subject.html#250">[ subject ]</a>
+              <a href="author.html#250">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-05 18:57:23 +0200 (Fri, 05 May 2006)
+New Revision: 218
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryView.form
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+History - use closeQurey (close session). Add function for clear all history.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-05 16:16:22 UTC (rev 217)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-05 16:57:23 UTC (rev 218)
+@@ -200,6 +200,8 @@
+        setNamePlant(namePlant);
+        setNameAuthor(nameAuthor);
+        setLocation(location);
++       
++       database.closeQuery(query);
+ /*
+  * konec casti kodu, ktera bude dobudoucna nahrazena.
+  * 
+@@ -250,7 +252,8 @@
+            logger.error(&quot;Searching history data with condition 'operation = insert' failed. Unable to execute search query.&quot;);          
+        } catch (RemoteException e) {		 
+     	   System.err.println(&quot;RemoteException- searchInsertInfo(), executeQuery&quot;);
+-	    }             
++	    }         
++       database.closeQuery(query);
+     }
+     
+     
+@@ -289,7 +292,9 @@
+             logger.error(&quot;Searching history data with condition 'operation = edit' failed. Unable to execute search query.&quot;);           
+         } catch (RemoteException e) { 		   
+      	   System.err.println(&quot;RemoteException- searchEditHistory(), executeQuery&quot;);
+-	 	}           
++	 	}    
++        
++        //zde nejde zavrit session closeQuery
+     }
+     
+     
+@@ -351,7 +356,9 @@
+             logger.error(&quot;Searching whole history data failed. Unable to execute search query.&quot;);           
+         } catch (RemoteException e) { 		   
+      	   System.err.println(&quot;RemoteException- searchWholeHistoryData(), executeQuery&quot;);
+-        }          
++        }   
++        
++        //zde nelze zavrit session closeQuery
+     }
+     
+    /**
+@@ -1164,8 +1171,11 @@
+        } catch (DBLayerException e) {
+            // Log and set error in case of an exception
+            logger.error(&quot;Processing search &quot; +typeObject+ &quot; results failed: &quot;+e.toString());            
+-       }     	    
+-        return object; 	       	          	   
++       }   
++       //close session
++       database.closeQuery(query);
++       
++       return object; 	       	          	   
+            	        
+     }
+     
+@@ -1210,7 +1220,9 @@
+             String role = ((AuthorOccurrence)object[0]).getRole();
+             allAuthor = allAuthor + role + &quot;: &quot; + author + &quot;\n&quot;;
+         }           
+-      
++       //close session
++       database.closeQuery(query);
++       
+        return allAuthor;     	    
+     }
+     
+@@ -1309,16 +1321,19 @@
+             logger.error(&quot;Searching historyChangeId failed. Unable to execute search query.&quot;);
+         } catch (RemoteException e) {		 
+      	   System.err.println(&quot;RemoteException- searchHistoryChangeId(), executeQuery&quot;);
+- 	    } 
++        } 
++
++        int countResult = 100;
++        try {
++                    countResult = database.getNumRows(resultIdChange);
++                    logger.debug(&quot;SearchHistoryChangeId - Number of result: &quot;+countResult);
++            } catch (RemoteException e) {
++                    System.err.println(&quot;RemoteException- searchHistoryChangeId(), getNumRows&quot;);
++            }		
++        //close session
++        database.closeQuery(query);
+         
+- 	    int countResult = 100;
+- 	    try {
+-			countResult = database.getNumRows(resultIdChange);
+-			logger.debug(&quot;SearchHistoryChangeId - Number of result: &quot;+countResult);
+-		} catch (RemoteException e) {
+-			System.err.println(&quot;RemoteException- searchHistoryChangeId(), getNumRows&quot;);
+-		}		
+-		return countResult;
++	return countResult;
+     }
+     
+     public void generateMessageUndo() {    	
+@@ -1428,6 +1443,24 @@
+         return detailsMessage;
+     }
+     
++    /*
++     * Tato funkce smaze vsechny data z tabulky tHistoryChange a z tHistory
++     * delete from tHistory;
++     * delete from tHistoryChange;
++     */
++    public void clearHistory() {
++        
++    }
++    
++    /*
++     * Tato funkce projde tabulky s cdelete - tAuthors, tAuthorsOccurrences, tOccurrences, tHabitats, tPublications
++     * a smaze v techto tabulkach zaznamy, ktere maji cdelete == 1
++     * delete from tAuthors where cdelete = 1;
++     */
++    public void clearDatabase() {
++        
++    }
++    
+      //***************************//
+     //****Init Hashtable*********//
+     //**************************//
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-05-05 16:16:22 UTC (rev 217)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-05-05 16:57:23 UTC (rev 218)
+@@ -39,7 +39,8 @@
+         view.nextButton.addActionListener(new nextButtonListener());     
+         view.undoToDateButton.addActionListener(new undoToDateButtonListener());
+         view.detailsButton.addActionListener(new detailsHistoryListener());
+-        view.toDisplayValueTextField.addActionListener(new rowSetDisplayChangeListener());       
++        view.toDisplayValueTextField.addActionListener(new rowSetDisplayChangeListener()); 
++        view.clearHistoryButton.addActionListener(new clearHistoryListener());
+     }
+     
+             /** 
+@@ -219,4 +220,20 @@
+            }          
+        }
+     }
++    
++    /**
++    *
++    */  
++    class clearHistoryListener implements ActionListener {
++       public void actionPerformed(ActionEvent actionEvent)
++       {
++           int okCancle = view.messageClearHistory();
++           if (okCancle == 0){
++                   //Button OK was press
++                   logger.debug(&quot;Button OK was press.&quot;);  
++                   //model.clearHistory
++                   //model.clearDatabase
++           }
++       }
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryView.form	2006-05-05 16:16:22 UTC (rev 217)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryView.form	2006-05-05 16:57:23 UTC (rev 218)
+@@ -133,6 +133,7 @@
+                               &lt;Component id=&quot;previousButton&quot; alignment=&quot;0&quot; pref=&quot;125&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;clearHistoryButton&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;Component id=&quot;detailsButton&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;Component id=&quot;undoToDateButton&quot; alignment=&quot;0&quot; pref=&quot;126&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+@@ -147,7 +148,9 @@
+                       &lt;Component id=&quot;undoToDateButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;detailsButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;65&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;clearHistoryButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;36&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;totalResultLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;totalResultValueLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -264,6 +267,16 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;clearHistoryButton&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;clearHistory&quot;)&quot; type=&quot;code&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-05-05 16:16:22 UTC (rev 217)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-05-05 16:57:23 UTC (rev 218)
+@@ -59,6 +59,7 @@
+         nextButton = new javax.swing.JButton();
+         previousButton = new javax.swing.JButton();
+         detailsButton = new javax.swing.JButton();
++        clearHistoryButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+         closeButton = new javax.swing.JButton();
+         helpButton = new javax.swing.JButton();
+@@ -99,6 +100,8 @@
+ 
+         detailsButton.setText(L10n.getString(&quot;detailsHistory&quot;));
+ 
++        clearHistoryButton.setText(L10n.getString(&quot;clearHistory&quot;));
++
+         org.jdesktop.layout.GroupLayout jPanel2Layout = new org.jdesktop.layout.GroupLayout(jPanel2);
+         jPanel2.setLayout(jPanel2Layout);
+         jPanel2Layout.setHorizontalGroup(
+@@ -124,6 +127,7 @@
+                         .add(org.jdesktop.layout.GroupLayout.LEADING, nextButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                         .add(org.jdesktop.layout.GroupLayout.LEADING, previousButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 125, Short.MAX_VALUE))
+                     .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
++                        .add(org.jdesktop.layout.GroupLayout.LEADING, clearHistoryButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                         .add(org.jdesktop.layout.GroupLayout.LEADING, detailsButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                         .add(org.jdesktop.layout.GroupLayout.LEADING, undoToDateButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 126, Short.MAX_VALUE)))
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+@@ -134,7 +138,9 @@
+                 .add(undoToDateButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(detailsButton)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 65, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(clearHistoryButton)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 36, Short.MAX_VALUE)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(totalResultLabel)
+                     .add(totalResultValueLabel))
+@@ -232,8 +238,13 @@
+      
+     public void messageSelection() {
+     	JOptionPane.showMessageDialog(this, &quot;No row was selected.&quot;, &quot;Information about selected row&quot;, JOptionPane.ERROR_MESSAGE);               
+-    } 
++    }
+     
++    public int messageClearHistory() {
++    	int okCancle = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;clearHistoryMessage&quot;), &quot;Information&quot;, JOptionPane.OK_CANCEL_OPTION);
++    	return okCancle;
++    }
++    
+     /**Rows to display */
+     public Integer getDisplayRows() { 
+         Integer countRows;
+@@ -251,6 +262,7 @@
+     }  
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton clearHistoryButton;
+     protected javax.swing.JButton closeButton;
+     protected javax.swing.JButton detailsButton;
+     private javax.swing.JLabel displayedLabel;
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-05 16:16:22 UTC (rev 217)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-05 16:57:23 UTC (rev 218)
+@@ -137,6 +137,7 @@
+ undoSelected = Undo selected
+ undoToDate = Undo to Date
+ detailsHistory = Details
++clearHistory = Clear history
+ #History - information about result and displayed rows
+ totalResult = Total results:
+ displayed = Displayed rows:
+@@ -197,10 +198,8 @@
+ territory.name = Territory
+ phytochorion.name = Phytochorion
+ phytochorion.code = Phytochorion code 
+-#pravdepodobne budou smazany
+-updatedWho = updatedWho
+-metadata = metadata
+-note = note
++# History - message
++clearHistoryMessage = All history will be delete.
+ 
+ # LOGIN
+ loginAdd = &amp;Add
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000249.html">[Plantlore-dev] r217 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+	<LI>Next message: <A HREF="000251.html">[Plantlore-dev] zapis ze schuzky
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#250">[ date ]</a>
+              <a href="thread.html#250">[ thread ]</a>
+              <a href="subject.html#250">[ subject ]</a>
+              <a href="author.html#250">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

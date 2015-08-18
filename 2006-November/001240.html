@@ -1,0 +1,338 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r860 - in trunk/src/net/sf/plantlore:	client/overview l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-November/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r860%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/overview%20l10n&In-Reply-To=%3C200611040013.kA40D4Ul008740%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001241.html">
+   <LINK REL="Next"  HREF="001243.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r860 - in trunk/src/net/sf/plantlore:	client/overview l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r860%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/overview%20l10n&In-Reply-To=%3C200611040013.kA40D4Ul008740%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r860 - in trunk/src/net/sf/plantlore:	client/overview l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sat Nov  4 01:13:04 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001241.html">[Plantlore-dev] [Bug #9097] Remove the announcement about new	Occurrences
+</A></li>
+        <LI>Next message: <A HREF="001243.html">[Plantlore-dev] [Bug #9105] Implement a better duplicity check
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1240">[ date ]</a>
+              <a href="thread.html#1240">[ thread ]</a>
+              <a href="subject.html#1240">[ subject ]</a>
+              <a href="author.html#1240">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-11-04 01:13:03 +0100 (Sat, 04 Nov 2006)
+New Revision: 860
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Fixed [ Bug #9097 ] Remove the announcement about new Occurrences
+Implemented alternative announcement instead. It doesn't require user confirmation anymore.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-11-04 00:13:03 UTC (rev 860)
+@@ -1945,18 +1945,6 @@
+         notifyObservers( getDefaultValues(false) );
+     }
+ 
+-    
+-
+-
+-    /* 
+-     *
+-     * This `Netbeans 5.0` is a real shit . Thank God to IBM for their vastly superior Eclipse 3.1
+-     * What Netbeans cannot do properly:
+-     * 1. indent the code automatically (when inserted...),
+-     * 2. find usages (invoked on a method definition)
+-     * 3. refactor method names
+-     *
+-     */
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-11-04 00:13:03 UTC (rev 860)
+@@ -26,6 +26,8 @@
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.Hashtable;
++import java.util.Timer;
++import java.util.TimerTask;
+ 
+ import javax.swing.AbstractAction;
+ import javax.swing.JComboBox;
+@@ -651,6 +653,7 @@
+         private String JUST_THIS = L10n.getString(&quot;AddEdit.JustThis&quot;);
+         private String CANCEL = L10n.getString(&quot;Common.Cancel&quot;);
+         private String TITLE = L10n.getString(&quot;AddEdit.QuestionDialogTitle&quot;);
++        private static final int CONFIRMATION_DELAY = 2500;
+         
+         public OkButtonAction() {
+             putValue(NAME, L10n.getString(&quot;Common.Ok&quot;));
+@@ -729,22 +732,20 @@
+                     }
+                 } else {//inAddMode
+                     Task task = model.storeRecord(true);
+-                    /*
+-                     * The following announcement should be removed (it was a RFE)..
+-                     */
+                     task.setPostTaskAction(new PostTaskAction() {
+                         public void afterStopped(Object value) {
+                             SwingUtilities.invokeLater(new Runnable() {
+                                 public void run() {
+-                                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;AddEdit.AddConfirmation&quot;),L10n.getString(&quot;AddEdit.AddConfirmationTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                                    view.confirmationLabel.setText(L10n.getString(&quot;AddEdit.AddConfirmation&quot;));
++                                    view.confirmationLabel.setForeground(new Color(0, 204, 0));
++                                    view.confirmationLabel.setVisible(true);
++                                    Timer timer = new Timer();
++                                    timer.schedule(new LabelHider(), CONFIRMATION_DELAY);
+                                 }
+                             });
+                         }
+                     });
+                     Dispatcher.getDispatcher().dispatch(task, view, false);
+-                     /**/
+-                    //view.setVisible(false);
+-
+                 }
+             } catch (RemoteException ex) {
+                 logger.error(&quot;Remote problem: &quot;+ex);
+@@ -757,6 +758,11 @@
+             }
+         }//mouseClicked
+             
++        class LabelHider extends TimerTask {
++            public void run() {
++                view.confirmationLabel.setVisible(false);
++            }            
++        }
+     }//OkButtonListener
+     
+     class CancelButtonAction extends AbstractAction {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-11-04 00:13:03 UTC (rev 860)
+@@ -195,7 +195,10 @@
+                                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                               &lt;Component id=&quot;gpsPanel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Component id=&quot;confirmationLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;/Group&gt;
+                                           &lt;/Group&gt;
+                                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+@@ -204,7 +207,7 @@
+                                                       &lt;EmptySpace min=&quot;-2&quot; pref=&quot;434&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;572&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;578&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                               &lt;/Group&gt;
+@@ -262,7 +265,11 @@
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;gpsPanel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                  &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;EmptySpace pref=&quot;31&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;confirmationLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;/Group&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+@@ -563,6 +570,20 @@
+                         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                       &lt;/AuxValues&gt;
+                     &lt;/Component&gt;
++                    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;confirmationLabel&quot;&gt;
++                      &lt;Properties&gt;
++                        &lt;Property name=&quot;font&quot; type=&quot;java.awt.Font&quot; editor=&quot;org.netbeans.beaninfo.editors.FontEditor&quot;&gt;
++                          &lt;Font name=&quot;Dialog&quot; size=&quot;14&quot; style=&quot;1&quot;/&gt;
++                        &lt;/Property&gt;
++                        &lt;Property name=&quot;foreground&quot; type=&quot;java.awt.Color&quot; editor=&quot;org.netbeans.beaninfo.editors.ColorEditor&quot;&gt;
++                          &lt;Color blue=&quot;0&quot; green=&quot;cc&quot; red=&quot;0&quot; type=&quot;rgb&quot;/&gt;
++                        &lt;/Property&gt;
++                        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++                      &lt;/Properties&gt;
++                      &lt;AuxValues&gt;
++                        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                      &lt;/AuxValues&gt;
++                    &lt;/Component&gt;
+                   &lt;/SubComponents&gt;
+                 &lt;/Container&gt;
+                 &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel7&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-11-04 00:13:03 UTC (rev 860)
+@@ -106,6 +106,7 @@
+             restoreButton.setVisible(false);
+         }
+ 
++        confirmationLabel.setVisible(false);
+         this.pack();
+     }
+     
+@@ -154,6 +155,7 @@
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+         clearLocationButton = new javax.swing.JButton();
++        confirmationLabel = new javax.swing.JLabel();
+         jPanel7 = new javax.swing.JPanel();
+         jScrollPane3 = new javax.swing.JScrollPane();
+ 
+@@ -314,6 +316,10 @@
+ 
+         clearLocationButton.setText(&quot;Vyma\u017e&quot;);
+ 
++        confirmationLabel.setFont(new java.awt.Font(&quot;Dialog&quot;, 1, 14));
++        confirmationLabel.setForeground(new java.awt.Color(0, 204, 0));
++        confirmationLabel.setText(&quot;jLabel1&quot;);
++
+         org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
+         jPanel5.setLayout(jPanel5Layout);
+         jPanel5Layout.setHorizontalGroup(
+@@ -348,14 +354,16 @@
+                             .add(jPanel5Layout.createSequentialGroup()
+                                 .add(gpsPanel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(clearLocationButton))
++                                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                                    .add(clearLocationButton)
++                                    .add(confirmationLabel)))
+                             .add(jPanel5Layout.createSequentialGroup()
+                                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                                     .add(jPanel5Layout.createSequentialGroup()
+                                         .add(placeDescriptionLabel)
+                                         .add(434, 434, 434))
+                                     .add(jPanel5Layout.createSequentialGroup()
+-                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 572, Short.MAX_VALUE)
++                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 578, Short.MAX_VALUE)
+                                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                                     .add(locationNoteLabel)
+@@ -399,7 +407,10 @@
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(gpsPanel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(clearLocationButton))
++                    .add(jPanel5Layout.createSequentialGroup()
++                        .add(clearLocationButton)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 31, Short.MAX_VALUE)
++                        .add(confirmationLabel)))
+                 .addContainerGap())
+         );
+ 
+@@ -1396,6 +1407,7 @@
+     protected javax.swing.JButton checklistButton;
+     protected javax.swing.JButton clearLocationButton;
+     protected javax.swing.JButton clearOccurrenceButton;
++    protected javax.swing.JLabel confirmationLabel;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
+     protected javax.swing.JLabel coordinateSystemLabel;
+     protected javax.swing.JLabel countryLabel;
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-11-04 00:13:03 UTC (rev 860)
+@@ -1726,7 +1726,7 @@
+ 
+ Common.HelpTT=Displays help for current section
+ 
+-AddEdit.AddConfirmation=Occurrence has been added successfuly
++AddEdit.AddConfirmation=Added
+ 
+ AddEdit.AddConfirmationTitle=Success
+ 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-11-04 00:13:03 UTC (rev 860)
+@@ -2040,7 +2040,7 @@
+ 
+ Common.HelpTT=Zobraz\u00ED n\u00E1pov\u011Bdu pro aktu\u00E1ln\u00ED \u010D\u00E1st programu
+ 
+-AddEdit.AddConfirmation=N\u00E1lez \u00FAsp\u011B\u0161n\u011B p\u0159id\u00E1n
++AddEdit.AddConfirmation=P\u0159id\u00E1no
+ 
+ AddEdit.AddConfirmationTitle=\u00DAsp\u011Bch
+ 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-11-03 23:18:51 UTC (rev 859)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-11-04 00:13:03 UTC (rev 860)
+@@ -1573,7 +1573,7 @@
+ 
+ Common.HelpTT=Displays help for current section
+ 
+-AddEdit.AddConfirmation=Occurrence has been added successfuly
++AddEdit.AddConfirmation=Added
+ 
+ AddEdit.AddConfirmationTitle=Success
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001241.html">[Plantlore-dev] [Bug #9097] Remove the announcement about new	Occurrences
+</A></li>
+	<LI>Next message: <A HREF="001243.html">[Plantlore-dev] [Bug #9105] Implement a better duplicity check
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1240">[ date ]</a>
+              <a href="thread.html#1240">[ thread ]</a>
+              <a href="subject.html#1240">[ subject ]</a>
+              <a href="author.html#1240">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

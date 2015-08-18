@@ -1,0 +1,162 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Jak resit 1:N vazby v DB pri exportu
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Jak%20resit%201%3AN%20vazby%20v%20DB%20pri%20exportu&In-Reply-To=%3Cf4dc39b90604240135y84eb7b4h1dbc5025de884e9f%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000198.html">
+   <LINK REL="Next"  HREF="000200.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Jak resit 1:N vazby v DB pri exportu</H1>
+    <B>Erik Kratochvil</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Jak%20resit%201%3AN%20vazby%20v%20DB%20pri%20exportu&In-Reply-To=%3Cf4dc39b90604240135y84eb7b4h1dbc5025de884e9f%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Jak resit 1:N vazby v DB pri exportu">discontinuum at gmail.com
+       </A><BR>
+    <I>Mon Apr 24 10:35:35 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000198.html">[Plantlore-dev] r182 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+        <LI>Next message: <A HREF="000200.html">[Plantlore-dev]Fwd:Re: Sw projekt - schuzka
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#199">[ date ]</a>
+              <a href="thread.html#199">[ thread ]</a>
+              <a href="subject.html#199">[ subject ]</a>
+              <a href="author.html#199">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Zdravim, potrebuju trochu poradit.
+
+V pripade vazeb 1:N (pripad TOccurrences &lt;-&gt; TAuthorsOccurrences) je otazka,
+jak vyresit export do CSV, XML si s tim asi poradi.
+
+Kdybysme delali dotaz rekneme nad tabulkama
+
+    TAuthors, TAuthorsOccurrences, TOccurrences, Plants
+
+a chteli  exportovat Plant.Taxon, Author.WholeName, AuthorsOccurences.Role.
+
+Problem je, ze prvni radek toho CSV souboru je seznam nazvu sloupcu, proste
+proto, aby se poznalo, co obsahuje i-ta hodnota.
+Jenze k jednomu nalezu (Occurence) muze existovat vice autoru s ruznymi
+rolemi (Authors, Role).
+
+Cili, kdyz si nadepisu CSV soubor
+
+    Plant.Taxon, Author.WholeName, AuthorsOccurrences.Role
+
+pak nevim, jak do toho schematu nacpat promenny pocet autoru nalezu.
+CSV neni zadny standard (jak sem se docetl), trochu sem googlil, ale nikde
+sem nenasel nejaky navrh na reseni.
+
+Prvni trochu rozumna moznost je zopakovani toho zaznamu nekolikrat s ruznymi
+autory (jak je to v aktualnim Overview).
+Cili pro zaznam
+
+    Pampeliska, EK, nasel, JK, revidoval, TK, revidoval
+
+by se konstruovaly 3. zaznamy
+
+    Pampeliska, EK, nasel
+    Pampeliska, JK, revidoval
+    Pampeliska, TK, nasel // nasel TK jinou pampelisku jinde vs.
+                          // nebo je to ta prvni pampeliska,
+                          // kterou TK nasel spolus EK?
+
+ktery by sly bezprostredne po sobe. Jenze problem s timhle resenim je, ze by
+se pri importu potom musel vzdycky drzet ten predchozi zaznam (cely, coz
+muze znamenat az desitky polozek) a ten nasledujici by se musel s tim
+predchozim porovnavat (co by mohlo bejt neprijemne zdlouhavy), ale presto by
+to nestacilo (viz ten modrozeleny pripad).
+Mozna by se hodilo zavest jakysi  hack toho CSV  a misto opakovani tech
+hodnot tam vlozit nejaky priznak, ze se radek vztahuje k tomu predchozimu, a
+vsechny hodnoty, ktere se shoduji s tim predchozim, nechat prazdne. Neco
+jako:
+
+    Author.WholeName, Plant.Taxon, Plant.Czechname, Author.Role,
+Author.Organization, Author.Address, AuthorOccurrence.Role
+    EK, pampeliska, pampelka, nalezce, UK, 17.listopadu, nasel
+    #JK,,, revizor, UK, 17.listopadu, revidoval
+    #TK,,, null, VSE, Daleko9kou, revidoval po JK
+    #LO,,, null, null, KdesiVLesi, null
+
+Pri importu by to pak znamenalo, ze by se Importovaci parser prepnul do
+nejakyho specialniho rezimu, kde by vedel, ze se to vztahuje k predch.
+zaznamu, a zaridil se podle toho.
+
+Nebo  ostrichovo reseni : &quot;strcit hlavu do pisku a nic  s tim nedelat&quot; a
+nechat uzivateli prostredky, kteryma to muze vyresit (jako deadlock v
+linuxu:) - at si, pokud chce ty zaznamy rozeznat, necha u nich vyexportovat
+i sloupecky obsahujici unikatni id zaznamu. Stejnak pro zpetny import jsou
+potreba minimalne vsechny NN sloupce a unikatni id zaznamu je NN...
+
+V XML tenhle problem neni, tam by se dalo neco jako (moc toho o xml nevim):
+
+    &lt;record&gt;
+      &lt;Plant taxon=&quot;pampeliska&quot;/&gt;
+      &lt;Occurrence note=&quot;V lese u lesa.&quot;/&gt;
+      &lt;Author wholename=&quot;EK&quot; role=&quot;nalezce&quot; organization=&quot;UK&quot;
+address=&quot;17...&quot;/&gt;
+      &lt;Author wholename=&quot;JK&quot; role=&quot;revizor&quot; organization=&quot;UK&quot;
+address=&quot;17..:&quot;/&gt;
+      &lt;Author wholename=&quot;TK&quot; ...../&gt;
+    &lt;/record&gt;
+
+Samosebou se bude muset upravit i export, zkusim dneska zapremejslet, jak by
+to tam slo nejak elegantne vecpat, aniz bych ztratil obecnost nebo musel
+delat nejaky hacky. Export bude stejne potreba upravit tak jako tak (protoze
+treba kvuli prenaseni zaznamu -&gt; aby se neztracela informace o lidech
+spjatych se zaznamem).
+
+Jak se na to tvarite? Unika mi neco?
+
+
+
+P.S.
+To druhy reseni me napadlo az skoro pri dokonceni tohohle mejlu. Priklanel
+bych se spis k nemu :)
+
+
+/* NEVSIMAT SI - nemam papir a nechci to zapomenout
+pro export styl XML uprava jenom Exporteru
+startNewRecord(); ---&gt; add &lt;Record&gt;
+writeRecord( record ); --&gt; add &lt;Plant /&gt;, &lt;Occurrence /&gt;, &lt;Author /&gt;
+for each Author do writeRecord( author ) ---&gt; add &lt;Author ../&gt;
+finishRecord(); ---&gt; add &lt;/Record&gt;
+*/
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060424/1713dfd0/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060424/1713dfd0/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000198.html">[Plantlore-dev] r182 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+	<LI>Next message: <A HREF="000200.html">[Plantlore-dev]Fwd:Re: Sw projekt - schuzka
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#199">[ date ]</a>
+              <a href="thread.html#199">[ thread ]</a>
+              <a href="subject.html#199">[ subject ]</a>
+              <a href="author.html#199">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

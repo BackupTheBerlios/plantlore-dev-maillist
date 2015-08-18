@@ -1,0 +1,443 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r160 - in trunk/src/net/sf/plantlore: middleware server server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r160%20-%20in%20trunk/src/net/sf/plantlore%3A%20middleware%20server%20server/manager&In-Reply-To=%3C200604201800.k3KI0YxI031852%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000163.html">
+   <LINK REL="Next"  HREF="000165.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r160 - in trunk/src/net/sf/plantlore: middleware server server/manager</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r160%20-%20in%20trunk/src/net/sf/plantlore%3A%20middleware%20server%20server/manager&In-Reply-To=%3C200604201800.k3KI0YxI031852%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r160 - in trunk/src/net/sf/plantlore: middleware server server/manager">krater at berlios.de
+       </A><BR>
+    <I>Thu Apr 20 20:00:34 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000163.html">[Plantlore-dev] r159 - in trunk/src/net/sf/plantlore: client server server/manager
+</A></li>
+        <LI>Next message: <A HREF="000165.html">[Plantlore-dev] r161 - trunk/src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#164">[ date ]</a>
+              <a href="thread.html#164">[ thread ]</a>
+              <a href="subject.html#164">[ subject ]</a>
+              <a href="author.html#164">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-20 20:00:15 +0200 (Thu, 20 Apr 2006)
+New Revision: 160
+
+Modified:
+   trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+Log:
+The Server Manager (and GUI) was tested and fixed.
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -3,6 +3,8 @@
+ import java.rmi.NotBoundException;
+ import java.rmi.RemoteException;
+ 
++import net.sf.plantlore.server.DBLayerException;
++
+ /** 
+  * Interface for obtaining the (possibly remote) DBLayer object.
+  * 
+@@ -27,7 +29,7 @@
+ 	 * @throws RemoteException		If the RMI encounters a problem.
+ 	 * @throws NotBoundException	If the server is not running on the specified port.
+ 	 */
+-	DBLayer create(String host, int port) throws RemoteException, NotBoundException;
++	DBLayer create(String host, int port) throws RemoteException, NotBoundException, DBLayerException;
+ 	
+ 	/** 
+ 	 * Destroy the DBLayer. This is a special measure, 
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -9,6 +9,7 @@
+ import org.apache.log4j.Logger;
+ 
+ import net.sf.plantlore.server.ConnectionInfo;
++import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+@@ -84,7 +85,7 @@
+ 	 * @return A stub of the remote object that lives on the server and mediates the connection
+ 	 * with the remote database.
+ 	 */
+-	public synchronized DBLayer create(String host, int port) throws RemoteException, NotBoundException {
++	public synchronized DBLayer create(String host, int port) throws RemoteException, NotBoundException, DBLayerException {
+ 		// Some exceptional cases are handled specially.
+ 		if(host == null || host.equals(&quot;&quot;) || host.equalsIgnoreCase(&quot;localhost&quot;))
+ 			return create();
+@@ -92,18 +93,19 @@
+ 		logger.debug(&quot;Creating a new DBLayer using the RMI:&quot;);
+ 		
+ 		// Connect to the remote server and obtain the RemoteDBLayerFactory
+-		logger.debug(&quot;  # connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
++		logger.debug(&quot;  connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
+ 		Registry registry = LocateRegistry.getRegistry(host, port);
+-		logger.debug(&quot;    completed&quot;);
++		logger.debug(&quot;  completed&quot;);
+ 		
+-		logger.debug(&quot;  # obtaining the remote dblayer factory ...&quot;);
++		logger.debug(&quot;  obtaining the remote dblayer factory ...&quot;);
+ 		RemoteDBLayerFactory remoteFactory = (RemoteDBLayerFactory) registry.lookup(RemoteDBLayerFactory.ID);
+-		logger.debug(&quot;    completed&quot;);
++		logger.debug(&quot;  completed&quot;);
+ 		
+ 		// Get the stub from the remote factory and save the information about the connection
+-		logger.debug(&quot;  # creating a new dblayer...&quot;);
+-		DBLayer stub = remoteFactory.create();
++		logger.debug(&quot;  creating a new dblayer...&quot;);
++		DBLayer stub = remoteFactory.create(); // DBLayerException can spawn here (too many users!)
+ 		logger.debug(&quot;  completed! :)&quot;);
++		
+ 		ConnectionInfo info = new ConnectionInfo(remoteFactory, null, stub, &quot;localhost -&gt; &quot; + host + &quot;:&quot; + port);
+ 		client.put(stub, info);
+ 		
+
+Modified: trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -3,6 +3,8 @@
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
+ 
++import net.sf.plantlore.server.DBLayerException;
++
+ /** 
+  * Interface for obtaining remote references of the DBLayer objects running on some remote server.
+  * 
+@@ -27,7 +29,7 @@
+ 	 * @return The remote reference of the DBLayer (that lives on the server side).
+ 	 * @throws RemoteException If the RMI encounters a problem.
+ 	 */
+-	DBLayer create() throws RemoteException;
++	DBLayer create() throws RemoteException, DBLayerException;
+ 	
+ 	/** 
+ 	 * Destroy the remote object, i.e. ensure some cleanup. 
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -44,13 +44,13 @@
+ 	 * Maximum number of connections from one IP = maximum number of DBLayer objects 
+ 	 * that can be created for users from this IP address.
+ 	 */
+-	private int maxConnectionsPerIP = 1;
++	private int maxConnectionsPerIP = 81; // TODO: Nacitat z nejakyho settings...
+ 	
+ 	/** 
+ 	 * Maximum number of clients = the total maximum number of DBLayer objects 
+ 	 * that can be created by this factory. 
+ 	 */
+-	private int maxConnectionsTotal = 8;
++	private int maxConnectionsTotal = 81; // TODO: Nacitat z nejakyho settings...
+ 	
+ 	/** Keep information about all connected clients. */
+ 	private Hashtable&lt;DBLayer, ConnectionInfo&gt; client = 
+@@ -98,7 +98,7 @@
+ 	 * (too many connections from this IP or too many clients connected). 
+ 	 * @throws RemoteException If the RMI encounters an error.
+ 	 */
+-	public synchronized DBLayer create() throws RemoteException {
++	public synchronized DBLayer create() throws RemoteException, DBLayerException {
+ 		// Apply the connection policy ~ see AllowConnection(host)
+ 		String clientHost = &quot;unknown&quot;;
+ 		try { clientHost = RemoteServer.getClientHost(); } 
+@@ -108,7 +108,7 @@
+ 		// Connection policy
+ 		if( !allowConnection(clientHost) ) {
+ 			logger.warn(&quot;Too many connections from &quot; + clientHost + &quot; (or the server is full)!&quot;);
+-			return null;
++			throw new DBLayerException(&quot;There are either too many connections or the server is already full!&quot;);
+ 		}
+ 		
+ 		// Create a new DBLayer, export it, and keep the stub. Also set the Undertaker of this object.
+@@ -158,8 +158,8 @@
+ 		ConnectionInfo info = client.remove(stub);
+ 		if(info != null) disconnect(info.getDatabase());
+ 		else try {
+-			logger.warn(RemoteServer.getClientHost() + &quot;attempts to destroy &quot; +
+-						&quot;a database layer that has was not created by this factory!&quot;);
++			logger.warn(RemoteServer.getClientHost() + &quot; attempts to destroy &quot; +
++						&quot;a database layer that has was not created by this factory OR attempts to destroy an already destroyed DBLayer!&quot;);
+ 		} catch(ServerNotActiveException e) {}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -1,18 +1,17 @@
+ package net.sf.plantlore.server;
+ 
+-import java.io.IOException;
+-import java.io.InputStream;
++
+ import java.rmi.AlreadyBoundException;
+ import java.rmi.RemoteException;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
+-import java.util.Properties;
+ 
++
+ import org.apache.log4j.Logger;
+-import org.apache.log4j.PropertyConfigurator;
+ 
++
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ import net.sf.plantlore.server.tools.*;
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -5,7 +5,6 @@
+ import java.rmi.RemoteException;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+-import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Observable;
+ 
+@@ -18,7 +17,7 @@
+ public class ServerMng extends Observable {
+ 	
+ 	private Server&lt;ConnectionInfo&gt; server;
+-	private Collection&lt;ConnectionInfo&gt; clients, selected;
++	private Collection&lt;ConnectionInfo&gt; clients;
+ 	
+ 	public enum Mode { CREATE_NEW, CONNECT_EXISTING };
+ 	
+@@ -49,32 +48,24 @@
+ 	}
+ 	
+ 	
+-	public ConnectionInfo[] getConnectedUsers() {
++	public ConnectionInfo[] getConnectedUsers(boolean refresh) {
+ 		if(server == null) return null;
+-		try {
+-			clients = /*(Collection&lt;ConnectionInfo&gt;)*/server.getClients();
+-			logger.debug(&quot;Clients connected to the server received.&quot;);
+-			setChanged(); notifyObservers(&quot;PH&quot;);
+-		} catch( RemoteException e) { logger.warn(&quot;Unable to obtain the list of connected users - network error?&quot;); }
++		if(refresh)
++			try {
++				clients = /*(Collection&lt;ConnectionInfo&gt;)*/server.getClients();
++				logger.debug(&quot;Clients connected to the server received.&quot;);
++				setChanged(); notifyObservers(&quot;PH&quot;);
++			} catch( RemoteException e) { logger.warn(&quot;Unable to obtain the list of connected users - network error?&quot;); }
+ 		return clients.toArray(new ConnectionInfo[0]);
+ 	}
+ 	
+ 	
+-	public void setSelectedClients(ConnectionInfo[] selected) {
+-		this.selected = new ArrayList&lt;ConnectionInfo&gt;(selected.length + 2);
+-		for(ConnectionInfo client : selected) this.selected.add(client);
+-		logger.debug(&quot;Selected clients stored.&quot;);
+-	}
++	public void kick(ConnectionInfo client) throws RemoteException {
++		if(server == null || clients == null) return;
++		logger.info(&quot;Kicking &quot; + client);
++		server.disconnect(client);
+ 	
+-	
+-	public void kickSelectedClients() throws RemoteException {
+-		if(server == null) return;
+-		for(ConnectionInfo client : selected) {
+-			logger.info(&quot;Kicking &quot; + client);
+-			server.disconnect(client);
+-		}
+-		logger.debug(&quot;All selected clients have been kicked.&quot;);
+-		getConnectedUsers();
++		getConnectedUsers(true);
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -4,9 +4,8 @@
+ import java.rmi.RemoteException;
+ 
+ import javax.swing.AbstractAction;
+-import javax.swing.event.ListSelectionEvent;
+-import javax.swing.event.ListSelectionListener;
+ 
++
+ import net.sf.plantlore.server.ConnectionInfo;
+ 
+ public class ServerMngCtrl {
+@@ -17,23 +16,22 @@
+ 	public ServerMngCtrl(ServerMng model, ServerMngView view) {
+ 		this.model = model; this. view = view;
+ 		
+-		view.users.addListSelectionListener(new SelectionChange());
+ 		view.kick.addActionListener(new KickUsers());
+ 		view.startstop.addActionListener(new StopServer());
+ 		view.terminate.addActionListener(new TerminateServer());
++		view.refresh.addActionListener(new Refresh());
+ 	}
+ 	
+-	class SelectionChange implements ListSelectionListener {
+-		public void valueChanged(ListSelectionEvent lse) {
+-			ConnectionInfo[] selected = (ConnectionInfo[])view.users.getSelectedValues();
+-			model.setSelectedClients(selected);			
+-		}
+-	}
+ 	
+ 	class KickUsers extends AbstractAction {
+ 		public void actionPerformed(ActionEvent ae) {
+ 			try {
+-				model.kickSelectedClients();
++				Object[] bunch = view.users.getSelectedValues();
++				if(bunch == null || bunch.length == 0) return;
++
++				for(Object client : bunch)
++					if(client instanceof ConnectionInfo) model.kick((ConnectionInfo)client);
++
+ 			} catch(RemoteException re) { }
+ 		}
+ 	}
+@@ -56,7 +54,7 @@
+ 	
+ 	class Refresh extends AbstractAction {
+ 		public void actionPerformed(ActionEvent ae) {
+-				model.getConnectedUsers();
++				model.getConnectedUsers(true);
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-04-20 18:00:15 UTC (rev 160)
+@@ -41,6 +41,11 @@
+ 
+       &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.DesignBoxLayout&quot;/&gt;
+       &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;refresh&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Refresh&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;kick&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Kick users&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-04-20 16:39:31 UTC (rev 159)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-04-20 18:00:15 UTC (rev 160)
+@@ -9,6 +9,8 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
++import net.sf.plantlore.server.ConnectionInfo;
++
+ /**
+  *
+  * @author  yaa
+@@ -35,6 +37,7 @@
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+     private void initComponents() {
+         jToolBar1 = new javax.swing.JToolBar();
++        refresh = new javax.swing.JButton();
+         kick = new javax.swing.JButton();
+         startstop = new javax.swing.JButton();
+         terminate = new javax.swing.JButton();
+@@ -42,6 +45,9 @@
+         users = new javax.swing.JList();
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        refresh.setText(&quot;Refresh&quot;);
++        jToolBar1.add(refresh);
++
+         kick.setText(&quot;Kick users&quot;);
+         jToolBar1.add(kick);
+ 
+@@ -80,6 +86,7 @@
+     private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JToolBar jToolBar1;
+     protected javax.swing.JButton kick;
++    protected javax.swing.JButton refresh;
+     protected javax.swing.JButton startstop;
+     protected javax.swing.JButton terminate;
+     protected javax.swing.JList users;
+@@ -88,8 +95,11 @@
+ 
+     
+ 	public void update(Observable source, Object parameter) {
+-		if(parameter != null &amp;&amp; parameter.toString().startsWith(&quot;PH&quot;))
+-			users.setListData(model.getConnectedUsers());
++		if(parameter != null &amp;&amp; parameter.toString().startsWith(&quot;PH&quot;)){
++			ConnectionInfo[] clients = model.getConnectedUsers(false);
++			if(clients != null) users.setListData(clients);
++			else users.setListData(new String[] {null}); // empty selection. the setListData mustn't be null :/
++		}
+ 	}
+     
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000163.html">[Plantlore-dev] r159 - in trunk/src/net/sf/plantlore: client server server/manager
+</A></li>
+	<LI>Next message: <A HREF="000165.html">[Plantlore-dev] r161 - trunk/src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#164">[ date ]</a>
+              <a href="thread.html#164">[ thread ]</a>
+              <a href="subject.html#164">[ subject ]</a>
+              <a href="author.html#164">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,1331 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r336 - in trunk/src/net/sf/plantlore: client/checklist client/export client/export/builders client/export/component client/imports common common/record l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r336%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/checklist%20client/export%20client/export/builders%20client/export/component%20client/imports%20common%20common/record%20l10n&In-Reply-To=%3C200605232246.k4NMkcOI012571%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000385.html">
+   <LINK REL="Next"  HREF="000387.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r336 - in trunk/src/net/sf/plantlore: client/checklist client/export client/export/builders client/export/component client/imports common common/record l10n</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r336%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/checklist%20client/export%20client/export/builders%20client/export/component%20client/imports%20common%20common/record%20l10n&In-Reply-To=%3C200605232246.k4NMkcOI012571%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r336 - in trunk/src/net/sf/plantlore: client/checklist client/export client/export/builders client/export/component client/imports common common/record l10n">krater at berlios.de
+       </A><BR>
+    <I>Wed May 24 00:46:38 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000385.html">[Plantlore-dev] r335 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000387.html">[Plantlore-dev] r337 - trunk/src/net/sf/plantlore/help/en/html
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#386">[ date ]</a>
+              <a href="thread.html#386">[ thread ]</a>
+              <a href="subject.html#386">[ subject ]</a>
+              <a href="author.html#386">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-24 00:46:20 +0200 (Wed, 24 May 2006)
+New Revision: 336
+
+Modified:
+   trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/client/export/component/XTree.java
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+Checklist can be restored to the original state (with all plants) now.
+
+L10n added (Checklist, Export, XTree, Error)
+
+imports/DefaultDirector.java
+(1) uses transactions now
+(2) at least one valid AO must come with Occurrence [plus the AO can be deleted, as well as Occurrences].
+Not tested - it currently exceeds my mental capacity...
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -36,6 +36,8 @@
+  */
+ public class Checklist extends JList {
+ 	
++	private String[] original;
++	
+ 	/**
+ 	 * Create a new checklist. Displayes the supplied values in several rows and columns.
+ 	 * 
+@@ -48,6 +50,8 @@
+ 				values[i] = values[i].toString();
+ 		// Insert the values to the list.
+ 		setListData( (String[])values );
++		// Remember the list.
++		original = (String[])values;
+ 		// Specify the default looks.
+ 		setCellRenderer( new CheckCellRenderer() );
+ 		setSelectionModel( new ToggleSelectionModel() );
+@@ -68,6 +72,21 @@
+ 	}
+ 	
+ 	/**
++	 * Reset the list of items.
++	 *
++	 */
++	public void restore() {
++		Object[] selected = getSelectedValues();
++		clearSelection();
++		
++		setListData( original );
++		
++		for(Object r : selected)
++			setSelectedValue(r, false);
++	}
++	
++	
++	/**
+ 	 * Index of the record that is highlighted.
+ 	 */
+ 	private int highlighted = -1;
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -35,6 +35,7 @@
+ 		view.save.setAction(new LoadCreate(1));
+ 		view.clear.setAction(new ClearSelection());
+ 		view.submit.setAction(new Submit());
++		view.restore.setAction(new Restore());
+ 	}
+ 	
+ 	/**
+@@ -90,24 +91,24 @@
+ 			if( result == JFileChooser.APPROVE_OPTION ) {
+ 				if(view.choice.getSelectedFile() == null) {
+ 					JOptionPane.showMessageDialog(null,
+-							L10n.getString(&quot;error.MissingFileName&quot;),
+-							L10n.getString(&quot;error.NothingSelected&quot;),
++							L10n.getString(&quot;Error.MissingFileName&quot;),
++							L10n.getString(&quot;Error.NothingSelected&quot;),
+ 							JOptionPane.WARNING_MESSAGE);
+ 					return;
+ 				}
+ 				try {
+ 					switch(type) {
+ 					case 0:
+-						view.checklist.load(view.choice.getSelectedFile().getAbsolutePath());
++						((Checklist)view.checklist).load(view.choice.getSelectedFile().getAbsolutePath());
+ 						break;
+ 					case 1:
+-						view.checklist.save(view.choice.getSelectedFile().getAbsolutePath());
++						((Checklist)view.checklist).save(view.choice.getSelectedFile().getAbsolutePath());
+ 						break;
+ 					}
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+-							L10n.getString(&quot;error.InvalidChecklist&quot;),
+-							L10n.getString(&quot;error.NothingSelected&quot;),
++							L10n.getString(&quot;Error.InvalidChecklist&quot;),
++							L10n.getString(&quot;Error.NothingSelected&quot;),
+ 							JOptionPane.WARNING_MESSAGE);
+ 					return;
+ 				}
+@@ -129,4 +130,19 @@
+ 			view.checklist.clearSelection();
+ 		}
+ 	}
++	
++	/**
++	 * Restore the checklist to its original state (right after creation).
++	 */
++	class Restore extends AbstractAction {
++		public Restore() {
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.RestoreTT&quot;));
++            ImageIcon icon = Resource.createIcon(&quot;Restore.gif&quot;);
++			if(icon == null) putValue(NAME, L10n.getString(&quot;Checklist.Restore&quot;));
++			else putValue(SMALL_ICON, icon);
++        } 
++		public void actionPerformed(ActionEvent arg0) {
++			((Checklist)view.checklist).restore();
++		}
++	}
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form	2006-05-23 22:46:20 UTC (rev 336)
+@@ -1,6 +1,6 @@
+ &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
+ 
+-&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
+   &lt;/Properties&gt;
+@@ -72,6 +72,14 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;restore&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Restore&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;scrollpane&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -1,19 +1,10 @@
+ package net.sf.plantlore.client.checklist;
+ 
+-import java.awt.Dimension;
+-
+ import javax.swing.JFileChooser;
+-import javax.swing.JScrollPane;
+ 
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.l10n.L10n;
+ 
+-/*
+- * ChecklistView.java
+- *
+- * Created on 15. kv&#283;ten 2006, 22:26
+- */
+-
+ /**
+  * The dialog displaying the checklist and several buttons 
+  * the allow the checklist to be saved or loaded. 
+@@ -47,12 +38,14 @@
+         load = new javax.swing.JButton();
+         save = new javax.swing.JButton();
+         clear = new javax.swing.JButton();
++        restore = new javax.swing.JButton();
+         scrollpane = new javax.swing.JScrollPane();
+         checklist = new Checklist( model.getAllowedValues() );
+         submit = new javax.swing.JButton();
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
+         setTitle(L10n.getString(&quot;Checklist.Title&quot;));
++        
+         load.setText(&quot;Load&quot;);
+         jToolBar1.add(load);
+ 
+@@ -62,12 +55,10 @@
+         clear.setText(&quot;Clear&quot;);
+         jToolBar1.add(clear);
+ 
++        restore.setText(&quot;Restore&quot;);
++        jToolBar1.add(restore);
++
+         scrollpane.setViewportView(checklist);
+-        scrollpane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+-		scrollpane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+-		scrollpane.setPreferredSize( 
+-				new Dimension( 2*checklist.getFixedCellWidth() + 2, 
+-						checklist.getVisibleRowCount()*checklist.getFixedCellHeight() + 30) );
+ 
+         submit.setText(&quot;Submit&quot;);
+ 
+@@ -101,10 +92,11 @@
+     
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+-    protected Checklist checklist;
++    protected javax.swing.JList checklist;
+     protected javax.swing.JButton clear;
+     private javax.swing.JToolBar jToolBar1;
+     protected javax.swing.JButton load;
++    protected javax.swing.JButton restore;
+     protected javax.swing.JButton save;
+     protected javax.swing.JScrollPane scrollpane;
+     protected javax.swing.JButton submit;
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -125,7 +125,7 @@
+ 	throws ExportException {
+ 		if(builder == null) {
+ 			logger.warn(&quot;The builder is null!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidBuilder&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidBuilder&quot;));
+ 		}
+ 		build = builder;
+ 	}
+@@ -140,7 +140,7 @@
+ 	throws ExportException {
+ 		if(result &lt; 0) {
+ 			logger.warn(&quot;The result set is probably not valid!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidResultset&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidResultset&quot;));
+ 		}
+ 		this.result =  result;
+ 	}
+@@ -154,7 +154,7 @@
+ 	throws ExportException {
+ 		if(db == null) {
+ 			logger.error(&quot;The database layer is null!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidDBLayer&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidDBLayer&quot;));
+ 		}
+ 		this.database = db;
+ 	}
+@@ -168,7 +168,7 @@
+ 	throws ExportException {
+ 		if(selection == null || selection.isEmpty()) {
+ 			logger.warn(&quot;The selection is null or empty!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidSelection&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidSelection&quot;));
+ 		}
+ 		this.selection = selection.clone();
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -57,12 +57,12 @@
+ 	 * List of all filters the Export Manager is capable to handle.
+ 	 */
+ 	protected XFilter[] filters = new XFilter[] {
+-			new XFilter(L10n.getString(&quot;FilterPlantloreNative&quot;), false, false, &quot;.xml&quot;, &quot;.pln&quot;),
+-			new XFilter(L10n.getString(&quot;FilterXML&quot;), true, true, &quot;.xml&quot;),
+-			new XFilter(L10n.getString(&quot;FilterCSV&quot;), true, true, &quot;.txt&quot;, &quot;.csv&quot;),	
+-			new XFilter(L10n.getString(&quot;FilterABCD&quot;), &quot;.xml&quot;),	
+-			new XFilter(L10n.getString(&quot;FilterDC&quot;), &quot;.xml&quot;),
+-			new XFilter(L10n.getString(&quot;FilterStdOut&quot;), true, false, &quot;.out&quot;)
++			new XFilter(L10n.getString(&quot;Format.PlantloreNative&quot;), false, false, &quot;.xml&quot;, &quot;.pln&quot;),
++			new XFilter(L10n.getString(&quot;Format.XML&quot;), true, true, &quot;.xml&quot;),
++			new XFilter(L10n.getString(&quot;Format.CSV&quot;), true, true, &quot;.txt&quot;, &quot;.csv&quot;),	
++			new XFilter(L10n.getString(&quot;Format.ABCD&quot;), &quot;.xml&quot;),	
++			new XFilter(L10n.getString(&quot;Format.DC&quot;), &quot;.xml&quot;),
++			new XFilter(L10n.getString(&quot;Format.StdOut&quot;), true, false, &quot;.out&quot;)
+ 	};
+ 	
+ 	
+@@ -262,7 +262,7 @@
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidRootTable&quot;));
+ 		if(template == null)
+ 			template = new Template().setEverything();
+-		if(selection == null)
++		if(selection == null || selection.isEmpty())
+ 			selection = new Selection().all();
+ 			
+ 		
+@@ -280,6 +280,7 @@
+ 		
+ 		// Execute the query.
+ 		Integer resultId = db.executeQuery( query );
++		int results  = db.getNumRows( resultId );
+ 		
+ 		// Create a new file and writer (wrapper).
+ 		Writer writer = new FileWriter( new File( filter.suggestName(filename) ) );
+@@ -288,32 +289,33 @@
+ 			throw new ExportException(L10n.getString(&quot;Error.WriterNotCreated&quot;));
+ 		}
+ 		
+-                logger.debug(&quot;filename: &quot;+ filename);
+-                logger.debug(&quot;filename2: &quot;+ filter.suggestName(filename));
+-                
+-                // Create a new builder according to the selected format.
++		logger.debug(&quot;filename: &quot;+ filename);
++		logger.debug(&quot;filename2: &quot;+ filter.suggestName(filename));
++		
++		// Create a new builder according to the selected format.
+ 		Builder builder;
+-		if(filter.getDescription().equals(L10n.getString(&quot;FilterCSV&quot;)))
++		if(filter.getDescription().equals(L10n.getString(&quot;Format.CSV&quot;)))
+ 			builder = new CSVBuilder(writer, template);
+-		else if(filter.getDescription().equals(L10n.getString(&quot;FilterDC&quot;)))                        
++		else if(filter.getDescription().equals(L10n.getString(&quot;Format.DC&quot;)))                        
+ 			builder = new DarwinCoreBuilder(filter.suggestName(filename));
+-                else if(filter.getDescription().equals(L10n.getString(&quot;FilterABCD&quot;))) 
+-                        builder = new ABCDBuilder(filter.suggestName(filename));
+-                else if(filter.getDescription().equals(L10n.getString(&quot;FilterXML&quot;)))                        
+-                        builder = new XMLBuilder(template, filter.suggestName(filename));                       
+-		else 
++		else if(filter.getDescription().equals(L10n.getString(&quot;Format.ABCD&quot;))) 
++			builder = new ABCDBuilder(filter.suggestName(filename));
++		else if(filter.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
++			builder = new XMLBuilder(template, filter.suggestName(filename));                       
++		else {
+ 			builder = new TrainingBuilder(template);
++		}
+ 
+ 		// Create a new Director and run it in a separate thread.
+ 		DefaultDirector director = new DefaultDirector(
+ 				builder, resultId, db, selection, useProjections, 
+ 				template.getDescription(), rootTable);
+ 		director.ignoreDead( filter.ignoreDead() );
+-		if(selection.size(0) &gt; 0) 
+-			director.setExpectedNumberOfRecords(selection.size(0));
++		if( selection.size(results) &gt; 0 ) 
++			director.setExpectedNumberOfRecords( selection.size(results) );
+ 		
+ 		// Start a new task.
+-		ExportTask t = new ExportTask(db, query, director, writer, selection.size(0));
++		ExportTask t = new ExportTask(db, query, director, writer, selection.size(results));
+ 		exportTasks.add(t);
+ 		t.addObserver(this);
+ 		
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -28,13 +28,13 @@
+ 	
+ 	public void setVisible(boolean visible) {
+ 		if(visible) {
+-			int result = view.choice.showDialog(null, &quot;Export&quot;);
++			int result = view.choice.showDialog(null, L10n.getString(&quot;Export.Title&quot;));
+ 			if( result == JFileChooser.APPROVE_OPTION ) {
+ 				
+ 				if(view.choice.getSelectedFile() == null) {
+ 					JOptionPane.showMessageDialog(null,
+-							L10n.getString(&quot;error.MissingFileName&quot;),
+-							L10n.getString(&quot;error.NothingSelected&quot;),
++							L10n.getString(&quot;Error.MissingFileName&quot;),
++							L10n.getString(&quot;Error.NothingSelected&quot;),
+ 						    JOptionPane.WARNING_MESSAGE);
+ 					return;
+ 				}
+@@ -55,8 +55,8 @@
+ 					progressView.setVisible(true);
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+-							L10n.getString(&quot;error.ExportFailed&quot;) + e,
+-							L10n.getString(&quot;export.Failed&quot;),
++							L10n.getString(&quot;Error.ExportFailed&quot;) + e,
++							L10n.getString(&quot;Export.Failed&quot;),
+ 						    JOptionPane.WARNING_MESSAGE);
+ 				}
+ 			}
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -30,8 +30,8 @@
+ 			Template t = view.tsm.getTemplate();
+ 			if( t.isEmpty() )
+ 				JOptionPane.showMessageDialog(view,
+-					L10n.getString(&quot;error.NoColumnsSelected&quot;),
+-				    L10n.getString(&quot;error.NothingSelected&quot;),
++					L10n.getString(&quot;Error.NoColumnsSelected&quot;),
++				    L10n.getString(&quot;Error.NothingSelected&quot;),
+ 				    JOptionPane.WARNING_MESSAGE);
+ 			else {
+ 				view.setVisible(false);
+@@ -48,8 +48,8 @@
+ 				}
+ 				catch(Exception e) {
+ 					JOptionPane.showMessageDialog(view,
+-							L10n.getString(&quot;error.ExportFailed&quot;) + e,
+-							L10n.getString(&quot;export.Failed&quot;),
++							L10n.getString(&quot;Error.ExportFailed&quot;) + e,
++							L10n.getString(&quot;Export.Failed&quot;),
+ 						    JOptionPane.WARNING_MESSAGE);
+ 				}
+ 			}
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -30,8 +30,8 @@
+ 			if(model != null &amp;&amp; model.isExportInProgress()) {
+ 				int response =
+ 					JOptionPane.showOptionDialog(view,
+-							L10n.getString(&quot;question.AbortImport&quot;),
+-							L10n.getString(&quot;export.Aborted&quot;),
++							L10n.getString(&quot;Question.AbortImport&quot;),
++							L10n.getString(&quot;Export.Aborted&quot;),
+ 							JOptionPane.OK_CANCEL_OPTION,
+ 							JOptionPane.WARNING_MESSAGE,
+ 							null,
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -13,6 +13,8 @@
+ /**
+  * CSV Builder.
+  * 
++ * The first line is the list of names of exported columns.
++ *  
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-23
+  * @version 1.2
+@@ -56,34 +58,24 @@
+ 	}
+ 	
+ 	/**
+-	 * Make a note that the header is yet to be created.
++	 * Create the header - comma separated list of names of columns.
+ 	 */
+ 	public void header() throws IOException {
+ 		firstColumnOnThisLine = true;
+ 		
+-		Occurrence sample = new Occurrence();
+-		sample.setMetadata(new Metadata());
+-		sample.setPublication(new Publication());
+-		sample.setHabitat(new Habitat());
+-		Habitat habitat = sample.getHabitat();
+-		habitat.setPhytochorion(new Phytochorion());
+-		habitat.setTerritory(new Territory());
+-		habitat.setNearestVillage(new Village());
+-		sample.setPlant(new Plant());
+-		
++		AuthorOccurrence sample = (AuthorOccurrence) new AuthorOccurrence().createTorso();
++		constructHeader( sample.getOccurrence() );
++		sample.setOccurrence(null);
+ 		constructHeader(sample);
+-		
+-		AuthorOccurrence associated = new AuthorOccurrence();
+-		associated.setAuthor(new Author());
+-		
+-		constructHeader(associated);
+-		
+-//		stream.write(NEWLINE);
+-//		stream.write(&quot;====================================================&quot;);
+ 		stream.write(NEWLINE);
+ 	}
+ 	
+-	
++	/**
++	 * Traverse the record and send names of relevant columns to the output. 
++	 * 
++	 * @param record	The record to be traversed.
++	 * @throws IOException
++	 */
+ 	private void constructHeader(Record record) throws IOException {
+ 		if(record == null) return;
+ 		Class table = record.getClass();
+
+Modified: trunk/src/net/sf/plantlore/client/export/component/XTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/component/XTree.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/export/component/XTree.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -83,7 +83,7 @@
+ 	 * The Default Hierarchy Model of the Database Model.
+ 	 */
+ 	public static Object[] DefaultHierarchy = {
+-		new XNode(XTree.class, &quot;Plantlore DB&quot;),
++		new XNode(XTree.class, &quot;Plantlore&quot;),
+ 		new Object[] { // OCCURENCE
+ 			new XNode(Occurrence.class, null),
+ 			new XNode(Occurrence.class, Occurrence.UNITIDDB, true),
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -1,7 +1,9 @@
+ package net.sf.plantlore.client.imports;
+ 
+ import java.rmi.RemoteException;
++import java.util.Collection;
+ import java.util.Date;
++import java.util.HashSet;
+ import java.util.Hashtable;
+ import java.util.List;
+ import java.util.Observable;
+@@ -10,6 +12,7 @@
+ 
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_EQ;
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_IS_NULL;
++import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ImportException;
+ import net.sf.plantlore.common.exception.ParserException;
+@@ -33,6 +36,11 @@
+  * The &lt;code&gt;Parser&lt;/code&gt; is responsible for reading and re-creating 
+  * records from the given file. 
+  * 
++ * &lt;br/&gt;
++ * Furthermore, there should be only one Director running at a time.
++ * The Director may have to wish to interact with the User and 
++ * it might not be easy to recognise to which Import the question relates.    
++ * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-05-06
+  * @version 1.0
+@@ -237,15 +245,19 @@
+ 	 * Start the import procedure.
+ 	 */
+ 	public void run() {
++		boolean transactionInProgress = false;
+ 		
+ 		try {
+-			logger.info(&quot;Import begins...&quot;);
++			logger.debug(&quot;Import begins...&quot;);
+ 			
+ 			// Reset the counters.
+ 			count = imported = 0;
+ 			
+ 			// Go through the whole file.
+ 			while( !aborted &amp;&amp; parser.hasNextRecord() ) {
++				
++				boolean atLeastOneAuthorRemains = false;
++				
+ 				logger.info(&quot;Fetching a new record from the Parser.&quot;);
+ 				// What is supposed to happen with the occurrence.
+ 				Action intention = parser.fetchNextRecord(); 
+@@ -261,6 +273,10 @@
+ 				}
+ 				recordFromFile = occ;
+ 				
++				// If the record in the file is dead, then it is clearly meant to be deleted!
++				if( recordFromFile.isDead() )
++					intention = Action.DELETE;
++				
+ 				logger.debug(&quot;New record No. &quot;+count+&quot; fetched: &quot;+occ);
+ 				logger.debug(&quot;Intention: &quot; + intention);
+ 				
+@@ -317,6 +333,12 @@
+ 				
+ 				logger.debug(&quot;About to perform the requested operation.&quot;);
+ 				
++				// Begin a new transaction.
++				transactionInProgress = db.beginTransaction();
++				if( !transactionInProgress )
++					throw new ImportException(L10n.getString(&quot;Error.RaceConditions&quot;));
++				
++				
+ 				try {
+ 					/*----------------------------------------------------------
+ 					 * The `occ` IS in the database as `occInDB` already.  
+@@ -335,7 +357,7 @@
+ 							case DELETE:
+ 								occInDB = (Occurrence) delete( occInDB );
+ 								// By a common decision: If the habitat is not shared it should be marked as deleted, too.
+-								if( !isShared(occInDB.getHabitat(), Occurrence.class, Occurrence.HABITAT) )
++								if( sharedBy(occInDB.getHabitat(), Occurrence.class, Occurrence.HABITAT) &gt; 1 )
+ 									delete( occInDB.getHabitat() );
+ 								break;
+ 							default:
+@@ -357,96 +379,123 @@
+ 				catch(ImportException ie) {
+ 					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
+ 					logger.error(&quot;This exception occured during insert/update/delete: &quot; + ie);
++					// Roll back the transaction.
++					db.rollbackTransaction();
++					transactionInProgress = false;
+ 					// The user cannot do a thing. Should he be informed?
+ 					continue;
+ 				}
+ 				
+ 				
+-				logger.debug(&quot;Adding the associated information about Authors.&quot;);
++				logger.debug(&quot;Processing the associated records - Authors, AuthorOccurrences.&quot;);
+ 				
+-				// The original intention with the Occurrence record.
+-				Action masterPlan = intention;
+-				
++			
+ 				/*----------------------------------------------------------
+ 				 * Now, deal with Authors associated with this Occurrence.
+ 				 *----------------------------------------------------------*/
+-				while( parser.hasNextPart(AuthorOccurrence.class) ) {
++				
++				// Is the record in the database?
++				AuthorOccurrence[] sharers = null;
++				if( isInDB ) 
++					sharers = findAllSharers(occInDB);
++				// If the Occurrence record should have been DELETED, all associated AuthorOccurrences should be deleted as well.
++				if( intention == Action.DELETE &amp;&amp; sharers != null ) {
++					logger.debug(&quot;Deleting all associated data (Author, AuthorOccurrence).&quot;);
++					atLeastOneAuthorRemains = true; // so that the transaction is confirmed
+ 					
+-					AuthorOccurrence ao;
+-					logger.info(&quot;Fetching associated data (Author, AuthorOccurrence).&quot;);
+-					try {
+-						ao = (AuthorOccurrence)parser.nextPart(AuthorOccurrence.class);
+-					} catch (ParserException e) {
+-						logger.warn(&quot;The associated record is not valid. &quot; + e);
+-						continue;
+-					}
+-					
+-					ao.setOccurrence(null);
+-					if( ao.getAuthor() == null ) {
+-						logger.warn(&quot;The record is incomplete - the Author is missing!&quot;);
+-						continue;
+-					}
+-					
+-					// Override the original intention if the Occurrence was supposed to be deleted.
+-					intention = (masterPlan == Action.DELETE) ? Action.DELETE : parser.intentedFor();
+-					
+-					logger.debug(&quot;New author-occurence record: &quot; + ao);
+-					logger.debug(&quot;Intention: &quot; + intention);
+-					
+-					// The Occurrence `occInDB` is in the database, that is for sure.
+-					// The ao.Occurrence, however, is NOT from the database -
+-					// which is why the findMatchInDB would surely cause an exception:
+-					// ao.Occurrence doesn't have the ID set (and even shouldn't!).
+-					ao.setOccurrence( occInDB ); // now it's fine
+-					
+-					Record counterpart = findMatchInDB( ao.getAuthor() );
+-					Author authorInDB = (counterpart == null) ? null : (Author)counterpart;
+-					
+-					// If the author is not in the database the AO cannot be there either.
+-					if(intention == Action.DELETE &amp;&amp; authorInDB == null)
+-						continue;
+-					
+-					// The Author is not in the database - we shall add him.
+-					if(authorInDB == null) {
+-						authorInDB = ao.getAuthor(); // technically, it is the authorToBeInDB
+-						Integer newId = db.executeInsertHistory( authorInDB );
+-						authorInDB.setId(newId);
+-					}
+-					// Set the correct author in the AO.
+-					ao.setAuthor(authorInDB);
+-					
+-					// Is this AuthorOccurrence in the database already?
+-					counterpart = findMatchInDB( ao );
+-					AuthorOccurrence aoInDB = (counterpart != null) ? (AuthorOccurrence)counterpart : null;
+-					
+-					// AO is not in the database.
+-					try {
+-						if(aoInDB == null)
+-							switch(intention) {
+-							case DELETE:
+-								break;
+-							default:
+-								db.executeInsertHistory(ao);	
++					for(AuthorOccurrence ao : sharers) 
++						delete( ao );					
++				}
++				// The intention was to ADD or UPDATE the existing record.  
++				else {
++					while( parser.hasNextPart(AuthorOccurrence.class) ) {
++						// Get the AuthorOccurrence from the Parser.
++						AuthorOccurrence ao;
++						logger.debug(&quot;Fetching associated data (Author, AuthorOccurrence).&quot;);
++						try {
++							ao = (AuthorOccurrence)parser.nextPart(AuthorOccurrence.class);
++						} catch (ParserException e) {
++							logger.warn(&quot;The associated record is not valid. &quot; + e);
++							continue;
++						}
++						
++						// Validity check.
++						if( !ao.areAllNNSet() ) {
++							logger.warn(&quot;The AuthorOccurrence is incomplete - the Author is missing or a NN column is not set!&quot;);
++							continue;
++						}
++						
++						// Check if that AuthorOccurrence is already in the database.
++						AuthorOccurrence aoInDB = null;
++						for( AuthorOccurrence alpha : sharers )
++							if( alpha.equals( ao ) ) {
++								aoInDB = alpha; break;
+ 							}
+-						// AO is in the database already.
+-						else
+-							switch(intention) {
+-							case DELETE:
+-								delete(aoInDB);
+-								break;
+-							case UNKNOWN:
+-							case INSERT:
+-							case UPDATE:
+-								// AO is already in the database (with the same properties a FKs!)
+-								break;
+-							}
+-					} catch (DBLayerException e) {
+-						logger.error(&quot;The associated record was not processed properly.&quot;);
+-						logger.error(&quot;The problem: &quot; + e);
++						
++						// The intention with this AuthorOccurrence. 
++						intention = parser.intentedFor();
++						// If the record is dead, we are supposed to delete it.
++						if( ao.isDead() )
++							intention = Action.DELETE;
++						
++						logger.debug(&quot;New author-occurence record: &quot; + ao);
++						logger.debug(&quot;Intention: &quot; + intention);
++						
++						try {
++							// AO is not in the database.
++							if(aoInDB == null)
++								switch(intention) {
++								case DELETE:
++									break;
++								default:
++									// The Occurrence `occInDB` is in the database, that is for sure.
++									// The ao.Occurrence, however, is NOT from the database.
++									ao.setOccurrence( occInDB ); // now it's fine
++									
++									Record counterpart = findMatchInDB( ao.getAuthor() );
++									Author authorInDB = (counterpart == null) ? null : (Author)counterpart;
++
++									// The Author is not in the database - we shall add him.
++									if(authorInDB == null) {
++										authorInDB = ao.getAuthor(); // technically, it is the authorToBeInDB
++										Integer newId = db.executeInsertInTransaction( authorInDB );
++										authorInDB.setId(newId);
++									}
++									// Set the correct author in the AO.
++									ao.setAuthor(authorInDB);
++									
++									// Now the AuthorOccurrence is complete.
++									db.executeInsertInTransaction(ao);	
++									
++									atLeastOneAuthorRemains = true;
++								}
++							// AO is in the database already.
++							else
++								switch(intention) {
++								case DELETE:
++									delete(aoInDB);
++									break;
++								case UNKNOWN:
++								case INSERT:
++								case UPDATE:
++									// AO is already in the database (with the same properties a FKs!)
++									atLeastOneAuthorRemains = true;
++									break;
++								}
++						} catch (DBLayerException e) {
++							logger.error(&quot;The associated record was not processed properly. &quot;  + e );
++							continue;
++						}
++						
++						logger.debug(&quot;Author-occurence processed.&quot;);
+ 					}
+-					
+-					logger.debug(&quot;Author-occurence processed.&quot;);
+ 				}
++				
++				// Transaction is valid iff everything went fine and the 
++				if( atLeastOneAuthorRemains )
++					transactionInProgress = ! db.commitTransaction();
++				else
++					transactionInProgress = ! db.rollbackTransaction();
+ 					
+ 				imported++;
+ 				setChanged(); notifyObservers( imported );
+@@ -455,7 +504,12 @@
+ 		catch(Exception e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+ 			logger.error(&quot;The problem: &quot; + e);
+-			/*e.printStackTrace();*/
++			
++			if( transactionInProgress ) 
++				try {
++					transactionInProgress = ! db.rollbackTransaction();
++				} catch (Exception e2) {}
++			
+ 			setChanged(); notifyObservers(e);
+ 		}
+ 		
+@@ -465,26 +519,53 @@
+ 	
+ 	
+ 	/**
+-	 * Find out whether the record is shared by some more records.
++	 * Find out whether the record is shared among other records.
+ 	 * &lt;br/&gt;
+ 	 * 
+ 	 * @param record	The instance of some record
+ 	 * @param father	The table that contains records possibly sharing the &lt;code&gt;record&lt;/code&gt;.
+ 	 * @param column	The name of the foreign key.	
+-	 * @return	True if the &lt;code&gt;record&lt;/code&gt; 
+-	 * is shared by more than one records from the &lt;code&gt;father&lt;/code&gt; table.
++	 * @return	The number of records in from the &lt;code&gt;father&lt;/code&gt; table that share the &lt;code&gt;record&lt;/code&gt;. 
+ 	 */
+-	public boolean isShared(Record record, Class father, String column) 
++	public int sharedBy(Record record, Class father, String column) 
+ 	throws RemoteException, DBLayerException {
+ 		SelectQuery q = db.createQuery(father);
+ 		q.addRestriction(RESTR_EQ, column, null, record, null);
+ 		int resultset = db.executeQuery(q), 
+ 		rows = db.getNumRows(resultset);
+ 		db.closeQuery(q);
+-		return rows &gt; 1;
++		return rows;
+ 	}
+ 	
+ 	/**
++	 * Find all records that share the specified one.
++	 * &lt;br/&gt;
++	 * 
++	 * @param shared	The instance of some record
++	 * @param father	The table that contains records possibly sharing the &lt;code&gt;record&lt;/code&gt;.
++	 * @param column	The name of the foreign key.	
++	 * @return	All sharers. 
++	 */
++	protected AuthorOccurrence[] findAllSharers(Record shared) 
++	throws RemoteException, DBLayerException {
++		SelectQuery q = db.createQuery(AuthorOccurrence.class);
++		q.addRestriction(RESTR_EQ, AuthorOccurrence.OCCURRENCE, null, shared, null);
++		int resultset = db.executeQuery(q),
++		rows = db.getNumRows(resultset);
++		AuthorOccurrence[] sharers;
++		if(rows &gt; 0) {
++			sharers = new AuthorOccurrence[rows];
++			Object[] pulp = db.more(resultset, 0, rows - 1);
++			for( int i = 0; i &lt; rows; i++ )
++				sharers[i] = ( (AuthorOccurrence)(  (Object[])pulp[i]  )[0] );
++		}
++		else
++			sharers = new AuthorOccurrence[0];
++		db.closeQuery(q);
++		return sharers;
++	}
++	
++	/**
+ 	 * A simple cache of records (one for each table).
+ 	 * It is higly likely, due to the properties of the export procedure,
+ 	 * that records sharing the same subrecords will come together.
+@@ -616,7 +697,7 @@
+ 			if(counterpart == null) {
+ 				logger.debug(&quot;The record is not in the database. It will be inserted.&quot;);
+ 				// Insert it!
+-				Integer newId = db.executeInsertHistory(record);
++				Integer newId = db.executeInsertInTransaction(record);
+ 				record.setId( newId );
+ 				return record;
+ 			}
+@@ -713,7 +794,7 @@
+ 				// update the existing one risking that we will (possibly) affect some other records
+ 				// that share the `current`.
+ 				
+-				if( isShared(current, father, foreignKey) ) {
++				if( sharedBy(current, father, foreignKey) &gt; 1 ) {
+ 					// This is up to the User.
+ 					logger.info(&quot;The record [&quot;+current+&quot;] is shared!&quot;);
+ 					insertUpdateDecision = lastDecision;
+@@ -727,13 +808,13 @@
+ 					logger.debug(&quot;Updating the current record.&quot;);
+ 					// Replace the values with new ones - fortunately, there are no FK involved.
+ 					current.replaceWith( replacement );
+-					db.executeUpdateHistory( current );
++					db.executeUpdateInTransaction( current );
+ 					return current;
+ 				}
+ 				else /*if( decision == Action.INSERT )*/ {
+ 					logger.debug(&quot;Inserting a new record.&quot;);
+ 					// Insert the replacement as a new record [DEFAULT OPERATION].
+-					Integer newId = db.executeInsertHistory(replacement);
++					Integer newId = db.executeInsertInTransaction(replacement);
+ 					replacement.setId( newId );
+ 					return replacement;
+ 				}
+@@ -782,16 +863,16 @@
+ 					logger.debug(&quot;Updating the current record.&quot;);
+ 					// Occurrences are always UPDATED
+ 					if( current instanceof Occurrence )
+-						db.executeUpdateHistory(current);
++						db.executeUpdateInTransaction(current);
+ 					else {
+-						boolean shared = isShared(current, father, foreignKey);
++						boolean shared = sharedBy(current, father, foreignKey) &gt; 1;
+ 						// If the record is not shared, it is safe to performt he udpate.
+ 						if( !shared ) 
+-							db.executeUpdateHistory(current);
++							db.executeUpdateInTransaction(current);
+ 						// If the shared record is Habitat, a new record will be created.
+ 						// Required by: Lada and the DB Model demands.
+ 						else if( current instanceof Habitat ) {
+-							Integer newId = db.executeInsertHistory(current);
++							Integer newId = db.executeInsertInTransaction(current);
+ 							current.setId(newId);
+ 						} else {
+ 							// If the shared record is something else, the User's intervention may be needed.
+@@ -800,10 +881,10 @@
+ 								insertUpdateDecision = expectDecision( replacement );
+ 							if(insertUpdateDecision == Action.UPDATE) 
+ 								// User decided to update (potentially dangerous).
+-								db.executeUpdateHistory(current);
++								db.executeUpdateInTransaction(current);
+ 							else {
+ 								// User decided to insert new copy (safer).
+-								Integer newId = db.executeInsertHistory(current);
++								Integer newId = db.executeInsertInTransaction(current);
+ 								current.setId(newId);
+ 							}
+ 						}
+@@ -853,7 +934,7 @@
+ 		if(record instanceof Deletable) {
+ 			logger.info(&quot;Deleting [&quot;+record+&quot;] from the database.&quot;);
+ 			((Deletable)record).setDeleted(1);
+-			db.executeUpdateHistory( record );
++			db.executeUpdateInTransaction( record );
+ 		}
+ 		return record;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -68,7 +68,9 @@
+ 	 */
+ 	protected boolean strict = true;
+ 	
++	protected final int CAPACITY = 32;
+ 	
++	
+ 	/**
+ 	 * Create the AutoComboBox with given array of values.
+ 	 * The AutoComboBox is in the strict mode by default.
+@@ -105,6 +107,18 @@
+ 			super.setPopupVisible(visibility);
+ 	}
+ 	
++	
++	public AutoComboBoxNG3() {
++		this(new String[] { null });		
++	} 
++	
++	
++	public void addItems(Object[] items) {
++		for(Object item : items)
++			if(item != null) 
++				this.addItem(item);
++	}
++	
+ 
+ 	/**
+ 	 * Enhanced ComboBox Editor returns the selected item based 
+@@ -189,7 +203,7 @@
+ 						}
+ 					}
+ 				
+-					if(!strict &amp;&amp; !prefix.equals(previousPrefix)) { // non-strict mode allows entering an unknown value 
++					if(!strict &amp;&amp; !prefix.equals(previousPrefix) &amp;&amp; prefix.length() &lt; CAPACITY) { // non-strict mode allows entering an unknown value 
+ 						super.remove(0, getLength());
+ 						super.insertString(0, prefix, null);
+ 						previousPrefix = prefix;
+@@ -210,7 +224,7 @@
+ 		public void remove(int offset, int length) throws BadLocationException {
+ 			if(!deflect) {
+ 				deflect = true;
+-				setPopupVisible(true);
++				if(keyPressed) setPopupVisible(true);
+ 				setMatch(getText(0, offset));
+ 				deflect = false;
+ 			}
+@@ -220,7 +234,7 @@
+ 		public void replace(int offset, int length, String text, AttributeSet attr) throws BadLocationException {
+ 			if(!deflect) {
+ 				deflect = true;
+-				setPopupVisible(true);
++				if(keyPressed) setPopupVisible(true);
+ 				setMatch(getText(0,offset) + text);
+ 				deflect = false;
+ 			}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-23 22:46:20 UTC (rev 336)
+@@ -141,7 +141,7 @@
+ 				setValue(key, subrecord);
+ 			} catch (Exception e) { e.printStackTrace(); }
+ 		}
+-		return null;
++		return this;
+ 	}
+ 	
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-23 22:45:38 UTC (rev 335)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-23 22:46:20 UTC (rev 336)
+@@ -303,16 +303,25 @@
+ Database = Database
+ Change = Change
+ 
+-# EXPORT | IMPORT
+-FilterPlantloreNative = Plantlore native (for future import)
+-FilterXML = Extensible Markup Language (XML)
+-FilterCSV = Comma Separated Value (CSV)
+-FilterABCD = ABCD Schema native
+-FilterDC = DarwinCore native
+-FilterConsole = Console output
++#=============================================================
++# CHECKLIST
++#	net.sf.plantlore.client.checklist
++#=============================================================
++Checklist.Title = Checklist
++Checklist.Submit = Submit
++Checklist.SubmitTT = Set the selected plants.
++Checklist.Load = Load
++Checklist.LoadTT = Load a previously stored checklist (preserve the selection).
++Checklist.Save = Create
++Checklist.SaveTT = Create a new checklist from the currently selected plants.
++Checklist.Clear = Deselect all
++Checklist.ClearTT = Deselect all currently selected records.
++Checklist.Restore = Restore
++Checklist.RestoreTT = Restore the checklist to the original state (with all plants).
+ 
+ 
+ 
++
+ import.Title = Import
+ import.Failed = Import failed.
+ import.Initializing = Initializing...
+@@ -329,17 +338,27 @@
+ import.Insert = Insert new
+ import.Replace = Replace
+ 
++#=============================================================
++# EXPORT
++#	net.sf.plantlore.client.export
++#=============================================================
+ Export.Title = Export
+-Export.Aborted = Aborted
++Export.Initializing = Initializing export. This may take a while.
++Export.Aborted = Aborted by User.
++Export.Completed = Completed!
++Export.Failed = Export failed
+ Export.Abort = Abort
+ Export.Hide = Hide
+ Export.SelectColumns = Select Columns
+-Export.Initializing = Initializing...
+-Export.Failed = Export failed! 
+-Export.RecordsExported = records exported
+-Export.Completed = Completed!
++Export.RecordsExported = records exported.
+ Export.Progress = records exported
+ 
++Format.PlantloreNative = Plantlore Native (*.xml)
++Format.XML = XML (*.xml)
++Format.CSV = Comma separated values (*.txt, *.csv)
++Format.ABCD = ABCD Schema (*.xml)
++Format.DC = DarwinCore (*.xml)
++Format.StdOut = Standard Output
+ 
+ 
+ 
+@@ -359,7 +378,117 @@
+ 
+ AutoSelect = select automatically 
+ 
++#=============================================================
++# RECORDS
++#	net.sf.plantlore.client.export.component.XTree
++#=============================================================
++XTree.Plantlore = Plantlore
+ 
++Author = Author
++Author.wholeName = Name
++Author.organization = Organization
++Author.role = Role
++Author.address = Address
++Author.phoneNumber = Phone number
++Author.email = E-mail
++Author.url = URL
++Author.note = Note
++Author.deleted = Deleted
++
++AuthorOccurrence = Author-Occurrence
++AuthorOccurrence.role = Role
++AuthorOccurrence.note = Note
++AuthorOccurrence.author = Author
++AuthorOccurrence.occurrence = Occurrence
++AuthorOccurrence.deleted = Deleted
++
++Habitat = Habitat
++Habitat.territory = Territory
++Habitat.phytochorion = Phytochorion
++Habitat.nearestVillage = Nearest bigger seat
++Habitat.quadrant = Quadrant
++Habitat.description = Description
++Habitat.country = Country
++Habitat.altitude = Altitude
++Habitat.latitude = Latitude
++Habitat.longitude = Longitude
++Habitat.note = Note
++Habitat.deleted = Deleted
++
++Metadata = Metadata
++Metadata.technicalContactName = Technical contact
++Metadata.technicalContactAddress = Technical contact address
++Metadata.technicalContactEmail = Technical contact email
++Metadata.contentContactName = Content contact
++Metadata.contentContactAddress = Content contact address
++Metadata.contentContactEmail = Content contact email
++Metadata.dataSetTitle = Data set
++Metadata.dataSetDetails = Details
++Metadata.sourceInstitutionId = Institution
++Metadata.sourceId = Source
++Metadata.ownerOrganizationAbbrev = Organization
++Metadata.dateCreate = Created on
++Metadata.dateModified = Modified on
++Metadata.recordBasis = Basis
++Metadata.biotopeText = Biotope
++Metadata.deleted = Deleted
++
++Occurrence = Occurrence
++Occurrence.unitIdDb = Database ID
++Occurrence.unitValue = Unique ID
++Occurrence.habitat = Habitat
++Occurrence.plant = Plant
++Occurrence.yearCollected = Year
++Occurrence.monthCollected = Month
++Occurrence.dayCollected = Day
++Occurrence.timeCollected = Time
++Occurrence.isoDateTimeBegin = ISO Date
++Occurrence.dataSource = Source
++Occurrence.publication = Publication
++Occurrence.herbarium = Herbarium
++Occurrence.createdWhen = Created on
++Occurrence.createdWho = Created by
++Occurrence.updatedWhen = Updated on
++Occurrence.updatedWho = Updated by
++Occurrence.metadata = Metadata
++Occurrence.note = Note
++Occurrence.deleted = Deleted
++
++Phytochorion = Phytochorion
++Phytochorion.name = Name
++Phytochorion.code = Code
++
++Plant = Plant
++Plant.surveyTaxId = ID
++Plant.taxon = Taxon
++Plant.genus = Genus
++Plant.species = Species
++Plant.scientificNameAuthor = Named by
++Plant.czechName = Czech name
++Plant.synonyms = Synonyms
++Plant.note = Note
++
++Publication = Publication
++Publication.collectionName = Collection
++Publication.collectionYearPublication = Year
++Publication.journalName = Journal
++Publication.journalAuthorName = Author
++Publication.referenceCitation = Reference
++Publication.referenceDetail = Detail
++Publication.url = URL
++Publication.createdWho = Created by
++Publication.note = Note
++Publication.deleted = Deleted
++
++Territory = Territory
++Territory.name = Name
++
++Village = Village
++Village.name = Name
++
++
++
++
+ # LIST OF WARNINGS
+ warningEmptySelection = No record has been selected.\n Please select some record and try again.
+ warningEmptySelectionTitle = Empty selection...
+@@ -367,7 +496,10 @@
+ warningNoUsername = No username has been entered.\n Please select or type a username and try again.
+ warningNoUsernameTitle = Missing username...
+ 
+-# LIST OF ERRORS AND EXCEPTIONS
++
++#=============================================================
++# ERRORS
++#=============================================================
+ errorDBLayerException = The connection to the database could not be established.\n Please make sure you entered valid authentication information (misspelled username, incorrect password)\n and try again.
+ errorDBLayerExceptionTitle = Database connection error! 
+ 
+@@ -385,19 +517,27 @@
+ 
+ 
+ 
+-error.InvalidDBLayer = The database layer is not valid! \n The DBLayer cannot be null.
+-error.InvalidParser = The Parser is not valid! \n The Parser cannot be null.
+-error.InvalidUser = The User is not valid! \n The User cannot be null.
+-error.RecordNotFound = No matching record was found!
+-error.FKIsNull = The foreign key is not set!
+-error.ReaderNotCreated = Unable to create a new reader!
+-error.MissingFileName = The name of the file is missing!
+-error.ThreadFailed = Unable to create a new thread!
+-error.NothingSelected = Nothing is selected!
+-error.ImportFailed = Import failed!\n
++Error.InvalidDBLayer = The database layer is not valid! 
++Error.InvalidBuilder = The supplied Builder is not valid!
++Error.InvalidResultset = The supplied result set identifier is not valid!
++Error.InvalidSelection = The supplied list of selected items is not valid!
++Error.TooManyTasks = There are too many exports running already.
++Error.InvalidQuery = The supplied select query is not valid!
++Error.InvalidFilter = The supplied file format is not valid!
++Error.MissingFileName = The file name was not specified.
++Error.InvalidRootTable = The supplied root table is not valid!\n If you want to use projections,\n you must specify the root table.
++Error.WriterNotCreated = Unable to create the output file writer.
++Error.NothingSelected = Nothing is selected.
++Error.NoColumnsSelected = No columns are selected.
++Error.ExportFailed = Export ended prematurely. 
++Error.InvalidChecklist = The checklist is not valid.
+ 
+ 
+-question.AbortImport = Import will be aborted.
++
++#=============================================================
++# QUESTIONS
++#=============================================================
++Question.AbortImport = Import will be aborted.
+ question.SharedRecord = This record is is shared. Updating it may affect other records.
+ question.NewerRecord = The record in the database is newer than the record in the file.
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000385.html">[Plantlore-dev] r335 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000387.html">[Plantlore-dev] r337 - trunk/src/net/sf/plantlore/help/en/html
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#386">[ date ]</a>
+              <a href="thread.html#386">[ thread ]</a>
+              <a href="subject.html#386">[ subject ]</a>
+              <a href="author.html#386">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

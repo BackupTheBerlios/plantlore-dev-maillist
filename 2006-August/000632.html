@@ -1,0 +1,2198 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r484 - trunk/src/net/sf/plantlore/client/user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r484%20-%20trunk/src/net/sf/plantlore/client/user&In-Reply-To=%3C200608032314.k73NEidD009327%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000631.html">
+   <LINK REL="Next"  HREF="000633.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r484 - trunk/src/net/sf/plantlore/client/user</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r484%20-%20trunk/src/net/sf/plantlore/client/user&In-Reply-To=%3C200608032314.k73NEidD009327%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r484 - trunk/src/net/sf/plantlore/client/user">lada at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug  4 01:14:44 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000631.html">[Plantlore-dev] r483 - in trunk/src/net/sf/plantlore: client	client/history client/metadata common l10n
+</A></li>
+        <LI>Next message: <A HREF="000633.html">[Plantlore-dev] Reconnect &amp; RemoteException
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#632">[ date ]</a>
+              <a href="thread.html#632">[ thread ]</a>
+              <a href="subject.html#632">[ subject ]</a>
+              <a href="author.html#632">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-04 01:14:30 +0200 (Fri, 04 Aug 2006)
+New Revision: 484
+
+Modified:
+   trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+   trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerView.java
+Log:
+UserManager - task, long transaction, comment, ...
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-08-03 08:49:39 UTC (rev 483)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-08-03 23:14:30 UTC (rev 484)
+@@ -16,7 +16,6 @@
+ import java.util.ArrayList;
+ import java.util.Date;
+ import net.sf.plantlore.common.AutoTextArea;
+-import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.Right;
+ import org.apache.log4j.Logger;
+@@ -52,91 +51,79 @@
+    class CloseButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
++    	   model.setUsedClose(true);
+     	   view.close();
+        }
+    }
+    
+-   /*
+-    *
++   /**
++    * ActionListener class controlling the &lt;b&gt;ADD&lt;/b&gt;, &lt;b&gt;EDIT&lt;/b&gt; and &lt;b&gt;OK&lt;/b&gt; buttons on the form.
+     */
+    class OperationButtonListener implements ActionListener {
+         public void actionPerformed(ActionEvent actionEvent)
+-       {    	  
+-    	   // zeptame se modelu, co je treba provest za akci DETEIL, ADD, EDIT
+-            logger.debug(model.getOperation());
+-           if (model.getOperation().equals(&quot;ADD&quot;)) {
+-               logger.debug(&quot;Add of User.&quot;);
+-               //otestovani, zda jsou vyplneny povinne polozky
+-                if (view.checkNotNull()) {
+-                   //ovezeni, zda se neopakuje login (musi byt unikatni)
+-                   if (model.uniqueLogin(view.loginText.getText())) {
+-                       //message s informaci, ze je dany login jiz existuje 
+-                       view.checUniqueLoginMessage(view.loginText.getText());
++       {    	
++        	// Get information about operation - ADD, EDIT, DETAILS
++            logger.debug(&quot;Operation &quot; + model.getOperation() + &quot;was called&quot;);
++            if (model.getOperation().equals(&quot;ADD&quot;)) {
++                logger.debug(&quot;Add of User.&quot;);
++                //check wether all obligatory fields were filled 
++                 if (view.checkNotNull()) {
++                     //Check if new name of project (dataSetTitle) already exist
++                 	if (model.uniqueLogin(view.loginText.getText())){                		
++                 		view.showErrorMessage(UserManager.ERROR_TITLE, UserManager.ERROR_LOGIN);
++                 		return;
++                 	}
++                    //create new instance of User and save filed values    
++                   User user = new User();                                                                            
++                   user.setLogin(view.loginText.getText());
++                   user.setPassword(view.passwordtext.getText());
++                   user.setFirstName(view.firstNameText.getText());
++                   user.setSurname(view.surnameText.getText());
++                   user.setWholeName(view.firstNameText.getText()+&quot; &quot;+view.surnameText.getText());
++                   user.setEmail(view.emailText.getText());
++                   user.setAddress(view.addressText.getText());
++                   user.setCreateWhen(new Date());
++                   user.setDropWhen(null);
++                   user.setNote(view.noteText.getText());
++                   //Right
++                   Right right = new Right();
++                   user.setRight(right);
++                   right.setEditGroup(model.getEditGroupID());
++                   if (view.administratorCheckBox.isSelected()) { 
++                	   right.setAdministrator(1);
+                    } else {
+-                        //vytvorime novy rekord a ulozime do nej nactene hodnoty
+-                        User user = new User();                    
+-                         //nacteni hodnot                                       
+-                       user.setLogin(view.loginText.getText());
+-                       user.setPassword(view.passwordtext.getText());
+-                       user.setFirstName(view.firstNameText.getText());
+-                       user.setSurname(view.surnameText.getText());
+-                       user.setWholeName(view.firstNameText.getText()+&quot; &quot;+view.surnameText.getText());
+-                       user.setEmail(view.emailText.getText());
+-                       user.setAddress(view.addressText.getText());
+-                       user.setCreateWhen(new Date());
+-                       user.setDropWhen(null);
+-                       user.setNote(view.noteText.getText());
+-                       //Right
+-                       Right right = new Right();
+-                       user.setRight(right);
+-
+-                       right.setEditGroup(model.getEditGroupID());
+-
+-                       if (view.administratorCheckBox.isSelected()) {
+-                           right.setAdministrator(1);
+-                       } else {
+-                           right.setAdministrator(0);
+-                       }
+-                       if (view.editAllCheckBox.isSelected()) {
+-                           right.setEditAll(1);
+-                       } else {
+-                           right.setEditAll(0);
+-                       }
+-                       //FIXME: rozmyslet nejake chytre oznacovani aneb pokud mohu editovat vse, tak je jasne, ze mohu editovat i svoje, atd.
+-                       //BUDE TO CHTIT CHYTRE OZNACOVANI
+-
+-                       if (view.addRightCheckBox.isSelected()) {
+-                           right.setAdd(1);
+-                       } else {
+-                           right.setAdd(0);
+-                       }                                       
+-
+-                        //mela by se tu vypsat nejaka informace pro uzivatele
+-                        //pridani zaznamu do tabulky User
+-
+-                       //FIXME: PRIDANI PADA na vlozeni do tabulky tUser
+-                        model.addUserRecord(user, right);                                                                                  
+-                        //zavreni pridavaciho dialogu
+-                        view.close();
+-                    }                                                           
+-                }
++                       right.setAdministrator(0);
++                   }
++                   if (view.editAllCheckBox.isSelected()) {
++                       right.setEditAll(1);
++                   } else {
++                       right.setEditAll(0);
++                   }
++                   if (view.addRightCheckBox.isSelected()) {
++                       right.setAdd(1);
++                   } else {
++                       right.setAdd(0);
++                   }                                       
++                    // Save new User into model
++                    model.setNewUserRecord(user);
++                    model.setRight(right);  
++                    view.close();
++                    }                                                                   
+            } else if (model.getOperation().equals(&quot;EDIT&quot;)) {  
+                logger.debug(&quot;Edit of User.&quot;);
+-                //otestovani, zda jsou vyplneny povinne polozky
++                //check wether all obligatory fields were filled 
+                 if (view.checkNotNull()) {
+-                    //nacteni hodnot                                                          
+-                   model.getSelectedRecord().setPassword(view.passwordtext.getText());
+-                   model.getSelectedRecord().setFirstName(view.firstNameText.getText());
+-                   model.getSelectedRecord().setSurname(view.surnameText.getText());
+-                   model.getSelectedRecord().setWholeName(view.firstNameText.getText()+&quot; &quot;+view.surnameText.getText());
+-                   model.getSelectedRecord().setEmail(view.emailText.getText());
+-                   model.getSelectedRecord().setAddress(view.addressText.getText());                  
+-                   model.getSelectedRecord().setNote(view.noteText.getText());
++                    //Load data                                                          
++                   model.getUserRecord().setPassword(view.passwordtext.getText());
++                   model.getUserRecord().setFirstName(view.firstNameText.getText());
++                   model.getUserRecord().setSurname(view.surnameText.getText());
++                   model.getUserRecord().setWholeName(view.firstNameText.getText()+&quot; &quot;+view.surnameText.getText());
++                   model.getUserRecord().setEmail(view.emailText.getText());
++                   model.getUserRecord().setAddress(view.addressText.getText());                  
++                   model.getUserRecord().setNote(view.noteText.getText());
+                    //Right
+-                   Right right = model.getSelectedRecord().getRight();
+-                   
+-                   right.setEditGroup(model.getEditGroupID());
+-                   
++                   Right right = model.getUserRecord().getRight();                   
++                   right.setEditGroup(model.getEditGroupID());                   
+                    if (view.administratorCheckBox.isSelected()) {
+                        right.setAdministrator(1);
+                    } else {
+@@ -148,14 +135,12 @@
+                        right.setEditAll(0);
+                    }
+                    //FIXME: rozmyslet nejake chytre oznacovani aneb pokud mohu editovat vse, tak je jasne, ze mohu editovat i svoje, atd.
+-                   //BUDE TO CHTIT CHYTRE OZNACOVANI                   
++                                
+                    if (view.addRightCheckBox.isSelected()) {
+                        right.setAdd(1);
+                    } else {
+                        right.setAdd(0);
+-                   }
+-                   //ulozeni uzivatele - melibychom zobrazit message,ze bude olozen novy uzivatel OK, CANCLE
+-                   model.editUserRecord();
++                   }                   
+                    view.close(); 
+                 }
+            } else if (model.getOperation().equals(&quot;DETAILS&quot;)) {
+@@ -180,7 +165,7 @@
+                 if (tmp.length() &gt; 1) //omit empty lines
+                     userList.add(tmp);
+             }
+-            model.setEditGroup(userList);
++            // TODO - co tu mam volat??? model.setEditGroup(userList);
+         }
+     }//taxonAreaListener
+     
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-08-03 08:49:39 UTC (rev 483)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-08-03 23:14:30 UTC (rev 484)
+@@ -9,17 +9,18 @@
+ import java.text.DateFormat;
+ import java.util.Observable;
+ import java.util.Observer;
++
+ import javax.swing.JDialog;
+-import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.TransferFocus;
+ import net.sf.plantlore.common.PlantloreHelp;
+-import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.l10n.L10n;
+ 
++
+ /**
+  *
+  * @author  Lada
+@@ -35,17 +36,27 @@
+     public AddEditUserView(UserManager model, javax.swing.JDialog parent, boolean modal) {
+         super(parent, modal);
+         this.model = model;
++        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents(); 
+         PlantloreHelp.addKeyHelp(PlantloreHelp.USER_ADD, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.USER_ADD, this.helpButton);        
+-        new TabTransfersFocus(noteText);
+-        new TabTransfersFocus(editGroupTextArea);                
++        TransferFocus.patch(noteText);
++        TransferFocus.patch(editGroupTextArea);                
+     }
+     
+      public void update(Observable observable, Object object)
+     {
+     }
+-    
++   
++     /**
++      *  Display generic error message.
++      *  @param title title of error message
++      *  @param message error message we want to display
++      */
++     public void showErrorMessage(String title, String message) {
++         JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);               
++     }
++     
+      /*
+       * nastaveni formulare pro add
+       */
+@@ -81,7 +92,7 @@
+       */
+      public void loadData() {
+            //Get selected user object
+-           User user = model.getSelectedRecord();      
++           User user = model.getUserRecord();      
+            loginText.setText(user.getLogin());
+            passwordtext.setText(user.getPassword());
+            firstNameText.setText(user.getFirstName());
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-03 08:49:39 UTC (rev 483)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-03 23:14:30 UTC (rev 484)
+@@ -12,25 +12,33 @@
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Date;
++import java.util.Observable;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import org.apache.log4j.Logger;
+ 
+ /**
+- *
+- * @author Lada
++ * UserManager model. Contains bussines logic and data fields of the UserManager. Implements
++ * operations including add user, edit user, delete user and search user. 
++ * 
++ * @author Lada Oberreiterova
++ * @version 1.0
+  */
+-public class UserManager {
++public class UserManager extends Observable {
+     
+     /** Instance of a logger */
+     private Logger logger;      
+     /** Instance of a database management object */
+     private DBLayer database;   
++    /** Exception with details about an error */
++    private String error = null;
+     /** Constant with default number of rows to display */
+     protected static final int DEFAULT_DISPLAY_ROWS = 6;    
+     /** Actual number of rows to display */
+@@ -39,44 +47,39 @@
+     private int currentFirstRow;
+     /** Information about current display rows*/
+     private String displayRow;    
+-    
+-     //*******Informations about searching Result from database*****//
+     /** Result of the search query */
+     private int resultId = 0;
+     /** List of data (results of a search query) displayed in the table */
+-    private ArrayList&lt;User&gt; userList = new ArrayList();         
+-    // informace pro uzivatele o zmenach v tabulce User
+-    private String messageUser;
+-    
+-    //Informace o operaci, ktera se bude provadet - ADD, EDIT, DELETE, DETAIL
++    private ArrayList&lt;User&gt; userList = new ArrayList&lt;User&gt;();         
++    /** Message containing information about changes in user record*/
++    private String messageUser;    
++    /** Type of operation - ADD, EDIT, DELETE, DETAIL*/
+     private String operation = &quot;&quot;;
+-    //Vyvrany zaznam v tabulce s Petadaty
+-    private User selectedRecord;
+-    
+-    //*********************Search - promenne podle,kterych se vyhledava************//
++    /** Containing information about closing the addEdit dialog*/
++    private boolean usedClose = false;
++    /** Record for add, update or delete*/
++    private User userRecord;
++    /** Identifier of record for add, update or delete*/
++    private int idRecord;
+     /** Field to be used for sorting search query results */
+     private int sortField = SORT_LOGIN;
+     /** Direction of sorting. 0 = ASC, 1 = DESC. Default is ASC */
+     private int sortDirection = 0;
+     /** Direction of type user. 0 = All user,1 = Current user. Default is All user.*/
+-    private int showUserDirection = 0;
+-    /** Data about user*/
+-    private String login;
+-    private String password;
+-    private String firstName;
+-    private String surname;
++    private int showUserDirection = 0;    
++    /** User login */
++    private String login;        
++    /** Firstname and surname of user */
+     private String wholeName;
++    /** Email of user */
+     private String email;
+-    private String address;
+-    private Date createWhen;
+-    private Date dropWhen;
++    /** Address of user */
++    private String address;   
++    /** User rights */
+     private Right right;
+-    private String note;
+-    private ArrayList&lt;String&gt; editGroup;
+-    
+-    /** list of all users - for dialog add, edit*/
++    /** List of all users - for dialog add, edit*/
+     private Pair&lt;String, Integer&gt;[] users = null;
+-    // seznam vsech aktualnich loginu
++    /** List of all used login */
+     private ArrayList&lt;String&gt; userLogin = new ArrayList&lt;String&gt;(); 
+     
+     /** Constants used for identification of fields for sorting */
+@@ -85,254 +88,431 @@
+     public static final int SORT_SURNAME = 2;
+     public static final int SORT_CREATEWHEN = 3;
+   
++    /** Constants with error descriptions */
++    public static final String ERROR_SEARCH = L10n.getString(&quot;Error.UserSearchFailed&quot;);
++    public static final String ERROR_PROCESS = L10n.getString(&quot;Error.UserProcessResultsFailed&quot;);
++    public static final String ERROR_NUMBER_ROWS = L10n.getString(&quot;Error.GetNumberRows&quot;);
++    public static final String ERROR_ADD = L10n.getString(&quot;Error.UserAddFailed&quot;);
++    public static final String ERROR_EDIT = L10n.getString(&quot;Error.UserEditFailed&quot;);
++    public static final String ERROR_DELETE = L10n.getString(&quot;Error.UserDeleteFailed&quot;);    
++    public static final String ERROR_DBLAYER_TITLE = L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;);
++    public static final String ERROR_DBLAYER = L10n.getString(&quot;Error.DBLayerException&quot;);
++    public static final String ERROR_REMOTE_TITLE = L10n.getString(&quot;Error.RemoteExceptionTitle&quot;);
++    public static final String ERROR_REMOTE = L10n.getString(&quot;Error.RemoteException&quot;);
++    public static final String ERROR_UNKNOWEN_TITLE = L10n.getString(&quot;Error.UnknownExceptionTitle&quot;);
++    public static final String ERROR_UNKNOWEN = L10n.getString(&quot;Error.UnknownException&quot;);
++    public static final String ERROR_TITLE = L10n.getString(&quot;Error.MessageTitle&quot;);
++    public static final String ERROR_TRANSACTION = L10n.getString(&quot;Error.TransactionRaceConditions&quot;);
++    public static final String ERROR_CREATE_PAIRS = L10n.getString(&quot;Error.UserManagerCreatePairs&quot;); 
++    public static final String ERROR_LOGIN = L10n.getString(&quot;Error.UserManagerDuplicityLogin&quot;);
++    
++    public static final String QUESTION_DELETE_TITLE = L10n.getString(&quot;Question.DeleteUserTitle&quot;);
++    public static final String QUESTION_DELETE = L10n.getString(&quot;Question.DeleteUser&quot;);
++    
++    public static final String PROGRESS_SEARCH = L10n.getString(&quot;User.Search.ProgressTitle&quot;);
++    public static final String PROGRESS_ADD = L10n.getString(&quot;User.Add.ProgressTitle&quot;);
++    public static final String PROGRESS_EDIT = L10n.getString(&quot;User.Edit.ProgressTitle&quot;);
++    public static final String PROGRESS_DELETE = L10n.getString(&quot;User.Delete.ProgressTitle&quot;);
++    
++    public static final String WARNING_SELECTION_TITLE = L10n.getString(&quot;Warning.EmptySelectionTitle&quot;);
++    public static final String WARNING_SELECTION = L10n.getString(&quot;Warning.EmptySelection&quot;);
++    
++    public static final String INFORMATION_RESULT_TITLE = L10n.getString(&quot;Information.NoUserInResultTitle&quot;);
++    public static final String INFORMATION_RESULT = L10n.getString(&quot;Information.NoUserInResult&quot;);
++    public static final String INFORMATION_SEARCH_TITLE = L10n.getString(&quot;Information.SearchUserTitle&quot;);
++    public static final String INFORMATION_SEARCH = L10n.getString(&quot;Information.SearchUser&quot;);    
++    public static final String INFORMATION_DELETE_TITLE = L10n.getString(&quot;Information.UserDeleteTitle&quot;);
++    public static final String INFORMATION_DELETE = L10n.getString(&quot;Information.UserDelete&quot;);    
++   
+     /**
+      * Creates a new instance of UserManager
++     * @param Instance of a database management object
+      */
+     public UserManager(DBLayer database) {
+         
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+-       this.database = database;
+-       
+-       //nacteni dat o uzivatelovi
+-       searchUser();
+-       //opet funkci pro vyzadani si dat postupne
+-       processResult(1, displayRows);
++       this.database = database;              
+     }
+     
+-     /**
++    /**
++     *  Search for user in the database. Operation might be executed in a separate thread using the Task class (depends
++     *  on the input parameters). The reason for this is that we are sometimes executing search from
++     *  another long running operation, teherefore we do not need a new thread.
+      *
++     *  @param createTask tells whether to execute search in a separate thread
++     *  @return instance of the Task with the long running operation (searching data)
++     */    
++    public Task searchUser(boolean createTask) {
++       
++    	if (createTask) {
++	    	final Task task = new Task() {    		    		
++	    		public Object task() throws DBLayerException, RemoteException {
++	  		       int resultIdent;
++	    			try {
++	  		    	    resultIdent = search();
++	  		    	    setResultId(resultIdent);	
++	  		    	    loadLoginUsers();
++		    	   } catch (RemoteException e) {	            
++			            logger.error(&quot;Searching user failed. Remote exception caught in User. Details: &quot;+e.getMessage());
++			        	database.rollbackTransaction();
++		                RemoteException remex = new RemoteException(ERROR_SEARCH + e);
++		                remex.setStackTrace(e.getStackTrace());
++		                throw remex; 		           
++			        } catch (DBLayerException e) {
++			        	logger.error(&quot;Searching user failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());       	                                                   
++			        	database.rollbackTransaction();
++		                DBLayerException dbex = new DBLayerException(ERROR_SEARCH + e);
++		                dbex.setStackTrace(e.getStackTrace());
++		                throw dbex; 		           
++			        }					       
++                    return null;			        
++				}
++		    };
++		    return task;
++    	} else {
++    		try {
++    			int resultIdent = search();
++    			setResultId(resultIdent);
++			} catch (DBLayerException e) {
++				logger.error(&quot;Searching user failed. Remote exception caught in User. Details: &quot;+e.getMessage());
++				setError(ERROR_SEARCH);
++				setChanged();
++                notifyObservers();                
++			} catch (RemoteException e) {
++				logger.error(&quot;Searching user failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());
++				setError(ERROR_SEARCH);
++				setChanged();
++                notifyObservers();                
++			}
++			return null;
++    	}
++  }
++    
++    /**
++     *  Method to construct and execute the search query.
++     *  Save identifier of the search result     
++     *  @return id identifying the search result
++     *  @throws DBLayerException in case search failed
++     *  @throws RemoteException in case network communication failed
+      */
+-    public void searchUser() {
+-        
++    private int search() throws DBLayerException, RemoteException {           
+         //Create new Select query
+-        SelectQuery query = null;       
++        SelectQuery query = null;   
++        int resultId = 0;
+ 
+-    	//  Select data from tUser table
+-        try {
+-                query = database.createQuery(User.class);         
+-                
+-                if (wholeName != null &amp;&amp; !wholeName.equals(&quot;&quot;)) {
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, User.WHOLENAME, null, &quot;%&quot; + wholeName + &quot;%&quot;, null);
+-                }
+-                if (login != null &amp;&amp; !login.equals(&quot;&quot;)) {
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, User.LOGIN, null, &quot;%&quot; + login + &quot;%&quot;, null);
+-                }
+-                if (email != null &amp;&amp; !email.equals(&quot;&quot;)) {
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, User.EMAIL, null, &quot;%&quot; + email + &quot;%&quot;, null);
+-                }
+-                if (address != null &amp;&amp; !address.equals(&quot;&quot;)) {
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, User.ADDRESS, null, &quot;%&quot; + address + &quot;%&quot;, null);
+-                }
+-                
+-                if ( this.showUserDirection == 1 ) {
+-                    query.addRestriction(PlantloreConstants.RESTR_IS_NULL, User.DROPWHEN, null, null, null);
+-                }
+-                
+-                String field;
+-                logger.debug(&quot;SortField: &quot; + sortField);
+-                switch (sortField) {
+-                case 0:
+-                        field = User.LOGIN;
+-                        break;
+-                case 1:
+-                        field = User.FIRSTNAME;
+-                        break;
+-                case 2:
+-                        field = User.SURNAME;
+-                        break;
+-                case 3:
+-                        field = User.CREATEWHEN;
+-                        break;                
+-                default:
+-                        field = User.LOGIN;
+-                }
++    	//  Select data from tUser table        
++        query = database.createQuery(User.class);         
++        
++        if (wholeName != null &amp;&amp; !wholeName.equals(&quot;&quot;)) {
++            query.addRestriction(PlantloreConstants.RESTR_LIKE, User.WHOLENAME, null, &quot;%&quot; + wholeName + &quot;%&quot;, null);
++        }
++        if (login != null &amp;&amp; !login.equals(&quot;&quot;)) {
++            query.addRestriction(PlantloreConstants.RESTR_LIKE, User.LOGIN, null, &quot;%&quot; + login + &quot;%&quot;, null);
++        }
++        if (email != null &amp;&amp; !email.equals(&quot;&quot;)) {
++            query.addRestriction(PlantloreConstants.RESTR_LIKE, User.EMAIL, null, &quot;%&quot; + email + &quot;%&quot;, null);
++        }
++        if (address != null &amp;&amp; !address.equals(&quot;&quot;)) {
++            query.addRestriction(PlantloreConstants.RESTR_LIKE, User.ADDRESS, null, &quot;%&quot; + address + &quot;%&quot;, null);
++        }
++        
++        if ( this.showUserDirection == 1 ) {
++            query.addRestriction(PlantloreConstants.RESTR_IS_NULL, User.DROPWHEN, null, null, null);
++        }
++        
++        String field;
++        logger.debug(&quot;SortField: &quot; + sortField);
++        switch (sortField) {
++        case 0:
++                field = User.LOGIN;
++                break;
++        case 1:
++                field = User.FIRSTNAME;
++                break;
++        case 2:
++                field = User.SURNAME;
++                break;
++        case 3:
++                field = User.CREATEWHEN;
++                break;                
++        default:
++                field = User.LOGIN;
++        }
+ 
+-                logger.debug(&quot;Order by: &quot;+ field);
+-                if (sortDirection == 0) {
+-                        query.addOrder(PlantloreConstants.DIRECT_ASC, field);
+-                } else {
+-                        query.addOrder(PlantloreConstants.DIRECT_DESC, field);
+-                }
+-                                
+-        } catch (RemoteException e) {
+-            System.err.println(&quot;RemoteException - searchUserData(), createQuery&quot;);
+-        } catch (DBLayerException e) {
+-            System.err.println(&quot;DBLayerException - searchUserData(), createQuery&quot;);
++        logger.debug(&quot;Order by: &quot;+ field);
++        if (sortDirection == 0) {
++                query.addOrder(PlantloreConstants.DIRECT_ASC, field);
++        } else {
++                query.addOrder(PlantloreConstants.DIRECT_DESC, field);
+         }
+-                
+-        int resultId = 0;
+-        try {
+-            // Execute query                    
+-            resultId = database.executeQuery(query);
+-            // Save &quot;edit&quot; User data
+-            setResultId(resultId);    
+-        } catch (DBLayerException e) {                            
+-            logger.error(&quot;Searching metada failed. Unable to execute search query.&quot;);           
+-        } catch (RemoteException e) { 		   
+-     	   System.err.println(&quot;RemoteException- searchMetada(), executeQuery&quot;);
+-        }          
++        
++        //Execute query                    
++        resultId = database.executeQuery(query);        
++        return resultId;
+     }
+     
+    /**
+      * Process results of a search query. Retrieves results using the database management object (DBLayer) and stores them in the data field of the class. 
+-     * @param fromTable number of the first row to show in table. Number of the first row to retraieve is 1.
++     * @param from number of the first row to show in table. Number of the first row to retraieve is 1.
+      * @param count number of rows to retrieve 
+      */
+-    public void processResult(int fromTable, int count) {
++    public void processResult(int from, int count) {
+         
+         if (this.resultId != 0) {
+             int currentRow = getResultRows();
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+-            logger.debug(&quot;Max available rows: &quot;+(fromTable+count-1));
++            logger.debug(&quot;Max available rows: &quot;+(from+count-1));
+            
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+-            int to = Math.min(currentRow, fromTable+count-1);               
++            int to = Math.min(currentRow, from+count-1);             
+             if (to &lt;= 0) {
+-            	userList = new ArrayList&lt;User&gt;();  
+-                setDisplayRows(0);
+-            	setCurrentDisplayRows(&quot;0-0&quot;);
++            	userList = new ArrayList&lt;User&gt;(); 
++            	setDisplayRows(0);
++            	setCurrentDisplayRows(&quot;0-0&quot;);       
+             } else {
+-                logger.debug(&quot;Retrieving query results: 1 - &quot;+to);
+-                setCurrentDisplayRows(fromTable+ &quot;-&quot; + to);                
+-                try {                	 
+-                     // Retrieve selected row interval 
+-                	Object[] objectUser;
+-                 	try {
+-                 		objectUser = database.more(this.resultId, 0, to-1);  
+-                 	} catch(RemoteException e) {
+-                     	System.err.println(&quot;RemoteException- processEditResult, more&quot;);
+-                     	logger.debug(&quot;RemoteException- processEditResult, more&quot;);
+-                     	return;
+-                     }                   
+-                    int countResult = objectUser.length;  
+-                    logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);
+-                    // Create storage for the results
+-                    this.userList = new ArrayList&lt;User&gt;();
+-                    // Cast the results to the User objects
+-                    for (int i=0; i&lt;countResult; i++ ) {                    							
+-						Object[] objHis = (Object[])objectUser[i];
+-                        this.userList.add((User)objHis[0]);
+-                    }           
+-                    //Update current first displayed row (only if data retrieval was successful)
+-                    setCurrentFirstRow(fromTable); 
++                logger.debug(&quot;Retrieving query results: 1 -&quot; + to);
++                setCurrentDisplayRows(from+ &quot;-&quot; + to);                              	 
++                // Retrieve selected row interval 
++                Object[] objectUser;
++             	try {
++             		objectUser = database.more(this.resultId, 0, to-1);  
++             	} catch(RemoteException e) {
++             		logger.error(&quot;Remote exception caught in UserManager (processResult). Details: &quot;+e.getMessage());
++        			setError(ERROR_PROCESS);
++        			setChanged();
++                    notifyObservers();
++                 	return;                                                                                       
+                 } catch (DBLayerException e) {                  
+-                    logger.error(&quot;Processing search results failed: &quot;+e.toString());            
+-                }             
+-            }
+-        }         
++                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());   
++                    setError(ERROR_PROCESS);
++                    setChanged();
++                    notifyObservers();
++                    return;
++                }  
++                if (objectUser == null) {
++                	logger.error(&quot;tUser doesn`t contain required data&quot;);
++                	setError(ERROR_PROCESS);
++                    setChanged();
++                    notifyObservers();
++                    return;
++                }
++                int countResult = objectUser.length;  
++                logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);                
++                this.userList = new ArrayList&lt;User&gt;();
++                // Cast the results to the User objects
++                for (int i=0; i&lt;countResult; i++ ) {                    							
++                	Object[] objHis = (Object[])objectUser[i];
++                    this.userList.add((User)objHis[0]);
++                    logger.debug(&quot;Proccess: &quot;+ i + &quot;: &quot; + (User)objHis[0]);
++                }               
++                // Update current first displayed row                
++                logger.info(&quot;Results successfuly retrieved&quot;);                   
++                setCurrentFirstRow(from);
++            }                        
++         }         
+     }
++            
++     
++    /**
++     * Save new user into the database. 
++     * Operation is executed in a separate thread using Task class.
++     *      
++     * @return instance of the Task with the long running operation (executeInsert)   
++     */
++    public Task addUserRecord() {
++    	    	
++    	final Task task = new Task() {    		    		
++    		public Object task() throws DBLayerException, RemoteException {
++    			try {
++    				int rightId = database.executeInsert(right);
++    	            right.setId(rightId);
++    	            database.executeInsert(userRecord);		
++    	            logger.debug(&quot;EXECUTE OK&quot;);
++    	            //Add new name (login) of user to user list    	            
++    	            int count = users.length;
++    	            Pair&lt;String, Integer&gt;[] usersNew = new Pair[count+1];
++    	            for(int i=0; i&lt;count; i++) {
++    	            	usersNew[i] = users[i];
++    	            	logger.debug(i + &quot;: &quot; + usersNew.length);
++    	            }
++    	            usersNew[count] = new Pair(userRecord.getWholeName()+ &quot; (&quot; + userRecord.getLogin() + &quot; )&quot;, userRecord.getId());
++    	            logger.debug(userRecord.getId());
++    	            //TODO overit, zda znam cID nebo je zjistit jinak ... pravdepodobne se rovna count+1    	            
++    	            users = usersNew;
++		        }catch (RemoteException e) {
++		        	logger.error(&quot;Process add User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());		        	
++                    RemoteException remex = new RemoteException(ERROR_ADD + e);
++                    remex.setStackTrace(e.getStackTrace());
++                    throw remex; 		           		       	    
++		        } catch (DBLayerException e) {
++		        	logger.error(&quot;Process add User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());       	                                                   		        
++                    DBLayerException dbex = new DBLayerException(ERROR_ADD + e);
++                    dbex.setStackTrace(e.getStackTrace());
++                    throw dbex; 		            
++		        } 		       		       					        
++		        return null;
++    		}
++	    };
++	    return task;
++    } 		  
+     
+-    public void addUserRecord (User user, Right right) {
+-        try {
+-            int rightId = database.executeInsert(right);
+-            right.setId(rightId);
+-            database.executeInsert(user);
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
+-    }
+-    
+-    public void editUserRecord() {       
+-        try {
+-            database.executeUpdate(selectedRecord.getRight());
+-            database.executeUpdate(selectedRecord);
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
+-    }
+-    
+-    public void deleteUserRecord() {
++    /**
++     *  Update User in the database. To-be-updated User is stored in &lt;code&gt;UserRecord&lt;/code&gt;. 
++     *  Operation is executed in a separate thread using Task class.
++     *  
++     *  @return instance of the Task with the long running operation (executeUpdate)
++     */
++    public Task editUserRecord() {       
++           	
++    	final Task task = new Task() {    		    		
++    		public Object task() throws DBLayerException, RemoteException {
++    			
++    			boolean ok = false;
++    			ok = database.beginTransaction();
++		        if (!ok) {
++		            logger.debug(&quot;UserManager.editUserRecord(): Can't create transaction. Another is probably already running.&quot;);
++		            throw new DBLayerException(ERROR_TRANSACTION);
++		        }		      
++    			try {
++    				database.executeUpdateInTransaction(userRecord.getRight());
++    	            database.executeUpdateInTransaction(userRecord);
++    	            userList.set(idRecord, userRecord);
++    	            //Update list of names (logins) of users
++    	            users[userRecord.getId()].setFirst(userRecord.getWholeName()+ &quot; (&quot; + userRecord.getLogin() + &quot; )&quot;);
++		        }catch (RemoteException e) {
++		        	logger.error(&quot;Process update User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());
++		        	database.rollbackTransaction();
++		        	database.rollbackTransaction();
++                    RemoteException remex = new RemoteException(ERROR_EDIT + e);
++                    remex.setStackTrace(e.getStackTrace());
++                    throw remex; 		           		       	    
++		        } catch (DBLayerException e) {
++		        	logger.error(&quot;Process update User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());       	                                                   
++		        	database.rollbackTransaction();
++		        	database.rollbackTransaction();
++                    DBLayerException dbex = new DBLayerException(ERROR_EDIT + e);
++                    dbex.setStackTrace(e.getStackTrace());
++                    throw dbex; 		            
++		        } 	
++		        database.commitTransaction();
++		        return null;
++    		}
++	    };
++	    return task;
++    } 
++    	    	    	
++    /**     
++     *  Update User in the database. To-be-updated User is stored in &lt;code&gt;UserRecord&lt;/code&gt; field.
++     *  Operation is executed in a separate thread using Task class.
++     *  
++     *  @return instance of the Task with the long running operation (executeDelete) 
++     */
++    public Task deleteUserRecord() {
++    	
++    	
++ //TODO pokud bude nastaveno zobrazeni jen uzivatelu, kteri maji pristup do databaze, tak je nutne smazat uzivatele z listu
+         
+-        //pokud bude nastaveno zobrazeni jen uzivatelu, kteri maji pristup do databaze, tak je nutne smazat uzivatele z listu
+-        
+-        //pri mazani uzivatele se mu nastavi DROPWHEN na aktualni cas - nebude fyzicky smazan z databaze
+-        selectedRecord.setDropWhen(new Date());
+-                
+-        try {
+-            database.executeUpdate(selectedRecord);
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
+-    }      
+-        
+-    
+-    /**nacteni vsech seznamu uzivatelu pro autoTextArea 
+-     *
++        //Set actual time into param DROPWHEN - inform about deactive user account     	
++        userRecord.setDropWhen(new Date());    	
++    	final Task task = new Task() {    		    		
++    		public Object task() throws DBLayerException, RemoteException {    			    			
++    			try {
++    				 database.executeUpdate(userRecord);		            
++		        }catch (RemoteException e) {
++		        	logger.error(&quot;Process delete User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());		        	
++                    RemoteException remex = new RemoteException(ERROR_DELETE + e);
++                    remex.setStackTrace(e.getStackTrace());
++                    throw remex; 		           		       	    
++		        } catch (DBLayerException e) {
++		        	logger.error(&quot;Process delete User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());       	                                                   		        	
++                    DBLayerException dbex = new DBLayerException(ERROR_DELETE + e);
++                    dbex.setStackTrace(e.getStackTrace());
++                    throw dbex; 		            
++		        } 			        		      			        
++		        return null;
++    		}
++	    };
++	    return task;
++    } 
++    	  
++    /** 
++     * Load all login of users into autoTextArea (add/edit dialog).
++     * @return pairs of objects - (name of user (login), identifier of record)
++     * @throws DBLayerException in case search failed
++     * @throws RemoteException in case network communication failed
+      */
+-    public Pair&lt;String, Integer&gt;[] getUsers() {
++    public Pair&lt;String, Integer&gt;[] loadLoginUsers() throws DBLayerException, RemoteException{
+         if (users == null)
+         {  
+             SelectQuery sq;
+-            int resultid;
++            int resultLoginid;
+             int resultsCount;
+             Object[] records;
+-            Object[] row;
++            Object[] record;
+             
+-            //vyhledani vsech uzivatelu pro autoTextArea
++            //Search all users
+             try {
+                 sq = database.createQuery(User.class);
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, User.WHOLENAME);
+                 sq.addProjection(PlantloreConstants.PROJ_PROPERTY, User.WHOLENAME);
+                 sq.addProjection(PlantloreConstants.PROJ_PROPERTY, User.ID);
+                 sq.addProjection(PlantloreConstants.PROJ_PROPERTY, User.LOGIN);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
++                resultLoginid = database.executeQuery(sq);
++                resultsCount = database.getNumRows(resultLoginid);
+                 logger.debug(&quot;getUsers(): we got &quot;+resultsCount+&quot; results.&quot;);
+-                records = database.more(resultid, 0, resultsCount-1);
++                records = database.more(resultLoginid, 0, resultsCount-1);
+                 users = new Pair[resultsCount];
+                 userLogin.clear();
+                 for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    row = (Object[])records[i];
+-                    users[i] = new Pair((String)row[0] + &quot; (&quot; + (String)row[2] + &quot;)&quot;, (Integer)row[1]);
+-                    //vytvoreni seznamu pouzitych loginu (vcetne neaktivnich uzivatelu)
+-                    //oba seznamy je nutne updatovat i pri ADD a EDIT (pridat ci zmenit)
+-                    userLogin.add((String)row[2]);
++                    record = (Object[])records[i];
++                    users[i] = new Pair((String)record[0] + &quot; (&quot; + (String)record[2] + &quot;)&quot;, (Integer)record[1]);                    
++                    userLogin.add((String)record[2]);
+                 }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
++                database.closeQuery(sq);
++            }catch (RemoteException e) {	            
++	            logger.error(&quot;Searching user and creating Pairs (login, identifier) failed. Remote exception caught in User. Details: &quot;+e.getMessage());	        	
++                RemoteException remex = new RemoteException(ERROR_CREATE_PAIRS + e);
++                remex.setStackTrace(e.getStackTrace());
++                throw remex; 		           
++	        } catch (DBLayerException e) {
++	        	logger.error(&quot;Searching user and creating Pairs (login, identifier) failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());       	                                                   
++                DBLayerException dbex = new DBLayerException(ERROR_CREATE_PAIRS + e);
++                dbex.setStackTrace(e.getStackTrace());
++                throw dbex; 		           
++	        }					       
+             return users;
+         } else
+             return users;
+-     }
+-    
+-    
+-    /**
+-     * nastaveni seznamu loginu na null, aby doslo k jeho opetovnemu nacteni
+-     * bude se nastavovat po ADD, EDIT
++     }       
++   
++    /** 
++     *  Check whther exists login of usr adding by add dialog.
++     *  @param login login of user adding by add dialog 
++     *  @return true if login doesn`t exist yet, false in other way
+      */
+-    public void setUsers() {
+-        users = null;
+-    }
+-    
+-    /** otestovani unikatonosti nove vkladaneho loginu v ADD
+-     *  ?? dovoli se editovat login uzivatele... po inspiraci win, linux ZAKAZANO
+-     */
+-    public boolean uniqueLogin(String login) {
+-        logger.debug(&quot;Login new: &quot;+login);
+-        logger.debug(&quot;All login: &quot;+ userLogin.toString());        
++    public boolean uniqueLogin(String login) {               
+         return userLogin.contains(login);
+     }
+     
+     //****************************//
+     //****Get and set metods*****//
+     //**************************//
++   
++     /** 
++      * Set list of users with right to edit records created by specific user
++      * @param userList users names list
++      */ 
++    //TODO userList - urcite se to musi jmenovat jinak- jde o jmena v texArea u ADD, EDIT!!!
++   // public void setEditGroup(ArrayList&lt;String&gt; userLogin) {       
++    //    this.userLogin = userLogin;
++    //}
+     
+-    // seznam jmen uzivatelu, kteri smeji editovat nalezy vybraneho uzivatele
+-    public void setEditGroup(ArrayList userList) {       
+-        this.userList = userList;
+-    }
+-    
+-    // podle seznamu id je nutne vygenerovat seznam jmen jednotlivych uzivatelu
++    /** 
++     * Create and get list of names of users which have right to edit records created by specific user     
++     * @param editGroupId containing index of users separated by comma
++     * @return users names list
++     */
+     public String getEditGroup(String editGroupId) {        
+             String[] tmpUserId = editGroupId.split(&quot;,&quot;);
+             logger.debug(&quot;tmpUserId: &quot; + tmpUserId[0]);
+@@ -348,15 +528,18 @@
+             }
+             return editGroup;        
+     }
+-    
+-    //funkce vezme userList a users a vygeneruje String id1;id2;id3 pro ulozeni do databaze
+-    //ohlidaji se i duplicity
++        
++    /**
++     *  Get string containing index of users from userList separated by comma. This string is generated for saving into database.
++     *  @return string containing index of users separated by comma
++     */
+     public String getEditGroupID() {
+         ArrayList&lt;Integer&gt; tmpUserId = new ArrayList&lt;Integer&gt;();
+         for (int i=0 ; i &lt; userList.size() ; i++) {
+             for (int j=0; j &lt; users.length; j++) {
+                 if (users[j].getFirst().equals(userList.get(i))) {
+                     Integer userId = users[j].getSecond();
++                    //Check duplicity
+                     if (!tmpUserId.contains(userId)) {
+                         tmpUserId.add(userId);
+                     }
+@@ -367,56 +550,157 @@
+         String editGroupId=&quot;&quot;;
+         for (int i=0; i &lt; tmpUserId.size(); i++) {
+             editGroupId = editGroupId + tmpUserId.get(i).toString() + &quot;,&quot;;
+-        }
+-        logger.debug(&quot;EDITGROUPID: &quot;+ editGroupId);
+-        //vrati string pro ulozeni do databaze
++        }               
+         return editGroupId;
+     }
++ 
+     
+-    //id vysledku po vyhledavani v db
++    /**
++     * Set new list of pair (name of user(login), index of user).
++     * @param usersNew ist of pair (name of user(login), index of user)
++     */
++    public void setUsers(Pair&lt;String, Integer&gt;[] usersNew) {
++        this.users = usersNew;
++    }
++   
++    /**
++     * Get ist of pair (name of user(login), index of user).
++     * @return ist of pair (name of user(login), index of user)
++     */
++    public Pair&lt;String, Integer&gt;[] getUsers() {
++        return this.users;
++    }
++ 
++    
++    
++    /**
++     *  Set an error flag.
++     *  @param msg  message explaining the error which occured
++     */
++    public void setError(String msg) {
++        this.error = msg;
++    }
++    
++    /**
++     *  Checks whether an error flag is set.
++     *  @return true if an error occured and error message is available, false otherwise
++     */
++    public boolean isError() {
++        if (this.error != null) {
++            return true;
++        } else {
++            return false;
++        }
++    }
++    
++    /**
++     *  Get error message for the error that occured
++     *  @return message explaining the error which occured
++     */
++    public String getError() {
++        return this.error;
++    }      
++    
++    /**
++     * Set true if addEdit dialog was closed by CLOSE button
++     * @param usedClose containing information about closing the addEdit dialog
++     */
++    public void setUsedClose(boolean usedClose) {
++    	this.usedClose = usedClose;
++    }
++    
++    /**
++     * Get information about closing the addEdit dialog
++     * @return true if addEdit dialog was closed by CLOSE button
++     */
++    public boolean usedClose() {
++    	if (this.usedClose == true) {
++    		usedClose = false;
++    		return true;
++    	}
++    	return false;
++    }
++    
++    /**
++	  * Set result of a database operation. This is used only for search operations.
++      * @param resultId id of the SelectQuery result	  
++	  */
+     public void setResultId(int resultId) {
+         this.resultId = resultId;
+     }
+     
++    /**
++     *  Get results of last database operation. This is used only for search operations.
++     *  @return resultId identifying the SelectQuery result
++     */
+     public int getResultId() {
+         return this.resultId;
+     }
+     
++    /**
++     * Get the number of results for the current SelectQuery
++     * @return number of results for the current SelectQuery
++     */
+     public int getResultRows() {
+         int resultCount = 0;
+         if (resultId != 0) try {
+                 resultCount = database.getNumRows(resultId);        	
+         } catch(RemoteException e) {
+-                System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++                logger.error(&quot;Get number of results failed.Remote exception caught in UserManager. Details: &quot;+e.getMessage());  
++            	setError(ERROR_NUMBER_ROWS);
+         }
+         return resultCount;
+     }
+ 
++    /**
++	  * Get results of a search query for dislpaying in userManager dialog
++	  * @return results of a search query for dislpaying in userManager dialog
++	  */
+     public ArrayList&lt;User&gt; getUserList() {
+               return this.userList;		  
+        }
+ 
++    /**
++	  * Set results of a search query for dislpaying in userManager dialog
++	  * @param userList results of a search query for dislpaying in userManager dialog
++	  */
+      public void setUserList(ArrayList&lt;User&gt; userList) {
+               this.userList = userList;		  
+      } 
+     
++     /**
++  	 * Get information about current display rows (from - to)
++  	 * @return information about current display rows (from - to)
++  	 */
+      public String getCurrentDisplayRows() {
+ 		  return this.displayRow;		  
+ 	   }
+ 
++     /**
++  	 * Set information about current display rows (from - to)
++  	 * @param displayRow information about current display rows (from - to)
++  	 */
+      public void setCurrentDisplayRows(String displayRow) {
+               this.displayRow = displayRow;		  
+      } 
+-     
++    
++     /**
++  	 * Get message with information for user
++  	 * @return message with information for user
++  	 */
+      public String getMessageUser() {
+ 		  return this.messageUser;		  
+ 	   }
+ 
++     /**
++  	 * Set message with information for user
++  	 * @param messageUser message with information for user
++  	 */
+      public void setMessageUser(String messageUser) {
+               this.messageUser= messageUser;		  
+      } 
+      
+-         /**
++    /**
+      *  Get index of the first row currently displayed in the list of record changes. This is an index in the results returned by a search query.
+      *  @return index of the first row currently displayed in the list of User
+      */
+@@ -448,26 +732,50 @@
+         this.displayRows = rows;
+     }
+     
+-    // predani informace o operaci, ktera byla zavolana - ADD, EDIT, DELETE, DETAIL
++    /**
++     * Get information about selected operation (ADD, EDIT, DELETE, DETAIL)
++     * @return information about selected operation (ADD, EDIT, DELETE, DETAIL)
++     */
+      public String getOperation() {
+                   logger.debug(&quot;Operation: &quot;+operation);
+ 		  return this.operation;		  
+ 	   }
+ 
++     /**
++      * Set information about selected operation (ADD, EDIT, DELETE, DETAIL)
++      * @param operation information about selected operation (ADD, EDIT, DELETE, DETAIL)
++      */
+      public void setOperation(String operation) {
+               this.operation = operation;		  
+      } 
+     
+-    //Vraci User objekt vybraneho zaznam pro nasledny EDIT, DELETE ci zobrazeni DETAILU 
+-    public void setSelectedRecord(int selectedRecordId) {
+-        this.selectedRecord = (User)(userList.get(selectedRecordId));
++     /**
++      *  Set selected User  
++      *  @param userId index of the selected metadata in the list of user
++      */ 
++    public void setUserRecord(int userId) {
++    	logger.debug(&quot;User: &quot;+ userId + &quot;: &quot; + ((User)userList.get(userId)).getFirstName() + &quot; list.length= &quot; + userList.size());
++        this.userRecord = (User)(userList.get(userId));
++        this.idRecord = userId;
+     }
+     
+-    public User getSelectedRecord() {
+-        return this.selectedRecord;
++    /**
++     * Get selected User
++     * @return selected User
++     */
++    public User getUserRecord() {
++        return this.userRecord;
+     }
+     
+-        /**
++    /**
++     *  Set new user 
++     *  @param user new instantce of User
++     */
++   public void setNewUserRecord(User user) {
++       this.userRecord = user;
++   }    
++    
++    /**
+      *  Set field used for sorting results of the search query.
+      *  @param field numeric identificator of the field used for sorting
+      */
+@@ -508,44 +816,8 @@
+     public void setLogin(String login) {
+         this.login = login;
+     }
+-    
++       
+     /**
+-     *   Get first name of the user
+-     *   @return string containing the first name of the user
+-     *   @see setFirstName
+-     */
+-    public String getFirstName() {
+-        return this.firstName;
+-    }
+-    
+-    /**
+-     *   Set first name of the user
+-     *   @param firstName string containing the first name of the user
+-     *   @see getFirstName
+-     */
+-    public void setFirstName(String firstName) {
+-        this.firstName = firstName;
+-    }
+-    
+-    /**
+-     *   Get surname of the user
+-     *   @return string containing surname of the user
+-     *   @see setSurname
+-     */
+-    public String getSurname() {
+-        return this.surname;
+-    }
+-    
+-    /**
+-     *   Set surname of the user
+-     *   @param surname string containing surname of the user
+-     *   @see getSurname
+-     */
+-    public void setSurname(String surname) {
+-        this.surname = surname;
+-    }
+-    
+-    /**
+      *   Get whole name of the user
+      *   @return string containing whole name of the user
+      *   @see setWholeName
+@@ -597,45 +869,9 @@
+      */
+     public void setAddress(String address) {
+         this.address = address;
+-    }
++    }  
+     
+     /**
+-     *   Get date when the user was created
+-     *   @return date when the user was added to the system
+-     *   @see setWhenCreated
+-     */
+-    public java.util.Date getWhenCreated() {
+-        return this.createWhen;
+-    }
+-    
+-    /**
+-     *   Set date when the user was created
+-     *   @param whenCreated date when the user was added to the system
+-     *   @see getWhenCreated
+-     */
+-    public void setWhenCreated(java.util.Date createWhen) {
+-        this.createWhen = createWhen;
+-    }
+-    
+-    /**
+-     *   Get date when the user was dropped
+-     *   @return date when the user was deleted from the system
+-     *   @see setWhenDropped
+-     */
+-    public java.util.Date getWhenDropped() {
+-        return this.dropWhen;
+-    }
+-    
+-    /**
+-     *   Set date when the user was dropped
+-     *   @param whenDropped date when the user was deleted from the system
+-     *   @see getWhenDropped
+-     */
+-    public void setWhenDropped(java.util.Date dropWhen) {
+-        this.dropWhen = dropWhen;
+-    }
+-
+-    /**
+      *   Get record with the rights of the user
+      *   @return record with the rights of the user
+      *   @see setRight
+@@ -643,6 +879,7 @@
+     public Right getRight() {
+         return this.right;
+     }
++
+     
+     /**
+      *   Set record with the rights of the user
+@@ -653,22 +890,4 @@
+         this.right = right;
+     }
+     
+-    /**
+-     *   Get note about the user
+-     *   @return string containing note about the user
+-     *   @see setNote
+-     */
+-    public String getNote() {
+-        return this.note;
+-    }
+-    
+-    /**
+-     *   Set note about the user
+-     *   @param contact string containing note about the user
+-     *   @see getNote
+-     */
+-    public void setNote(String note) {
+-        this.note = note;
+-    }   
+-        
+-}
++  }
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-03 08:49:39 UTC (rev 483)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-03 23:14:30 UTC (rev 484)
+@@ -13,30 +13,59 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+-import java.util.Date;
+-import net.sf.plantlore.common.PlantloreHelp;
+-import net.sf.plantlore.common.record.Right;
++import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
++import java.rmi.RemoteException;
++
++import net.sf.plantlore.client.metadata.AddEditMetadataCtrl;
++import net.sf.plantlore.client.metadata.AddEditMetadataView;
++import net.sf.plantlore.client.metadata.MetadataManager;
++import net.sf.plantlore.client.metadata.MetadataManagerTableModel;
++import net.sf.plantlore.client.metadata.MetadataManagerCtrl.escapeKeyPressed;
++import net.sf.plantlore.common.DefaultProgressBar;
++import net.sf.plantlore.common.ProgressBar;
++import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.record.User;
+ import org.apache.log4j.Logger;
+ 
+ /**
+- *
+- * @author Lada
++* Controller for the main UserManager dialog (part of the UserManager MVC).
++ * 
++ * @author Lada Oberreiterova
++ * @version 1.0
+  */
+ public class UserManagerCtrl {
+     
++	/** Instance of a logger */
+     private Logger logger;
++    /** Model of UserManager MVC */
+     private UserManager model;
++    /** View of UserManager MVC */
+     private UserManagerView view;
++    /** View of add dialog*/
++    private AddEditUserView addView;
++    /** Controler of add dialog*/
++    private AddEditUserCtrl addCtrl;
++    /** View of edit dialog*/
++    private AddEditUserView editView;
++    /** Controler of edit dialog*/
++    private AddEditUserCtrl editCtrl;
++    /** View of details dialog*/
++    private AddEditUserView detailView;
++    /** Controler of details dialog*/
++    private AddEditUserCtrl detailCtrl;
+     
+     /**
+      * Creates a new instance of UserManagerCtrl
++     *  @param model model of the MetadataManager MVC
++     *  @param view  view of the MetadataManager MVC 
+      */
+-    public UserManagerCtrl(UserManager model, UserManagerView view) {
++    public UserManagerCtrl(UserManager modelUser, UserManagerView viewUser) {
+         
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+-        this.model = model;
+-        this.view = view;
++        this.model = modelUser;
++        this.view = viewUser;
+           
+         view.closeButton.addActionListener(new closeButtonListener());
+         view.previousButton.addActionListener(new previousButtonListener());
+@@ -52,12 +81,84 @@
+         view.sortDescendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+         view.showAllUserRadioBUtton.addFocusListener(new ShowUserDirectionRadioFocusListener());
+         view.showCurrentUserRadioButton.addFocusListener(new ShowUserDirectionRadioFocusListener());
++        
++        //Add key listeners
++        view.closeButton.addKeyListener(new escapeKeyPressed());
++        view.previousButton.addKeyListener(new escapeKeyPressed());
++        view.nextButton.addKeyListener(new escapeKeyPressed());
++        view.addButtons.addKeyListener(new escapeKeyPressed());
++        view.toDisplayValueTextField.addKeyListener(new escapeKeyPressed());
++        view.helpButton.addKeyListener(new escapeKeyPressed());
++        view.editButtons.addKeyListener(new escapeKeyPressed());
++        view.deleteButton.addKeyListener(new escapeKeyPressed());
++        view.detailsButton.addKeyListener(new escapeKeyPressed());
++        view.searchButton.addKeyListener(new escapeKeyPressed());
++        view.sortComboBox.addKeyListener(new escapeKeyPressed());
++        view.tableUserList.addKeyListener(new escapeKeyPressed());
++        view.sortAscendingRadioButton.addKeyListener(new escapeKeyPressed());
++        view.sortDescendingRadioButton.addKeyListener(new escapeKeyPressed());
++        view.addressSearchText.addKeyListener(new escapeKeyPressed());           
++        view.emailSearchText.addKeyListener(new escapeKeyPressed());
++        view.loginSearchText.addKeyListener(new escapeKeyPressed());
++        view.wholeNameSearchText.addKeyListener(new escapeKeyPressed());
++        view.addKeyListener(new escapeKeyPressed());
++        
++        //Search user and Load data
++        Task task = model.searchUser(true);        
++        
++        ProgressBar progressBar = new ProgressBar(task, view, true) {		   							 						
++        	public void exceptionHandler(Exception e) {
++				if (e instanceof DBLayerException) {	   									   							
++   					DBLayerException dbex = (DBLayerException) e;	
++   					view.showErrorMessage(MetadataManager.ERROR_DBLAYER_TITLE,MetadataManager.ERROR_DBLAYER+ &quot;\n&quot; + dbex.getMessage());   																				   					
++   					getTask().stop();
++   					return;
++   				}
++   				if (e instanceof RemoteException) {	 
++   					RemoteException remex = (RemoteException) e;		
++   					view.showErrorMessage(MetadataManager.ERROR_REMOTE_TITLE, MetadataManager.ERROR_REMOTE+ &quot;\n&quot; + remex.getMessage());   																				   					
++   					getTask().stop();
++   					return;
++   				}
++   				view.showErrorMessage(MetadataManager.ERROR_UNKNOWEN_TITLE, MetadataManager.ERROR_UNKNOWEN+ &quot;\n&quot; + e.getMessage());   						
++   				logger.error(e);
++   			}
++
++			public void afterStopping() {
++				//Process result
++		        model.processResult(1, model.getDisplayRows());
++		        //Update view dialog
++		        view.tableUserList.setModel(new UserManagerTableModel(model));
++		        int from = model.getCurrentFirstRow();
++                int to = from + view.tableUserList.getRowCount() - 1;
++                view.displayedValueLabel.setText(from + &quot;-&quot; + to);
++                view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());
++           } 		   					
++		};
++		progressBar.setTitle(MetadataManager.PROGRESS_SEARCH);	                   	                   
++        task.start();                                       
++    }                        
++   
++    /**     
++     * KeyListener class controlling the pressing key ESCAPE.
++     * On key ESCAPE hides the view.     
++     */
++    public class escapeKeyPressed implements KeyListener {
++    	 	 public void keyPressed(KeyEvent evt){
++    	 		if (evt.getKeyCode() == KeyEvent.VK_ESCAPE) {
++    	 			logger.debug(&quot;ESCAPE: &quot; + view.getFocusOwner());
++    	 			view.close();
++    	 		}    	 		     	 		 
++    	 	 }
++    	      public void keyReleased(KeyEvent evt) {}    	     
++    	      public void keyTyped(KeyEvent evt) {}    	         
+     }
++ 
+     
+-       /**
+-    * On Cancel just hides the view.
+-    *
+-    */
++    /**
++     * ActionListener class controlling the &lt;b&gt;CLOSE&lt;/b&gt; button on the form.
++     * On Close hides the view.
++     */
+    class closeButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+@@ -66,45 +167,60 @@
+    }
+      
+    /**
+-    * 
+-    *
++    *  ActionListener class controlling the &lt;b&gt;PREV&lt;/b&gt; button on the form.
++    *  The button PREV is used for browsing the search results.
+     */
+    class previousButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   //   Call processResults only if we don't see the first page (should not happen, button should be disabled)
+-    	   logger.debug(&quot;FIRST&quot;);
+-    	   logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ view.tableUserList.getRowCount());      
++    	   // Check whether an error flag is set
++           if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++           // Get previous page of results
+            if (model.getCurrentFirstRow() &gt; 1) {
+                int firstRow = Math.max(model.getCurrentFirstRow()- model.getDisplayRows(), 1);
+                model.processResult(firstRow, model.getDisplayRows()); 
++               if (model.isError()) return;
+                if (model.getCurrentFirstRow() &gt; 1){
+                }
+                view.tableUserList.setModel(new UserManagerTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableUserList.getRowCount() - 1;
+                view.displayedValueLabel.setText(from + &quot;-&quot; + to);
+-           }                           
++           }      
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableUserList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+-   
++    	   
+    /**
+-    * 
+-    *
++    * ActionListener class controlling the &lt;b&gt;NEXT&lt;/b&gt; button on the form.
++    * The button NEXT is used for browsing the search results.    
+     */
+    class nextButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   //Call processResults only if we don't see the last page
+-    	   logger.debug(&quot;NEXT&quot;);
+-           logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ model.getDisplayRows());
+-           logger.debug(&quot;num rows in table (view) &quot;+ view.tableUserList.getRowCount());              
++    	   // Check whether an error flag is set 
++           if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++           // Get next page of result
+            if (model.getCurrentFirstRow()+ view.tableUserList.getRowCount()&lt;=model.getResultRows()) {
+                model.processResult(model.getCurrentFirstRow()+ model.getDisplayRows(), view.tableUserList.getRowCount());
++               if (model.isError()) return;
+                view.tableUserList.setModel(new UserManagerTableModel(model));             
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableUserList.getRowCount() - 1;
+@@ -113,187 +229,354 @@
+                }else {
+             	   view.displayedValueLabel.setText(from + &quot;-&quot; + to);
+                }               
+-           }                       
++           }  
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableUserList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+-   
+-    /**
+-    * 
++    	   
++   /**
++    *  ActionListener class controlling the text field on the form for set number of rows to displayed.
+     */
+      class rowSetDisplayChangeListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent) {
+-           // Save old value
++           // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++           // Save old value 
+            int oldValue = model.getDisplayRows();           
+            // Check whether new value &gt; 0
+            if (view.getDisplayRows() &lt; 1) {
+                view.setDisplayRows(oldValue);
+                return;
+-           }
+-           if (view.getDisplayRows() &gt; model.getResultRows()){
+-        	   view.setDisplayRows(model.getResultRows());
+-           } 
+-           
++           }           
+            // Set new value in the model
+            model.setDisplayRows(view.getDisplayRows());
+            logger.debug(&quot;New display rows: &quot;+view.getDisplayRows());
+            // If neccessary reload search results
+-           if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
++           if (oldValue != view.getDisplayRows()) {
+                model.processResult(model.getCurrentFirstRow(), view.getDisplayRows());
++               if (model.isError()) return;
+                view.tableUserList.setModel(new UserManagerTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableUserList.getRowCount() - 1;
+                view.displayedValueLabel.setText(from + &quot;-&quot; + to);               
+            }
++           // Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableUserList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }        	   
+-   }
+-   
+- 
++   }  
++     
+     /**
+-    *
++    *  ActionListener class controlling the &lt;b&gt;Add user&lt;/b&gt; button on the form.
+     */  
+     class addUserListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-           //v modelu nastavim informaci o tom, ze jde o ADD
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++           //set information abut selected operation ADD
+            model.setOperation(&quot;ADD&quot;);           
+-           //otevre se dialog addEdit s tim, ze mu rekneme, ze jde o ADD
+-           //pozor: pri add se musi ohlidat, zda byly vyplneny povinne polozky
+-           AddEditUserView addView = new AddEditUserView(model, view,true);
+-           AddEditUserCtrl addCtrl = new AddEditUserCtrl(addView, model);
+-           addView.setAddForm();
+-           addView.setVisible(true);           
+-           //nacteni            
+-           model.searchUser();
+-           //opet funkci pro vyzadani si dat postupne
+-           model.processResult(1, model.getDisplayRows());
+-           model.setUsers();
+-           view.tableUserList.setModel(new UserManagerTableModel(model));                      
+-           view.displayedValueLabel.setText(1 + &quot;-&quot; + view.tableUserList.getRowCount());
+-           view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());
++           //create add dialog if dialog not exist and open Add dialog
++           if (addView == null) {
++       	   	    addView = new AddEditUserView(model, view,true);
++          		addCtrl = new AddEditUserCtrl(addView, model);
++          }
++          addView.setAddForm();
++          addView.setVisible(true);          
++           //User press button close
++           if (model.usedClose()) return;
++           //save new record Metadata into database
++           Task task = model.addUserRecord();
++           
++           ProgressBar progressBar = new ProgressBar(task, view, true) {		   							 
++   			public void exceptionHandler(Exception e) {
++   				if (e instanceof DBLayerException) {	   									   							
++   					DBLayerException dbex = (DBLayerException) e;	
++   					view.showErrorMessage(UserManager.ERROR_DBLAYER_TITLE, UserManager.ERROR_DBLAYER+ &quot;\n&quot; + dbex.getMessage());   																				   					
++   					getTask().stop();
++   					return;
++   				}
++   				if (e instanceof RemoteException) {	 
++   					RemoteException remex = (RemoteException) e;		
++   					view.showErrorMessage(UserManager.ERROR_REMOTE_TITLE,UserManager.ERROR_REMOTE+ &quot;\n&quot; + remex.getMessage());   																				   					
++   					getTask().stop();
++   					return;
++   				}
++   				view.showErrorMessage(UserManager.ERROR_UNKNOWEN_TITLE, UserManager.ERROR_UNKNOWEN+ &quot;\n&quot; + e.getMessage());   						
++   				logger.error(e);
++   			}
++   			
++   			public void afterStopping() {
++    			   //load data
++    	           model.searchUser(false);           
++    	           model.processResult(1, model.getDisplayRows());
++    	           if (model.isError()) return;
++    	           view.tableUserList.setModel(new UserManagerTableModel(model));                      
++    	           view.displayedValueLabel.setText(1 + &quot;-&quot; + view.tableUserList.getRowCount());
++    	           view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());    	           
++               } 		   		
++   		};
++   		progressBar.setTitle(UserManager.PROGRESS_ADD);	                   	                   
++        task.start();                                       
+        }
+     }
+-    
++        	 
+      /**
+-    *
++    * ActionListener class controlling the &lt;b&gt;Edit user&lt;/b&gt; button on the form.
+     */  
+     class editUserListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-           if (view.tableUserList.getSelectedRow() &lt; 0) {    
+-               view.selectRowMessage();
+-           } else {
+-               //v modelu nastavim informaci o tom, ze jde o EDIT
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(UserManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++           if (view.tableUserList.getSelectedRow() &lt; 0) {
++        	   // Display warning message saying that no row of table has been selected.
++               view.showWarningMessage(UserManager.WARNING_SELECTION_TITLE, UserManager.WARNING_SELECTION);
++           }else {
++               //Set information about selected operation - EDIT
+                model.setOperation(&quot;EDIT&quot;);
+-               //poznaceni si do modelu inforamce o vybranem radku pro dalsi praci
++               //Set information about selected row
+                int resultNumber = view.tableUserList.getSelectedRow() + model.getCurrentFirstRow()-1;  
+-               model.setSelectedRecord(resultNumber);
+-               //nacteni dat do dialogu
+-               User user = model.getSelectedRecord();               
+-               AddEditUserView editView = new AddEditUserView(model,view,true);
+-               AddEditUserCtrl editCtrl = new AddEditUserCtrl(editView, model);
+-               //nacteni dat pro dialog
+-               editView.loadData();               
+-               //vytvoreni dialogu
++               model.setUserRecord(resultNumber);
++               //Create edit dialog
++               User user = model.getUserRecord(); 
++               if (editView == null) {
++            	   	editView = new AddEditUserView(model,view,true);
++        	   		editCtrl = new AddEditUserCtrl(editView, model);
++               }               
++               //Load data and setting of edit dialog
++               editView.loadData();                              
+                editView.setEditForm();               
+-               editView.setVisible(true);    
+-               //nacteni uzivatelu
+-               model.searchUser();
+-               //opet funkci pro vyzadani si dat postupne
+-               model.processResult(1, model.getDisplayRows());
+-               model.setUsers();
+-               view.tableUserList.setModel(new UserManagerTableModel(model));                      
+-               view.displayedValueLabel.setText(1 + &quot;-&quot; + view.tableUserList.getRowCount());                
+-           }          
++               editView.setVisible(true);               
++               // User press button close
++               if (model.usedClose()) return;
++               //Update User               
++               Task task = model.editUserRecord();
++               
++               ProgressBar progressBar = new ProgressBar(task, view, true) {		   							 
++          			public void exceptionHandler(Exception e) {
++          				if (e instanceof DBLayerException) {	   									   							
++           					DBLayerException dbex = (DBLayerException) e;	
++           					view.showErrorMessage(UserManager.ERROR_DBLAYER_TITLE,UserManager.ERROR_DBLAYER+ &quot;\n&quot; + dbex.getMessage());   																				   					
++           					getTask().stop();
++           					return;
++           				}
++           				if (e instanceof RemoteException) {	 
++           					RemoteException remex = (RemoteException) e;		
++           					view.showErrorMessage(UserManager.ERROR_REMOTE_TITLE,UserManager.ERROR_REMOTE+ &quot;\n&quot; + remex.getMessage());   																				   					
++           					getTask().stop();
++           					return;
++           				}
++           				view.showErrorMessage(UserManager.ERROR_UNKNOWEN_TITLE, UserManager.ERROR_UNKNOWEN+ &quot;\n&quot; + e.getMessage());   						
++           				logger.error(e);
++           			}
++
++          			public void afterStopping() {
++          			   //load User          				
++                        if (model.isError()) return;
++                        view.tableUserList.setModel(new UserManagerTableModel(model));                         
++                     } 		   					
++          		};
++          		progressBar.setTitle(UserManager.PROGRESS_EDIT);	                   	                   
++                task.start();                                       
++              }
+        }
+     }
+-    
++
+     /**
+-    *
++    *  ActionListener class controlling the &lt;b&gt;Details&lt;/b&gt; button on the form.
+     */  
+     class detailsUserListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
+            if (view.tableUserList.getSelectedRow() &lt; 0) {    
+-               view.selectRowMessage();
++               // Display warning message saying that no row of table has been selected.
++               view.showWarningMessage(UserManager.WARNING_SELECTION_TITLE, UserManager.WARNING_SELECTION);
+            } else {
+-               //v modelu nastavim informaci o tom, ze jde o DETAILS
++               //Set information about selected operation - DETAILS
+                 model.setOperation(&quot;DETAILS&quot;);
+-               //poznaceni si do modelu inforamce o vybranem radku pro dalsi praci
++               //Set information about selected row
+                int resultNumber = view.tableUserList.getSelectedRow() + model.getCurrentFirstRow()-1;  
+-               model.setSelectedRecord(resultNumber);
+-               //nacteni dat do dialogu
+-               User user = model.getSelectedRecord();               
+-               AddEditUserView detailsView = new AddEditUserView(model, view,true);
+-               AddEditUserCtrl detailsCtrl = new AddEditUserCtrl(detailsView, model);
+-               //nacteni dat            
+-               detailsView.loadData();
+-               //vytvoreni dialogu
+-               detailsView.setDetailsForm();
+-               detailsView.setVisible(true); 
++               model.setUserRecord(resultNumber);
++               //Create detail dialog
++               User user = model.getUserRecord();               
++               if (detailView == null) {
++               		detailView = new AddEditUserView(model, view,true);
++           			detailCtrl = new AddEditUserCtrl(detailView, model);
++               }
++               //Load data and setting of detail dialog            
++               detailView.loadData();               
++               detailView.setDetailsForm();
++               detailView.setVisible(true);              
+            }          
+        }
+     }
+-    
+-     /**
+-    *
++    	
++    /**
++    *  ActionListener class controlling the &lt;b&gt;Delete metadata&lt;/b&gt; button on the form.
+     */  
+     class deleteUserListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(UserManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
+            if (view.tableUserList.getSelectedRow() &lt; 0) {    
+-               view.selectRowMessage();
++               // Display warning message saying that no row of table has been selected.
++               view.showWarningMessage(UserManager.WARNING_SELECTION_TITLE, UserManager.WARNING_SELECTION);          
+            } else {
+-               //smazani zaznamu
++               //Set information about selected row
+                int resultNumber = view.tableUserList.getSelectedRow() + model.getCurrentFirstRow()-1; 
+-               model.setSelectedRecord(resultNumber);
+-               //informace administratorovi,o tom, ze dany uzivatel bude smazan
+-               int okCancle = view.messageDelete(model.getSelectedRecord().getWholeName());
+-               logger.debug(okCancle);
+-               if (okCancle == 0) {
+-                   logger.debug(&quot;Ok button was press&quot;);
+-                   //zavolani delete na vybraneho uzivatele
+-                   model.deleteUserRecord();        
+-                   //nacteni metadat
+-                   model.searchUser();
+-                   //opet funkci pro vyzadani si dat postupne
+-                   model.processResult(1, model.getDisplayRows());
+-                   view.tableUserList.setModel(new UserManagerTableModel(model));                      
+-                   view.displayedValueLabel.setText(1 + &quot;-&quot; + view.tableUserList.getRowCount());  
+-                   view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());
++               model.setUserRecord(resultNumber);
++               //Test if record was been deleted
++               if (model.getUserRecord().getDropWhen() != null) {
++            	   view.showInfoMessage(UserManager.INFORMATION_DELETE_TITLE, UserManager.INFORMATION_DELETE);
++            	   return;
+                }
+-           }          
++        	   int okCancle = view.showQuestionMessage(UserManager.QUESTION_DELETE_TITLE, UserManager.QUESTION_DELETE);               
++               if (okCancle == 0){
++            	   //Button OK was press
++            	   logger.debug(&quot;Button OK was press.&quot;);
++	               //Delete selected record
++	               Task task = model.deleteUserRecord();
++	               
++	               ProgressBar progressBar = new ProgressBar(task, view, true) {		   								  		   									
++					public void exceptionHandler(Exception e) {
++						if (e instanceof DBLayerException) {	   									   							
++		   					DBLayerException dbex = (DBLayerException) e;	
++		   					view.showErrorMessage(UserManager.ERROR_DBLAYER_TITLE,UserManager.ERROR_DBLAYER+ &quot;\n&quot; + dbex.getMessage());   																				   					
++		   					getTask().stop();
++		   					return;
++		   				}
++		   				if (e instanceof RemoteException) {	 
++		   					RemoteException remex = (RemoteException) e;		
++		   					view.showErrorMessage(UserManager.ERROR_REMOTE_TITLE,UserManager.ERROR_REMOTE+ &quot;\n&quot; + remex.getMessage());   																				   					
++		   					getTask().stop();
++		   					return;
++		   				}
++		   				view.showErrorMessage(UserManager.ERROR_UNKNOWEN_TITLE, UserManager.ERROR_UNKNOWEN+ &quot;\n&quot; + e.getMessage());   						
++		   				logger.error(e);
++		   			}
++	
++                    public void afterStopping() {
++                       // load User
++	   	               model.searchUser(false);               
++	   	               model.processResult(1, model.getDisplayRows());
++	   	               if (model.isError()) return;
++	   	               view.tableUserList.setModel(new UserManagerTableModel(model));                      
++	   	               view.displayedValueLabel.setText(1 + &quot;-&quot; + view.tableUserList.getRowCount());
++	   	               view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());		   	               
++                                }
++		   			};
++		   			progressBar.setTitle(UserManager.PROGRESS_DELETE);	                   	                   
++		            task.start();                                                                  
++		          }else {
++		        	  logger.debug(&quot;Button Cancle was press.&quot;);
++		          }	           
++           }
+        }
+-    }
++   }    	       
+     
++    /**
++     * ActionListener class controlling the &lt;b&gt;Search/Sort&lt;/b&gt; button on the form.
++     */
+     class searchUserListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-           model.setWholeName(view.wholeNameSearchText.getText());           
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   return;
++           }
++    	   model.setWholeName(view.wholeNameSearchText.getText());           
+            model.setLogin(view.loginSearchText.getText());
+            model.setEmail(view.emailSearchText.getText());
+            model.setAddress(view.addressSearchText.getText());
+            if (!(view.checkNonEmpty(&quot;login&quot;) || view.checkNonEmpty(&quot;name&quot;) ||
+                view.checkNonEmpty(&quot;email&quot;) || view.checkNonEmpty(&quot;address&quot;))) {
+-               view.showSearchInfoFillMessage();
++        	   // Display info message  saying that no search field has been filled in.
++        	   view.showInfoMessage(UserManager.INFORMATION_SEARCH_TITLE, UserManager.INFORMATION_SEARCH);
+                model.setLogin(&quot;%&quot;);
+            }            
+-           //opet funkci pro vyzadani si dat postupne
+-           model.searchUser();
+-           //pokud je pocet radku pro zobrazeni roven 0, tak se nastavi defaultni hodnota
+-           if (model.getDisplayRows() &lt;= 0) {
+-               model.setDisplayRows(UserManager.DEFAULT_DISPLAY_ROWS);
+-           }
+-           if (model.getResultRows() &lt; 1) {
+-               view.showSearchInfoMessage();
+-           }
+-           model.processResult(1, model.getDisplayRows());           
+-           view.tableUserList.setModel(new UserManagerTableModel(model));                      
+-           view.displayedValueLabel.setText(model.getCurrentDisplayRows());  
+-           view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());           
++                     
++           //Load User with specific conditions
++           Task task = model.searchUser(true);   
++           
++           ProgressBar progressBar = new ProgressBar(task, view, true) {		   								  						    
++				public void exceptionHandler(Exception e) {
++					if (e instanceof DBLayerException) {	   									   							
++	   					DBLayerException dbex = (DBLayerException) e;	
++	   					view.showErrorMessage(UserManager.ERROR_DBLAYER_TITLE, UserManager.ERROR_DBLAYER+ &quot;\n&quot; + dbex.getMessage());   																				   					
++	   					getTask().stop();
++	   					return;
++	   				}
++	   				if (e instanceof RemoteException) {	 
++	   					RemoteException remex = (RemoteException) e;		
++	   					view.showErrorMessage(UserManager.ERROR_REMOTE_TITLE,UserManager.ERROR_REMOTE+ &quot;\n&quot; + remex.getMessage());   																				   					
++	   					getTask().stop();
++	   					return;
++	   				}
++	   				view.showErrorMessage(UserManager.ERROR_UNKNOWEN_TITLE, UserManager.ERROR_UNKNOWEN+ &quot;\n&quot; + e.getMessage());   						
++	   				logger.error(e);
++	   			}
++
++				public void afterStopping() {
++					if (model.getDisplayRows() &lt;= 0) {
++		               model.setDisplayRows(UserManager.DEFAULT_DISPLAY_ROWS);
++		           }
++		           //No record in result - show message to user
++		           if (model.getResultRows() &lt; 1) {
++		               view.showInfoMessage(UserManager.INFORMATION_RESULT_TITLE,UserManager.INFORMATION_RESULT);
++		           }
++		           model.processResult(1, model.getDisplayRows());
++		           if (model.isError()) return;		           
++		           view.tableUserList.setModel(new UserManagerTableModel(model)); 		           
++		           view.displayedValueLabel.setText(model.getCurrentDisplayRows());  
++		           view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString()); 		           
++               } 		   					
++			};
++			progressBar.setTitle(UserManager.PROGRESS_SEARCH);	                   	                   
++            task.start();                                                                  
+        }
+     }
+-    
+-     /**
++
++    /**
+      *  Focus listener for the &lt;strong&gt;sort combobox&lt;/strong&gt; at the search panel. After losing focus automaticaly 
+      *  stores value of the field to model.
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerView.java	2006-08-03 08:49:39 UTC (rev 483)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerView.java	2006-08-03 23:14:30 UTC (rev 484)
+@@ -9,6 +9,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ import javax.swing.DefaultListSelectionModel;
++import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.l10n.L10n;
+@@ -30,6 +31,7 @@
+     public UserManagerView(UserManager model, java.awt.Frame parent, boolean modal) {
+         super(parent, modal);
+         this.model = model;
++        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
+         PlantloreHelp.addKeyHelp(PlantloreHelp.USER_MANAGER, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.USER_MANAGER, this.helpButton);        
+@@ -133,6 +135,46 @@
+         }        
+         return true;
+     }
++    
++    
++    
++    /**
++     *  Display generic error message.
++     *  @param title title of error message
++     *  @param message error message we want to display
++     */
++    public void showErrorMessage(String title, String message) {
++        JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);               
++    }
++    
++      /**
++     * Display warning message.
++     * @param title title of warning message
++     * @param message warning message we want to display
++     */
++    public void showWarningMessage(String title, String message) {    	
++        JOptionPane.showMessageDialog(this, message, title, JOptionPane.WARNING_MESSAGE);               
++    }             
++    
++    /**
++     * Display OK_CANCLE message
++     * @param title title of question message
++     * @param message message containing same question for user
++     * @return information which button was selected - OK or Cancle 
++     */
++     public int showQuestionMessage(String title, String message) {
++    	int okCancle = JOptionPane.showConfirmDialog(this, message, title, JOptionPane.OK_CANCEL_OPTION);
++    	return okCancle;
++    }          
++    
++     /**
++     *  Display info message 
++     *  @param title title of info message
++     *  @param message information message we want to display
++     */
++    public void showInfoMessage(String title, String message) {
++         JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);       
++    }
+       
+     /** This method is called from within the constructor to
+      * initialize the form.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000631.html">[Plantlore-dev] r483 - in trunk/src/net/sf/plantlore: client	client/history client/metadata common l10n
+</A></li>
+	<LI>Next message: <A HREF="000633.html">[Plantlore-dev] Reconnect &amp; RemoteException
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#632">[ date ]</a>
+              <a href="thread.html#632">[ thread ]</a>
+              <a href="subject.html#632">[ subject ]</a>
+              <a href="author.html#632">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,167 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r545 - in trunk/src/net/sf/plantlore/common: .	exception
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r545%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%0A%09exception&In-Reply-To=%3C200608221056.k7MAutXV010230%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000746.html">
+   <LINK REL="Next"  HREF="000748.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r545 - in trunk/src/net/sf/plantlore/common: .	exception</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r545%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%0A%09exception&In-Reply-To=%3C200608221056.k7MAutXV010230%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r545 - in trunk/src/net/sf/plantlore/common: .	exception">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug 22 12:56:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000746.html">[Plantlore-dev] r544 - in trunk/src/net/sf/plantlore:	common/exception server
+</A></li>
+        <LI>Next message: <A HREF="000748.html">[Plantlore-dev] r546 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#747">[ date ]</a>
+              <a href="thread.html#747">[ thread ]</a>
+              <a href="subject.html#747">[ subject ]</a>
+              <a href="author.html#747">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-22 12:56:50 +0200 (Tue, 22 Aug 2006)
+New Revision: 545
+
+Modified:
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+Log:
+DBLayerUtils: The caller is informed about more exceptional states in several methods. It gives him greater control over the behaviour.
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-22 09:33:00 UTC (rev 544)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-22 10:56:50 UTC (rev 545)
+@@ -241,7 +241,7 @@
+ 	 * @return	The number of records that share the supplied &lt;code&gt;record&lt;/code&gt;. 
+ 	 */
+     public int sharedBy(Record record)
+-    throws RemoteException {
++    throws RemoteException, DBLayerException {
+     	return sharedBy(record, true);
+     }
+     
+@@ -254,7 +254,7 @@
+ 	 * @return	The number of records that share the supplied &lt;code&gt;record&lt;/code&gt;. 
+ 	 */
+ 	public int sharedBy(Record record, boolean aliveOnly) 
+-	throws RemoteException {
++	throws RemoteException, DBLayerException {
+ 		if(record.getId() == null)
+ 			return 0;
+ 		
+@@ -276,8 +276,6 @@
+ 				q.addRestriction(RESTR_EQ, &quot;DELETED&quot;, null, 0, null);
+ 			int resultset = db.executeQuery(q); 
+ 			rows = db.getNumRows(resultset);
+-		} catch (DBLayerException e) {
+-			//e.printStackTrace();
+ 		} finally {
+ 			if(q != null)
+ 				db.closeQuery(q);
+@@ -389,9 +387,10 @@
+ 			// Is there such record?
+ 			int results = db.executeQuery( query );
+ 			int rows = db.getNumRows( results );
+-			if( rows &gt; 1 ) 
+-				logger.info(&quot;There are &quot; + rows + 
+-						&quot; completely identical records in the &quot; + table.getSimpleName() + &quot; table!&quot;);
++			if( rows &gt; 1 ) {
++				logger.warn(&quot;There are &quot; + rows + &quot; completely identical records in the &quot; + table.getSimpleName() + &quot; table!&quot;);
++				throw new DBLayerException(L10n.getString(&quot;Error.AmbiguousRecord&quot;));
++			}
+ 			
+ 			record = null;
+ 			if( rows != 0 ) 
+@@ -745,7 +744,12 @@
+ 			// Delete the Occurrence first.
+ 			db.executeUpdateInTransaction( occ );
+ 			// Try to delete the Habitat of this Occurrence.
+-			delete( occ.getHabitat() );
++			try {
++				delete( occ.getHabitat() );
++			} catch(DBLayerException e) {
++				if( e.getMessage() != L10n.getString(&quot;Error.DeletingSharedRecord&quot;) )
++					throw e;
++			}
+ 			// Delete all authors associated with this Occurrence
+ 			AuthorOccurrence[] aos = findAllAuthors( occ );
+ 			deletingAllAuthorOccurrences = true;
+@@ -767,8 +771,10 @@
+ 						(record instanceof AuthorOccurrence &amp;&amp; deletingAllAuthorOccurrences) ? 2 : 1 );
+ 				db.executeUpdateInTransaction( record );
+ 			}
+-			else 
+-				logger.info(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
++			else {
++				logger.warn(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
++				throw new DBLayerException(L10n.getString(&quot;Error.DeletingSharedRecord&quot;));
++			}
+ 		}
+ 		// (I) IMMUTABLE RECORDS
+ 		else {
+@@ -802,7 +808,7 @@
+ 		int sharers = sharedBy( record, false );
+ 		if( sharers &gt; 0 ) {
+ 			logger.error(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other record(s). It cannot be deleted!&quot;);
+-			throw new DBLayerException(L10n.getFormattedString(&quot;Error.DeletingSharedRecord&quot;, record, sharers));
++			throw new DBLayerException(L10n.getString(&quot;Error.DeletingSharedRecord&quot;));
+ 		}
+ 		
+ 		db.executeDeleteHistory( record );
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-22 09:33:00 UTC (rev 544)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-22 10:56:50 UTC (rev 545)
+@@ -17,7 +17,7 @@
+ 	private static final long serialVersionUID = 2006060411002L;
+ 	
+         /** Error code */
+-        private int errorCode;
++        private int errorCode = 0;
+         /** Additional error info */
+         private String errorInfo;
+     
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000746.html">[Plantlore-dev] r544 - in trunk/src/net/sf/plantlore:	common/exception server
+</A></li>
+	<LI>Next message: <A HREF="000748.html">[Plantlore-dev] r546 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#747">[ date ]</a>
+              <a href="thread.html#747">[ thread ]</a>
+              <a href="subject.html#747">[ subject ]</a>
+              <a href="author.html#747">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

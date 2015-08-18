@@ -1,0 +1,197 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r414 - trunk/src/net/sf/plantlore/client/history
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r414%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200605312232.k4VMWU1G032277%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000507.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r414 - trunk/src/net/sf/plantlore/client/history</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r414%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200605312232.k4VMWU1G032277%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r414 - trunk/src/net/sf/plantlore/client/history">lada at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 00:32:30 CEST 2006</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000507.html">[Plantlore-dev] r415 - in trunk/src/net/sf/plantlore: client common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#505">[ date ]</a>
+              <a href="thread.html#505">[ thread ]</a>
+              <a href="subject.html#505">[ subject ]</a>
+              <a href="author.html#505">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-06-01 00:32:29 +0200 (Thu, 01 Jun 2006)
+New Revision: 414
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+Log:
+Implement undo for History-friendly occurrence deletion.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-31 21:46:57 UTC (rev 413)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-31 22:32:29 UTC (rev 414)
+@@ -176,7 +176,7 @@
+        occurrence = ((Occurrence)objHis[0]);
+        
+        //FIXME: bude nutno dovyhledavat autory
+-       setNameAuthor(getAllAuthors(occurrence));
++       setNameAuthor(getAllNameOfAuthors(getAllAuthors(occurrence, 0)));
+        setNamePlant(occurrence.getPlant().getTaxon());       
+        setLocation(occurrence.getHabitat().getNearestVillage().getName());
+        
+@@ -476,7 +476,19 @@
+              occurrence.setDeleted(isDelete);              
+              //Add to list of changed Record
+              if (!editObjectList.contains((Record)occurrence))                 
+-                editObjectList.add((Record)occurrence);             
++                editObjectList.add((Record)occurrence);       
++             //pripsat PRI obnovani z DELETE obnoveni i autoru (autorOcc)
++             isDelete = (isDelete == 1) ? 2 : isDelete;
++             Object[] objects = getAllAuthors(occurrence, 2-isDelete);
++             int countResult = objects.length;               
++             for (int i=0; i&lt;countResult; i++ ) {                    							
++                Object[] autOcc = (Object[])objects[i];          
++                AuthorOccurrence authorOccurrence = (AuthorOccurrence)autOcc[0];
++                authorOccurrence.setDeleted(isDelete);
++                 //Add to list of changed Record
++                 if (!editObjectList.contains((Record)authorOccurrence))                 
++                    editObjectList.add((Record)authorOccurrence);                 
++            }                                     
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
+              Object[] object = searchObject(&quot;AuthorOccurrence&quot;,recordId);  
+              AuthorOccurrence authorOccurrence = (AuthorOccurrence)object[0];
+@@ -1201,17 +1213,29 @@
+     
+     /*
+      * Funkce, ktera mi dohleda vsechny autory ke konkretnimu nalezu
++     * isDlete - rekne, zda pozadujeme vsechny aktivni nebo neaktivni zaznamy
+      */
+-    public String getAllAuthors(Occurrence occurrence) {
+-        String allAuthor = &quot;&quot;;
+-        SelectQuery query = null;
++    public Object[] getAllAuthors(Occurrence occurrence, int isDelete) {        
+         
+-        int resultId = 0;
+-        
++        SelectQuery query = null;        
++        int resultId = 0;        
+         try {
+             query = database.createQuery(AuthorOccurrence.class);
+             query.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.OCCURRENCE, null, occurrence , null);
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 0 , null);
++            if (isDelete == 1) {
++                query.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 1 , null);
++            } else {
++                Object[] args = new Object[8];
++                args[0] = PlantloreConstants.RESTR_EQ;
++                args[1] = AuthorOccurrence.DELETED;
++                args[2] = null;
++                args[3] = 0;                    
++                args[4] = PlantloreConstants.RESTR_EQ;
++                args[5] = AuthorOccurrence.DELETED;
++                args[6] = null;
++                args[7] = 2;
++                query.addOrRestriction(args);                
++            }
+             resultId = database.executeQuery(query);
+         } catch(RemoteException e) {
+             System.err.println(&quot;RemoteException, getAllAuthors() - AuthorOccurrence, createQuery&quot;);
+@@ -1222,13 +1246,29 @@
+        
+        try {
+             int to = database.getNumRows(resultId); 
+-            objects = database.more(resultId, 0, to-1);  
++            if (to &gt; 0)
++                objects = database.more(resultId, 0, to-1);  
+         } catch (RemoteException ex) {
+             ex.printStackTrace();
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+-        }  
+-        
++        }         
++       //close session
++        try {
++            database.closeQuery(query);
++        } catch(RemoteException e) {
++            System.err.println(&quot;RemoteException, getAllAuthors() - AuthorOccurrence, createQuery&quot;);
++        }         
++       return objects;
++    }
++    
++    /*
++     * Funkce, ktera vrati jmena autoru pro dany nalez
++     */
++    public String getAllNameOfAuthors(Object[] objects) {
++        if (objects == null)
++            return &quot;&quot;;
++        String allAuthor = &quot;&quot;;
+         int countResult = objects.length;  
+         logger.debug(&quot;Authos of occurrence. Results retrieved. Count: &quot;+ countResult);        
+         // Cast the results to the AuthorOccurrence objects
+@@ -1237,14 +1277,7 @@
+             String author = ((AuthorOccurrence)object[0]).getAuthor().getWholeName();
+             String role = ((AuthorOccurrence)object[0]).getRole();
+             allAuthor = allAuthor + author + &quot; (&quot; + L10n.getString(PlantloreConstants.ENTITY_AUTHOR + &quot;.&quot; + Author.ROLE + &quot;.&quot; +role) + &quot;)&quot; + &quot;, &quot;;
+-        }           
+-       //close session
+-        try {
+-            database.closeQuery(query);
+-        } catch(RemoteException e) {
+-            System.err.println(&quot;RemoteException, getAllAuthors() - AuthorOccurrence, createQuery&quot;);
+-        }
+-        
++        }                        
+        return allAuthor;     	    
+     }
+     
+@@ -1469,7 +1502,7 @@
+               Occurrence occurrence = historyChange.getOccurrence();             
+               detailsMessage = L10n.getString(&quot;History.DetailsOccurrence&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_OCCURRENCE + &quot;.&quot;+ Occurrence.PLANT) + &quot;: &quot;+ occurrence.getPlant().getTaxon()+&quot;\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_AUTHOROCCURRENCE+&quot;.&quot;+ AuthorOccurrence.AUTHOR) + &quot;: &quot; +getAllAuthors(occurrence) + &quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_AUTHOROCCURRENCE+&quot;.&quot;+ AuthorOccurrence.AUTHOR) + &quot;: &quot; +getAllNameOfAuthors(getAllAuthors(occurrence, 0)) + &quot;\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_OCCURRENCE +&quot;.&quot;+ Occurrence.ISODATETIMEBEGIN) + &quot;: &quot; + occurrence.getIsoDateTimeBegin() +&quot;\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.NEARESTVILLAGE) + &quot;: &quot;+ occurrence.getHabitat().getNearestVillage().getName() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.DESCRIPTION) + &quot;: &quot;+ occurrence.getHabitat().getDescription() + &quot;\n&quot;;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000507.html">[Plantlore-dev] r415 - in trunk/src/net/sf/plantlore: client common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#505">[ date ]</a>
+              <a href="thread.html#505">[ thread ]</a>
+              <a href="subject.html#505">[ subject ]</a>
+              <a href="author.html#505">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

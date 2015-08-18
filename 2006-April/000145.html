@@ -1,0 +1,138 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r141 - trunk/src/net/sf/plantlore/client/login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r141%20-%20trunk/src/net/sf/plantlore/client/login&In-Reply-To=%3C200604121850.k3CIoZx8013912%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000144.html">
+   <LINK REL="Next"  HREF="000146.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r141 - trunk/src/net/sf/plantlore/client/login</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r141%20-%20trunk/src/net/sf/plantlore/client/login&In-Reply-To=%3C200604121850.k3CIoZx8013912%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r141 - trunk/src/net/sf/plantlore/client/login">krater at berlios.de
+       </A><BR>
+    <I>Wed Apr 12 20:50:35 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000144.html">[Plantlore-dev] r140 - trunk/src/net/sf/plantlore/client/authors
+</A></li>
+        <LI>Next message: <A HREF="000146.html">[Plantlore-dev] r142 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#145">[ date ]</a>
+              <a href="thread.html#145">[ thread ]</a>
+              <a href="subject.html#145">[ subject ]</a>
+              <a href="author.html#145">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-12 20:50:33 +0200 (Wed, 12 Apr 2006)
+New Revision: 141
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+Log:
+AuthView &quot;repaired&quot; = prevented from entering recursion (by distinguishing the type of the incoming event).
+Correct handling of the selected index of some database in the list. ListEvent.getFirst() cannot be trusted!
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-12 18:30:54 UTC (rev 140)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-12 18:50:33 UTC (rev 141)
+@@ -95,7 +95,7 @@
+     public void update(Observable arg0, Object arg1) {
+ 		DBInfo selected = model.getSelected();
+ 		if(selected == null) return;
+-		System.out.println(&quot;selected = &quot; + selected);
++		System.out.println(&quot;AuthView [98] :: selected record is &quot; + selected);
+ 		user.removeAllItems();
+ 		user.addItems(selected.users);
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 18:30:54 UTC (rev 140)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 18:50:33 UTC (rev 141)
+@@ -133,8 +133,9 @@
+ 	 */
+ 	public void setSelected(int index) {
+ 		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;
+-		logger.debug(&quot;Another record has been selected &quot; + selected);
+-		this.setChanged(); this.notifyObservers();
++		logger.debug(&quot;Selected database is &quot; + selected);
++		this.setChanged(); 
++		this.notifyObservers(&quot;[!] recursion won't be tolerated&quot;);
+ 	}
+ 	
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-12 18:30:54 UTC (rev 140)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-12 18:50:33 UTC (rev 141)
+@@ -37,7 +37,7 @@
+ 	
+ 	class ChoiceChanged implements ListSelectionListener {
+ 		public void valueChanged(ListSelectionEvent e) {
+-			model.setSelected(e.getFirstIndex());
++			model.setSelected( view.choice.getSelectedIndex() );
+ 		}	
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-12 18:30:54 UTC (rev 140)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-12 18:50:33 UTC (rev 141)
+@@ -101,8 +101,12 @@
+     
+     
+     public void update(Observable source, Object parameter) {
+-    	if(parameter == null)
++    	if(parameter == null) {
++    		// Every item of the list will - after being added to the list - cause an valueChange event,
++    		// because every time an item is inserted to the list, it is also selected!
+     		choice.setListData(model.getRecords());
++    		
++    	}
+     	else if(parameter != null &amp;&amp; parameter instanceof DBLayer)
+     		this.setVisible(false); // the database layer has been created, we are no longer neccessary
+ 	}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000144.html">[Plantlore-dev] r140 - trunk/src/net/sf/plantlore/client/authors
+</A></li>
+	<LI>Next message: <A HREF="000146.html">[Plantlore-dev] r142 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#145">[ date ]</a>
+              <a href="thread.html#145">[ thread ]</a>
+              <a href="subject.html#145">[ subject ]</a>
+              <a href="author.html#145">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

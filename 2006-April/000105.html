@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r105 - in trunk/src/net/sf/plantlore/client: . login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r105%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200604032209.k33M9MKd019848%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000104.html">
+   <LINK REL="Next"  HREF="000106.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r105 - in trunk/src/net/sf/plantlore/client: . login</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r105%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200604032209.k33M9MKd019848%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r105 - in trunk/src/net/sf/plantlore/client: . login">fraktalek at berlios.de
+       </A><BR>
+    <I>Tue Apr  4 00:09:22 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000104.html">[Plantlore-dev] r104 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+        <LI>Next message: <A HREF="000106.html">[Plantlore-dev] r106 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#105">[ date ]</a>
+              <a href="thread.html#105">[ thread ]</a>
+              <a href="subject.html#105">[ subject ]</a>
+              <a href="author.html#105">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-04-04 00:09:21 +0200 (Tue, 04 Apr 2006)
+New Revision: 105
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+Log:
+Fixed problem with badly displayed Login menu item in File menu - when using
+Action the item label needs to be set in the action as the action sets item's
+properties.
+Added selection listener to overview and changed it to SINGLE_SELECTION mode.
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-03 21:51:25 UTC (rev 104)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-03 22:09:21 UTC (rev 105)
+@@ -31,6 +31,8 @@
+     private OverviewTableModel tableModel;
+     private Logger logger;
+ 
++    private int selectedRow;
++
+     /** Creates a new instance of AppCore */
+     public AppCore()
+     {
+@@ -156,6 +158,12 @@
+         return tableModel.getPagesCount();
+     }
+     
++    public void setSelectedRow(int i) 
++    {
++        selectedRow = i;
++        logger.debug(&quot;Selected row #&quot;+i);
++    }
++    
+     public void savePreferences() {
+         logger.info(&quot;Saving main window preferences.&quot;);
+         prefs.putInt(&quot;recordsPerPage&quot;, recordsPerPage);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-03 21:51:25 UTC (rev 104)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-03 22:09:21 UTC (rev 105)
+@@ -19,6 +19,9 @@
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+ import javax.swing.JFormattedTextField;
++import javax.swing.ListSelectionModel;
++import javax.swing.event.ListSelectionEvent;
++import javax.swing.event.ListSelectionListener;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.client.dblayer.FirebirdDBLayer;
+ import net.sf.plantlore.common.record.Plant;
+@@ -95,20 +98,13 @@
+         view.setInvertSelectedAction(new InvertSelectedAction());
+         view.setNextPageAction(new NextPageAction());
+         view.setPrevPageAction(new PreviousPageAction());
++        view.setSelectedRowListener(new OverviewSelectionListener());
+ 
+         view.addWindowListener(new AppWindowListener());
+         view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+         
+         // TODO: Comb the code here <A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">KR at TER</A>
+-        view.setLoginAction(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				// Reuse the existing dialogs, hide'em when they're no longer needed.
+-				if(loginModel == null) loginModel = new Login(new RMIDBLayerFactory());
+-				if(loginView == null) loginView = new LoginView(loginModel);
+-				if(loginCtrl == null) loginCtrl = new LoginCtrl(loginModel, loginView);
+-				loginView.setVisible(true);				
+-			}
+-        });
++        view.setLoginAction(new LoginAction());
+     }
+     
+     /** Handles click to menu item Settings.
+@@ -400,4 +396,36 @@
+             }
+         }  
+     }
++    
++    class OverviewSelectionListener implements ListSelectionListener {
++        public void valueChanged(ListSelectionEvent e) {
++            //Ignore extra messages.
++            if (e.getValueIsAdjusting()) return;
++            
++            ListSelectionModel lsm =
++                    (ListSelectionModel)e.getSource();
++            if (lsm.isSelectionEmpty()) {
++                //no rows are selected
++            } else {
++                int selectedRow = lsm.getMinSelectionIndex();
++                model.setSelectedRow(selectedRow);
++                //selectedRow is selected
++            }
++        }
++    }
++    
++    class LoginAction extends AbstractAction {
++        public LoginAction() {
++            putValue(NAME, L10n.getString(&quot;Login&quot;));
++            //putValue(SHORT_DESCRIPTION, L10n.getString(&quot;nextButtonTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Login&quot;));                        
++        }
++        public void actionPerformed(ActionEvent arg0) {
++                // Reuse the existing dialogs, hide'em when they're no longer needed.
++                if(loginModel == null) loginModel = new Login(new RMIDBLayerFactory());
++                if(loginView == null) loginView = new LoginView(loginModel);
++                if(loginCtrl == null) loginCtrl = new LoginCtrl(loginModel, loginView);
++                loginView.setVisible(true);				
++        }
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-03 21:51:25 UTC (rev 104)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-03 22:09:21 UTC (rev 105)
+@@ -36,7 +36,9 @@
+ import javax.swing.JTextField;
+ import javax.swing.JToggleButton;
+ import javax.swing.JToolBar;
++import javax.swing.ListSelectionModel;
+ import javax.swing.border.BevelBorder;
++import javax.swing.event.ListSelectionListener;
+ import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.ComponentAdjust;
+ import net.sf.plantlore.common.StatusBarManager;
+@@ -92,7 +94,7 @@
+     
+     private JLabel statusLabel;
+     
+-    private JTable overview;
++    private JTable overview = new JTable();
+     private JToolBar mainToolBar;
+     private JToolBar pageToolBar;
+     private JFormattedTextField recordsPerPage = new JFormattedTextField(NumberFormat.getIntegerInstance());
+@@ -211,7 +213,8 @@
+     private void initOverview()
+     {
+         OverviewTableModel otm = model.getTableModel();
+-        overview = new JTable(otm);
++        overview.setModel(otm);
++        overview.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+         TableColumn tc;
+         for (int i = 0; i &lt; otm.getColumnCount(); i++) {
+             tc = overview.getColumnModel().getColumn(i);
+@@ -436,6 +439,11 @@
+         recordsPerPage.addPropertyChangeListener(p);
+     }
+     
++    public void setSelectedRowListener(ListSelectionListener l)
++    {
++        overview.getSelectionModel().addListSelectionListener(l);
++    }
++    
+     /** Returns the frame of the main window.
+      *
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-03 21:51:25 UTC (rev 104)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-03 22:09:21 UTC (rev 105)
+@@ -55,7 +55,7 @@
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				if(model.getSelected() == null) return; // Must select somethin'								
+ 				AuthView a = new AuthView(model);
+-				/*AuthCtrl c = */new AuthCtrl(model, a);
++				AuthCtrl c = new AuthCtrl(model, a);
+ 				a.setVisible(true);
+ 			}
+ 		});
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000104.html">[Plantlore-dev] r104 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+	<LI>Next message: <A HREF="000106.html">[Plantlore-dev] r106 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#105">[ date ]</a>
+              <a href="thread.html#105">[ thread ]</a>
+              <a href="subject.html#105">[ subject ]</a>
+              <a href="author.html#105">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

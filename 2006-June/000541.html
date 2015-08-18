@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r434 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r434%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200606041047.k54AltV7015746%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000540.html">
+   <LINK REL="Next"  HREF="000542.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r434 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r434%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200606041047.k54AltV7015746%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r434 - trunk/src/net/sf/plantlore/server">krater at berlios.de
+       </A><BR>
+    <I>Sun Jun  4 12:47:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000540.html">[Plantlore-dev] r433 - in trunk/src/net/sf/plantlore: client/resources common/exception common/record middleware server server/manager
+</A></li>
+        <LI>Next message: <A HREF="000542.html">[Plantlore-dev] r435 - in trunk/src/net/sf/plantlore: common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#541">[ date ]</a>
+              <a href="thread.html#541">[ thread ]</a>
+              <a href="subject.html#541">[ subject ]</a>
+              <a href="author.html#541">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-06-04 12:47:53 +0200 (Sun, 04 Jun 2006)
+New Revision: 434
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+A bug that crippled the SelectQueryImplementation during remote calls has been fixed. The problem was with proper distinction between remote references (stubs) and remote objects. The SelectQueryImplementation has been granted the access to the translation reqistry of the HibernateDBLayer that is capable of translating stubs to corresponding remote objects.
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-06-04 09:40:45 UTC (rev 433)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-06-04 10:47:53 UTC (rev 434)
+@@ -71,8 +71,12 @@
+     
+     private int maxSessionId;
+     /** Session factory for creating Hibernate sessions */
+-    private SessionFactory sessionFactory;    
+-    /** List of select queries */
++    private SessionFactory sessionFactory;
++    
++    /** 
++     * List of select queries - velmi dulezity obekt, provadi preklad ze stubu, ktere nam muzou chodit
++     * na odpovidajici remote objekty. TODO: Nekam to poznamenat a zdokumentovat! 
++     */
+     private Hashtable&lt;SelectQuery, SelectQuery&gt; queries;    
+     
+     private Hashtable&lt;SelectQuery, Session&gt; sessions;
+@@ -651,7 +655,7 @@
+             throw ex;
+         }
+         Session session = sessionFactory.openSession();
+-        SelectQuery query = new SelectQueryImplementation(session.createCriteria(classname)), 
++        SelectQuery query = new SelectQueryImplementation(session.createCriteria(classname), queries), 
+         	stub = query;
+         
+         if(undertaker != null)
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-06-04 09:40:45 UTC (rev 433)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-06-04 10:47:53 UTC (rev 434)
+@@ -52,9 +52,12 @@
+     /* List of projections for the query */
+     private ArrayList projections = new ArrayList();
+     
++    private Map&lt;SelectQuery, SelectQuery&gt; translation;
++    
+     /** Creates a new instance of SelectQueryImplementation */
+-    public SelectQueryImplementation(Criteria criteria) {
++    public SelectQueryImplementation(Criteria criteria, Map&lt;SelectQuery, SelectQuery&gt; translation) {
+         this.criteria = criteria;
++        this.translation = translation;
+     }
+     
+     /**
+@@ -114,6 +117,7 @@
+      *  @param values collection of values for restrictions working with more values (RESTR_IN)
+      */
+     public void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values) throws RemoteException {
++    	SubQueryImplementation subQuery = null;
+         switch (type) {
+             case PlantloreConstants.RESTR_BETWEEN:
+                 Object[] vals = values.toArray();
+@@ -179,10 +183,16 @@
+                 criteria.add(Restrictions.neProperty(firstPropertyName, secondPropertyName));
+                 break;
+             case PlantloreConstants.SUBQUERY_GEALL:
+-                criteria.add(Subqueries.propertyGeAll(firstPropertyName, ((SubQueryImplementation)value).getCriteria()));
++            	// It may happen we got only the STUB, yet what we need is the remote object!
++            	subQuery = (SubQueryImplementation)translation.get( value );
++            	if( subQuery != null)
++            		criteria.add(Subqueries.propertyGeAll(firstPropertyName, subQuery.getCriteria()));
+                 break;
+             case PlantloreConstants.SUBQUERY_LEALL:
+-                criteria.add(Subqueries.propertyLeAll(firstPropertyName, ((SubQueryImplementation)value).getCriteria()));
++            	// It may happen we got only the STUB, yet what we need is the remote object!
++            	subQuery = (SubQueryImplementation)translation.get( value );
++            	if( subQuery != null)
++            		criteria.add(Subqueries.propertyLeAll(firstPropertyName, subQuery.getCriteria()));
+                 break;                
+             default:
+                 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000540.html">[Plantlore-dev] r433 - in trunk/src/net/sf/plantlore: client/resources common/exception common/record middleware server server/manager
+</A></li>
+	<LI>Next message: <A HREF="000542.html">[Plantlore-dev] r435 - in trunk/src/net/sf/plantlore: common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#541">[ date ]</a>
+              <a href="thread.html#541">[ thread ]</a>
+              <a href="subject.html#541">[ subject ]</a>
+              <a href="author.html#541">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

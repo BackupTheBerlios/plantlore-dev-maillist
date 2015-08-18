@@ -1,0 +1,382 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r409 - in trunk/src/net/sf/plantlore/client/export: . builders
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r409%20-%20in%20trunk/src/net/sf/plantlore/client/export%3A%20.%20builders&In-Reply-To=%3C200605311732.k4VHWghd011343%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000496.html">
+   <LINK REL="Next"  HREF="000494.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r409 - in trunk/src/net/sf/plantlore/client/export: . builders</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r409%20-%20in%20trunk/src/net/sf/plantlore/client/export%3A%20.%20builders&In-Reply-To=%3C200605311732.k4VHWghd011343%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r409 - in trunk/src/net/sf/plantlore/client/export: . builders">lada at berlios.de
+       </A><BR>
+    <I>Wed May 31 19:32:42 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000496.html">[Plantlore-dev] r408 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000494.html">[Plantlore-dev] [Bug #7704] History doesn't revive deleted AuthorOccs for restored Occs
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#495">[ date ]</a>
+              <a href="thread.html#495">[ thread ]</a>
+              <a href="subject.html#495">[ subject ]</a>
+              <a href="author.html#495">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-31 19:32:30 +0200 (Wed, 31 May 2006)
+New Revision: 409
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java
+Log:
+Fixed bug #7659. Use `writer` instead of a file name. Comment.
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-31 17:29:59 UTC (rev 408)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-31 17:32:30 UTC (rev 409)
+@@ -303,9 +303,9 @@
+ 		if(filter.getDescription().equals(L10n.getString(&quot;Format.CSV&quot;)))
+ 			builder = new CSVBuilder(writer, template);
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.DC&quot;)))                        
+-			builder = new DarwinCoreBuilder(filter.suggestName(filename));
++			builder = new DarwinCoreBuilder(writer);
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.ABCD&quot;))) 
+-			builder = new ABCDBuilder(filter.suggestName(filename));
++			builder = new ABCDBuilder(writer);
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
+ 			builder = new XMLBuilder(template, writer);                       
+                 else if(filter.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)))                        
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java	2006-05-31 17:29:59 UTC (rev 408)
++++ trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java	2006-05-31 17:32:30 UTC (rev 409)
+@@ -1,11 +1,7 @@
+ package net.sf.plantlore.client.export.builders;
+ 
+-import java.io.File;
+-import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.Writer;
+-import java.util.ArrayList;
+-import java.util.Hashtable;
+ import net.sf.plantlore.client.export.AbstractBuilder;
+ import net.sf.plantlore.client.export.Builder;
+ import net.sf.plantlore.client.export.Template;
+@@ -13,7 +9,6 @@
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+-import org.apache.log4j.Logger;
+ import org.dom4j.Document;
+ import org.dom4j.DocumentHelper;
+ import org.dom4j.Element;
+@@ -25,16 +20,13 @@
+  *
+  * @author Lada Oberreiterov&#225;
+  * @since 18.5.2006
+- * @version
+  *
++ *
+  */
+ public class ABCDBuilder implements Builder {
+-    
+-    private Logger logger;
+-
+-    private Document document;
+-    private File fXML;
+-    private String file = &quot;ABCD_2_06.xml&quot;;    
++        
++    private Document document;  
++    private Writer outputWriter;  
+     private String projectTitle = &quot;&quot;;
+     private Element root;
+     private Element actualUnitsElement;   
+@@ -43,54 +35,46 @@
+     private AuthorOccurrence authorOccurrence = null;
+     
+     
+-    /** Creates a new instance of ABCDBuilder */
+-    public ABCDBuilder(String file) {                
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());          
++    /** 
++     * Creates a new instance of ABCDBuilder.
++     * This builder receives records (holder objects from the database)
++     * decomposes them, mapping them to ABCD Schema 2.06 and stores it in the 
++     * specified XML file. 
++     * &lt;br/&gt;     
++     *
++     * @param writer	The writer that will create the file.     
++     */
++    public ABCDBuilder(Writer writer) {                           
+         document = DocumentHelper.createDocument();        
+-        this.file = file;
+-    }
+-    
+-    
+-    public void header() throws IOException {
+-	logger.debug(&quot;ABCD Builder - header.&quot;);	
++        this.outputWriter = writer;
+         document.addElement(&quot;dataSets&quot;);
+         root = document.getRootElement();
+     }
++    
++    /** Empty. */ 
++    public void header() throws IOException {	        
++    }
+ 
+-    /*
+-     * Create new XML file for saved data.
+-     * Save data into XML file in ABCD Schema.
++    /*          
++     * Generate the footer of this format.
++     * Save data to XML file in ABCD Schema.
+      */
+-    public void footer() throws IOException {
+-        System.out.println(&quot;Training Builder disengaged.&quot;);
+-        
+-        fXML= new File(file);
+-        if (!fXML.exists()) fXML.createNewFile();
+-        
+-        // Pretty print the document to System.out        
+-        FileOutputStream out = new FileOutputStream(fXML);
++    public void footer() throws IOException {        
+         OutputFormat format = OutputFormat.createPrettyPrint();
+-        XMLWriter writer = new XMLWriter( out, format );
+-        writer.write( document );
++        XMLWriter xmlwriter = new XMLWriter( outputWriter, format );
++        xmlwriter.write( document );
++        xmlwriter.close();
+     }
+-
+-    public void startRecord() throws IOException {
+-            logger.debug(&quot;ABCD Builder - startRecord.&quot;);            
++    /** Empty. */
++    public void startRecord() throws IOException {            
+     }
+ 
+-    public void finishRecord() throws IOException {
+-            logger.debug(&quot;ABCD Builder - finishRecord.&quot;);            
++    /** Empty. */
++    public void finishRecord() throws IOException {    
+     }
+-
+-    /**
+-     * Only for testing
+-     */
+-    public void output(Class table, String column, Object value) throws IOException {
+-            System.out.println(&quot;   &quot; + table.getSimpleName() + &quot;.&quot; + column + &quot; = &quot; + value);
+-    }
+     
+-    /**
+-     * For eache occurrence generate XML elements and save value.
++    /**     
++     *  Decompose the given &lt;code&gt;occurrence&lt;/code&gt;, generate XML document for ABCD Schema and mapping data of occurrence.
+      */
+     public void outputABCD() {
+         if (occurrence == null ) return;
+@@ -153,7 +137,7 @@
+     }
+ 
+     /**
+-     * For each project generate elements contains metadata (content and technidal contact person, project descrption).
++     * For each project create elements contains metadata (content contact person, technidal contact person, project descrption,...).
+      *
+      */
+     public void generateDataSet() {
+@@ -189,6 +173,9 @@
+         setActualUnitsElement(units);
+     }
+     
++    /*
++     *  Create elements for author of occurrence.     
++     */
+      public void outputAuthors() {
+         Element agents = getActualAgentElement();
+         Element gatheringAgent = agents.addElement(&quot;gatheringAgent&quot;);
+@@ -202,6 +189,9 @@
+         representation.addElement(&quot;text&quot;).setText(authorOccurrence.getAuthor().getOrganizationNN());
+     }
+     
++     /*
++      *  Build part of the whole record.
++      */
+     public void part(Record record) throws IOException {
+         if(record == null) return;        
+         Class table = record.getClass();
+@@ -214,7 +204,7 @@
+             outputAuthors();
+         }               
+     }    
+-    
++        
+     public void setActualUnitsElement(Element unitsElement) {
+         this.actualUnitsElement = unitsElement;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java	2006-05-31 17:29:59 UTC (rev 408)
++++ trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java	2006-05-31 17:32:30 UTC (rev 409)
+@@ -9,9 +9,9 @@
+ 
+ package net.sf.plantlore.client.export.builders;
+ 
+-import java.io.File;
+-import java.io.FileOutputStream;
++
+ import java.io.IOException;
++import java.io.Writer;
+ import java.util.Date;
+ import net.sf.plantlore.client.export.Builder;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+@@ -22,7 +22,6 @@
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.Village;
+-import org.apache.log4j.Logger;
+ import org.dom4j.Document;
+ import org.dom4j.DocumentHelper;
+ import org.dom4j.Element;
+@@ -34,46 +33,51 @@
+  * @author Lada
+  */
+ public class DarwinCoreBuilder implements Builder {
+-    
+-    private Logger logger;
+ 
+-    private Document document;
+-    private File fXML;
+-    private String file = &quot;DarwinCore2.xml&quot;;        
++    private Document document;   
++    private Writer outputWriter;        
+     private Element root;
+     private Element actualRecordElement;       
+     private Occurrence occurrence = null;  
+     private AuthorOccurrence authorOccurrence = null;
+     
+-    /** Creates a new instance of DarwinCoreBuilder */
+-    public DarwinCoreBuilder(String file) {
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());          
++    /** 
++     * Creates a new instance of DarwinCoreBuilder 
++     * This builder receives records (holder objects from the database)
++     * decomposes them, mapping them to Darwin Core 2 and stores it in the 
++     * specified XML file. 
++     *
++     * @param writer	The writer that will create the file.     
++     */
++    public DarwinCoreBuilder(Writer writer) {      
+         document = DocumentHelper.createDocument(); 
+-        this.file = file;
+-    }
+-
+-    public void header() throws IOException {
+-        logger.debug(&quot;DarwinCore Builder - header.&quot;);	
++        this.outputWriter = writer;
+         document.addElement(&quot;recordSet&quot;);
+         root = document.getRootElement();
+     }
+ 
+-    public void footer() throws IOException {
+-        System.out.println(&quot;DarwinCore Builder disengaged.&quot;);
+-        
+-        fXML= new File(file);
+-        if (!fXML.exists()) fXML.createNewFile();
+-        
+-        // Pretty print the document to System.out        
+-        FileOutputStream out = new FileOutputStream(fXML);
++    /** Empty. */
++    public void header() throws IOException {                
++    }
++
++    /*          
++     * Generate the footer of this format.
++     * Save data to XML file in DarwinCore Schema.
++     */
++    public void footer() throws IOException {        
+         OutputFormat format = OutputFormat.createPrettyPrint();
+-        XMLWriter writer = new XMLWriter( out, format );
+-        writer.write( document );
++        XMLWriter xmlwriter = new XMLWriter( outputWriter, format );
++        xmlwriter.write( document );
++        xmlwriter.close();
+     }
+ 
++    /** Empty. */
+     public void startRecord() throws IOException {
+     }
+ 
++    /*
++     * Build part of the whole record.
++     */
+     public void part(Record record) throws IOException {
+         if(record == null) return;        
+         Class table = record.getClass();
+@@ -87,11 +91,14 @@
+         }     
+     }
+ 
++    /** Empty. */
+     public void finishRecord() throws IOException {
+     }
+ 
+-    private void outputDarwinCore() {
+-        logger.debug(&quot;output&quot;);
++    /*
++     * Decompose the given &lt;code&gt;occurrence&lt;/code&gt;, generate XML document for Darwin Core and mapping data of occurrence.     
++     */
++    private void outputDarwinCore() {      
+         Element record = document.getRootElement().addElement(&quot;record&quot;);
+         setActualREcordElement(record);                
+                
+@@ -127,7 +134,7 @@
+         record.addElement(&quot;collector&quot;).setText(authorOccurrence.getAuthor().getWholeName());
+     }
+     
+-       public void setActualREcordElement(Element recordElement) {
++   public void setActualREcordElement(Element recordElement) {
+         this.actualRecordElement = recordElement;
+     }
+     
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000496.html">[Plantlore-dev] r408 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000494.html">[Plantlore-dev] [Bug #7704] History doesn't revive deleted AuthorOccs for restored Occs
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#495">[ date ]</a>
+              <a href="thread.html#495">[ thread ]</a>
+              <a href="subject.html#495">[ subject ]</a>
+              <a href="author.html#495">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

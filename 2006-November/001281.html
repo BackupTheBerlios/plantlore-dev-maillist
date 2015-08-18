@@ -1,0 +1,747 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r863 - in trunk/src/net/sf/plantlore: common server	server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-November/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r863%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200611281850.kASIoxt9017835%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001280.html">
+   <LINK REL="Next"  HREF="001283.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r863 - in trunk/src/net/sf/plantlore: common server	server/manager</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r863%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200611281850.kASIoxt9017835%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r863 - in trunk/src/net/sf/plantlore: common server	server/manager">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 28 19:50:59 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001280.html">[Plantlore-dev] Bug #9107 - PostgreSecurity
+</A></li>
+        <LI>Next message: <A HREF="001283.html">[Plantlore-dev] [Bug #9446] Start server without GUI from the	command line
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1281">[ date ]</a>
+              <a href="thread.html#1281">[ thread ]</a>
+              <a href="subject.html#1281">[ subject ]</a>
+              <a href="author.html#1281">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-11-28 19:50:58 +0100 (Tue, 28 Nov 2006)
+New Revision: 863
+
+Added:
+   trunk/src/net/sf/plantlore/common/PlainProgressMonitor.java
+   trunk/src/net/sf/plantlore/common/SuperDispatcher.java
+Modified:
+   trunk/src/net/sf/plantlore/common/Dispatcher.java
+   trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+   trunk/src/net/sf/plantlore/server/DatabaseSettings.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/ServerSettings.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+Log:
+Dispatcher.java: The method justDispatch() must have been deleted because it might have crippled the Dispatcher if used (the Dispatcher would never dispatch another task).
+
+DatabaseSettings.java, ServerSettings.java: toString() method added (for easier debugging).
+
+ServerMng.java: ServerMng accepts extra server settings (from an external authority). This allows us to override the settings from the configuration file (plantlore.server.xml) with settings parsed from the command line.
+
+Server.Plantlore.java: It should be possible to control the Server from a command line now. There are several new parameters: port, timeout, connectionsTotal, connectionsPerIP, dbPort, dbEngine, dbParameter, password, host, terminate, who, nogui. All these parameters will be described in the user manual. (The administrator can have a little bit of fun writing: &quot;java net.sf.plantlore.server.Plantlore terminate the server on port 2100 running on host 127.0.0.1 and use the password enigma&quot; It will really stop the server :)).
+
+SuperDispatcher.java: SuperDispatcher came into existence originally aiming to supplant the current Dispatcher. Hence the name Super Dispatcher. However, such an act would require a little bit more work on the ProgressBarManager (which doesn't satisfy me any longer). Work and time that I am not willing to invest. The most important thing is that the SuperDispatcher can dispatch so called &quot;multitask&quot; which is a series of two or more consecutive tasks that depend on each other - if one of the tasks ends with an exception, the remaining tasks are automatically cancelled ( = never executed). It also has a task-queue so that all tasks handed over to the dispatcher will be dispatched when their time comes. I forbid you to use the SuperDispatcher (it is used in the &quot;Server part&quot; only!) because both the Dispatcher and the SuperDispatcher are delicate pieces of whole program that must be used exclusively (their usage cannot be mixed).
+
+
+All the new parts must be tested!
+
+Modified: trunk/src/net/sf/plantlore/common/Dispatcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -16,7 +16,7 @@
+ 
+ /**
+  *
+- * @author fraktalek
++ * @author fraktalek, krater
+  */
+ public class Dispatcher {
+     private Logger logger = Logger.getLogger(Dispatcher.class.getPackage().getName());
+@@ -26,22 +26,12 @@
+     private static Dispatcher dispatcher = new Dispatcher();
+     private static ProgressBarManager pbm;
+     
++    
+     private Dispatcher() {
+     }
+     
+     
+-    public synchronized boolean justDispatch(Task task) {
+-        if (taskRunning) {
+-            logger.debug(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
+-            return false;
+-        }
+-        
+-        taskRunning = true;
+-        task.start();
+-
+-        return true;
+-    }
+- 
++   
+     public synchronized boolean dispatch(Task task, JFrame parent, boolean stoppable) {
+         if (taskRunning) {
+             logger.debug(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
+
+Added: trunk/src/net/sf/plantlore/common/PlainProgressMonitor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlainProgressMonitor.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/common/PlainProgressMonitor.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -0,0 +1,53 @@
++/**
++ * 
++ */
++package net.sf.plantlore.common;
++
++import java.util.Observable;
++import java.util.Observer;
++
++import org.apache.log4j.Logger;
++
++/**
++ * @author yaa
++ *
++ */
++public class PlainProgressMonitor implements Observer {
++	
++	private Logger logger;
++
++	
++	/**
++	 * 
++	 */
++	public PlainProgressMonitor(Logger logger) {
++		this.logger = logger;
++	}
++	
++	public synchronized PlainProgressMonitor registerTask(Task...tasks) {
++		for( Task t : tasks)
++			t.addObserver(this);
++		return this;
++	}
++
++	public synchronized void unregisterTask(Task...tasks) {
++		for( Task t : tasks )
++			t.deleteObserver(this);
++	}
++	
++	/* (non-Javadoc)
++	 * @see java.util.Observer#update(java.util.Observable, java.lang.Object)
++	 */
++	public void update(Observable source, Object parameter) {
++		if( parameter instanceof Exception ) {
++			logger.error(&quot;Task &quot; + source + &quot; failed! &quot; + ((Exception)parameter).getMessage());
++			System.out.println(((Exception)parameter).getMessage());
++		} else if( parameter instanceof Pair ) {
++            Pair p = (Pair)parameter;
++            Object first = p.getFirst();
++            if (first instanceof Task.Message &amp;&amp; ((Task.Message)first) == Task.Message.MESSAGE_CHANGED)
++                System.out.println( p.getSecond() );
++		}
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/common/SuperDispatcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/SuperDispatcher.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/common/SuperDispatcher.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -0,0 +1,146 @@
++/**
++ * 
++ */
++package net.sf.plantlore.common;
++
++import java.util.LinkedList;
++import java.util.Observable;
++import java.util.Observer;
++import java.util.Queue;
++
++import org.apache.log4j.Logger;
++
++/**
++ * @author yaa
++ *
++ */
++public class SuperDispatcher implements Observer {
++	
++	
++    private Logger logger = Logger.getLogger(SuperDispatcher.class.getPackage().getName());
++    private TaskInfo current = null;
++    private Queue&lt;TaskInfo&gt; taskQueue = new LinkedList&lt;TaskInfo&gt;();
++    
++    
++    private static SuperDispatcher dispatcher = new SuperDispatcher();
++    
++    public enum TaskStatus { Waiting, Working, Completed, Cancelled, Crashed };
++    
++    
++    private class TaskInfo {
++    	public Task task;
++    	public boolean silent;
++    	public TaskInfo followingTask;
++    	public Object result;
++    	public TaskStatus status;
++    	
++    	public TaskInfo(Task task, boolean silent) {
++    		this.task = task;
++    		this.silent = silent;
++    		followingTask = null;
++    		result = null;
++    		status = TaskStatus.Waiting;
++    	}
++    }
++
++    
++    private SuperDispatcher() { }
++    
++    
++    
++    private void dispatch(TaskInfo next) {
++    	current = next;
++    	if(current != null) {
++    		logger.info(&quot;Dispatching task &quot; + current.task);
++    		current.status = TaskStatus.Working;
++			current.task.addObserver(this);
++			current.task.start();
++    	}
++    }
++    
++    private void dispatchNext() {
++    	if(current != null &amp;&amp; current.followingTask != null)
++    		dispatch(current.followingTask);
++    	else
++    		dispatch( taskQueue.poll() );
++    }
++    
++    
++    private void tryToDispatchNextTask() {
++    	if( current == null ) 
++    		dispatchNext();
++    	else {
++    		switch( current.status ) {
++    		case Cancelled:
++    		case Crashed:
++    		case Completed:
++    			dispatchNext();
++    			break;
++    		}
++    	}
++    }
++    
++
++    private synchronized void enqueueNewMultitask(Task...tasks) {
++    	TaskInfo previous = null;
++    	for( Task t : tasks ) {
++    		TaskInfo info = new TaskInfo(t, true);
++    		if(previous != null)
++    			previous.followingTask = info;
++    		previous = info;
++    		taskQueue.offer(info);
++    	}
++    	logger.info(&quot;New multitask enqueued.&quot;);
++    	tryToDispatchNextTask();
++    }
++    
++    
++    private synchronized void enqueueIndependentTasks(Task...tasks) {
++    	for( Task t : tasks )
++    		taskQueue.offer( new TaskInfo(t, true) );
++    	logger.info(&quot;New tasks enqueued.&quot;);
++    	tryToDispatchNextTask();
++    }
++    
++    
++    
++	public synchronized void update(Observable task, Object msg) {
++		// The current task has crashed!
++		if( msg instanceof Exception ) {
++			current.status = TaskStatus.Crashed;
++			for( TaskInfo info = current.followingTask; info != null; info.status = TaskStatus.Cancelled, info = info.followingTask );
++			current.task.deleteObserver(this);
++			logger.info(&quot;Task &quot; + current.task + &quot; crashed! &quot; + msg);
++			tryToDispatchNextTask();
++		}
++		// The current task has terminated successfully.
++		if( msg instanceof Pair) {
++	          Pair p = (Pair)msg;
++	          Object command = p.getFirst();
++	          if( command instanceof Task.Message &amp;&amp;  (Task.Message)command == Task.Message.STOPPING ) {
++	        	  current.task.deleteObserver(this);
++	        	  current.status = TaskStatus.Completed;
++	        	  current.result = current.task.getValue();
++	        	  logger.info(&quot;Task &quot; + current.task + &quot; completed! Returned value is &quot; + current.result);
++	        	  tryToDispatchNextTask();
++	          }
++		}
++
++	}
++
++	
++	
++	
++    
++    
++    public static void enqueueMultitask(Task...tasks) {
++    	dispatcher.enqueueNewMultitask(tasks);
++    }
++    
++    
++    public static void enqueue(Task...tasks) {
++    	dispatcher.enqueueIndependentTasks(tasks);
++    }
++
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -1,7 +1,6 @@
+ package net.sf.plantlore.server;
+ 
+ import java.io.Serializable;
+-import java.rmi.RemoteException;
+ 
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+
+Modified: trunk/src/net/sf/plantlore/server/DatabaseSettings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/DatabaseSettings.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/server/DatabaseSettings.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -17,6 +17,14 @@
+ 	private int port;
+ 	private String database;
+ 	
++	/* (non-Javadoc)
++	 * @see java.lang.Object#toString()
++	 */
++	@Override
++	public String toString() {
++		return connectionStringPrefix + &quot; ~ &quot; + connectionStringSuffix;
++	}
++	
+ 	/**
+ 	 * Create new Database settings.
+ 	 * 
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -8,12 +8,16 @@
+ import javax.swing.JFrame;
+ import javax.swing.UIManager;
+ 
++import org.apache.log4j.Logger;
+ import org.apache.log4j.PropertyConfigurator;
+ 
+ import com.jgoodies.looks.plastic.PlasticXPLookAndFeel;
+ 
+ import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.PlainProgressMonitor;
+ import net.sf.plantlore.common.PlantloreHelp;
++import net.sf.plantlore.common.SuperDispatcher;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.PlantloreException;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.server.manager.*;
+@@ -31,15 +35,86 @@
+ 	
+ 	private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
+ 	
+-	/**
+-	 * Configure the basic components the Server will use, 
+-	 * create the GUI and display it.
+-	 *
+-	 */
+-	public void run() {
++	
++	public static boolean hasOption(String option, String[] args) {
++		for(String arg : args)
++			if(arg.equalsIgnoreCase(option) || arg.equalsIgnoreCase(&quot;-&quot;+option) || arg.equalsIgnoreCase(&quot;--&quot;+option))
++				return true;
++		return false;
++	}
++	
++	
++	public static String parameterValue(String parameterName, String args[]) {
++		for(int i = 0; i &lt; args.length; i++) {
++			String arg = args[i];
++			if(arg.equalsIgnoreCase(parameterName) || arg.equalsIgnoreCase(&quot;-&quot;+parameterName) || arg.equalsIgnoreCase(&quot;--&quot;+parameterName)) {
++				if( i + 1 &lt; args.length )
++					return args[i + 1]; 
++			}
++		}
++		return null;
++	}
++
++	
++	public static String replaceIfValid(String replacement, String defaultValue) {
++		return (replacement != null &amp;&amp; replacement.length() &gt; 0) ? replacement : defaultValue;
++	}
++	
++	
++	public static int replaceIfValid(String replacement, int defaultValue) {
++		if(replacement != null) {
++			try {
++				int value = Integer.parseInt(replacement);
++				return value;
++			} catch(NumberFormatException e) { /* Never mind, return the default value. */}
++		}
++		return defaultValue;
++	}
++	
++
++	public static void main(String[] args) {
++		/*=====================================================================
++		 * 
++		 * Process all parameters passed to the program.
++		 * 
++		 *=====================================================================*/
++        boolean
++        	stopServer = Plantlore.hasOption(&quot;terminate&quot;, args),
++        	whoIsThere = Plantlore.hasOption(&quot;who&quot;, args),
++        	noGUI = Plantlore.hasOption(&quot;nogui&quot;, args) || stopServer || whoIsThere;
++        
++        ServerSettings settings;
++		try {
++			settings = ServerMng.loadSettingsFromFile(ServerMng.settingsFileName);
++		} catch( Exception e ) {
++			settings = ServerMng.generateDefaultServerSettings();
++		}
++        int 
++        	port = replaceIfValid(parameterValue(&quot;port&quot;, args), settings.getPort()), 
++        	timeout = replaceIfValid(parameterValue(&quot;timeout&quot;, args), settings.getTimeout()), 
++        	connectionsTotal = replaceIfValid(parameterValue(&quot;connectionstotal&quot;, args), settings.getConnectionsTotal()),
++        	connectionsPerIP = replaceIfValid(parameterValue(&quot;connectionsperip&quot;, args), settings.getConnectionsPerIP()),
++        	databasePort = replaceIfValid(parameterValue(&quot;dbport&quot;, args), settings.getDatabaseSettings().getPort());
++        String
++        	databaseEngine = replaceIfValid(parameterValue(&quot;dbengine&quot;, args), settings.getDatabaseSettings().getDatabase()),
++        	databaseParameter =  replaceIfValid(parameterValue(&quot;dbparameter&quot;, args), settings.getDatabaseSettings().getConnectionStringSuffix()),
++        	password = replaceIfValid(parameterValue(&quot;password&quot;, args), &quot;&quot;),
++        	host = replaceIfValid(parameterValue(&quot;host&quot;, args), &quot;localhost&quot;);
++        
++        // Prepare new Server Settings.
++        settings = new ServerSettings(port, timeout, connectionsTotal, connectionsPerIP,
++        		new DatabaseSettings(databaseEngine, databasePort, databaseParameter));
++        
++
++        /*=====================================================================
++         * 
++         * Perform the initialization ritual.
++         * 
++         *=====================================================================*/
++        
+ 		// Load log4j settings
+ 		try {
+-			ClassLoader cl = this.getClass().getClassLoader();
++			ClassLoader cl = Plantlore.class.getClassLoader();
+ 			InputStream is = cl.getResourceAsStream(LOGGER_PROPS);
+ 			Properties props = new Properties();
+ 			props.load(is);
+@@ -48,44 +123,68 @@
+ 		} catch (IOException ex) {
+ 			ex.printStackTrace();
+ 		}
++
++		// Get a logger so as to be able to report problems.
++		Logger logger = Logger.getLogger(Plantlore.class.getPackage().getName());
+ 		
+-		 // Initialize Help
+-        try {
+-            PlantloreHelp.initialize();
+-        } catch (PlantloreException e) {
+-            // TODO: Display error message
++
++        /*=====================================================================
++         * 
++         * Take the requested action!
++         * 
++         *=====================================================================*/
++        
++		final ServerMng serverManager = new ServerMng(settings);
++		
++		// TERMINATE A RUNNING SERVER
++        if( stopServer ) {
++        	Task 
++        		connectToServerTask = serverManager.createConnectToRunningServerTask(host, port, password),
++        		terminateTheServerTask = serverManager.createTerminateServerTask();
++        	new PlainProgressMonitor(logger).registerTask(connectToServerTask, terminateTheServerTask);
++        	
++        	SuperDispatcher.enqueueMultitask(connectToServerTask, terminateTheServerTask);
++        	return;
+         }
++
+         
+-        // Disable reconnect
+-        DefaultExceptionHandler.disableReconnect();
+-        
+         // Set the hostname to make remote connections possible
+         RMI.setHostName();
+-
+-
+-        java.awt.EventQueue.invokeLater(new Runnable(){
+-        	public void run() {
+-        		ServerMng model = new ServerMng();
+-        		ServerCreateView view = new ServerCreateView(model);
+-        		new ServerCreateCtrl(model, view);
+-        		view.setVisible(true);
+-        	}
+-        });
+-       	
+         
+-	}
+-	
++        
++        // CREATE A NEW SERVER
++        if(noGUI) {
++        	Task startNewServerTask = serverManager.createNewServerTask(password);
++        	new PlainProgressMonitor(logger).registerTask(startNewServerTask);
++        	
++        	SuperDispatcher.enqueue(startNewServerTask);
++        	return;
++        }
++        else {
++    		// Set beautiful system look &amp; feel.
++            try { 
++                UIManager.setLookAndFeel(new PlasticXPLookAndFeel()); 
++            } catch (Exception e) { e.printStackTrace(); JFrame.setDefaultLookAndFeelDecorated(true); }
++            
++   		 	// Initialize Help
++            try {
++                PlantloreHelp.initialize();
++            } catch (PlantloreException e) {}
++            
++            // Disable reconnect
++            DefaultExceptionHandler.disableReconnect();
++            
++            // Open the Dialog
++        	java.awt.EventQueue.invokeLater(new Runnable(){
++        		public void run() {
++        			ServerCreateView view = new ServerCreateView(serverManager);
++        			new ServerCreateCtrl(serverManager, view);
++        			view.setVisible(true);
++        		}
++        	});
++        	return;
++        }
+ 
+-	
+-	public static void main(String[] args) {
+-		
+-		// Set beautiful system look &amp; feel.
+-        try { 
+-            UIManager.setLookAndFeel(new PlasticXPLookAndFeel()); 
+-        } catch (Exception e) { e.printStackTrace(); JFrame.setDefaultLookAndFeelDecorated(true); }
+-		
+-        new Plantlore().run();
+-
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/ServerSettings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -16,6 +16,19 @@
+ 	private int connectionsPerIP;
+ 	private DatabaseSettings databaseSettings;
+ 	
++	/* (non-Javadoc)
++	 * @see java.lang.Object#toString()
++	 */
++	@Override
++	public String toString() {
++		return 
++			&quot;Port = &quot; + port + 
++			&quot; Timeout = &quot; + timeout + 
++			&quot; Connections Total = &quot; + connectionsTotal + 
++			&quot; Connections Per IP = &quot; + connectionsPerIP +
++			&quot; Database settings = &quot; + databaseSettings;
++	}
++	
+ 	/**
+ 	 * Create new Server Settings.
+ 	 * 
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-11-13 12:34:03 UTC (rev 862)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-11-28 18:50:58 UTC (rev 863)
+@@ -4,7 +4,9 @@
+ import java.io.BufferedWriter;
+ import java.io.File;
+ import java.io.FileInputStream;
++import java.io.FileNotFoundException;
+ import java.io.FileOutputStream;
++import java.io.IOException;
+ import java.io.InputStreamReader;
+ import java.io.OutputStreamWriter;
+ import java.io.Reader;
+@@ -15,6 +17,7 @@
+ 
+ import org.apache.log4j.Logger;
+ import org.dom4j.Document;
++import org.dom4j.DocumentException;
+ import org.dom4j.DocumentHelper;
+ import org.dom4j.Element;
+ import org.dom4j.Node;
+@@ -66,7 +69,7 @@
+ 	
+ 	/** The server control interface. */
+ 	private Server server;
+-	private ServerSettings settings;
++	private ServerSettings settings, defaultSettings;
+ 	
+ 	/** List of connected clients. */
+ 	private ConnectionInfo[] clients;
+@@ -74,7 +77,9 @@
+ 	private boolean didWeCreateTheServer = false;
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+-	private String settingsFileName; {
++	public static final String settingsFileName;
++	
++	static {
+ 		String userHome = System.getProperty(&quot;user.home&quot;),
+ 		osName = System.getProperty(&quot;os.name&quot;),
+ 		plantloreDirName = (osName.equals(&quot;Linux&quot;) ? &quot;.&quot; : &quot;&quot;) + PLANTLORE, 
+@@ -91,10 +96,50 @@
+ 	 * Create a new Server Manager.
+ 	 */
+ 	public ServerMng() {
++		this(null);
++	}
++	
++	public ServerMng(ServerSettings defaultSettings) {
++		this.defaultSettings = defaultSettings;
+ 		getSettings(true);
+ 		RMI.addToCodebase( Utils.getCodeBasePath() );
+ 	}
+ 	
++	
++	public static ServerSettings generateDefaultServerSettings() {
++		return new ServerSettings(RMIServer.DEFAULT_PORT, 3, 32, 2, 
++				new DatabaseSettings(&quot;postgresql&quot;, 5432, null));
++	}
++	
++	public static ServerSettings loadSettingsFromFile(String fileName) 
++	throws DocumentException, FileNotFoundException, IOException {
++		ServerSettings settings = null;
++		Reader reader = new BufferedReader(
++				new InputStreamReader(new FileInputStream(fileName), &quot;UTF-8&quot;));
++		SAXReader saxReader = new SAXReader();
++		Document document = saxReader.read( reader );
++		reader.close();
++
++		Node server = document.selectSingleNode(&quot;/config/server&quot;);
++		Number portNumber = server.numberValueOf(&quot;port&quot;),
++		connectionsNumber = server.numberValueOf(&quot;connections&quot;),
++		peripNumber = server.numberValueOf(&quot;perip&quot;);
++		int port = (portNumber == null) ? RMIServer.DEFAULT_PORT : portNumber.intValue(),
++				connections = (connectionsNumber == null || connectionsNumber.intValue() &lt;= 1) ? 16 : connectionsNumber.intValue(),
++						perip = (peripNumber == null || peripNumber.intValue() &lt;= 1) ? 2 : peripNumber.intValue();
++
++		Node database = server.selectSingleNode(&quot;database&quot;);
++
++		String databaseType = database.valueOf(&quot;engine&quot;),
++		databaseParameter = database.valueOf(&quot;parameter&quot;);
++		Number databasePortNumber = database.numberValueOf(&quot;port&quot;);
++		int databasePort = (databasePortNumber == null) ? 0 : databasePortNumber.intValue();
++
++		settings = new ServerSettings(port, 3, connections, perip, 
++				new DatabaseSettings(databaseType, databasePort, databaseParameter));
++		return settings;
++	}
++	
+ 	/**
+ 	 * Obtain the settings of the server.
+ 	 * 
+@@ -106,37 +151,10 @@
+ 			return settings;
+ 
+ 		// Create some default settings.
+-		settings = new ServerSettings(RMIServer.DEFAULT_PORT, 3, 32, 2, 
+-				new DatabaseSettings(&quot;postgresql&quot;, 5432, null));
+-		
+ 		try {
+-			Reader reader = new BufferedReader(
+-					new InputStreamReader(new FileInputStream(settingsFileName), &quot;UTF-8&quot;));
+-			SAXReader saxReader = new SAXReader();
+-            Document document = saxReader.read( reader );
+-            reader.close();
+-            
+-            Node server = document.selectSingleNode(&quot;/config/server&quot;);
+-            Number portNumber = server.numberValueOf(&quot;port&quot;),
+-            connectionsNumber = server.numberValueOf(&quot;connections&quot;),
+-            peripNumber = server.numberValueOf(&quot;perip&quot;);
+-            int port = (portNumber == null) ? RMIServer.DEFAULT_PORT : portNumber.intValue(),
+-            connections = (connectionsNumber == null || connectionsNumber.intValue() &lt;= 1) ? 16 : connectionsNumber.intValue(),
+-            perip = (peripNumber == null || peripNumber.intValue() &lt;= 1) ? 2 : peripNumber.intValue();
+-            
+-            Node database = server.selectSingleNode(&quot;database&quot;);
+-            
+-            String databaseType = database.valueOf(&quot;engine&quot;),
+-            databaseParameter = database.valueOf(&quot;parameter&quot;);
+-            Number databasePortNumber = database.numberValueOf(&quot;port&quot;);
+-            int databasePort = (databasePortNumber == null) ? 0 : databasePortNumber.intValue();
+-            
+-            settings = new ServerSettings(port, 3, connections, perip, 
+-            		new DatabaseSettings(databaseType, databasePort, databaseParameter));
+-            
+-            
++			settings = defaultSettings != null ? defaultSettings : loadSettingsFromFile(settingsFileName);
+ 		} catch(Exception e) {
+-			logger.error(&quot;Unable to load settings. &quot; + e.getMessage());
++			settings = generateDefaultServerSettings();
+ 		}
+ 		return settings;
+ 	}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001280.html">[Plantlore-dev] Bug #9107 - PostgreSecurity
+</A></li>
+	<LI>Next message: <A HREF="001283.html">[Plantlore-dev] [Bug #9446] Start server without GUI from the	command line
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1281">[ date ]</a>
+              <a href="thread.html#1281">[ thread ]</a>
+              <a href="subject.html#1281">[ subject ]</a>
+              <a href="author.html#1281">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

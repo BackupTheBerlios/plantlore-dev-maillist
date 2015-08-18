@@ -1,0 +1,1248 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r354 - trunk/src/net/sf/plantlore/client
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r354%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605252146.k4PLkD80029379%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000403.html">
+   <LINK REL="Next"  HREF="000405.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r354 - trunk/src/net/sf/plantlore/client</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r354%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605252146.k4PLkD80029379%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r354 - trunk/src/net/sf/plantlore/client">fraktalek at berlios.de
+       </A><BR>
+    <I>Thu May 25 23:46:13 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000403.html">[Plantlore-dev] r353 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+        <LI>Next message: <A HREF="000405.html">[Plantlore-dev] r355 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#404">[ date ]</a>
+              <a href="thread.html#404">[ thread ]</a>
+              <a href="subject.html#404">[ subject ]</a>
+              <a href="author.html#404">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-25 23:46:11 +0200 (Thu, 25 May 2006)
+New Revision: 354
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/SearchCtrl.java
+   trunk/src/net/sf/plantlore/client/SearchView.form
+   trunk/src/net/sf/plantlore/client/SearchView.java
+Log:
+User entered data are now handled correctly in AddEdit. Similar behaviour implemented in Search.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -120,6 +120,8 @@
+      * @param ao Assumes it is from database and therefore assumes WGS84 coordinate system.
+      */
+     public void setRecord(Integer occurrenceId) {
++        logger.debug(&quot;Loading AddEdit data for occurrence id &quot;+occurrenceId);
++        
+         DBLayerUtils dlu = new DBLayerUtils(database);
+         this.o = (Occurrence) dlu.getObjectFor(occurrenceId, Occurrence.class);
+         coordinateSystem = WGS84;
+@@ -136,14 +138,7 @@
+                         
+             originalAuthors.add(new Pair&lt;Integer,String&gt;(id,role));
+         }
+-        
+-        Iterator it = originalAuthors.iterator();
+-        System.out.println(&quot;Original authors are: &quot;);
+-        while (it.hasNext()) {
+-            Pair&lt;Integer,String&gt; pOA = (Pair&lt;Integer,String&gt;)it.next();
+-            System.out.println(&quot;&quot;+pOA.getFirst()+&quot;:&quot;+pOA.getSecond());
+-        }
+-        
++                
+         village = new Pair(o.getHabitat().getNearestVillage().getName(), o.getHabitat().getNearestVillage().getId());
+         
+         taxonList = new ArrayList();
+@@ -169,7 +164,9 @@
+         month = o.getMonthCollected();
+         day = o.getDayCollected();
+         time = o.getTimeCollected();
+-                
++        
++        System.out.println(&quot;+++++++++ phytCountry = &quot;+phytCountry+&quot; publication = &quot;+publication+&quot; source = &quot;+source);
++        
+         //we also must determine (again) who shares habitat data with us
+         loadHabitatSharingOccurrences();
+     }
+@@ -315,8 +312,13 @@
+     }
+ 
+     public void setPhytCountry(String phytCountry) {
+-        this.phytCountry = phytCountry;
+-        logger.debug(&quot;PhytCountry set to &quot;+phytCountry);
++        if (phytCountry != null &amp;&amp; !phytCountry.equals(EMPTY_STRING)) {
++            this.phytCountry = phytCountry;
++            logger.debug(&quot;PhytCountry set to &quot;+phytCountry);
++        } else {
++            this.phytCountry = null;
++            logger.debug(&quot;PhytCountry set to null&quot;);
++        }
+     }
+ 
+     public String getQuadrant() {
+@@ -360,8 +362,13 @@
+     }
+ 
+     public void setSource(String source) {
+-        this.source = source;
+-        logger.debug(&quot;Source set to &quot;+source);
++        if (source != null &amp;&amp; !source.equals(EMPTY_STRING)) {
++            this.source = source;
++            logger.debug(&quot;Source set to &quot;+source);
++        } else {
++            this.source = null;
++            logger.debug(&quot;Source set to null.&quot;);
++        }
+     }
+ 
+     public Pair&lt;String, Integer&gt; getPublication() {
+@@ -369,8 +376,13 @@
+     }
+ 
+     public void setPublication(Pair&lt;String, Integer&gt; publication) {
+-        this.publication = publication;
+-        logger.debug(&quot;Publication set to &quot;+publication);
++        if (publication != null &amp;&amp; !publication.equals(EMPTY_PAIR)) {
++            this.publication = publication;
++            logger.debug(&quot;Publication set to &quot;+publication);
++        } else {
++            this.publication = null;
++            logger.debug(&quot;Publication set to null&quot;);
++        }
+     }
+ 
+     public String getHerbarium() {
+@@ -503,7 +515,7 @@
+         //cIsoDateTimeBegin construction
+         Calendar c = Calendar.getInstance();
+         c.set(Calendar.YEAR, year);
+-        if (!month.equals(12)) { //there is empty string at the 12th position in the monthChooser
++        if (month != null) { 
+             c.set(Calendar.MONTH, month);
+             c.set(Calendar.DAY_OF_MONTH,day);
+         } else {
+@@ -526,7 +538,7 @@
+         }
+         occ.setIsoDateTimeBegin(c.getTime());
+         
+-        if (!month.equals(12)) occ.setMonthCollected(month); // 12 ... see a few lines above
++        if (month != null) occ.setMonthCollected(month); 
+         if (occurrenceNote != null) occ.setNote(occurrenceNote);
+         occ.setPlant(plant);
+         occ.setYearCollected(year);
+@@ -605,16 +617,27 @@
+         //cIsoDateTimeBegin construction
+         Calendar c = Calendar.getInstance();
+         c.set(Calendar.YEAR, year);
+-        c.set(Calendar.MONTH, month);
+-        c.set(Calendar.DAY_OF_MONTH,day);
++        if (month != null) { //user entered month
++            c.set(Calendar.MONTH, month);
++            c.set(Calendar.DAY_OF_MONTH,day);
++        } else { //user didn't enter month, however we still have to compose cIsoDateTimeBegin column
++            c.set(Calendar.MONTH, 0);
++            c.set(Calendar.DAY_OF_MONTH,1);            
++        }
+         Calendar temp = Calendar.getInstance();
+-        temp.setTime(time);
+-        c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
+-        c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        if (time != null) {
++            temp.setTime(time);
++            c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
++            c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        } else {
++            c.set(Calendar.HOUR_OF_DAY,0);
++            c.set(Calendar.MINUTE,1); //to avoid problems with possible strong inequality in search
++        }
+         o.setIsoDateTimeBegin(c.getTime());
+         
+         o.setMetadata(m);
+         o.setMonthCollected(month);
++        
+         o.setNote(occurrenceNote);
+         o.setPlant(plant);
+         o.setPublication(publ);
+@@ -657,15 +680,7 @@
+         occTmp.setUnitValue(o.getUnitValue());
+         occTmp.setYearCollected(o.getYearCollected());
+         occTmp.setDeleted(0);
+-        
+-        //#### 2BE REMOVED
+-        DBLayerUtils dlu = new DBLayerUtils(database);
+-        occTmp.setCreatedWhen(new Date());
+-        occTmp.setUpdatedWhen(new Date());
+-        occTmp.setCreatedWho((User) dlu.getObjectFor(2,User.class));
+-        occTmp.setUpdatedWho((User) dlu.getObjectFor(2,User.class));        
+-        //####
+-        
++                
+         return occTmp;
+     }
+     
+@@ -706,12 +721,10 @@
+                     boolean originalTaxonSurvived = false;
+                     
+                     for (int t = 0; t &lt; taxonList.size(); t++) {
+-                        System.out.print(&quot;#&quot;+taxonOriginal + &quot;# vs #&quot;+taxonList.get(t)+&quot;#&quot;);
+                         if (taxonOriginal.equals(taxonList.get(t))) {
+                             originalTaxonSurvived = true;
+                             break;
+                         }
+-                        System.out.println(&quot; NO&quot;);
+                     }
+ 
+                     prepareOccurrenceUpdate(updateAllPlants);
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -415,7 +415,14 @@
+     
+     class MonthChangeListener implements PropertyChangeListener {
+         public void propertyChange(PropertyChangeEvent evt) {
+-            model.setMonth((Integer) evt.getNewValue());
++            Integer i = (Integer) evt.getNewValue();
++            if (!i.equals(12)) { //there is an empty string at the 12th position in the combobox
++                model.setMonth(i);
++                view.dayChooser.setEnabled(true);
++            } else {
++                model.setMonth(null);
++                view.dayChooser.setEnabled(false);
++            }
+         } 
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-25 21:46:11 UTC (rev 354)
+@@ -422,14 +422,24 @@
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;com.toedter.calendar.JMonthChooser&quot; name=&quot;monthChooser&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;dayChooser&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);&amp;#xa;monthChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;com.toedter.calendar.JDayChooser&quot; name=&quot;dayChooser&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;okButton&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;dayChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;dayChooser.setLocale(L10n.getCurrentLocale());&amp;#xa;&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -439,6 +449,11 @@
+               &lt;/Properties&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;timeTextField&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;okButton&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -789,7 +804,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;295&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;190&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -990,16 +1005,31 @@
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;altitudeTextField&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;latitudeTextField&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;latitudeTextField&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;longitudeTextField&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;longitudeTextField&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;WGS84Button&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -1026,7 +1056,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;295&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;190&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -7,6 +7,7 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.Dimension;
++import java.awt.event.FocusListener;
+ import java.text.DateFormat;
+ import java.text.MessageFormat;
+ import java.text.NumberFormat;
+@@ -275,13 +276,17 @@
+ 
+         dayLabel.setText(&quot;Day:&quot;);
+ 
++        monthChooser.setNextFocusableComponent(dayChooser);
+         ((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);
+         monthChooser.setLocale(L10n.getCurrentLocale());
+ 
++        dayChooser.setNextFocusableComponent(okButton);
+         dayChooser.setLocale(L10n.getCurrentLocale());
+ 
+         timeLabel.setText(&quot;Time:&quot;);
+ 
++        timeTextField.setNextFocusableComponent(okButton);
++
+         org.jdesktop.layout.GroupLayout jPanel4Layout = new org.jdesktop.layout.GroupLayout(jPanel4);
+         jPanel4.setLayout(jPanel4Layout);
+         jPanel4Layout.setHorizontalGroup(
+@@ -472,7 +477,7 @@
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 295, Short.MAX_VALUE)
++                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 190, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel7Layout.setVerticalGroup(
+@@ -515,6 +520,12 @@
+         SJTSKButton.setNextFocusableComponent(sourceCombo);
+         SJTSKButton.setActionCommand(&quot;SJTSK&quot;);
+ 
++        altitudeTextField.setNextFocusableComponent(latitudeTextField);
++
++        latitudeTextField.setNextFocusableComponent(longitudeTextField);
++
++        longitudeTextField.setNextFocusableComponent(WGS84Button);
++
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+         jPanel1.setLayout(jPanel1Layout);
+         jPanel1Layout.setHorizontalGroup(
+@@ -574,7 +585,7 @@
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 295, Short.MAX_VALUE)
++                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 190, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel9Layout.setVerticalGroup(
+@@ -751,19 +762,31 @@
+         territoryNameCombo.setSelectedItem(model.getTerritoryName());
+         phytNameCombo.setSelectedItem(model.getPhytName());
+         phytCodeCombo.setSelectedItem(model.getPhytCode());
+-        phytCountryCombo.setSelectedItem(model.getPhytCountry());
++        if (model.getPhytCountry() != null) 
++            phytCountryCombo.setSelectedItem(model.getPhytCountry());
++        else
++            phytCountryCombo.setSelectedIndex(0);
+         quadrantTextField.setText(model.getQuadrant());
+         
+-        altitudeTextField.setText(&quot;&quot;+model.getAltitude());
+-        longitudeTextField.setText(&quot;&quot;+model.getLongitude());
+-        latitudeTextField.setText(&quot;&quot;+model.getLatitude());
+-        sourceCombo.setSelectedItem(model.getSource());
+-        publicationCombo.setSelectedItem(model.getPublication());
++        if (model.getAltitude() != null) altitudeTextField.setText(&quot;&quot;+model.getAltitude());
++        if (model.getLongitude() != null) longitudeTextField.setText(&quot;&quot;+model.getLongitude());
++        if (model.getLatitude() != null) latitudeTextField.setText(&quot;&quot;+model.getLatitude());
++        if (model.getSource() != null) 
++            sourceCombo.setSelectedItem(model.getSource());
++        else
++            sourceCombo.setSelectedIndex(0);
++        if (model.getPublication() != null)
++            publicationCombo.setSelectedItem(model.getPublication());
++        else
++            publicationCombo.setSelectedIndex(0);
+         herbariumTextField.setText(model.getHerbarium());
+         
+-        monthChooser.setMonth(model.getMonth());
+-        dayChooser.setDay(model.getDay());     
+-        dayChooser.setMonth(model.getMonth());
++        if (model.getMonth() != null) {
++            monthChooser.setMonth(model.getMonth());
++            dayChooser.setDay(model.getDay());     
++            dayChooser.setMonth(model.getMonth());
++        } else
++            ((JComboBox)monthChooser.getComboBox()).setSelectedIndex(12);
+     }
+     
+     public void clearComponentData() {
+@@ -876,7 +899,8 @@
+         if (arg instanceof String) {
+             String s = (String)arg;
+             if (s.equals(&quot;updateDayChooser&quot;)) {
+-                dayChooser.setMonth(model.getMonth());
++                if (model.getMonth() != null)
++                    dayChooser.setMonth(model.getMonth());
+             }
+         }
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -31,6 +31,7 @@
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.Village;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import org.apache.log4j.Logger;
+@@ -46,6 +47,8 @@
+ public class Search extends Observable {
+     public static final int INTERVAL = 1;
+     public static final int MONTH = 2;
++    public static final String EMPTY_STRING = L10n.getString(&quot;Common.ComboboxNothingSelected&quot;);
++    public static final Pair&lt;String,Integer&gt; EMPTY_PAIR = new Pair&lt;String,Integer&gt;(EMPTY_STRING,-1);
+     
+     private Logger logger;
+     private DBLayer database;      
+@@ -365,14 +368,14 @@
+     }
+     
+     public boolean isNotEmpty(String s) {
+-        if (s != null &amp;&amp; !s.equals(&quot;&quot;))
++        if (s != null &amp;&amp; !s.equals(&quot;&quot;) &amp;&amp; !s.equals(EMPTY_STRING))
+             return true;
+         else
+             return false;
+     }
+ 
+     public boolean isNotEmpty(Pair&lt;String,Integer&gt; p) {
+-        if (p != null &amp;&amp; p.getFirst() != null &amp;&amp;!p.getFirst().equals(&quot;&quot;))
++        if (p != null &amp;&amp; p.getFirst() != null &amp;&amp;!p.getFirst().equals(&quot;&quot;) &amp;&amp; !p.equals(EMPTY_PAIR))
+             return true;
+         else
+             return false;
+@@ -575,7 +578,7 @@
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.NEARESTVILLAGE,&quot;vill&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.TERRITORY,&quot;territory&quot;);
+                 sq.addOrder(PlantloreConstants.DIRECT_DESC, &quot;occ.&quot;+Occurrence.YEARCOLLECTED); //setridit podle roku
+-                //sq.addRestriction(PlantloreConstants.RESTR_EQ, &quot;occ.&quot;+Occurrence.DELETED, null, 0, null);
++                sq.addRestriction(PlantloreConstants.RESTR_EQ, &quot;occ.&quot;+Occurrence.DELETED, null, 0, null);
+                 
+                 for (Column column : columns) {
+                     switch (column.type) {
+
+Modified: trunk/src/net/sf/plantlore/client/SearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -20,8 +20,11 @@
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ import java.rmi.RemoteException;
++import java.text.NumberFormat;
++import java.text.ParseException;
+ import java.util.ArrayList;
+ import java.util.Date;
++import java.util.Locale;
+ import javax.swing.JComboBox;
+ import javax.swing.JOptionPane;
+ import javax.swing.JSpinner;
+@@ -36,6 +39,7 @@
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import org.apache.log4j.Logger;
+@@ -68,9 +72,9 @@
+         //------- TextFields --------        
+         view.herbariumTextField.addFocusListener(new HerbariumListener());
+         view.quadrantTextField.addFocusListener(new QuadrantListener());
+-        view.altitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new AltitudeListener());
+-        view.longitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new LongitudeListener());
+-        view.latitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new LatitudeListener());
++        view.altitudeTextField.addFocusListener(new AltitudeListener());
++        view.longitudeTextField.addFocusListener(new LongitudeListener());
++        view.latitudeTextField.addFocusListener(new LatitudeListener());
+         
+         //------- TextAreas --------        
+         view.taxonTextArea.addFocusListener(new TaxonAreaListener());
+@@ -165,7 +169,11 @@
+ 
+     class MonthChangeListener implements PropertyChangeListener {
+         public void propertyChange(PropertyChangeEvent evt) {
+-            model.setMonth((Integer) evt.getNewValue());
++            Integer i = (Integer) evt.getNewValue();
++            if (!i.equals(12))
++                model.setMonth(i);
++            else
++                model.setMonth(null);
+         } 
+     }
+     
+@@ -267,35 +275,116 @@
+         }
+     }//QuadrantListener
+     
+-    class MonthListener implements ChangeListener {
+-        public void stateChanged(ChangeEvent e) {
+-            JSpinner s = (JSpinner) e.getSource();
+-            model.setMonth((Integer)s.getValue());
++    class AltitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++
++        public void focusGained(FocusEvent e) {
+         }
+-    }//MonthListener
+-    
+-    
+-    class AltitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setAltitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setAltitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setAltitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    model.setAltitude(value);
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                } catch (ParseException ex2) {
++                    if (model.getAltitude() != null) {
++                        tf.setText(&quot;&quot;+nf.format(model.getAltitude()));
++                    } else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
+     }//AltitudeListener
+ 
+-    class LongitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setLongitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
+-    }//LongitudeListener
++    class LatitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
+ 
+-    class LatitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setLatitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setLatitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setLatitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                    model.setLatitude(value);                    
++                } catch (ParseException ex2) {
++                    if (model.getLatitude() != null)
++                        tf.setText(&quot;&quot;+model.getLatitude());
++                    else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
+     }//LatitudeListener
+ 
++    class LongitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setLongitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setLongitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                    model.setLongitude(value);                    
++                } catch (ParseException ex2) {
++                    if (model.getLongitude() != null)
++                        tf.setText(&quot;&quot;+model.getLongitude());
++                    else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
++    }//LongitudeListener
+     
+     class ExtendedButtonListener extends MouseAdapter {
+         public void mouseClicked(MouseEvent e) {
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-25 21:46:11 UTC (rev 354)
+@@ -121,7 +121,7 @@
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getVillages());&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;//items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)townComboBox).setStrict(true);&amp;#xa;townComboBox.setActionCommand(&quot;townComboBox&quot;);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)townComboBox).setStrict(true);&amp;#xa;townComboBox.setActionCommand(&quot;townComboBox&quot;);&amp;#xa;townComboBox.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+@@ -277,8 +277,8 @@
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel1&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; pref=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -577,7 +577,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getTerritories()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)territoryNameCombo).setStrict(true);&amp;#xa;territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)territoryNameCombo).setStrict(true);&amp;#xa;territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);&amp;#xa;territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -589,7 +589,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPhytNames()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytNameCombo).setStrict(true);&amp;#xa;phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytNameCombo).setStrict(true);&amp;#xa;phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);&amp;#xa;phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -601,7 +601,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPhytCodes()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCodeCombo).setStrict(true);&amp;#xa;phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCodeCombo).setStrict(true);&amp;#xa;phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);&amp;#xa;phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -613,7 +613,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getCountries()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCountryCombo).setStrict(false);&amp;#xa;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCountryCombo).setStrict(false);&amp;#xa;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&amp;#xa;phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -657,7 +657,7 @@
+                           &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;0&quot; pref=&quot;113&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;0&quot; pref=&quot;171&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;30&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -668,7 +668,7 @@
+                           &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;12&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;24&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;publicationLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;publicationCombo&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -735,7 +735,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getSources()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)sourceCombo).setStrict(false);&amp;#xa;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)sourceCombo).setStrict(false);&amp;#xa;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;sourceCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -747,7 +747,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPublications());&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)publicationCombo).setStrict(true);&amp;#xa;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)publicationCombo).setStrict(true);&amp;#xa;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;publicationCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -759,7 +759,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getProjects());&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)projectCombo).setStrict(true);&amp;#xa;projectCombo.setActionCommand(&quot;projectCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)projectCombo).setStrict(true);&amp;#xa;projectCombo.setActionCommand(&quot;projectCombo&quot;);&amp;#xa;projectCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -840,19 +840,29 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel6&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel7&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;EmptySpace min=&quot;12&quot; pref=&quot;12&quot; max=&quot;12&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;jLabel7&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;/Group&gt;
++                              &lt;Component id=&quot;jLabel8&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;Component id=&quot;jLabel8&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;longitudeFormattedTextField&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;Component id=&quot;latitudeFormattedTextField&quot; alignment=&quot;1&quot; min=&quot;0&quot; pref=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;Component id=&quot;altitudeFormattedTextField&quot; alignment=&quot;1&quot; min=&quot;-2&quot; pref=&quot;63&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;0&quot; pref=&quot;64&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;/Group&gt;
++                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;longitudeTextField&quot; min=&quot;-2&quot; pref=&quot;64&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;25&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;S42Button&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;WGS84Button&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -866,32 +876,24 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;altitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jLabel6&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;latitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jLabel7&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;longitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jLabel8&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;WGS84Button&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;S42Button&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;SJTSKButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;WGS84Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel6&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;48&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;S42Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel7&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;SJTSKButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel8&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;longitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace pref=&quot;60&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -905,31 +907,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;altitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;latitudeFormattedTextField&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;NumberFormat nf = NumberFormat.getNumberInstance(L10n.getCurrentLocale());&amp;#xa;nf.setMaximumFractionDigits(3);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;altitudeFormattedTextField.setActionCommand(&quot;altitudeFormattedTextField&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;latitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;longitudeFormattedTextField&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;latitudeFormattedTextField.setActionCommand(&quot;latitudeFormattedTextField&quot;);&amp;#xa;&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel7&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Latitude:&quot;/&gt;
+@@ -946,18 +923,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;longitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;WGS84Button&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;longitudeFormattedTextField.setActionCommand(&quot;longitudeFormattedTextField&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;WGS84Button&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;buttonGroup&quot; type=&quot;javax.swing.ButtonGroup&quot; editor=&quot;org.netbeans.modules.form.RADComponent$ButtonGroupPropertyEditor&quot;&gt;
+@@ -1030,6 +995,21 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;altitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;latitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;longitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel9&quot;&gt;
+@@ -1059,7 +1039,7 @@
+             &lt;DimensionLayout dim=&quot;1&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;115&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;127&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-25 20:15:07 UTC (rev 353)
++++ trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-25 21:46:11 UTC (rev 354)
+@@ -110,16 +110,14 @@
+         locationNoteArea = new javax.swing.JTextArea();
+         jPanel1 = new javax.swing.JPanel();
+         jLabel6 = new javax.swing.JLabel();
+-        NumberFormat nf = NumberFormat.getNumberInstance(L10n.getCurrentLocale());
+-        nf.setMaximumFractionDigits(3);
+-        altitudeFormattedTextField = new JFormattedTextField(nf);
+-        latitudeFormattedTextField = new JFormattedTextField(nf);
+         jLabel7 = new javax.swing.JLabel();
+         jLabel8 = new javax.swing.JLabel();
+-        longitudeFormattedTextField = new JFormattedTextField(nf);
+         WGS84Button = new javax.swing.JRadioButton();
+         S42Button = new javax.swing.JRadioButton();
+         SJTSKButton = new javax.swing.JRadioButton();
++        altitudeTextField = new javax.swing.JTextField();
++        latitudeTextField = new javax.swing.JTextField();
++        longitudeTextField = new javax.swing.JTextField();
+         jPanel9 = new javax.swing.JPanel();
+         jScrollPane5 = new javax.swing.JScrollPane();
+         occurrenceNoteArea = new javax.swing.JTextArea();
+@@ -136,6 +134,7 @@
+ 
+         ((AutoComboBox)townComboBox).setStrict(true);
+         townComboBox.setActionCommand(&quot;townComboBox&quot;);
++        townComboBox.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         TaxonLabel.setText(&quot;Taxon:&quot;);
+ 
+@@ -312,15 +311,19 @@
+ 
+         ((AutoComboBox)territoryNameCombo).setStrict(true);
+         territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);
++        territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         ((AutoComboBox)phytNameCombo).setStrict(true);
+         phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);
++        phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         ((AutoComboBox)phytCodeCombo).setStrict(true);
+         phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);
++        phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         ((AutoComboBox)phytCountryCombo).setStrict(false);
+         phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);
++        phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+         quadrantTextField.setActionCommand(&quot;quadrantTextField&quot;);
+ 
+@@ -395,12 +398,15 @@
+ 
+         ((AutoComboBox)sourceCombo).setStrict(false);
+         sourceCombo.setActionCommand(&quot;sourceCombo&quot;);
++        sourceCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+         ((AutoComboBox)publicationCombo).setStrict(true);
+         publicationCombo.setActionCommand(&quot;publicationCombo&quot;);
++        publicationCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         ((AutoComboBox)projectCombo).setStrict(true);
+         projectCombo.setActionCommand(&quot;projectCombo&quot;);
++        projectCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         org.jdesktop.layout.GroupLayout jPanel6Layout = new org.jdesktop.layout.GroupLayout(jPanel6);
+         jPanel6.setLayout(jPanel6Layout);
+@@ -419,7 +425,7 @@
+                     .add(publicationCombo, 0, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 113, Short.MAX_VALUE)
+                     .add(sourceCombo, 0, 171, Short.MAX_VALUE))
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap(30, Short.MAX_VALUE))
+         );
+         jPanel6Layout.setVerticalGroup(
+             jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -427,7 +433,7 @@
+                 .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(sourceLabel)
+                     .add(sourceCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 12, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 24, Short.MAX_VALUE)
+                 .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(publicationLabel)
+                     .add(publicationCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+@@ -468,19 +474,10 @@
+         jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;GPS&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 10)));
+         jLabel6.setText(&quot;Altitude:&quot;);
+ 
+-        altitudeFormattedTextField.setNextFocusableComponent(latitudeFormattedTextField);
+-        altitudeFormattedTextField.setActionCommand(&quot;altitudeFormattedTextField&quot;);
+-
+-        latitudeFormattedTextField.setNextFocusableComponent(longitudeFormattedTextField);
+-        latitudeFormattedTextField.setActionCommand(&quot;latitudeFormattedTextField&quot;);
+-
+         jLabel7.setText(&quot;Latitude:&quot;);
+ 
+         jLabel8.setText(&quot;Longitude:&quot;);
+ 
+-        longitudeFormattedTextField.setNextFocusableComponent(WGS84Button);
+-        longitudeFormattedTextField.setActionCommand(&quot;longitudeFormattedTextField&quot;);
+-
+         convertCoordinatesGroup.add(WGS84Button);
+         WGS84Button.setText(&quot;WGS84&quot;);
+         WGS84Button.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+@@ -515,15 +512,21 @@
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                        .add(jLabel6)
+-                        .add(jLabel7))
+-                    .add(jLabel8))
++                        .add(jPanel1Layout.createSequentialGroup()
++                            .add(12, 12, 12)
++                            .add(jLabel7))
++                        .add(jLabel8))
++                    .add(jLabel6))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
+-                    .add(longitudeFormattedTextField)
+-                    .add(latitudeFormattedTextField, 0, 0, Short.MAX_VALUE)
+-                    .add(altitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 63, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .add(25, 25, 25)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(jPanel1Layout.createSequentialGroup()
++                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                            .add(latitudeTextField)
++                            .add(altitudeTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 64, Short.MAX_VALUE))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel1Layout.createSequentialGroup()
++                        .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 64, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(S42Button)
+                     .add(WGS84Button)
+@@ -534,26 +537,21 @@
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(altitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jLabel6))
+-                        .add(6, 6, 6)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(latitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jLabel7))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(longitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jLabel8)))
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(WGS84Button)
+-                        .add(6, 6, 6)
+-                        .add(S42Button)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(SJTSKButton)))
+-                .addContainerGap(48, Short.MAX_VALUE))
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(WGS84Button)
++                    .add(jLabel6)
++                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .add(6, 6, 6)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(S42Button)
++                    .add(jLabel7)
++                    .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(SJTSKButton)
++                    .add(jLabel8)
++                    .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(60, Short.MAX_VALUE))
+         );
+ 
+         jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Ocurrence note&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+@@ -575,7 +573,7 @@
+         jPanel9Layout.setVerticalGroup(
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 115, Short.MAX_VALUE)
++                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 127, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+ 
+@@ -608,8 +606,8 @@
+                     .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                 .add(0, 0, 0)
+                 .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+@@ -713,25 +711,26 @@
+         
+     public void clearComponentData() {
+         model.clearAuthors(); resetAuthorModel(); initAuthorTable();
+-        townComboBox.setSelectedIndex(-1);
++        townComboBox.setSelectedIndex(0);
+         taxonTextArea.setText(&quot;&quot;);
+         descriptionArea.setText(&quot;&quot;);
+         
+         locationNoteArea.setText(&quot;&quot;);
+         occurrenceNoteArea.setText(&quot;&quot;);
+-        territoryNameCombo.setSelectedIndex(-1);
+-        phytNameCombo.setSelectedIndex(-1);
+-        phytCodeCombo.setSelectedIndex(-1);
+-        phytCountryCombo.setSelectedIndex(-1);
++        territoryNameCombo.setSelectedIndex(0);
++        phytNameCombo.setSelectedIndex(0);
++        phytCodeCombo.setSelectedIndex(0);
++        phytCountryCombo.setSelectedIndex(0);
+         quadrantTextField.setText(&quot;&quot;);
+         
+-        altitudeFormattedTextField.setText(&quot;&quot;);
+-        longitudeFormattedTextField.setText(&quot;&quot;);
+-        latitudeFormattedTextField.setText(&quot;&quot;);
+-        sourceCombo.setSelectedIndex(-1);
+-        publicationCombo.setSelectedIndex(-1);
++        altitudeTextField.setText(&quot;&quot;);
++        longitudeTextField.setText(&quot;&quot;);
++        latitudeTextField.setText(&quot;&quot;);
++        sourceCombo.setSelectedIndex(0);
++        publicationCombo.setSelectedIndex(0);
++        projectCombo.setSelectedIndex(0);
+         herbariumTextField.setText(&quot;&quot;);
+-        ((JComboBox)monthChooser.getComboBox()).setSelectedItem(&quot;&quot;);
++        ((JComboBox)monthChooser.getComboBox()).setSelectedIndex(12);
+         
+         intervalRadioButton.setSelected(true);        
+         monthLabel.setEnabled(false);
+@@ -788,7 +787,7 @@
+     protected javax.swing.JLabel TaxonLabel;
+     protected javax.swing.JLabel TownLabel;
+     protected javax.swing.JRadioButton WGS84Button;
+-    protected javax.swing.JFormattedTextField altitudeFormattedTextField;
++    protected javax.swing.JTextField altitudeTextField;
+     protected javax.swing.JTable authorTable;
+     protected javax.swing.JButton cancelButton;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
+@@ -823,9 +822,9 @@
+     private javax.swing.JScrollPane jScrollPane3;
+     private javax.swing.JScrollPane jScrollPane4;
+     private javax.swing.JScrollPane jScrollPane5;
+-    protected javax.swing.JFormattedTextField latitudeFormattedTextField;
++    protected javax.swing.JTextField latitudeTextField;
+     protected javax.swing.JTextArea locationNoteArea;
+-    protected javax.swing.JFormattedTextField longitudeFormattedTextField;
++    protected javax.swing.JTextField longitudeTextField;
+     protected com.toedter.calendar.JMonthChooser monthChooser;
+     protected javax.swing.JLabel monthLabel;
+     protected javax.swing.JRadioButton monthRadioButton;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000403.html">[Plantlore-dev] r353 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+	<LI>Next message: <A HREF="000405.html">[Plantlore-dev] r355 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#404">[ date ]</a>
+              <a href="thread.html#404">[ thread ]</a>
+              <a href="subject.html#404">[ subject ]</a>
+              <a href="author.html#404">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

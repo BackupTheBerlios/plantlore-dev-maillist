@@ -1,0 +1,2560 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r638 - in trunk/src/net/sf/plantlore:	client/publications common/record l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r638%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/publications%20common/record%20l10n&In-Reply-To=%3C200609022132.k82LWkkE011038%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000893.html">
+   <LINK REL="Next"  HREF="000895.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r638 - in trunk/src/net/sf/plantlore:	client/publications common/record l10n</H1>
+    <B>kovo at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r638%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/publications%20common/record%20l10n&In-Reply-To=%3C200609022132.k82LWkkE011038%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r638 - in trunk/src/net/sf/plantlore:	client/publications common/record l10n">kovo at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  2 23:32:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000893.html">[Plantlore-dev] r637 - in trunk/src/net/sf/plantlore:	client/history client/metadata client/user common/record
+</A></li>
+        <LI>Next message: <A HREF="000895.html">[Plantlore-dev] r639 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#894">[ date ]</a>
+              <a href="thread.html#894">[ thread ]</a>
+              <a href="subject.html#894">[ subject ]</a>
+              <a href="author.html#894">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-09-02 23:32:33 +0200 (Sat, 02 Sep 2006)
+New Revision: 638
+
+Modified:
+   trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java
+   trunk/src/net/sf/plantlore/client/publications/AddPublicationView.form
+   trunk/src/net/sf/plantlore/client/publications/AddPublicationView.java
+   trunk/src/net/sf/plantlore/client/publications/PublicationManager.java
+   trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.form
+   trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Update of Publication manager. This should be final version ready for testing. List of changes:
+* ProgressBars updated
+* Checking length of user input
+* All strings should now be localized
+* JavaDoc updated
+* Compiler warnings removed
+
+Modified: trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -1,9 +1,3 @@
+-/*
+- * AddPublicationCtrl.java
+- *
+- * Created on 21. leden 2006, 0:58
+- *
+- */
+ 
+ package net.sf.plantlore.client.publications;
+ 
+@@ -14,11 +8,8 @@
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ import java.rmi.RemoteException;
+-import javax.swing.JOptionPane;
+-import net.sf.plantlore.common.PlantloreHelp;
+-import javax.swing.Timer;
+-import net.sf.plantlore.common.ProgressBar;
+-import net.sf.plantlore.common.ProgressDialog;
++import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+@@ -28,17 +19,13 @@
+  * Controller for the Add/Edit publication dialog in the PublicationManager MVC.
+  * 
+  * @author Tomas Kovarik
+- * @version 1.0 BETA, May 1, 2006
++ * @version 1.0
+  */
+ public class AddPublicationCtrl {
+     /** Model of the Publication manager MVC */
+     private PublicationManager model;
+     /** View for adding publications in PublicationManager */
+     private AddPublicationView view;
+-    /** Timer used to check for the end of long running tasks */
+-    private Timer timer;
+-    /** Instance of progress dialog */
+-    private ProgressDialog progress;    
+     /** Instance of a logger */ 
+     private Logger logger;
+     
+@@ -87,63 +74,52 @@
+                 if (model.getEditPublication() == null) {                    
+                     // Save new publication
+                     Task task = model.savePublication();                
+-                    ProgressBar progressBar = new ProgressBar(task, view, true) {
+-                        public void exceptionHandler(Exception ex) {
+-                            if (ex instanceof DBLayerException) {
+-                                DBLayerException e = (DBLayerException)ex;
+-                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                                logger.error(e+&quot;: &quot;+e.getErrorInfo());
+-                                getTask().stop();
+-                                return;
+-                            }
+-                            if (ex instanceof RemoteException) {
+-                                RemoteException e = (RemoteException)ex;
+-                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                                logger.error(e);
+-                                getTask().stop();
+-                                return;
+-                            }
+-                            JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                            logger.error(ex);                            
+-                        }              
+-                        
++                    DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
++                        @Override
+                         public void afterStopped(Object value) {
+                             model.searchPublication(false);
+-                            model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
+                             model.reloadCache();
+                         }
+                     };
+-                    progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
++                    dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+                     task.start();
+                 } else {                    
+                     // Edit existing publication
+                     Task task = model.editPublication();
+-                    ProgressBar progressBar = new ProgressBar(task, view, true) {
+-                        public void exceptionHandler(Exception ex) {
+-                            if (ex instanceof DBLayerException) {
+-                                DBLayerException e = (DBLayerException)ex;
+-                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                                logger.error(e+&quot;: &quot;+e.getErrorInfo());
+-                                getTask().stop();
+-                                return;
+-                            }
+-                            if (ex instanceof RemoteException) {
+-                                RemoteException e = (RemoteException)ex;
+-                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                                logger.error(e);
+-                                getTask().stop();
+-                                return;
+-                            }
+-                            JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                            logger.error(ex);                            
+-                        }                                      
++                    DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
++                        @Override
+                         public void afterStopped(Object value) {
+                             model.searchPublication(false);
+-                            model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
+                             model.reloadCache();                            
+                         }
+                     };
+-                    progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
++                    dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+                     task.start();                    
+                 }
+                 // Close the add dialog when save finished
+
+Modified: trunk/src/net/sf/plantlore/client/publications/AddPublicationView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/AddPublicationView.form	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/AddPublicationView.form	2006-09-02 21:32:33 UTC (rev 638)
+@@ -3,7 +3,7 @@
+ &lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;title&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-      &lt;Connection code=&quot;L10n.getString(&quot;addPublicationTitle&quot;)&quot; type=&quot;code&quot;/&gt;
++      &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.Title&quot;)&quot; type=&quot;code&quot;/&gt;
+     &lt;/Property&gt;
+   &lt;/Properties&gt;
+   &lt;SyntheticProperties&gt;
+@@ -125,55 +125,55 @@
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationCollectionNameLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.CollectionName.Label&quot;)+&quot; *&quot;&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationCollectionYearPublicationLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.CollectionYearPublication.Label&quot;)+&quot; *&quot;&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel3&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationJournalNameLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.JournalName.Label&quot;)+&quot; *&quot;&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel5&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationJournalAuthorNameLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.JournalAuthorName.Label&quot;)+&quot; *&quot;&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel7&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationReferenceDetailLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.ReferenceDetail.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel8&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationNoteLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.Note.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel9&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;requiredFieldLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;&quot;* &quot;+L10n.getString(&quot;Publications.Add.RequiredField.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;collectionNameField&quot;&gt;
+       &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;collectionNameField.setValue(&quot;&quot;);&quot;/&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;collectionNameField.setValue(&quot;&quot;);&amp;#xa;collectionNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.COLLECTIONNAME)));&quot;/&gt;
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;publicationYearField&quot;&gt;
+@@ -183,12 +183,12 @@
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;journalNameField&quot;&gt;
+       &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalNameField.setValue(&quot;&quot;);&quot;/&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalNameField.setValue(&quot;&quot;);&amp;#xa;journalNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALNAME)));&quot;/&gt;
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;urlField&quot;&gt;
+       &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;urlField.setValue(&quot;&quot;);&quot;/&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;urlField.setValue(&quot;&quot;);&amp;#xa;urlField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.URL)));&quot;/&gt;
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+     &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane2&quot;&gt;
+@@ -205,6 +205,7 @@
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;TransferFocus.patch(noteArea);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;noteArea.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.NOTE)));&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+@@ -232,7 +233,7 @@
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;saveBtn&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;Publication.Add.SaveButton&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.SaveButton.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+         &lt;Property name=&quot;minimumSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+           &lt;Dimension value=&quot;[150, 23]&quot;/&gt;
+@@ -242,18 +243,18 @@
+     &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel10&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;addPublicationUrlLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.Url.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;referenceDetailField&quot;&gt;
+       &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceDetailField.setValue(&quot;&quot;);&quot;/&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceDetailField.setValue(&quot;&quot;);&amp;#xa;referenceDetailField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCEDETAIL)));&quot;/&gt;
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;journalAuthorField&quot;&gt;
+       &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalAuthorField.setValue(&quot;&quot;);&quot;/&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalAuthorField.setValue(&quot;&quot;);&amp;#xa;journalAuthorField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALAUTHORNAME)));&quot;/&gt;
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+   &lt;/SubComponents&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/publications/AddPublicationView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/AddPublicationView.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/AddPublicationView.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -8,20 +8,28 @@
+ import java.util.Observer;
+ import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
++import javax.swing.text.AttributeSet;
++import javax.swing.text.BadLocationException;
++import javax.swing.text.PlainDocument;
++import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.DocumentSizeFilter;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.TransferFocus;
++import net.sf.plantlore.common.record.Publication;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+- * Dialog used for adding / editing publications.
+- *
++ * Dialog for adding / editing publications.
++ * 
+  * @author  Tomas Kovarik
+- * @version 1.0, June 4, 2006
++ * @version 1.0
+  */
+ public class AddPublicationView extends javax.swing.JDialog implements Observer {
+     /** Model of the Publication manager MVC */
+     private PublicationManager model;    
+-
++    /** Variable used for setting maximu input size of text fields */
++    private PlainDocument pd;
++    
+     /**
+      * Creates new form AddPublicationView 
+      * 
+@@ -70,30 +78,34 @@
+         referenceDetailField = new javax.swing.JFormattedTextField();
+         journalAuthorField = new javax.swing.JFormattedTextField();
+ 
+-        setTitle(L10n.getString(&quot;addPublicationTitle&quot;));
+-        jLabel1.setText(L10n.getString(&quot;addPublicationCollectionNameLbl&quot;));
++        setTitle(L10n.getString(&quot;Publications.Add.Title&quot;));
++        jLabel1.setText(L10n.getString(&quot;Publications.Add.CollectionName.Label&quot;)+&quot; *&quot;);
+ 
+-        jLabel2.setText(L10n.getString(&quot;addPublicationCollectionYearPublicationLbl&quot;));
++        jLabel2.setText(L10n.getString(&quot;Publications.Add.CollectionYearPublication.Label&quot;)+&quot; *&quot;);
+ 
+-        jLabel3.setText(L10n.getString(&quot;addPublicationJournalNameLbl&quot;));
++        jLabel3.setText(L10n.getString(&quot;Publications.Add.JournalName.Label&quot;)+&quot; *&quot;);
+ 
+-        jLabel5.setText(L10n.getString(&quot;addPublicationJournalAuthorNameLbl&quot;));
++        jLabel5.setText(L10n.getString(&quot;Publications.Add.JournalAuthorName.Label&quot;)+&quot; *&quot;);
+ 
+-        jLabel7.setText(L10n.getString(&quot;addPublicationReferenceDetailLbl&quot;));
++        jLabel7.setText(L10n.getString(&quot;Publications.Add.ReferenceDetail.Label&quot;));
+ 
+-        jLabel8.setText(L10n.getString(&quot;addPublicationNoteLbl&quot;));
++        jLabel8.setText(L10n.getString(&quot;Publications.Add.Note.Label&quot;));
+ 
+-        jLabel9.setText(L10n.getString(&quot;requiredFieldLbl&quot;));
++        jLabel9.setText(&quot;* &quot;+L10n.getString(&quot;Publications.Add.RequiredField.Label&quot;));
+ 
+         collectionNameField.setValue(&quot;&quot;);
++        collectionNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.COLLECTIONNAME)));
+ 
+         publicationYearField.setValue(0);
+         publicationYearField.setValue(null);
+ 
+         journalNameField.setValue(&quot;&quot;);
++        journalNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALNAME)));
+ 
+         urlField.setValue(&quot;&quot;);
++        urlField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.URL)));
+ 
++        noteArea.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.NOTE)));
+         noteArea.setColumns(20);
+         noteArea.setRows(5);
+         TransferFocus.patch(noteArea);
+@@ -105,14 +117,16 @@
+         closeBtn.setText(L10n.getString(&quot;Common.Close&quot;));
+         closeBtn.setMinimumSize(new java.awt.Dimension(150, 23));
+ 
+-        saveBtn.setText(L10n.getString(&quot;Publication.Add.SaveButton&quot;));
++        saveBtn.setText(L10n.getString(&quot;Publications.Add.SaveButton.Label&quot;));
+         saveBtn.setMinimumSize(new java.awt.Dimension(150, 23));
+ 
+-        jLabel10.setText(L10n.getString(&quot;addPublicationUrlLbl&quot;));
++        jLabel10.setText(L10n.getString(&quot;Publications.Add.Url.Label&quot;));
+ 
+         referenceDetailField.setValue(&quot;&quot;);
++        referenceDetailField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCEDETAIL)));
+ 
+         journalAuthorField.setValue(&quot;&quot;);
++        journalAuthorField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALAUTHORNAME)));
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+@@ -209,7 +223,7 @@
+     public boolean checkCompulsory() {
+         if (((Integer)publicationYearField.getValue() == null) &amp;&amp; (((String)collectionNameField.getValue()).length() == 0) &amp;&amp;
+             (((String)journalNameField.getValue()).length() == 0) &amp;&amp; (((String)journalAuthorField.getValue()).length() == 0)) {
+-            JOptionPane.showMessageDialog(this, &quot;At least one of the following fields must be filled in: Journal author, Year of publication, Journal name, Collection name&quot;, &quot;Missing compulsory field&quot;, JOptionPane.ERROR_MESSAGE);
++            JOptionPane.showMessageDialog(this, L10n.getString(&quot;Publications.CompulsoryFieldsMessage&quot;), L10n.getString(&quot;Publications.CompulsoryFieldsMessage.Title&quot;), JOptionPane.ERROR_MESSAGE);
+             collectionNameField.requestFocus();
+             return false;
+         }
+@@ -240,14 +254,19 @@
+      *  @param arg  argument sent with notification
+      */
+     public void update(Observable o, Object arg) {
+-        // Load form fields with data from the model
+-        this.collectionNameField.setValue(model.getCollectionName());
+-        this.publicationYearField.setValue(model.getPublicationYear());
+-        this.journalNameField.setValue(model.getJournalName());
+-        this.journalAuthorField.setValue(model.getJournalAuthor());
+-        this.referenceDetailField.setValue(model.getReferenceDetail());
+-        this.urlField.setValue(model.getUrl());
+-        this.noteArea.setText(model.getNote());
++        if (arg instanceof Exception) {
++            // Exception occurred during execution
++            DefaultExceptionHandler.handle(this, (Exception)arg);            
++        } else {
++            // Load form fields with data from the model
++            this.collectionNameField.setValue(model.getCollectionName());
++            this.publicationYearField.setValue(model.getPublicationYear());
++            this.journalNameField.setValue(model.getJournalName());
++            this.journalAuthorField.setValue(model.getJournalAuthor());
++            this.referenceDetailField.setValue(model.getReferenceDetail());
++            this.urlField.setValue(model.getUrl());
++            this.noteArea.setText(model.getNote());
++        }
+     }
+     
+     /**
+@@ -324,7 +343,7 @@
+     
+     /**
+      *  Add FocusListener for the &lt;b&gt;note&lt;/b&gt; field
+-     *  @param pcl FocusListener for the &lt;b&gt;note&lt;/b&gt; field
++     *  @param fl FocusListener for the &lt;b&gt;note&lt;/b&gt; field
+      */
+     void noteAddFocusListener(FocusListener fl) {
+         noteArea.addFocusListener(fl);
+@@ -392,6 +411,27 @@
+     public String getNote() {
+         return noteArea.getText();        
+     }        
++
++    class FieldLengthLimit extends PlainDocument {
++        private int limit;
++        // optional uppercase conversion
++        private boolean toUppercase = false;
++        
++        FieldLengthLimit(int limit) {
++            super();
++            this.limit = limit;
++        }
++        
++        @Override
++        public void insertString(int offset, String  str, AttributeSet attr) throws BadLocationException {
++            if (str == null) return;
++            if ((getLength() + str.length()) &lt;= limit) {
++                super.insertString(offset, str, attr);
++            } else {
++                super.insertString(offset, str.substring(0, limit), attr);
++            }
++        }
++    }    
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     private javax.swing.JButton closeBtn;
+
+Modified: trunk/src/net/sf/plantlore/client/publications/PublicationManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/PublicationManager.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/PublicationManager.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -22,20 +22,14 @@
+  * Publication manager model. Contains bussines logic and data fields of the PublicationManager.
+  * Implements operations including add publication, edit publication, delete publication, search
+  * publications.
+- *
++ * 
+  * @author Tomas Kovarik
+- * @version 1.0, June 4, 2006
+- *
+- * TODO:    Proper exception handling
+- *          Clean API (get rid of unused or unnecessary methods)
+- *          Improve thread management
++ * @version 1.0
+  */
+ public class PublicationManager extends Observable {
+     /* VARIOUS VARIABLES */
+     /** Instance of a logger */
+     private Logger logger;
+-    /** Exception with details about an error */
+-    private String error = null;
+     /** Instance of a database management object */
+     private DBLayer database;
+     /** Flag telling whether a long running operation has already finished */
+@@ -45,7 +39,7 @@
+     /** Actual number of rows to display */
+     private int displayRows = DEFAULT_DISPLAY_ROWS;
+     /** Data (results of a search query) displayed in the table */
+-    private ArrayList data;
++    private ArrayList&lt;Publication&gt; data;
+     /** Index of the first record shown in the table */
+     private int currentFirstRow;
+     /** Index of currently selected publication in the table */
+@@ -56,8 +50,10 @@
+     private int sortDirection = 0;
+     /** Publication we want to edit */
+     private Publication editPublication;
+-    /** Enum used for notifying AppCore to reload cahced publications */
++    /** Enum used for notifying AppCore to reload cached publications */
+     private PlantloreConstants.Table[] editTypeArray = new PlantloreConstants.Table[]{PlantloreConstants.Table.PUBLICATION};
++    /** Instance of currently active SelectQuery. We have to keep it so that we can close it when neccessary */
++    private SelectQuery activeSelectQuery = null;
+     
+     /* PUBLICATION PROPERTIES */
+     /** Name of the collection */
+@@ -95,13 +91,7 @@
+     public static final int SORT_JOURNAL_AUTHOR = 4;
+     public static final int SORT_REFERENCE_CITATION = 5;
+     public static final int SORT_REFERENCE_DETAIL = 6;
+-    /** Constants with error descriptions */
+-    public static final String ERROR_SEARCH = L10n.getString(&quot;publicationSearchFailed&quot;);
+-    public static final String ERROR_SAVE = L10n.getString(&quot;publicationSaveFailed&quot;);
+-    public static final String ERROR_UPDATE = L10n.getString(&quot;publicationUpdateFailed&quot;);
+-    public static final String ERROR_DELETE = L10n.getString(&quot;publicationDeleteFailed&quot;);
+-    public static final String ERROR_PROCESS = L10n.getString(&quot;publicationProcessResultsFailed&quot;);
+-
++    /** Constants for operations */
+     public static final int ADD = 1;
+     public static final int EDIT = 2;
+     public static final int DELETE = 3;
+@@ -127,6 +117,7 @@
+         final Task task = new Task() {
+             public Object task() throws Exception {
+                 boolean first = true;
++                setStatusMessage(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+                 // Construct Reference citation
+                 StringBuffer refCitation = new StringBuffer();
+                 if ((journalAuthor != null) &amp;&amp; (!journalAuthor.equals(&quot;&quot;))) {
+@@ -188,6 +179,7 @@
+         // Create new Task
+         final Task task = new Task() {
+             public Object task() throws Exception {
++                setStatusMessage(L10n.getString(&quot;Publications.ProgressBar.Delete&quot;));                
+                 Publication pub = (Publication)data.get(getPublicationIndex());
+                 // Set deleted flag of the publication
+                 pub.setDeleted(1);
+@@ -214,6 +206,7 @@
+         final Task task = new Task() {
+             public Object task() throws Exception {
+                 boolean first = true;
++                setStatusMessage(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+                 // Construct Refernce citation
+                 StringBuffer refCitation = new StringBuffer();
+                 if ((journalAuthor != null) &amp;&amp; (!journalAuthor.equals(&quot;&quot;))) {
+@@ -269,12 +262,14 @@
+      *
+      *  @param createTask tells whether to execute search in a separate thread
+      *  @return instance of the Task with the long running operation (searching data)
++     *  @see #search()
+      */
+     public Task searchPublication(boolean createTask) {
+         // Use the Task class to execute the search in a new thread
+         if (createTask) {
+             final Task task = new Task() {
+                 public Object task() throws Exception {
++                    setStatusMessage(L10n.getString(&quot;Publications.ProgressBar.Search&quot;));                    
+                     // Search the data
+                     int resultId = search();
+                     setResult(resultId);
+@@ -286,14 +281,18 @@
+             };
+             return task;
+         } else {
+-            // Do not use Task
++            // Do not use Task. Catch exceptions but do not display error.
+             try {
+                 int resultId = search();
+                 setResult(resultId);
+             } catch (DBLayerException ex1) {
+-                // ???
++                logger.error(&quot;DBLayerException caught while searching the database. Details: &quot;+ex1.getMessage());
++                ex1.printStackTrace();
++                return null;
+             } catch (RemoteException ex2) {
+-                // ???
++                logger.error(&quot;RemoteException caught while searching the database. Details: &quot;+ex2.getMessage());
++                ex2.printStackTrace();
++                return null;
+             }
+             logger.info(&quot;Publications successfuly retrieved from the database&quot;);
+             return null;
+@@ -301,11 +300,12 @@
+     }
+     
+     /**
+-     *  Method to construct and execute the search query.
++     *  Method to construct and execute the search query. This method is called from searchPublication method.
+      *
+      *  @return id identifying the search result
+      *  @throws DBLayerException in case search failed
+      *  @throws RemoteException in case network communication failed
++     *  @see #searchPublication(boolean)
+      */
+     private Integer search() throws DBLayerException, RemoteException {
+         SelectQuery query;
+@@ -347,55 +347,66 @@
+         int resultId = 0;
+         // Execute query
+         resultId = database.executeQuery(query);
++        // If there is a previous active query, close it first
++        if (this.activeSelectQuery != null) {
++            database.closeQuery(this.activeSelectQuery);
++        }
++        // Save the query as the active search query        
++        this.activeSelectQuery = query;
+         return resultId;
+     }
+       
++    /**
++     *  Notify observers  about the change in the list of publications (used to reload cached publications)
++     */
+     public void reloadCache() {
+         // Notify observers about the change in the list of publications. Used to reload cached publications
+         setChanged();
+         notifyObservers(editTypeArray);        
+     }
+     
+-    public boolean hasRights(int operation) {
++    /**
++     *  Check whether the user has appropriate rights for the given operation.
++     *
++     *  @param  operation operation that is executed (for operation codes see constants)
++     *  @return true if the user has the right to execute the operation, false otherwise
++     *  @throws RemoteException in case we could not get user's access privileges
++     */
++    public boolean hasRights(int operation) throws RemoteException {
+         String[] group;
+         SelectQuery sq;
+         int result;
+         Object[] resData;
+         ArrayList groupList;
+         User groupUser;
+-        try {
+-            // Administrator can add, edit and delete any record
+-            if (database.getUserRights().getAdministrator() == 1) {
++        // Administrator can add, edit and delete any record
++        if (database.getUserRights().getAdministrator() == 1) {
++            return true;
++        }
++        if (operation == ADD) {
++            if (database.getUserRights().getAdd() == 1) {
+                 return true;
++            } else {
++                return false;
+             }
+-            if (operation == ADD) {
+-                if (database.getUserRights().getAdd() == 1) {
++        } else { // EDIT AND DELETE - the same rights apply
++            // Check whether the user can edit all the records
++            if (database.getUserRights().getEditAll() == 1) {
++                return true;
++            }
++            // Check whether the user can edit the record through some other user
++            group = database.getUserRights().getEditGroup().split(&quot;,&quot;);
++            // We will need Publication that will be edited
++            Publication selectedPubl = (Publication)data.get(this.getPublicationIndex());
++            // Check whether someone in the group is an owner of the publication
++            for (int i=0;i&lt;group.length;i++) {
++                if (selectedPubl.getCreatedWho().getId().toString().equals(group[i])) {
+                     return true;
+-                } else {
+-                    return false;
+                 }
+-            } else { // EDIT AND DELETE - the same rights apply
+-                // Check whether the user can edit all the records
+-                if (database.getUserRights().getEditAll() == 1) {
+-                    return true;
+-                }
+-                // Check whether the user can edit the record through some other user
+-                group = database.getUserRights().getEditGroup().split(&quot;,&quot;);
+-                // We will need Publication that will be edited
+-                Publication selectedPubl = (Publication)data.get(this.getPublicationIndex());
+-                // Check whether someone in the group is an owner of the publication
+-                for (int i=0;i&lt;group.length;i++) {
+-                    if (selectedPubl.getCreatedWho().getId().toString().equals(group[i])) {
+-                        return true;
+-                    }
+-                }
+-                // No rights to edit the record
+-                return false;
+             }
+-        } catch (RemoteException e) {
+-            logger.error(&quot;Remote exception caught&quot;);
++            // No rights to edit the record
++            return false;
+         }
+-        return false;
+     }
+     
+     /**
+@@ -417,30 +428,25 @@
+      *
+      *  @param index index of the selected publication in the list of publications
+      *  @return true if publication can be deleted, false otherwise
++     *  @throws RemoteException in case we were not able to get to-be-deleted publication because of network error
++     *  @throws DBLayerException in case we were not able to get to-be-deleted publication because database query failed 
+      */
+-    public boolean checkDelete(int index) {
++    public boolean checkDelete(int index) throws RemoteException, DBLayerException {
+         SelectQuery sq;
+         int resId;
+         
+         // Get the selected publication
+         Publication publ = (Publication)data.get(index);
+         // Find out whether we can delete this publication
+-        try {
+-            sq = database.createQuery(Occurrence.class);
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.PUBLICATION, null, publ, null);
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.DELETED, null, 0, null);
+-            resId = database.executeQuery(sq);
+-            if (database.getNumRows(resId)&gt;0) {
+-                database.closeQuery(sq);
+-                return false;
+-            }
++        sq = database.createQuery(Occurrence.class);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.PUBLICATION, null, publ, null);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.DELETED, null, 0, null);
++        resId = database.executeQuery(sq);
++        if (database.getNumRows(resId)&gt;0) {
+             database.closeQuery(sq);
+-        } catch (RemoteException e1) {
+-            System.out.println(&quot;Handle the Remote exception&quot;);
+-        } catch (DBLayerException e2) {
+-            logger.error(&quot;Loading occurrences failed. Cannot determine whether publication can be deleted&quot;);
+-            setError(this.ERROR_DELETE);
+-        }        
++            return false;
++        }
++        database.closeQuery(sq);
+         return true;
+     }
+     
+@@ -452,50 +458,36 @@
+      *
+      * @param from  index of the first row to retrieve.
+      * @param count number of rows to retrieve
++     * @throws RemoteException in case of a network error
++     * @throws DBLayerException in case of a database error 
+      */
+-    public void processResults(int from, int count) {
++    public void processResults(int from, int count) throws RemoteException, DBLayerException {
+         if (this.resultId != 0) {
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+             int to = Math.min(getResultRows(), from+count-1);
+             if (to == 0) {
+-                this.data = new ArrayList();
++                this.data = new ArrayList&lt;Publication&gt;();
+             } else {
+-                try {
+-                    // Retrieve selected row interval
+-                    Object[] objArray;
+-                    try {
+-                        // FIXME: Should change all the usages of processResults to use 0 as the index of the forst row
+-                        // from-1 and to-1 just temporary
+-                        objArray = database.more(resultId, from-1, to-1);
+-                    } catch(RemoteException e) {
+-                        System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                        return;
+-                    }
+-                    logger.debug(&quot;Results retrieved. Count: &quot;+objArray.length);
+-                    // Create storage for the results
+-                    this.data = new ArrayList(objArray.length);
+-                    // Cast the results to the AuthorRecord objects
+-                    for (int i=0;i&lt;objArray.length;i++) {
+-                        Object[] objAuth = (Object[])objArray[i];
+-                        this.data.add((Publication)objAuth[0]);
+-                    }
+-                } catch (DBLayerException e) {
+-                    // Log and set error in case of an exception
+-                    logger.error(&quot;Processing search results failed: &quot;+e.toString());
+-                    setError(this.ERROR_PROCESS);
++                // Retrieve selected row interval
++                Object[] objArray;
++                // FIXME: Should change all the usages of processResults to use 0 as the index of the forst row
++                // from-1 and to-1 just temporary
++                objArray = database.more(resultId, from-1, to-1);
++                logger.debug(&quot;Results retrieved. Count: &quot;+objArray.length);
++                // Create storage for the results
++                this.data = new ArrayList&lt;Publication&gt;(objArray.length);
++                // Cast the results to the AuthorRecord objects
++                for (int i=0;i&lt;objArray.length;i++) {
++                    Object[] objAuth = (Object[])objArray[i];
++                    this.data.add((Publication)objAuth[0]);
+                 }
+-                // Update current first displayed row (only if data retrieval was successful).
+-                if (!this.isError()) {
+-                    logger.info(&quot;Results successfuly retrieved&quot;);
+-                    // Update current first displayed row
+-                    setCurrentFirstRow(from);
+-                }
++                logger.info(&quot;Results successfuly retrieved&quot;);
++                // Update current first displayed row
++                setCurrentFirstRow(from);
+             }
+             // Tell observers to update
+             setChanged();
+             notifyObservers();
+-            // Clean error flag (if it was set)
+-            this.error = null;
+         }
+     }
+     
+@@ -548,45 +540,33 @@
+      *
+      *  @return number of results for the current SelectQuery
+      */
+-    public int getResultRows() {
++    public int getResultRows(){
+         int result = 0;
+-        if (resultId != 0) try {
+-            result = database.getNumRows(resultId);
+-        } catch(RemoteException e) {
+-            System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++        if (resultId != 0) {
++            try {
++                result = database.getNumRows(resultId);
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while retrieving number of rows in the result. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                return 0;
++            }
+         }
+         return result;
+     }
+     
+     /**
+-     *  Set an error flag.
+-     *  @param msg  message explaining the error which occured
++     *  Close active SelectQuery (if there is one)
++     *
++     *  @throws DBLayerException    In case database operation failed
++     *  @throws RemoteException     In case network operation failed
+      */
+-    public void setError(String msg) {
+-        this.error = msg;
+-    }
+-    
+-    /**
+-     *  Checks whether an error flag is set.
+-     *  return true if an error occured and error message is available, false otherwise
+-     */
+-    public boolean isError() {
+-        if (this.error != null) {
+-            return true;
+-        } else {
+-            return false;
++    public void closeActiveQuery() throws DBLayerException, RemoteException {
++        if (this.activeSelectQuery != null) {
++            database.closeQuery(this.activeSelectQuery);
++            this.activeSelectQuery = null;
+         }
+     }
+-    
+     /**
+-     *  Get error message for the error that occured
+-     *  @return message explaining the error which occured
+-     */
+-    public String getError() {
+-        return this.error;
+-    }
+-    
+-    /**
+      *  Get data returned by the last search query. Returns only currently displayed data.
+      *  @return data returned by the last search query
+      */
+@@ -679,7 +659,7 @@
+     
+     /**
+      *  Get publication we are editing in the add/edit publication dialog
+-     *  @param editPublication   Publication we are editing
++     *  @return Publication we are editing
+      */
+     public Publication getEditPublication() {
+         return this.editPublication;
+
+Modified: trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -5,12 +5,12 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
++import java.awt.event.WindowAdapter;
++import java.awt.event.WindowEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ import java.rmi.RemoteException;
+-import javax.swing.JOptionPane;
+ import net.sf.plantlore.common.*;
+-import javax.swing.Timer;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+@@ -19,7 +19,7 @@
+  * Controller for the main PublicationManager dialog (part of the PublicationManager MVC).
+  * 
+  * @author Tomas Kovarik
+- * @version 1.0, June 4, 2006
++ * @version 1.0
+  */
+ public class PublicationManagerCtrl {
+     /** Instance of a logger */
+@@ -41,6 +41,7 @@
+         this.model = publModel;
+         this.view = publView;
+         // Add action listeners to buttons
++        view.addPublicationWindowListener(new PublicationWindowListener());        
+         view.closeBtnAddActionListener(new CloseButtonListener());
+         view.addBtnAddActionListener(new AddPublicationButtonListener());
+         view.searchBtnAddActionlistener(new SearchPublicationButtonListener());
+@@ -59,36 +60,55 @@
+         view.sortDirectionAddFocusListener(new SortDirectionRadioFocusListener());
+         // Display all publication when Publication manager is opened using the Task
+         Task task = model.searchPublication(true);
+-        ProgressBar progressBar = new ProgressBar(task, view, true) {
+-            public void exceptionHandler(Exception ex) {
+-                if (ex instanceof DBLayerException) {
+-                    DBLayerException e = (DBLayerException)ex;
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(e+&quot;: &quot;+e.getErrorInfo());
+-                    getTask().stop();
+-                    return;
+-                }
+-                if (ex instanceof RemoteException) {
+-                    RemoteException e = (RemoteException)ex;
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(e);
+-                    getTask().stop();
+-                    return;
+-                }
+-                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                logger.error(ex);                            
+-            }              
++        DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+             // After Task is finished, display the results
++            @Override
+             public void afterStopped(Object value) {
+                 model.setCurrentFirstRow(1);
+-                model.processResults(1, model.getDisplayRows());
++                try {
++                    model.processResults(1, model.getDisplayRows());
++                } catch (RemoteException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                } catch (DBLayerException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                }
+             }
+         };
+-        progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
++        dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Search&quot;));
+         task.start();
+     }
+     
++    
+     /**
++     *  Window listener for the main Publication manager window. When window is closed, we have to close
++     *  all open database connections
++     */
++    class PublicationWindowListener extends WindowAdapter {
++        public void windowClosed(WindowEvent e) {
++            // Close database connection
++            try {
++                model.closeActiveQuery();
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while closing select query. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            } catch (DBLayerException ex) {
++                logger.error(&quot;RemoteException caught while closing select query. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            }
++        }
++    }
++
++    /**
+      * ActionListener class controlling the &lt;b&gt;close&lt;/b&gt; button on the form.
+      */
+     class CloseButtonListener implements ActionListener {
+@@ -103,15 +123,22 @@
+      */    
+     class AddPublicationButtonListener implements ActionListener {
+         public void actionPerformed(ActionEvent e) {
+-            // Check whether we have rights for this operation
+-            if (!model.hasRights(model.ADD)) {
+-                view.showErrorMessage(&quot;You don't have sufficient rights for this operation&quot;);
++            try {
++                // Check whether we have rights for this operation
++                if (!model.hasRights(PublicationManager.ADD)) {
++                    view.showErrorMessage(L10n.getString(&quot;Publications.Add.InsufficientRights&quot;));
++                    return;
++                }            
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
+                 return;
+-            }            
++            }
+             // Display dialog for adding / editing publications. This dialog shares model with
+             // the rest of the PublicationManager.
+             AddPublicationView addPublView = new AddPublicationView(model, view.getFrame(), true);
+-            AddPublicationCtrl addPublCtrl = new AddPublicationCtrl(model, addPublView);            
++            new AddPublicationCtrl(model, addPublView);            
+             // We are going to add publication, no editing
+             model.setEditPublication(null);
+             // addPublView.setSize(400,450);        
+@@ -131,13 +158,20 @@
+                 view.selectRowMsg();
+                 return;
+             }          
+-            // Check whether we have rights for this operation
+-            if (!model.hasRights(model.EDIT)) {
+-                view.showErrorMessage(&quot;You don't have sufficient rights for this operation&quot;);
++            try {
++                // Check whether we have rights for this operation
++                if (!model.hasRights(PublicationManager.EDIT)) {
++                    view.showErrorMessage(L10n.getString(&quot;Publications.Edit.InsufficientRights&quot;));
++                    return;
++                }                        
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
+                 return;
+-            }                        
++            }
+             AddPublicationView addPublView = new AddPublicationView(model, view.getFrame(), false);
+-            AddPublicationCtrl addPublCtrl = new AddPublicationCtrl(model, addPublView);            
++            new AddPublicationCtrl(model, addPublView);            
+             // Save publication we are going to edit
+             model.setEditPublication(model.getSelectedPublication(index));            
+             model.setPublicationIndex(index);
+@@ -160,17 +194,35 @@
+                 view.selectRowMsg();
+                 return;
+             }        
+-            // Check whether we have rights for this operation
+-            if (!model.hasRights(model.DELETE)) {
+-                view.showErrorMessage(&quot;You don't have sufficient rights for this operation&quot;);
++            try {
++                // Check whether we have rights for this operation
++                if (!model.hasRights(PublicationManager.DELETE)) {
++                    view.showErrorMessage(L10n.getString(&quot;Publications.Delete.InsufficientRights&quot;));
++                    return;
++                }           
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                
++            }
++            try {
++                // Check whether it is OK to delete the publication (it cannot be used in an occurrence)                
++                if (model.checkDelete(index) == false) {
++                    view.showErrorMessage(L10n.getString(&quot;Publications.Delete.UsedInOccurrence&quot;));
++                    return;
++                }
++            } catch (RemoteException e1) {
++                logger.error(&quot;RemoteException caught while loading occurrences. Cannot determine whether publication can be deleted. Details: &quot;+e1.getMessage());
++                e1.printStackTrace();
++                DefaultExceptionHandler.handle(view, e1);
+                 return;
+-            }           
+-            // Check whether it is OK to delete the publication (it cannot be used in an occurrence)
+-            if (model.checkDelete(index) == false) {
+-                view.showErrorMessage(&quot;This publication cannot be deleted because it is used in an occurence&quot;);
++            } catch (DBLayerException e2) {
++                logger.error(&quot;DBLayerException caught while loading occurrences. Cannot determine whether publication can be deleted. Details: &quot;+e2.getMessage());
++                e2.printStackTrace();
++                DefaultExceptionHandler.handle(view, e2);
+                 return;
+-            }
+-            System.out.println(&quot;********* CHECK DELETE OK&quot;);
++            }        
+             // Confirm deletion
+             if (!view.confirmDelete()) {
+                 return;
+@@ -179,33 +231,28 @@
+             model.setPublicationIndex(index);
+             // Delete is executed in a separate thread using Task
+             Task task = model.deletePublication();
+-            ProgressBar progressBar = new ProgressBar(task, view, true) {
+-                public void exceptionHandler(Exception ex) {
+-                    if (ex instanceof DBLayerException) {
+-                        DBLayerException e = (DBLayerException)ex;
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                        logger.error(e+&quot;: &quot;+e.getErrorInfo());
+-                        getTask().stop();
+-                        return;
+-                    }
+-                    if (ex instanceof RemoteException) {
+-                        RemoteException e = (RemoteException)ex;
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                        logger.error(e);
+-                        getTask().stop();
+-                        return;
+-                    }
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex);                            
+-                }              
++            DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                 // Refresh the list of publications after a delete
+-                public void afterStopped(Object value) {
++                @Override
++                public void afterStopped(Object value) {                    
+                     model.searchPublication(false);
+-                    model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }
+                     model.reloadCache();
+                 }
+             };
+-            progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
++            dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Delete&quot;));
+             task.start();
+         }
+     }    
+@@ -217,31 +264,27 @@
+         public void actionPerformed(ActionEvent e) {
+             // Run DB search. The operation is executed in a separate thread
+             Task task = model.searchPublication(true);
+-            ProgressBar progressBar = new ProgressBar(task, view, true) {
+-                public void exceptionHandler(Exception ex) {
+-                    if (ex instanceof DBLayerException) {
+-                        DBLayerException e = (DBLayerException)ex;
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                        logger.error(e+&quot;: &quot;+e.getErrorInfo());
+-                        getTask().stop();
+-                        return;
+-                    }
+-                    if (ex instanceof RemoteException) {
+-                        RemoteException e = (RemoteException)ex;
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                        logger.error(e);
+-                        getTask().stop();
+-                        return;
+-                    }
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex);                            
+-                }              
++
++            DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                 // Display the results of a search
++                @Override
+                 public void afterStopped(Object value) {
+-                    model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }                        
+                 }
+             };
+-            progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
++            dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Search&quot;));
+             task.start();
+         }
+     }        
+@@ -254,7 +297,19 @@
+             // Call processResults only if we don't see the first page (should not happen, button should be disabled)
+             if (model.getCurrentFirstRow() &gt; 1) {
+                 int firstRow = Math.max(model.getCurrentFirstRow()-view.getDisplayRows(), 1);
+-                model.processResults(firstRow, view.getDisplayRows());                
++                try {
++                    model.processResults(firstRow, view.getDisplayRows());                
++                } catch (RemoteException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                } catch (DBLayerException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                }
+             }
+         }
+     }
+@@ -265,8 +320,20 @@
+     class NextButtonListener implements ActionListener {    
+         public void actionPerformed(ActionEvent e) {
+             // Call processResults only if we don't see the last page (should not happen, button should be disabled)
+-            if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResultRows()) {
+-                model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());
++            try {            
++                if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResultRows()) {
++                    model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());
++                }
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            } catch (DBLayerException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
+             }
+         }
+     }    
+@@ -355,8 +422,20 @@
+             // Set new value in the model
+             model.setDisplayRows(view.getDisplayRows());
+             // If neccessary reload search results
+-            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
+-                model.processResults(model.getCurrentFirstRow(), view.getDisplayRows());
++            try {            
++                if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
++                    model.processResults(model.getCurrentFirstRow(), view.getDisplayRows());
++                }
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            } catch (DBLayerException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
+             }
+         }        
+     }            
+
+Modified: trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.form	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.form	2006-09-02 21:32:33 UTC (rev 638)
+@@ -10,7 +10,7 @@
+   &lt;/NonVisualComponents&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;title&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-      &lt;Connection code=&quot;L10n.getString(&quot;publicationManager&quot;)&quot; type=&quot;code&quot;/&gt;
++      &lt;Connection code=&quot;L10n.getString(&quot;Publications.Title&quot;)&quot; type=&quot;code&quot;/&gt;
+     &lt;/Property&gt;
+   &lt;/Properties&gt;
+   &lt;SyntheticProperties&gt;
+@@ -63,7 +63,7 @@
+         &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+           &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+             &lt;TitledBorder title=&quot;&lt;User Code&gt;&quot;&gt;
+-              &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;publicationList&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;Publications.List.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/TitledBorder&gt;
+           &lt;/Border&gt;
+         &lt;/Property&gt;
+@@ -158,7 +158,7 @@
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;previousBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;prevButton&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Previous.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -168,7 +168,7 @@
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;nextBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;nextButton&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Next.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -178,7 +178,7 @@
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;deleteBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;deletePublicationBtn&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Delete.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -188,7 +188,7 @@
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;editBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;editPublicationBtn&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Edit.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -198,7 +198,7 @@
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;addBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;addPublicationBtn&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Add.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -208,35 +208,35 @@
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;totalResultLabel2&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;totalResult&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.TotalResults.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;totalRowsLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;((Integer)model.getResultRows()).toString()&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;((Integer)model.getResultRows()).toString()&amp;#xa;&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;toDisplayedLabel2&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;displayRows&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.RowsToDisplay.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;displayedLabel2&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;displayed&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.DisplayedRows.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;displayedLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;displayed&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.DisplayedRows.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+@@ -255,7 +255,7 @@
+         &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+           &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+             &lt;TitledBorder title=&quot;&lt;User Code&gt;&quot;&gt;
+-              &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;searchPublicationsLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;Publications.Search.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/TitledBorder&gt;
+           &lt;/Border&gt;
+         &lt;/Property&gt;
+@@ -274,8 +274,8 @@
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;journalNameField&quot; pref=&quot;186&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;collectionNameField&quot; alignment=&quot;0&quot; pref=&quot;186&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                              &lt;Component id=&quot;journalNameField&quot; pref=&quot;183&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                              &lt;Component id=&quot;collectionNameField&quot; alignment=&quot;0&quot; pref=&quot;183&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+@@ -284,8 +284,8 @@
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;referenceDetailField&quot; pref=&quot;186&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;referenceCitationField&quot; alignment=&quot;0&quot; pref=&quot;186&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                              &lt;Component id=&quot;referenceDetailField&quot; pref=&quot;183&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                              &lt;Component id=&quot;referenceCitationField&quot; alignment=&quot;0&quot; pref=&quot;183&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;Component id=&quot;searchBtn&quot; min=&quot;-2&quot; pref=&quot;149&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+@@ -329,14 +329,14 @@
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel11&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;collectionNameLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Search.CollectionName.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel12&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;journalNameLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Search.JournalName.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+@@ -345,7 +345,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;&lt;User Code&gt;&quot;&gt;
+-                  &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;sortingLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++                  &lt;Connection PropertyName=&quot;titleX&quot; code=&quot;L10n.getString(&quot;Publications.Ordering.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+             &lt;/Property&gt;
+@@ -355,12 +355,13 @@
+             &lt;DimensionLayout dim=&quot;0&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jLabel13&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;9&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;descRadio&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;ascRadio&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;sortCombo&quot; alignment=&quot;1&quot; pref=&quot;151&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;sortCombo&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;142&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -369,8 +370,8 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;sortCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jLabel13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;sortCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;ascRadio&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -385,7 +386,7 @@
+             &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;descRadio&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-                  &lt;Connection code=&quot;L10n.getString(&quot;descending&quot;)&quot; type=&quot;code&quot;/&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;Common.Descending&quot;)&quot; type=&quot;code&quot;/&gt;
+                 &lt;/Property&gt;
+                 &lt;Property name=&quot;actionCommand&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+                   &lt;Connection code=&quot;L10n.getString(&quot;descending&quot;)&quot; type=&quot;code&quot;/&gt;
+@@ -403,7 +404,7 @@
+             &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;ascRadio&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-                  &lt;Connection code=&quot;L10n.getString(&quot;ascending&quot;)&quot; type=&quot;code&quot;/&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;Common.Ascending&quot;)&quot; type=&quot;code&quot;/&gt;
+                 &lt;/Property&gt;
+                 &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+                   &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
+@@ -418,7 +419,7 @@
+             &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel13&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-                  &lt;Connection code=&quot;L10n.getString(&quot;sortByLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;Publications.OrderBy.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+             &lt;/Component&gt;
+@@ -434,42 +435,42 @@
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel14&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;referenceCitationLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Search.ReferenceCitation.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel15&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;referenceDetailLbl&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Search.ReferenceDetail.Label&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;searchBtn&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;searchPublicationsBtn&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;Publications.Search.Button&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;collectionNameField&quot;&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;collectionNameField.setValue(&quot;&quot;);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;collectionNameField.setValue(&quot;&quot;);&amp;#xa;collectionNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.COLLECTIONNAME)));&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;journalNameField&quot;&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalNameField.setValue(&quot;&quot;);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;journalNameField.setValue(&quot;&quot;);&amp;#xa;journalNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALNAME)));&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;referenceCitationField&quot;&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceCitationField.setValue(&quot;&quot;);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceCitationField.setValue(&quot;&quot;);&amp;#xa;referenceCitationField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCECITATION)));&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;referenceDetailField&quot;&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceDetailField.setValue(&quot;&quot;);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;referenceDetailField.setValue(&quot;&quot;);&amp;#xa;referenceDetailField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCEDETAIL)));&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+@@ -487,7 +488,7 @@
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;helpBtn&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-          &lt;Connection code=&quot;L10n.getString(&quot;Help&quot;)&quot; type=&quot;code&quot;/&gt;
++          &lt;Connection code=&quot;L10n.getString(&quot;Common.Help&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;AuxValues&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/client/publications/PublicationManagerView.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -3,6 +3,7 @@
+ 
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusListener;
++import java.awt.event.WindowAdapter;
+ import java.beans.PropertyChangeListener;
+ import java.util.ArrayList;
+ import java.util.Observable;
+@@ -12,10 +13,14 @@
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.table.DefaultTableModel;
++import javax.swing.text.AttributeSet;
++import javax.swing.text.BadLocationException;
++import javax.swing.text.PlainDocument;
++import net.sf.plantlore.common.DocumentSizeFilter;
+ import net.sf.plantlore.common.PlantloreHelp;
+-import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.Publication;
+ import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
+ 
+ /**
+  * Main dialog of the PublicationManager used for searching publications and displaying the 
+@@ -28,12 +33,15 @@
+     /** Model of the PublicationManager MVC */
+     private PublicationManager model;
+     /** Names of fields available for sorting the results */
+-    private String[] sortFields = {L10n.getString(&quot;collectionNameTitle&quot;), L10n.getString(&quot;publicationYearTitle&quot;), L10n.getString(&quot;journalNameTitle&quot;), L10n.getString(&quot;journalAuthorTitle&quot;), L10n.getString(&quot;referenceCitationTitle&quot;), L10n.getString(&quot;referenceDetailTitle&quot;)};        
++    private String[] sortFields = {L10n.getString(&quot;Publications.Sortby.CollectionNameTitle&quot;), L10n.getString(&quot;Publications.Sortby.PublicationYearTitle&quot;), L10n.getString(&quot;Publications.Sortby.JournalNameTitle&quot;), L10n.getString(&quot;Publications.Sortby.JournalAuthorTitle&quot;), L10n.getString(&quot;Publications.Sortby.ReferenceCitationTitle&quot;), L10n.getString(&quot;Publications.Sortby.ReferenceDetailTitle&quot;)};        
+     /** Names of the columns in the search results */
+-    private String[] columnNames = new String [] {L10n.getString(&quot;collectionNameTitle&quot;), L10n.getString(&quot;publicationYearTitle&quot;), L10n.getString(&quot;journalNameTitle&quot;), L10n.getString(&quot;journalAuthorTitle&quot;), L10n.getString(&quot;referenceCitationTitle&quot;), L10n.getString(&quot;referenceDetailTitle&quot;), L10n.getString(&quot;publicationUrlTitle&quot;)};    
++    private String[] columnNames = new String [] {L10n.getString(&quot;Publications.ColumnTitle.CollectionNameTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.PublicationYearTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.JournalNameTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.JournalAuthorTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.ReferenceCitationTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.ReferenceDetailTitle&quot;), L10n.getString(&quot;Publications.ColumnTitle.PublicationUrlTitle&quot;)};    
+     /** Contents of the table with the query result */
+     private String[][] tableData;
+-    
++    /** Instance of a Logger */
++    private Logger logger;
++    /** Variable used for setting maximu input size of text fields */
++    PlainDocument pd;
+     /**
+      * Creates new form PublicationManagerView 
+      * 
+@@ -43,6 +51,7 @@
+      */
+     public PublicationManagerView(PublicationManager model, JFrame parent, boolean modal) {        
+         super(parent, modal);
++        logger = Logger.getLogger(this.getClass().getPackage().getName());                        
+         this.model = model;
+         this.model.addObserver(this);
+         initComponents();
+@@ -97,8 +106,8 @@
+         sortButtonGroup.add(descRadio);
+         sortButtonGroup.setSelected(ascRadio.getModel(), true);
+ 
+-        setTitle(L10n.getString(&quot;publicationManager&quot;));
+-        jPanel7.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;publicationList&quot;)));
++        setTitle(L10n.getString(&quot;Publications.Title&quot;));
++        jPanel7.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Publications.List.Label&quot;)));
+         listTable.setModel(new javax.swing.table.DefaultTableModel(
+             new Object [][] {
+                 {null, null, null, null},
+@@ -112,25 +121,26 @@
+         ));
+         jScrollPane3.setViewportView(listTable);
+ 
+-        previousBtn.setText(L10n.getString(&quot;prevButton&quot;));
++        previousBtn.setText(L10n.getString(&quot;Publications.Previous.Button&quot;));
+ 
+-        nextBtn.setText(L10n.getString(&quot;nextButton&quot;));
++        nextBtn.setText(L10n.getString(&quot;Publications.Next.Button&quot;));
+ 
+-        deleteBtn.setText(L10n.getString(&quot;deletePublicationBtn&quot;));
++        deleteBtn.setText(L10n.getString(&quot;Publications.Delete.Button&quot;));
+ 
+-        editBtn.setText(L10n.getString(&quot;editPublicationBtn&quot;));
++        editBtn.setText(L10n.getString(&quot;Publications.Edit.Button&quot;));
+ 
+-        addBtn.setText(L10n.getString(&quot;addPublicationBtn&quot;));
++        addBtn.setText(L10n.getString(&quot;Publications.Add.Button&quot;));
+ 
+-        totalResultLabel2.setText(L10n.getString(&quot;totalResult&quot;));
++        totalResultLabel2.setText(L10n.getString(&quot;Publications.TotalResults.Label&quot;));
+ 
+-        totalRowsLabel.setText(((Integer)model.getResultRows()).toString());
++        totalRowsLabel.setText(((Integer)model.getResultRows()).toString()
++        );
+ 
+-        toDisplayedLabel2.setText(L10n.getString(&quot;displayRows&quot;));
++        toDisplayedLabel2.setText(L10n.getString(&quot;Publications.RowsToDisplay.Label&quot;));
+ 
+-        displayedLabel2.setText(L10n.getString(&quot;displayed&quot;));
++        displayedLabel2.setText(L10n.getString(&quot;Publications.DisplayedRows.Label&quot;));
+ 
+-        displayedLabel.setText(L10n.getString(&quot;displayed&quot;));
++        displayedLabel.setText(L10n.getString(&quot;Publications.DisplayedRows.Label&quot;));
+ 
+         rowsField.setValue(model.getDisplayRows());
+ 
+@@ -190,22 +200,22 @@
+                 .addContainerGap())
+         );
+ 
+-        jPanel8.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;searchPublicationsLbl&quot;)));
+-        jLabel11.setText(L10n.getString(&quot;collectionNameLbl&quot;));
++        jPanel8.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Publications.Search.Label&quot;)));
++        jLabel11.setText(L10n.getString(&quot;Publications.Search.CollectionName.Label&quot;));
+ 
+-        jLabel12.setText(L10n.getString(&quot;journalNameLbl&quot;));
++        jLabel12.setText(L10n.getString(&quot;Publications.Search.JournalName.Label&quot;));
+ 
+-        jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;sortingLbl&quot;)));
+-        descRadio.setText(L10n.getString(&quot;descending&quot;));
++        jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Publications.Ordering.Label&quot;)));
++        descRadio.setText(L10n.getString(&quot;Common.Descending&quot;));
+         descRadio.setActionCommand(L10n.getString(&quot;descending&quot;));
+         descRadio.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         descRadio.setMargin(new java.awt.Insets(0, 0, 0, 0));
+ 
+-        ascRadio.setText(L10n.getString(&quot;ascending&quot;));
++        ascRadio.setText(L10n.getString(&quot;Common.Ascending&quot;));
+         ascRadio.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         ascRadio.setMargin(new java.awt.Insets(0, 0, 0, 0));
+ 
+-        jLabel13.setText(L10n.getString(&quot;sortByLbl&quot;));
++        jLabel13.setText(L10n.getString(&quot;Publications.OrderBy.Label&quot;));
+ 
+         sortCombo.setModel(new DefaultComboBoxModel(sortFields));
+ 
+@@ -214,19 +224,20 @@
+         jPanel9Layout.setHorizontalGroup(
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
++                .addContainerGap()
+                 .add(jLabel13)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(9, 9, 9)
+                 .add(jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(descRadio)
+                     .add(ascRadio)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, sortCombo, 0, 151, Short.MAX_VALUE)))
++                    .add(sortCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 142, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+         );
+         jPanel9Layout.setVerticalGroup(
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+                 .add(jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel13)
+-                    .add(sortCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(sortCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(jLabel13))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(ascRadio)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+@@ -234,19 +245,23 @@
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+-        jLabel14.setText(L10n.getString(&quot;referenceCitationLbl&quot;));
++        jLabel14.setText(L10n.getString(&quot;Publications.Search.ReferenceCitation.Label&quot;));
+ 
+-        jLabel15.setText(L10n.getString(&quot;referenceDetailLbl&quot;));
++        jLabel15.setText(L10n.getString(&quot;Publications.Search.ReferenceDetail.Label&quot;));
+ 
+-        searchBtn.setText(L10n.getString(&quot;searchPublicationsBtn&quot;));
++        searchBtn.setText(L10n.getString(&quot;Publications.Search.Button&quot;));
+ 
+         collectionNameField.setValue(&quot;&quot;);
++        collectionNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.COLLECTIONNAME)));
+ 
+         journalNameField.setValue(&quot;&quot;);
++        journalNameField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.JOURNALNAME)));
+ 
+         referenceCitationField.setValue(&quot;&quot;);
++        referenceCitationField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCECITATION)));
+ 
+         referenceDetailField.setValue(&quot;&quot;);
++        referenceDetailField.setDocument(new FieldLengthLimit(Publication.getColumnSize(Publication.REFERENCEDETAIL)));
+ 
+         org.jdesktop.layout.GroupLayout jPanel8Layout = new org.jdesktop.layout.GroupLayout(jPanel8);
+         jPanel8.setLayout(jPanel8Layout);
+@@ -261,16 +276,16 @@
+                             .add(jLabel12))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel8Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(journalNameField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 186, Short.MAX_VALUE)
+-                            .add(collectionNameField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 186, Short.MAX_VALUE))
++                            .add(journalNameField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 183, Short.MAX_VALUE)
++                            .add(collectionNameField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 183, Short.MAX_VALUE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel8Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jLabel14)
+                             .add(jLabel15))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel8Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(referenceDetailField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 186, Short.MAX_VALUE)
+-                            .add(referenceCitationField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 186, Short.MAX_VALUE)))
++                            .add(referenceDetailField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 183, Short.MAX_VALUE)
++                            .add(referenceCitationField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 183, Short.MAX_VALUE)))
+                     .add(searchBtn, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 149, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel9, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+@@ -301,7 +316,7 @@
+ 
+         closeBtn.setText(L10n.getString(&quot;Common.Close&quot;));
+ 
+-        helpBtn.setText(L10n.getString(&quot;Help&quot;));
++        helpBtn.setText(L10n.getString(&quot;Common.Help&quot;));
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+@@ -332,8 +347,8 @@
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+-        
+-    /**
++      
++/**
+      *  Check whether the given field is empty or not. This is used for validating user input when 
+      *  searching publications.
+      *
+@@ -371,33 +386,22 @@
+     public JDialog getDialog() {
+         return this;
+     }
+-    
++       
+     /**
+-     *  Display error message saying that no search field has been filled in.
+-     */
+-    public void showSearchErrorMessage() {
+-        JOptionPane.showMessageDialog(this, &quot;Please fill in at least one search field&quot;, &quot;Missing search data&quot;, JOptionPane.ERROR_MESSAGE);       
+-    }
+-    
+-    /**
+      *  Display generic error message.
+      *  @param message Message we want to display
+      */
+     public void showErrorMessage(String message) {
+-        JOptionPane.showMessageDialog(this, message, &quot;Error&quot;, JOptionPane.ERROR_MESSAGE);               
++        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Error.GenericMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+     }
+-    
++
+     /**
+      *  Method used for updating the view (called when the model has changed and notifyObservers() was called)
++     *  @param obs Instance of an Observable which changed
++     *  @param obj Object used as a parameter of the update
+      */
+-    public void update(Observable obs, Object obj) {       
+-        // Check whether we have some kind of error to display
+-        if (model.isError()) {
+-            showErrorMessage(model.getError());            
+-            return;
+-        } else {
+-            displayResults(model.getData());
+-        }
++    public void update(Observable obs, Object obj) {
++        displayResults(model.getData());
+     }
+ 
+     /**
+@@ -407,7 +411,6 @@
+      */
+     public void displayResults(ArrayList results) {
+         this.tableData = new String[results.size()][];
+-        System.out.println(&quot;Displaying data. Data length: &quot;+this.tableData.length);        
+         for (int i=0;i&lt;results.size();i++) {            
+             this.tableData[i] = new String[7];
+             this.tableData[i][0] = ((Publication)results.get(i)).getCollectionName();
+@@ -612,6 +615,14 @@
+         }
+     }
+     
++    /** 
++     *  Add WindowListener to the main window
++     *  @param wa WindowAdapter object acting as window listener
++     */
++    public void addPublicationWindowListener(WindowAdapter wa) {
++        this.addWindowListener(wa);
++    }    
++    
+     /**
+      *  Add PropertyChangeListener to collection name field.
+      *  @param pcl PropertyChangeListener for the collection name field
+@@ -654,7 +665,7 @@
+ 
+     /**
+      *  Add FocusListener to sort combo.
+-     *  @param pcl FocusListener for the sort combo
++     *  @param fl FocusListener for the sort combo
+      */    
+     void sortAddFocusListener(FocusListener fl) {
+         sortCombo.addFocusListener(fl);
+@@ -662,7 +673,7 @@
+     
+     /**
+      *  Add FocusListener to ascending and descending radiobuttons.
+-     *  @param pcl FocusListener for the ascending and descending radiobuttons
++     *  @param fl FocusListener for the ascending and descending radiobuttons
+      */
+     void sortDirectionAddFocusListener(FocusListener fl) {
+         ascRadio.addFocusListener(fl);
+@@ -675,8 +686,8 @@
+      */
+     public boolean confirmDelete() {
+         // JOptionPane results: 0 = Yes, 1 = No
+-        int res = JOptionPane.showConfirmDialog(this, &quot;Do you really want to delete selected publication?&quot;, 
+-                                                &quot;Delete publication&quot;, JOptionPane.YES_NO_OPTION);
++        int res = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;Publications.ConfirmDelete&quot;), 
++                                                L10n.getString(&quot;Publications.ConfirmDelete.Title&quot;), JOptionPane.YES_NO_OPTION);
+         if (res == 0) {
+             return true;
+         }
+@@ -695,18 +706,30 @@
+      *  Display dialog with the message saying that no row in the table with publications is selected
+      */
+     public void selectRowMsg() {
+-        JOptionPane.showMessageDialog(this, &quot;Please select at least one publication from the list&quot;,
+-                                      &quot;Select publication&quot;, JOptionPane.WARNING_MESSAGE);        
++        JOptionPane.showMessageDialog(this, L10n.getString(&quot;Publications.SelectPublication&quot;),
++                                      L10n.getString(&quot;Publications.SelectPublication.Title&quot;), JOptionPane.WARNING_MESSAGE);        
+     }
+-
+-    /**
+-     *  Display dialoge with message saying that the result of the search is empty
+-     */
+-    public void showSearchInfoMessage() {
+-        JOptionPane.showMessageDialog(this, &quot;No publications with the given attributes were found. Please modify search criteria.&quot;,
+-                                      &quot;No search results&quot;, JOptionPane.INFORMATION_MESSAGE);                
+-    }
+     
++    class FieldLengthLimit extends PlainDocument {
++        private int limit;
++        // optional uppercase conversion
++        private boolean toUppercase = false;
++        
++        FieldLengthLimit(int limit) {
++            super();
++            this.limit = limit;
++        }
++        
++        @Override
++        public void insertString(int offset, String  str, AttributeSet attr) throws BadLocationException {
++            if (str == null) return;
++            if ((getLength() + str.length()) &lt;= limit) {
++                super.insertString(offset, str, attr);
++            } else {
++                super.insertString(offset, str.substring(0, limit), attr);
++            }
++        }
++    }    
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     protected javax.swing.JButton addBtn;
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-09-02 21:32:33 UTC (rev 638)
+@@ -7,6 +7,7 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.Hashtable;
+ import java.util.List;
+ 
+ /**
+@@ -49,6 +50,18 @@
+     public static final String CREATEDWHO = &quot;createdWho&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+     
++    private static Hashtable&lt;String, Integer&gt; columnSizes;
++    static {
++        columnSizes = new Hashtable&lt;String,Integer&gt;();
++        columnSizes.put(COLLECTIONNAME,255);
++        columnSizes.put(JOURNALNAME,255);
++        columnSizes.put(JOURNALAUTHORNAME,255);
++        columnSizes.put(REFERENCECITATION,4096);
++        columnSizes.put(REFERENCEDETAIL,100);
++        columnSizes.put(URL,100);
++        columnSizes.put(NOTE,4096);
++    }
++    
+     //public enum Column {ID, COLLECTIONNAME, COLLECTIONYEARPUBLICATION, JOURNALNAME, JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL,
+     //URL, DELETED, CREATEDWHO, NOTE};    
+     
+@@ -107,6 +120,15 @@
+     }
+     
+     /**
++     *  Return size of the column in the database
++     *  @param columnConst constant identifying column
++     *  @return size of the given column
++     */
++    public static int getColumnSize(String columnConst) {
++        return columnSizes.get(columnConst);
++    }
++    
++    /**
+      *   Get publication id
+      *   @return id of the publication
+      *   @see setId
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-02 21:32:33 UTC (rev 638)
+@@ -341,7 +341,77 @@
+ MetadataManager.SortAscending = Ascending
+ MetadataManager.SortDescending = Descending
+ 
++#=============================================================
++# PUBLICATION MANAGER
++#	net.sf.plantlore.client.publications
++#=============================================================
+ 
++Publications.ProgressBar.Search = Searching publications, please wait.
++Publications.ProgressBar.Delete = Deleting publication, please wait.
++Publications.Add.InsufficientRights = You don't have sufficient rights to add publications
++Publications.Edit.InsufficientRights = You don't have sufficient rights to edit this publication
++Publications.Delete.InsufficientRights = You don't have sufficient rights to delete this publication
++Publications.Delete.UsedInOccurrence = This publication cannot be deleted because it is used in an occurence. To delete the publication, you have to first remove it from all the occurrences.
++Publications.ProgressBar.Save = Saving publication, please wait
++
++# Strings in the combobox for specifying column used for ordering the results
++Publications.Sortby.CollectionNameTitle=Collection name
++Publications.Sortby.ReferenceDetailTitle=Reference detail
++Publications.Sortby.ReferenceCitationTitle=Reference citation
++Publications.Sortby.JournalAuthorTitle=Journal Author
++Publications.Sortby.JournalNameTitle=Journal name
++Publications.Sortby.PublicationYearTitle=Year of publication
++
++# Column captions in the table with the search results
++Publications.ColumnTitle.CollectionNameTitle=Collection name
++Publications.ColumnTitle.ReferenceDetailTitle=Reference detail
++Publications.ColumnTitle.ReferenceCitationTitle=Reference citation
++Publications.ColumnTitle.JournalAuthorTitle=Journal author
++Publications.ColumnTitle.JournalNameTitle=Journal name
++Publications.ColumnTitle.PublicationYearTitle=Year of publication
++Publications.ColumnTitle.PublicationUrlTitle=URL
++
++Publications.ConfirmDelete = Do you really want to delete selected publication?
++Publications.ConfirmDelete.Title = Delete publication
++Publications.SelectPublication.Title = Please select at least one publication from the list
++Publications.SelectPublication.Title = Select publication
++Publications.CompulsoryFieldsMessage = At least one of the following fields must be filled in: Journal author, Year of publication, Journal name, Collection name
++Publications.CompulsoryFieldsMessage.Title = Missing compulsory field
++
++# Labels in the Add/Edit publication dialog
++Publications.Add.CollectionName.Label = Collection name:
++Publications.Add.CollectionYearPublication.Label = Year of publication:
++Publications.Add.JournalName.Label = Journal name:
++Publications.Add.JournalAuthorName.Label = Journal author:
++Publications.Add.ReferenceDetail.Label = Reference detail:
++Publications.Add.Url.Label = URL:
++Publications.Add.Note.Label = Note:
++Publications.Add.RequiredField.Label = At least one of these fields is required
++Publications.Add.SaveButton.Label = Save publication
++Publications.Add.Title = Add publication
++
++# Labels in the main Publication manager window
++Publications.List.Label = List of publications
++Publications.Search.Label = Search publications
++Publications.Previous.Button = Previous
++Publications.Next.Button = Next
++Publications.TotalResults.Label = Total results:
++Publications.RowsToDisplay.Label = Rows to display:
++Publications.DisplayedRows.Label = Displayed rows:
++Publications.Delete.Button = Delete publication
++Publications.Edit.Button = Edit publication
++Publications.Add.Button = Add publication
++Publications.Title = Publication Manager
++Publications.Search.CollectionName.Label = Collection name:
++Publications.Search.JournalName.Label = Journal name:
++Publications.Search.ReferenceCitation.Label = Reference citation:
++Publications.Search.ReferenceDetail.Label = Reference detail:
++Publications.Search.Button = Search publications
++Publications.Ordering.Label = Ordering results
++Publications.OrderBy.Label = Order by:
++
++Common.Ascending = Ascending
++Common.Descending = Descending
+ #=============================================================
+ # LOGIN
+ #	net.sf.plantlore.client.login
+@@ -588,11 +658,11 @@
+ 
+ Publication = Publication
+ Publication.collectionName = Collection
+-Publication.collectionYearPublication = Year
++Publication.collectionYearPublication = Publication year
+ Publication.journalName = Journal
+-Publication.journalAuthorName = Author
+-Publication.referenceCitation = Reference
+-Publication.referenceDetail = Detail
++Publication.journalAuthorName = Journal Author
++Publication.referenceCitation = Reference citation
++Publication.referenceDetail = Reference detail
+ Publication.url = URL
+ Publication.createdWho = Created by
+ Publication.note = Note
+@@ -695,9 +765,9 @@
+ Error.DeletingSharedRecord = The {0} is shared by {1} other records.\nCannot delete.
+ Error.UnableToProcess = The record No. {0} cannot be processed; 
+ Error.MissingUpdateRecord = The update is not defined! 
++Error.GenericMessageTitle = Error
+ 
+ 
+-
+ #=============================================================
+ # QUESTIONS
+ #=============================================================
+@@ -795,44 +865,6 @@
+ #Label next to the field in the Add author dialog
+ Author.Add.Note=Note\:
+ 
+-publicationUrlTitle=URL
+-
+-referenceDetailTitle=Reference detail
+-
+-referenceCitationTitle=Reference citation
+-
+-journalAuthorTitle=Journal Author
+-
+-journalNameTitle=Journal name
+-
+-publicationYearTitle=Year of publication
+-
+-collectionNameTitle=Collection name
+-
+-addPublicationTitle=Add publication
+-
+-publicationManager=Publication Manager
+-
+-referenceCitationLbl=Reference citation\:
+-
+-journalNameLbl=Journal name
+-
+-collectionNameLbl=Collection name
+-
+-referenceDetailLbl=Reference detail
+-
+-publicationList=List of publications
+-
+-addPublicationBtn=Add publication
+-
+-editPublicationBtn=Edit publication
+-
+-deletePublicationBtn=Delete publication
+-
+-searchPublicationsLbl=Search publications
+-
+-searchPublicationsBtn=Search publications
+-
+ publicationSearchFailed=Searching publications failed
+ 
+ publicationSaveFailed=Saving publication failed
+@@ -843,22 +875,6 @@
+ 
+ publicationProcessResultsFailed=Processing search results failed
+ 
+-addPublicationNoteLbl=Note\:
+-
+-addPublicationUrlLbl=URL\:
+-
+-addPublicationReferenceDetailLbl=Reference detail\:
+-
+-addPublicationReferenceCitationLbl=Reference citation\:
+-
+-addPublicationJournalAuthorNameLbl=Journal author\:
+-
+-addPublicationJournalNameLbl=Journal name\:
+-
+-addPublicationCollectionYearPublicationLbl=Year of publication\:
+-
+-addPublicationCollectionNameLbl=Collection name\:
+-
+ authorSearchFailed=Searching authors failed
+ 
+ authorSaveFailed=Saving author failed
+@@ -1101,8 +1117,6 @@
+ 
+ Overview.MenuDataPublications=&amp;Publication manager
+ 
+-Publication.Add.SaveButton=Save publication
+-
+ Message.DeleteRecords={0} records will be deleted.
+ 
+ Message.DeleteRecordsTT=Warning
+@@ -1423,3 +1437,19 @@
+ Overview.MenuHelp.About=About
+ 
+ Overview.MenuHelp.AboutTT=Displays info about Plantlore and this installation.
++
++Publication.Add.SaveButton=Save publication
++
++PUBLICATION.null=Publication
++
++publicationList=List of publications
++
++publicationManager=Publication manager
++
++publicationYearTitle=Year of publication
++
++publicationUrlTitle=URL
++
++collectionNameLbl=Collection name
++
++collectionNameTitle=Collection name
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-09-02 21:32:33 UTC (rev 638)
+@@ -391,23 +391,23 @@
+ 
+ journalNameTitle=Journal name
+ 
+-publicationYearTitle=Year of publication
++publicationYearTitle=Rok publikace
+ 
+-collectionNameTitle=Collection name
++collectionNameTitle=N\u00E1zev kolekce
+ 
+ addPublicationTitle=Add publication
+ 
+-publicationManager=Publication Manager
++publicationManager=Spr\u00E1va publikac\u00ED
+ 
+ referenceCitationLbl=Reference citation\:
+ 
+ journalNameLbl=Journal name
+ 
+-collectionNameLbl=Collection name
++collectionNameLbl=N\u00E1zev kolekce
+ 
+ referenceDetailLbl=Reference detail
+ 
+-publicationList=List of publications
++publicationList=Seznam publikac\u00ED
+ 
+ addPublicationBtn=Add publication
+ 
+@@ -419,15 +419,15 @@
+ 
+ searchPublicationsBtn=Search publications
+ 
+-publicationSearchFailed=Searching publications failed
++publicationSearchFailed=Vyhled\u00E1v\u00E1n\u00ED publikac\u00ED selhalo
+ 
+-publicationSaveFailed=Saving publication failed
++publicationSaveFailed=Uklad\u00E1n\u00ED publikace selhalo
+ 
+-publicationUpdateFailed=Updating publication failed
++publicationUpdateFailed=\u00DAprava publikace selhala
+ 
+-publicationDeleteFailed=Deleting publication failed
++publicationDeleteFailed=Maz\u00E1n\u00ED publikace selhalo
+ 
+-publicationProcessResultsFailed=Processing search results failed
++publicationProcessResultsFailed=Spracov\u00E1n\u00ED v\u00FDsledk\u016F hled\u00E1n\u00ED selhalo
+ 
+ addPublicationNoteLbl=Note\:
+ 
+@@ -1198,17 +1198,17 @@
+ 
+ Publication.collectionName=Kolekce
+ 
+-Publication.collectionYearPublication=Rok
++Publication.collectionYearPublication=Rok publikace
+ 
+ Publication.journalName=\u017Durn\u00E1l
+ 
+-Publication.journalAuthorName=Autor
++Publication.journalAuthorName=Autor \u010Dl\u00E1nku
+ 
+-Publication.referenceCitation=Reference
++Publication.referenceCitation=Reference (citace)
+ 
+-Publication.referenceDetail=Detail
++Publication.referenceDetail=Reference (detail)
+ 
+-Publication.url=Web
++Publication.url=URL
+ 
+ Publication.createdWho=Vytvo\u0159eno (k\u00FDm)
+ 
+@@ -1577,3 +1577,113 @@
+ Overview.MenuHelp.About=O programu
+ 
+ Overview.MenuHelp.AboutTT=Zobraz\u00ED informace o Plantlore a t\u00E9to instalaci.
++
++Publications.Add.Button=P\u0159idej publikaci
++
++Publications.Add.CollectionName.Label=N\u00E1zev kolekce\:
++
++Publications.Add.CollectionYearPublication.Label=Rok publikace\:
++
++Publications.Add.InsufficientRights=Nem\u00E1te dostate\u010Dn\u00E1 opr\u00E1vn\u011Bn\u00ED pro p\u0159id\u00E1v\u00E1n\u00ED publikac\u00ED
++
++Publications.Add.JournalAuthorName.Label=Autor \u010Dl\u00E1nku\:
++
++Publications.Add.JournalName.Label=N\u00E1zev \u010Dl\u00E1nku\:
++
++Publications.Add.Note.Label=Pozn\u00E1mka\:
++
++Publications.Add.ReferenceDetail.Label=Reference (detail)\:
++
++Publications.Add.RequiredField.Label=Alespo\u0148 jedna z t\u011Bchto polo\u017Eek mus\u00ED b\u00FDt vypl\u0148ena
++
++Publications.Add.SaveButton.Label=Ulo\u017E publikaci
++
++Publications.Add.Title=P\u0159idej publikaci
++
++Publications.Add.Url.Label=URL\:
++
++Publications.ColumnTitle.CollectionNameTitle=N\u00E1zev kolekce
++
++Publications.ColumnTitle.JournalAuthorTitle=Autor \u010Dl\u00E1nku
++
++Publications.ColumnTitle.JournalNameTitle=N\u00E1zev \u010Dl\u00E1nku
++
++Publications.ColumnTitle.PublicationUrlTitle=URL
++
++Publications.ColumnTitle.PublicationYearTitle=Rok publikace
++
++Publications.ColumnTitle.ReferenceCitationTitle=Reference (citace)
++
++Publications.ColumnTitle.ReferenceDetailTitle=Reference (detail)
++
++Publications.CompulsoryFieldsMessage=Alespo\u0148 jedna z n\u00E1sleduj\u00EDc\u00EDch polo\u017Eek mus\u00ED b\u00FDt vypln\u011Bna\: Autor \u010Dl\u00E1nku, Rok publikace, N\u00E1zev \u010Dl\u00E1nku, N\u00E1zev kolekce
++
++Publications.CompulsoryFieldsMessage.Title=Chyb\u011Bj\u00EDc\u00ED povinn\u00E1 polo\u017Eka
++
++Publications.ConfirmDelete=Opravdu chcete smazat vybranou publikaci?
++
++Publications.ConfirmDelete.Title=Sma\u017E publikaci
++
++Publications.Delete.Button=Sma\u017E publikaci
++
++Publications.Delete.InsufficientRights=Nem\u00E1te dostate\u010Dn\u00E1 opr\u00E1vn\u011Bn\u00ED pro tuto operaci
++
++Publications.Delete.UsedInOccurrence=Tato publikace nem\u016F\u017Ee b\u00FDt smaz\u00E1na proto\u017Ee se vyskytuje u n\u011Bkter\u00E9ho z n\u00E1lez\u016F. Aby bylo mo\u017En\u00E9 ji smazat, mus\u00EDte ji nejprve odstranit ze v\u0161ech n\u00E1lez\u016F u kter\u00FDch se vyskytuje.
++
++Publications.DisplayedRows.Label=Zobrazen\u00E9 \u0159\u00E1dky\:
++
++Publications.Edit.Button=Uprav publikaci
++
++Publications.Edit.InsufficientRights=Nem\u00E1te dostate\u010Dn\u00E1 opr\u00E1vn\u011Bn\u00ED pro tuto operaci
++
++Publications.List.Label=Seznam publikac\u00ED
++
++Publications.Next.Button=N\u00E1sleduj\u00EDc\u00ED
++
++Publications.OrderBy.Label=Uspo\u0159\u00E1dej dle\:
++
++Publications.Ordering.Label=Uspo\u0159\u00E1d\u00E1n\u00ED v\u00FDsledk\u016F
++
++Publications.Previous.Button=P\u0159edchoz\u00ED
++
++Publications.ProgressBar.Delete=Ma\u017Eu publikaci, \u010Dekejte pros\u00EDm.
++
++Publications.ProgressBar.Save=Ukl\u00E1d\u00E1m publikaci, \u010Dekejte pros\u00EDm.
++
++Publications.ProgressBar.Search=Vyhled\u00E1v\u00E1m publikace, \u010Dekejte pros\u00EDm.
++
++Publications.RowsToDisplay.Label=Zobrazit \u0159\u00E1dk\u016F\:
++
++Publications.Search.Button=Vyhledej publiakce
++
++Publications.Search.CollectionName.Label=N\u00E1zev kolekce\:
++
++Publications.Search.JournalName.Label=N\u00E1zev \u0107l\u00E1nku\:
++
++Publications.Search.Label=Vyhled\u00E1v\u00E1n\u00ED publikac\u00ED
++
++Publications.Search.ReferenceCitation.Label=Reference (citace)
++
++Publications.Search.ReferenceDetail.Label=Reference (detail)
++
++Publications.SelectPublication.Title=Vyberte publikaci
++
++Publications.Sortby.CollectionNameTitle=N\u00E1zev kolekce
++
++Publications.Sortby.JournalAuthorTitle=Autor \u010Dl\u00E1nku
++
++Publications.Sortby.JournalNameTitle=N\u00E1zev \u010Dl\u00E1nku
++
++Publications.Sortby.PublicationYearTitle=Rok publikace
++
++Publications.Sortby.ReferenceCitationTitle=Reference (citace)
++
++Publications.Sortby.ReferenceDetailTitle=Reference (detail)
++
++Publications.Title=Spr\u00E1va publikac\u00ED
++
++Publications.TotalResults.Label=V\u00FDsledk\u016F celkem\:
++
++Common.Ascending=Vzestupn\u011B
++
++Common.Descending=Sestupn\u011B
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-09-02 20:57:18 UTC (rev 637)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-09-02 21:32:33 UTC (rev 638)
+@@ -1107,3 +1107,135 @@
+ Overview.MenuHelp.About=About
+ 
+ Overview.MenuHelp.AboutTT=Displays info about Plantlore and this installation.
++
++Publication=Publication
++
++Publication.collectionName=Collection
++
++Publication.collectionYearPublication=Publication year
++
++Publication.createdWho=Created by
++
++Publication.deleted=Deleted
++
++Publication.journalAuthorName=Journal Autor
++
++Publication.journalName=Journal
++
++Publication.note=Note
++
++Publication.referenceCitation=Reference citation
++
++Publication.referenceDetail=Reference detail
++
++Publication.url=URL
++
++Publications.Add.Button=Add publication
++
++Publications.Add.CollectionName.Label=Collection name\:
++
++Publications.Add.CollectionYearPublication.Label=Year of publication\:
++
++Publications.Add.InsufficientRights=You don't have sufficient rights to add publications
++
++Publications.Add.JournalAuthorName.Label=Journal author\:
++
++Publications.Add.JournalName.Label=Journal name\:
++
++Publications.Add.Note.Label=Note\:
++
++Publications.Add.ReferenceDetail.Label=Reference detail\:
++
++Publications.Add.RequiredField.Label=At least one of these fields is required
++
++Publications.Add.SaveButton.Label=Save publication
++
++Publications.Add.Title=Add publication
++
++Publications.Add.Url.Label=URL\:
++
++Publications.ColumnTitle.CollectionNameTitle=Collection name
++
++Publications.ColumnTitle.JournalAuthorTitle=Journal author
++
++Publications.ColumnTitle.JournalNameTitle=Journal name
++
++Publications.ColumnTitle.PublicationUrlTitle=URL
++
++Publications.ColumnTitle.PublicationYearTitle=Year of publication
++
++Publications.ColumnTitle.ReferenceCitationTitle=Reference citation
++
++Publications.ColumnTitle.ReferenceDetailTitle=Reference detail
++
++Publications.CompulsoryFieldsMessage=At least one of the following fields must be filled in\: Journal author, Year of publication, Journal name, Collection name
++
++Publications.CompulsoryFieldsMessage.Title=Missing compulsory field
++
++Publications.ConfirmDelete=Do you really want to delete selected publication?
++
++Publications.ConfirmDelete.Title=Delete publication
++
++Publications.Delete.Button=Delete publication
++
++Publications.Delete.InsufficientRights=You don't have sufficient rights to delete this publication
++
++Publications.Delete.UsedInOccurrence=This publication cannot be deleted because it is used in an occurence. To delete the publication, you have to first remove it from all the occurrences.
++
++Publications.DisplayedRows.Label=Displayed rows\:
++
++Publications.Edit.Button=Edit publication
++
++Publications.Edit.InsufficientRights=You don't have sufficient rights to edit this publication
++
++Publications.List.Label=List of publications
++
++Publications.Next.Button=Next
++
++Publications.OrderBy.Label=Order by\:
++
++Publications.Ordering.Label=Ordering results
++
++Publications.Previous.Button=Previous
++
++Publications.ProgressBar.Delete=Deleting publication, please wait.
++
++Publications.ProgressBar.Save=Saving publication, please wait.
++
++Publications.ProgressBar.Search=Searching publications, please wait.
++
++Publications.RowsToDisplay.Label=Rows to display\:
++
++Publications.TotalResults.Label=Total results\:
++
++Publications.Title=Publication Manager
++
++Publications.Sortby.ReferenceDetailTitle=Reference detail
++
++Publications.Sortby.ReferenceCitationTitle=Reference citation
++
++Publications.Sortby.PublicationYearTitle=Year of publication
++
++Publications.Sortby.JournalNameTitle=Journal name
++
++Publications.Sortby.CollectionNameTitle=Collection name
++
++Publications.Sortby.JournalAuthorTitle=Journal Author
++
++Publications.SelectPublication.Title=Select publication
++
++Publications.Search.ReferenceDetail.Label=Reference detail\:
++
++Publications.Search.ReferenceCitation.Label=Reference citation\:
++
++Publications.Search.Label=Search publications
++
++Publications.Search.JournalName.Label=Journal name\:
++
++Publications.Search.Button=Search publications
++
++Publications.Search.CollectionName.Label=Collection name\:
++
++Common.Ascending=Ascending
++
++Common.Descending=Descending
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000893.html">[Plantlore-dev] r637 - in trunk/src/net/sf/plantlore:	client/history client/metadata client/user common/record
+</A></li>
+	<LI>Next message: <A HREF="000895.html">[Plantlore-dev] r639 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#894">[ date ]</a>
+              <a href="thread.html#894">[ thread ]</a>
+              <a href="subject.html#894">[ subject ]</a>
+              <a href="author.html#894">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

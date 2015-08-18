@@ -1,0 +1,548 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r76 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r76%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603261723.k2QHN3Zx007388%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000071.html">
+   <LINK REL="Next"  HREF="000073.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r76 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r76%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603261723.k2QHN3Zx007388%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r76 - trunk/src/net/sf/plantlore/server">krater at berlios.de
+       </A><BR>
+    <I>Sun Mar 26 19:23:03 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000071.html">[Plantlore-dev] r75 - trunk/src/net/sf/plantlore/middleware
+</A></li>
+        <LI>Next message: <A HREF="000073.html">[Plantlore-dev] r77 - in trunk/src/net/sf/plantlore: client common l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#72">[ date ]</a>
+              <a href="thread.html#72">[ thread ]</a>
+              <a href="subject.html#72">[ subject ]</a>
+              <a href="author.html#72">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-03-26 19:23:00 +0200 (Sun, 26 Mar 2006)
+New Revision: 76
+
+Modified:
+   trunk/src/net/sf/plantlore/server/DBLayerException.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+   trunk/src/net/sf/plantlore/server/Undertaker.java
+Log:
+HibernateDBLayer [HDBL] updated, ready to work with RMI (SelectQueries can now be Remote objects). The HDBL acts as a SelectQuery factory. The life of a SelectQuery ends when the executeQuery method is invoked with that SelectQuery as its parameter.
+
+Modified: trunk/src/net/sf/plantlore/server/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/DBLayerException.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/DBLayerException.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -9,6 +9,8 @@
+ 
+ /**
+  *  Exception for the DBLayer package (on the client side)
++ *  
++ *  FIXME: presunout nejspis do middleware package...
+  *
+  *  @author Tomas Kovarik
+  *  @version 0.1, Jan 16, 2006
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -8,6 +8,9 @@
+ package net.sf.plantlore.server;
+ 
+ import java.io.File;
++import java.rmi.NoSuchObjectException;
++import java.rmi.RemoteException;
++import java.rmi.server.UnicastRemoteObject;
+ import java.rmi.server.Unreferenced;
+ import java.util.Hashtable;
+ import org.apache.log4j.Logger;
+@@ -27,7 +30,7 @@
+  *  Implementation of DBLayer using Hibernate OR mapping to access the database.
+  *
+  *  @author Tom&#225;&#353; Kova&#345;&#237;k (database parts), Erik Kratochv&#237;l (rmi parts)
+- *  @version far from ready
++ *  @version far from ready!
+  */
+ public class HibernateDBLayer implements DBLayer, Unreferenced {
+     /** Instance of a logger */
+@@ -41,6 +44,10 @@
+     /** Maximum result ID used */
+     private int maxResultId;
+     
++    
++    private Hashtable&lt;SelectQuery, SelectQuery&gt; queries;
++    
++    
+     /** Creates a new instance of HibernateDBLayer.
+      * 
+      *  @param undertaker The object that is responsible for cleanup if the client crashes. 
+@@ -53,10 +60,13 @@
+     /** Creates a new instance of HibernateDBLayer */
+     public HibernateDBLayer() {
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+-        // Initialize pool of select queries, initial capacity = 8
++        // Initialize pool of result sets, initial capacity = 8
+         results = new Hashtable&lt;Integer, ScrollableResults&gt;(8); 
+         // Initialize maximum result id
+         maxResultId = 0;
++        
++        // Table of all living queries, initial capacity = 8
++        queries = new Hashtable&lt;SelectQuery, SelectQuery&gt;(8); 
+     }    
+     
+     /**
+@@ -269,14 +279,17 @@
+      *  @param classname entity we want to select from the database (given holder object class)
+      *  @return an instance of &lt;code&gt;SelectQuery&lt;/code&gt; used for building a query by client
+      *
+-     *  TODO: This has to be updated by ERIK to work with RMI
+      */
+-    public SelectQuery createQuery(Class classname) {
+-        SelectQuery query = new SelectQueryImplementation(session.createCriteria(classname));
+-        // TODO Tady se objekt query zaregistruje a exportuje pro remote usage.
++    public SelectQuery createQuery(Class classname) throws RemoteException {
++        SelectQuery query = new SelectQueryImplementation(session.createCriteria(classname)), 
++        	stub = query;
+         
++        if(undertaker != null)
++        	stub = (SelectQuery) UnicastRemoteObject.exportObject(query); 
+         
+-        return query;
++        queries.put(stub, query);
++        
++        return stub;
+     }    
+     
+     /**
+@@ -286,12 +299,26 @@
+      *  @throws DBLayerException when selecting records from the database fails
+      */
+     public int executeQuery(SelectQuery query) throws DBLayerException {
++    	
++    	SelectQuery selectQuery = queries.remove(query);
++    	if(selectQuery == null) return -1;
++    	
++    	if(undertaker != null) 
++    		try { UnicastRemoteObject.unexportObject(selectQuery, true); }
++    		catch(NoSuchObjectException e) {}
++    	
++    	assert(selectQuery instanceof SelectQueryImplementation);
++    	SelectQueryImplementation sq = (SelectQueryImplementation) selectQuery;
++    	
++    	
+         Transaction tx = null;        
+         ScrollableResults res;
++        
++        
+         try {
+             tx = session.beginTransaction();
+             // Execute detached criteria query
+-            res = query.getCriteria().scroll();
++            res = sq.getCriteria().scroll(); // retrieve Criteria from SelectQuery
+             // Commit transaction
+             tx.commit();                                      
+         } catch (HibernateException e) {
+@@ -302,21 +329,67 @@
+             throw new DBLayerException(&quot;Selecting records from the database failed. Details: &quot;+e.getMessage());
+         }
+         // Update current maximum result id and save the results
+-        maxResultId++;
++        maxResultId++; 
++        /* FIXME: NIKDE NENI maxResultId-- nebo tak neco, to je ficura nebo BUG?
++         * Si predstav, ze hypoteticky by nekdo drzel resultid = 0 dlouho, a mezitim 
++         * by se nekomu povedlo vykonat ty 4miliardy dotazu (nemusi to bejt uplne
++         * za vlasy pritazeny, kdyz budou v db statisice zaznamu) a dostal by se  s tim
++         * resultid zase na nulu. ale resultid = 0 uz v hashtable je, takze by to vratilo
++         * spatne...
++         */
+         results.put(maxResultId, res);
+         return maxResultId;
+     }
+     
++    /**
++     * This method is intended for final cleanup. &lt;b&gt;Do not call this method yourself!
++     * The proper way for you to get rid of a DBLayer is to call DBLayer.destroy() method!&lt;/b&gt;
++     * &lt;br/&gt;
++     * Terminate all processes running in this DBLayer,
++     * disconnect from the database and 
++     * destroy all objects created by this DBLayer.
++     * &lt;br/&gt;
++     * &lt;b&gt;After this the DBLayer will not be capable of carrying out its duties.&lt;/b&gt;
++     * &lt;br/&gt;
++     * This method is supposed to be used by the DBLayerFactory exclusively.
++     * 
++     * FIXME Think of a better mechanism that will hide it from users yet keep it accessible to the DBLF.
++     */
++    public void shutdown() /* throws RemoteException */ {
++    	
++    	if(undertaker != null) 
++    		for(SelectQuery sq : queries.values()) 
++    			try { UnicastRemoteObject.unexportObject(sq, true); }
++    			catch(NoSuchObjectException e) {}
++    	queries.clear();
++    	
++    	//kovo by mel asi nejak poukoncovat otevreny vysledky
++    	//for each unfinished (unclosed) result do close(result)  
++    	
++    }
+     
+     
+     
+-    
+-    
+     //===============================================================
+     // What happens to unreferenced objects? They get buried by the untertaker!
+     
+-	private Undertaker undertaker = null;
+-	public void unreferenced() { if(undertaker != null) undertaker.bury(this); }
++    /** 
++     * The object that is responsible for destroying the database in case all remote references
++     * have been lost. This can happen if the client crashes or doesn't destroy its remote
++     * DBLayers properly. 
++     */
++	private Undertaker undertaker = null; // sort of a callback here
++	
++	/**
++	 * Make sure this instance of DBLayer will be a subject of a proper cleanup.&lt;br/&gt;
++	 * This method is called by the RMI mechanism if all remote references of this
++	 * object have been lost.
++	 * 
++	 * @see java.rmi.dgc.leaseValue
++	 */
++	public void unreferenced() { 
++		if(undertaker != null) undertaker.bury(this); 
++	}
+ 	//===============================================================
+ 	      
+ }
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -2,11 +2,14 @@
+ 
+ import java.rmi.RemoteException;
+ import java.rmi.server.RemoteServer;
++import java.rmi.server.ServerNotActiveException;
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
+ import java.util.Hashtable;
+ import java.util.Vector;
+ 
++import org.apache.log4j.Logger;
++
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+@@ -17,33 +20,39 @@
+  * &lt;br/&gt;
+  * The proper way to disconnect all remote clients from the server has these steps:
+  * &lt;ol&gt;
+- * &lt;li&gt;removing the RemoteDBLayerFactory from the rmiregistry, so that no more clients can obtain a reference to
+- * the factory and ask it for creating a new dblayer&lt;/li&gt;
++ * &lt;li&gt;removing the RemoteDBLayerFactory from the rmiregistry, so that no more clients can obtain a reference
++ * of the factory and ask it for creating a new dblayer&lt;/li&gt;
+  * &lt;li&gt;unexporting the RemoteDBLayerFactory, so that it cannot accept remote calls, so that all clients that
+  * have a remote reference of this factory cannot ask it for another dblayer&lt;/li&gt;
+  * &lt;li&gt;&quot;kicking&quot; all currently connected users by unexporting their dblayer remote objects, which will terminate their
+  * connections effectively&lt;/li&gt;
+  * &lt;/ol&gt;
+  * 
+- * TODO: Pou&#382;&#237;vat logger a property file, pokud dojde k n&#283;jak&#253;m v&#253;jimk&#225;m, je&#382; je nutno logovat.
+  * TODO:  maxConnectionsPerIP &amp; maxConnectionsTotal by se asi m&#283;ly na&#269;&#237;tat z n&#283;jak&#233;ho config souboru.
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+- * @version 1.0 
++ * @version 1.0  
+  */
+ public class RMIRemoteDBLayerFactory extends UnicastRemoteObject
+ 	implements RemoteDBLayerFactory, Undertaker {
+ 	
++	private Logger logger;
+ 	
+ 	
+-	/** Maximum number of connections from one IP. */
++	/** 
++	 * Maximum number of connections from one IP = maximum number of DBLayer objects 
++	 * that can be created for users from this IP address.
++	 */
+ 	private int maxConnectionsPerIP = 1;
+ 	
+-	/** Maximum number of clients. */
++	/** 
++	 * Maximum number of clients = the total maximum number of DBLayer objects 
++	 * that can be created by this factory. 
++	 */
+ 	private int maxConnectionsTotal = 8;
+ 	
+-	/** Keep information about connected clients. */
++	/** Keep information about all connected clients. */
+ 	private Hashtable&lt;DBLayer, ConnectionInfo&gt; client = 
+ 		new Hashtable&lt;DBLayer, ConnectionInfo&gt;(maxConnectionsTotal);
+ 	
+@@ -51,19 +60,29 @@
+ 	 * Create a new RMIDBLayerFactory.
+ 	 * @throws RemoteException If the RMI encounters an error.
+ 	 */
+-	public RMIRemoteDBLayerFactory() throws RemoteException {}
++	public RMIRemoteDBLayerFactory() throws RemoteException {
++		logger = Logger.getLogger(this.getClass().getPackage().getName());
++	}
+ 	
+-	/** Return all information about connected clients. */
+-	public synchronized Collection&lt;ConnectionInfo&gt; getClients() { return new Vector&lt;ConnectionInfo&gt;(client.values()); }
++	/** 
++	 * Return information about connected clients.
++	 * 
++	 *  @return Collection holding information about currently connected clients.
++	 */
++	protected synchronized Collection&lt;ConnectionInfo&gt; getClients() { 
++		return new Vector&lt;ConnectionInfo&gt;(client.values()); 
++	}
+ 	
+ 	/**
+ 	 *  Shall the server open another conenction for the host?
+ 	 *  This method represents the connection policy of the server.
++	 *  
+ 	 * @param host	The name of the host that asks for another connection.
+ 	 * @return	True if the connection should be allowed.
+ 	 */
+ 	private boolean allowConnection(String host) {
+ 		if(client.size() &gt;= maxConnectionsTotal) return false;
++		
+ 		int c = 0;
+ 		for(ConnectionInfo info : client.values())
+ 			if(info.getClientHost().equalsIgnoreCase(host)) c++; // HA! C++ in Java! Strange!
+@@ -73,41 +92,60 @@
+ 	/**
+ 	 * Create a new remote object, export it so that the object can accept remote calls, and return the
+ 	 * stub of this object. The creation of new connection must adhere to the connection policy.
+-	 * @return Remote reference (stub) of the remote DBLayer object.
++	 * 
++	 * @return Remote reference (stub) of the remote DBLayer object or 
++	 * &lt;b&gt;null&lt;/b&gt; if the server doesn't approve of creating the DBLayer
++	 * (too many connections from this IP or too many clients connected). 
+ 	 * @throws RemoteException If the RMI encounters an error.
+ 	 */
+ 	public synchronized DBLayer create() throws RemoteException {
+ 		// Apply the connection policy ~ see AllowConnection(host)
+-		String clientHost = &quot;unable to comply&quot;;
+-		try { clientHost = RemoteServer.getClientHost(); } catch(Exception e) {}
+-		if( !allowConnection(clientHost) ) 
+-			throw new RemoteException(&quot;Too many connections from this IP (or the server is full)!&quot;);
++		String clientHost = &quot;unknown&quot;;
++		try { clientHost = RemoteServer.getClientHost(); } 
++		catch(Exception e) { logger.warn(&quot;Unable to retrieve the client's host name.&quot;); }
++		
++		// Connection policy
++		if( !allowConnection(clientHost) ) {
++			logger.info(&quot;Too many connections from &quot; + clientHost + &quot; (or the server is full)!&quot;);
++			return null;
++		}
++		
+ 		// Create a new DBLayer, export it, and keep the stub. Also set the Undertaker of this object.
+ 		DBLayer database = new HibernateDBLayer(this);
+ 		DBLayer stub = (DBLayer) UnicastRemoteObject.exportObject(database);
++		
+ 		// Save the information about this connection.
+ 		ConnectionInfo info = new ConnectionInfo(null, database, stub, clientHost); // remoteFactory is null because of security reasons.
+ 		client.put(stub, info);
++		
++		logger.info(&quot;New remote DBLayer created &quot; + info);
+ 
+ 		return stub;
+ 	}
+ 	
+ 	/**
+-	 * Disconnect the DBLayer from the server and unexport the object to prevent it from
+-	 * accepting more remote calls. 
++	 * Disconnect the DBLayer to prevent it from
++	 * accepting more remote calls.&lt;br/&gt; 
++	 * Make sure the DBLayer performs some cleanup.  
+ 	 * 
+ 	 * @param db	The DBLayer object (not stub!) that should be disconnected.
+ 	 * @throws RemoteException If the RMI encounters an error.
+ 	 */	
+-	protected void disconnect(DBLayer db)  throws RemoteException {
+-		if(db == null) return;
+-		//db.close();
++	void disconnect(DBLayer db)  throws RemoteException {
++		assert(db != null);
++		
++		// Let the database layer perform some cleanup.
++		db.shutdown();
++		
+ 		// Unexport the object even if there is an action in progress.
+ 		UnicastRemoteObject.unexportObject(db, true);
++		
++		logger.info(&quot;The database layer &quot; + db + &quot; has been disconnected and destroyed.&quot;);
+ 	}
+ 
+ 	/**
+-	 * Destroy the remote object associated with the stub (and remove it from the list of connected clients).
++	 * Destroy the remote object associated with the stub 
++	 * (and remove it from the list of connected clients).
+ 	 * 
+ 	 * @param stub The remote reference to the remote object that is to be destroyed.
+ 	 * @throws RemoteException If the RMI encounters an error.
+@@ -115,22 +153,37 @@
+ 	public synchronized void destroy(DBLayer stub) throws RemoteException {
+ 		ConnectionInfo info = client.remove(stub);
+ 		if(info != null) disconnect(info.getDatabase());
++		else try {
++			logger.warn(RemoteServer.getClientHost() + &quot;attempts to destroy &quot; +
++						&quot;a database layer that has was not created by this factory!&quot;);
++		} catch(ServerNotActiveException e) {}
+ 	}
+ 	
+-	/** Terminate the connection of all connected clients. */
+-	public synchronized void disconnectAll() {
++	/** 
++	 * Terminate the connection of all connected clients. 
++	 */
++	synchronized void disconnectAll() {
+ 		for (ConnectionInfo info : client.values()) 
+ 			try { disconnect(info.getDatabase()); } catch (Exception e) {}		
+ 		// Clear the list of opened connections - none is now opened.
+ 		client.clear();
+ 	}
+ 	
+-	/** Take care of DBLayer whose client has &quot;crashed&quot;. */
++	/** 
++	 * Take care of DBLayer whose client has &quot;crashed&quot;.
++	 * Ensure this database layer is properly disconnected.
++	 * 
++	 * @see destroy 
++	 */
+ 	public synchronized void bury(DBLayer database) {
+ 		DBLayer stub = null;
++		
++		// Find the ConnectionInfo object among the connected clients 
+ 		for(ConnectionInfo info : client.values())
+ 			if(info.getDatabase().equals(database)) { stub = info.getStub(); break; }
+-		try { destroy(stub); } catch(RemoteException e) { /* eat */}
++		
++		// Destroy it properly
++		try { destroy(stub); } catch(RemoteException e) {}
+ 	}
+ 	
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -11,20 +11,16 @@
+ import net.sf.plantlore.server.tools.*;
+ 
+ /**
+- * The &quot;starter&quot; class. This class is capable of binding a particular implementation
+- * of the RemoteDBLayer interface to the rmiregistry. 
++ *  
+  * &lt;br/&gt;
+  *  The server is terminated
+  *  &lt;=&gt; 
+- *  All remote objects that has been exported are unexported.
++ *  All remote objects that have been exported are unexported.
+  *  
+- * TODO: Pou&#382;&#237;t p&#345;i oznamov&#225;n&#237; chyb Logger. Chyby by se m&#283;ly zobrazovat lokalizovan&#283; - pou&#382;&#237;t odpov&#237;daj&#237;c&#237; property file.
+- * 
+- * 
+  * @see RemoteDBLayerFactory, RMIDBLayerFactory
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-11
+- * @version 0.9 Under construction
++ * @version 1.0
+  */
+ public class RMIServer extends UnicastRemoteObject implements Server&lt;ConnectionInfo&gt; {
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -23,14 +23,15 @@
+  * @author Tom&#225;&#353; Kova&#345;&#237;k, Erik Kratochv&#237;l
+  */
+ public class SelectQueryImplementation implements SelectQuery {
+-    Criteria criteria;
++	
++    private Criteria criteria;
+     
+     /** Creates a new instance of Selectcriteria */
+     public SelectQueryImplementation(Criteria criteria) {
+         this.criteria = criteria;
+     }
+     
+-    public Criteria getCriteria() {
++    Criteria getCriteria() {
+         return this.criteria;
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/server/Undertaker.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Undertaker.java	2006-03-26 17:17:09 UTC (rev 75)
++++ trunk/src/net/sf/plantlore/server/Undertaker.java	2006-03-26 17:23:00 UTC (rev 76)
+@@ -2,6 +2,12 @@
+ 
+ import net.sf.plantlore.middleware.DBLayer;
+ 
++/**
++ * 
++ *   
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-03-26
++  */
+ public interface Undertaker {
+ 	
+ 	void bury(DBLayer db);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000071.html">[Plantlore-dev] r75 - trunk/src/net/sf/plantlore/middleware
+</A></li>
+	<LI>Next message: <A HREF="000073.html">[Plantlore-dev] r77 - in trunk/src/net/sf/plantlore: client common l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#72">[ date ]</a>
+              <a href="thread.html#72">[ thread ]</a>
+              <a href="subject.html#72">[ subject ]</a>
+              <a href="author.html#72">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,515 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r854 - trunk/src/net/sf/plantlore/client/overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-October/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r854%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200610182105.k9IL5MJ1027223%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001227.html">
+   <LINK REL="Next"  HREF="001230.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r854 - trunk/src/net/sf/plantlore/client/overview</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r854%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200610182105.k9IL5MJ1027223%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r854 - trunk/src/net/sf/plantlore/client/overview">krater at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct 18 23:05:22 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001227.html">[Plantlore-dev] r853 - trunk/src/net/sf/plantlore/client/overview
+</A></li>
+        <LI>Next message: <A HREF="001230.html">[Plantlore-dev] [Bug #7749] Selecting an Author Name or a Revision	transfers focus
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1229">[ date ]</a>
+              <a href="thread.html#1229">[ thread ]</a>
+              <a href="subject.html#1229">[ subject ]</a>
+              <a href="author.html#1229">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-10-18 23:05:21 +0200 (Wed, 18 Oct 2006)
+New Revision: 854
+
+Added:
+   trunk/src/net/sf/plantlore/client/overview/InterestingFields.java
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+Log:
+Add/Edit dialog - a new button added (rem). This button will store the values in the dialog. The mechanism that will restore them will be implemented soon.
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-18 15:13:28 UTC (rev 853)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-18 21:05:21 UTC (rev 854)
+@@ -82,6 +82,8 @@
+     public final static int MAXIMUM_INTEGER_DIGITS = 9;
+     private final static Color COLOR_INVALID = Color.RED;
+     
++    private RememberDefaultValuesAction defaults = new RememberDefaultValuesAction();
++    
+     //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+     private ChecklistView checklistView;
+     
+@@ -145,6 +147,7 @@
+         view.settingsButton.setAction(new SettingsAction());
+         view.gpsChangeButton.setAction(new ChangeCoordinateSystemAction());
+         view.authButton.setAction(new AuthorManagerAction());
++        view.rememberButton.setAction( defaults );
+ //        view.preloadAuthorsCheckBox.addActionListener(new PreloadCheckBox());
+     }
+     
+@@ -863,18 +866,6 @@
+     
+     
+     /**
+-     * The holder object of most important fields in the dialog whose state should be stored.
+-     * The list of currently selected authors is not saved because that component may be a subject to change.
+-     *
+-     * @author kaimu
+-     */
+-    class InterestingFields implements java.io.Serializable {
+-        public Pair&lt;String, Integer&gt; territory, phytochorion, town, publication, project;
+-        public String description, locationNote, occurrenceNote, latitude, longitude, altitude, country, time, day, quadrant, herbarium, source;
+-        public Integer month, year;
+-    }
+-    
+-    /**
+      * This action stores the default values in the dialog for future revival.
+      * The revival is planned after the application is restarted (because there is another mechanism
+      * that preserves the currently inserted values in some fields of the dialog - implemented by Jakub Kotowski).
+@@ -883,11 +874,6 @@
+      */
+     class RememberDefaultValuesAction extends StandardAction {
+         
+-        public final String RESTORE = &quot;RestoreTheDefaultValues&quot;;
+-        public final String FORGET = &quot;ForgetTheDefaultValues&quot;;
+-        public final String REMEMBER = &quot;RememberTheDefaultValues&quot;;
+-        
+-        
+         private String defaultValuesFileName; {
+ 		String userHome = System.getProperty(&quot;user.home&quot;),
+ 		osName = System.getProperty(&quot;os.name&quot;),
+@@ -908,7 +894,7 @@
+          * Thus the default values may differ for each database the User works with.
+          * It was a necessary step because some of the stored values may not be in the other database at all.
+          */
+-        private Hashtable&lt;String, InterestingFields&gt; storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);;
++        private Hashtable&lt;String, InterestingFields&gt; storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);
+         
+         /**
+          * Create a new Action that is capable of remembering the list of default values.
+@@ -946,123 +932,152 @@
+                 return null;
+             return s;
+         }
+-
++        
+         /**
+-         * Take action!
++         * @return null if the object is not a pair or if the object  is null
+          */
+-        public void actionPerformed(ActionEvent e) {
++        private Pair&lt;String, Integer&gt; evaluate(Object o) {
++            if( o == null || !(o instanceof Pair) )
++                return null;
++            return (Pair&lt;String, Integer&gt;) o;
++        }
++        
++        /**
++         * Restore the state of the most important fields.
++         */
++        public void restore(boolean reload) {
+             try {
+-                String command = e.getActionCommand();
+-                // ===== Restore the list of default values. ===== 
+-                if( RESTORE.equals(command) ) {
+-                     load();
+-                    if( storedValues == null )
+-                        // There are no stored values yet.
+-                        storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);
++                if(reload)
++                    load();
++                
++                if( storedValues == null )
++                    // There are no stored values yet.
++                    storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);
+ 
+-                    // Look for default values that were saved for the database we are currently working with.
+-                    String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                    if( databaseID == null)
+-                        // We are propably not connected to a database yet. This should never happen.
+-                        return;
++                // Look for default values that were saved for the database we are currently working with.
++                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
++                if( databaseID == null)
++                    // We are propably not connected to a database yet. This should never happen.
++                    return;
+ 
+-                    // Obtain the default values.
+-                    InterestingFields defaults = storedValues.get( databaseID );
+-                    if( defaults == null)
+-                        // No default values stored for this particular database. Never mind.
+-                        return;
++                // Obtain the default values.
++                InterestingFields defaults = storedValues.get( databaseID );
++                if( defaults == null)
++                    // No default values stored for this particular database. Never mind.
++                    return;
+ 
+-                    // Now, do some reviving.
+-                    // The trouble is, that sometimes (mostly with the fields monitored with focus listeners) the model would have to be
+-                    // notified manually. Shame (that Swing doesn't provide a unified interface for some changes..). Let's go!
+-                    if(defaults.territory != null)
+-                        view.territoryNameCombo.setSelectedItem( defaults.territory );
+-                    if(defaults.phytochorion != null)
+-                        view.phytNameCombo.setSelectedItem( defaults.phytochorion );
+-                    if(defaults.town != null)
+-                        view.townComboBox.setSelectedItem( defaults.town );
+-                    if(defaults.project != null)
+-                        view.projectCombo.setSelectedItem( defaults.project );
+-                    if(defaults.publication != null)
+-                        view.publicationCombo.setSelectedItem( defaults.publication );
++                // Now, do some reviving.
++                // The trouble is, that sometimes (mostly with the fields monitored with focus listeners) the model would have to be
++                // notified manually. Shame (that Swing doesn't provide a unified interface for some changes..). Let's go!
++                if(defaults.territory != null)
++                    view.territoryNameCombo.setSelectedItem( defaults.territory );
++                if(defaults.phytochorion != null)
++                    view.phytNameCombo.setSelectedItem( defaults.phytochorion );
++                if(defaults.town != null)
++                    view.townComboBox.setSelectedItem( defaults.town );
++                if(defaults.project != null)
++                    view.projectCombo.setSelectedItem( defaults.project );
++                if(defaults.publication != null)
++                    view.publicationCombo.setSelectedItem( defaults.publication );
+ 
+-                    if(defaults.quadrant != null)
+-                        view.quadrantTextField.setText( defaults.quadrant );
+-                    if(defaults.country != null)
+-                        view.phytCountryCombo.setSelectedItem( defaults.country );
+-                    if(defaults.herbarium != null)
+-                        view.herbariumTextField.setText( defaults.herbarium );
+-                    if(defaults.source != null)
+-                        view.sourceCombo.setSelectedItem(defaults.source);
+-                    if(defaults.latitude != null)
+-                        view.latitudeTextField.setText( defaults.latitude );
+-                    if(defaults.altitude != null)
+-                        view.altitudeTextField.setText( defaults.altitude );
+-                    if(defaults.longitude != null)
+-                        view.longitudeTextField.setText( defaults.longitude );
+-                    if(defaults.time != null)
+-                        view.timeTextField.setText( defaults.time );
+-                    if(defaults.month != null)
+-                        view.monthChooser.setMonth( defaults.month );
+-                    if(defaults.day != null)
+-                        view.dayTextField.setText( defaults.day );
+-                    if(defaults.year != null)
+-                        view.yearSpinner.setValue( defaults.year );
++                if(defaults.quadrant != null)
++                    view.quadrantTextField.setText( defaults.quadrant );
++                if(defaults.country != null)
++                    view.phytCountryCombo.setSelectedItem( defaults.country );
++                if(defaults.herbarium != null)
++                    view.herbariumTextField.setText( defaults.herbarium );
++                if(defaults.source != null)
++                    view.sourceCombo.setSelectedItem(defaults.source);
++                if(defaults.latitude != null)
++                    view.latitudeTextField.setText( defaults.latitude );
++                if(defaults.altitude != null)
++                    view.altitudeTextField.setText( defaults.altitude );
++                if(defaults.longitude != null)
++                    view.longitudeTextField.setText( defaults.longitude );
++                if(defaults.time != null)
++                    view.timeTextField.setText( defaults.time );
++                if(defaults.month != null)
++                    view.monthChooser.setMonth( defaults.month );
++                if(defaults.day != null)
++                    view.dayTextField.setText( defaults.day );
++                if(defaults.year != null)
++                    view.yearSpinner.setValue( defaults.year );
+ 
+-                    if(defaults.description != null)
+-                        view.descriptionArea.setText( defaults.description );
+-                    if(defaults.locationNote != null)
+-                        view.locationNoteArea.setText( defaults.locationNote );
+-                    if(defaults.occurrenceNote != null)
+-                        view.occurrenceNoteArea.setText( defaults.occurrenceNote );
++                if(defaults.description != null)
++                    view.descriptionArea.setText( defaults.description );
++                if(defaults.locationNote != null)
++                    view.locationNoteArea.setText( defaults.locationNote );
++                if(defaults.occurrenceNote != null)
++                    view.occurrenceNoteArea.setText( defaults.occurrenceNote );
++            } catch (Exception e) {
++                logger.error(&quot;Unable to restore default values! &quot; + e.getMessage());
++            }
+                     
+-                } 
+-                // ===== Forget the list of default values. ===== 
+-                else if( FORGET.equals(command)) {
+-                    String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                    storedValues.remove( databaseID );
+-                    save();
+-                }
+-                // ===== Remember the list of default values. ===== 
+-                else {
+-                    // Gather the information from dialogs.
+-                    String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                    storedValues.remove( databaseID );
+-                    InterestingFields defaults = new InterestingFields();
++        }
++        
++        /**
++         * Remember the state of the most important fields.
++         */
++        public void remember() {
++            try {
++                // Gather the information from dialogs.
++                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
++                storedValues.remove( databaseID );
++                InterestingFields defaults = new InterestingFields();
+ 
+-                    defaults.territory = (Pair&lt;String, Integer&gt;) view.territoryNameCombo.getSelectedItem();
+-                    defaults.phytochorion = (Pair&lt;String, Integer&gt;) view.phytNameCombo.getSelectedItem();
+-                    defaults.town = (Pair&lt;String, Integer&gt;) view.townComboBox.getSelectedItem();
+-                    defaults.publication = (Pair&lt;String, Integer&gt;) view.publicationCombo.getSelectedItem();
+-                    defaults.project = (Pair&lt;String, Integer&gt;) view.projectCombo.getSelectedItem();
+-                    defaults.quadrant = evaluate( view.quadrantTextField.getText() );
+-                    defaults.country = evaluate( (String) view.phytCountryCombo.getSelectedItem() );
+-                    defaults.herbarium = evaluate( view.herbariumTextField.getText() );
+-                    defaults.source = evaluate( (String) view.sourceCombo.getSelectedItem() );
+-                    defaults.latitude = evaluate( view.latitudeTextField.getText() );
+-                    defaults.longitude = evaluate( view.longitudeTextField.getText() );
+-                    defaults.altitude = evaluate( view.altitudeTextField.getText() ); 
+-                    defaults.time = evaluate( view.timeTextField.getText() );
+-                    defaults.day = evaluate( view.dayTextField.getText() );
+-                    defaults.month = view.monthChooser.getMonth();
+-                    defaults.year = (Integer) view.yearSpinner.getValue();
+-                    defaults.description = evaluate( view.descriptionArea.getText() );
+-                    defaults.locationNote = evaluate( view.locationNoteArea.getText() );
+-                    defaults.occurrenceNote = evaluate( view.occurrenceNoteArea.getText() );
++                defaults.territory = evaluate( view.territoryNameCombo.getSelectedItem() );
++                defaults.phytochorion = evaluate( view.phytNameCombo.getSelectedItem() );
++                defaults.town = evaluate( view.townComboBox.getSelectedItem() );
++                defaults.publication = evaluate( view.publicationCombo.getSelectedItem() );
++                defaults.project = evaluate( view.projectCombo.getSelectedItem() );
++                defaults.quadrant = evaluate( view.quadrantTextField.getText() );
++                defaults.country = evaluate( (String) view.phytCountryCombo.getSelectedItem() );
++                defaults.herbarium = evaluate( view.herbariumTextField.getText() );
++                defaults.source = evaluate( (String) view.sourceCombo.getSelectedItem() );
++                defaults.latitude = evaluate( view.latitudeTextField.getText() );
++                defaults.longitude = evaluate( view.longitudeTextField.getText() );
++                defaults.altitude = evaluate( view.altitudeTextField.getText() ); 
++                defaults.time = evaluate( view.timeTextField.getText() );
++                defaults.day = evaluate( view.dayTextField.getText() );
++                defaults.month = view.monthChooser.getMonth();
++                defaults.year = (Integer) view.yearSpinner.getValue();
++                defaults.description = evaluate( view.descriptionArea.getText() );
++                defaults.locationNote = evaluate( view.locationNoteArea.getText() );
++                defaults.occurrenceNote = evaluate( view.occurrenceNoteArea.getText() );
+ 
+-                    storedValues.put( databaseID, defaults );
+-                    // Store them.
+-                    save(); 
+-                }
+-            } catch(Exception x) {
+-                //  Never mind..
++                storedValues.put( databaseID, defaults );
++                // Store them.
++                save(); 
++            } catch(Exception e) {
++                //logger.error(&quot;Unable to remember default values! &quot; + e.getMessage());
++                e.printStackTrace();
+             }
+         }
+         
++        /**
++         * Forget the state of the most important fields.
++         */
++        public void forget() {
++            try {
++                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
++                storedValues.remove( databaseID );
++                save();
++            } catch(Exception e) {
++                logger.error(&quot;Unable to forget default values! &quot; + e.getMessage());
++            }
++        }
++
++        /**
++         * Take action = remember the state of fields.
++         */
++        public void actionPerformed(ActionEvent e) {
++            logger.debug(&quot;Trying to memorize the default values for this dialog.&quot;);
++            remember();
++        }
++    }
++
+         
+-    }
+     
+-    
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-10-18 15:13:28 UTC (rev 853)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-10-18 21:05:21 UTC (rev 854)
+@@ -1047,8 +1047,10 @@
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;authButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;rememberButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;412&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;325&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;okButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -1067,6 +1069,7 @@
+                               &lt;Component id=&quot;okButton&quot; linkSize=&quot;13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;requiredInfoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;authButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;rememberButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace pref=&quot;16&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+@@ -1122,6 +1125,14 @@
+                     &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                   &lt;/AuxValues&gt;
+                 &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;rememberButton&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;rem&quot;/&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
+               &lt;/SubComponents&gt;
+             &lt;/Container&gt;
+             &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;extendedPanel&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-10-18 15:13:28 UTC (rev 853)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-10-18 21:05:21 UTC (rev 854)
+@@ -182,6 +182,7 @@
+         settingsButton = new javax.swing.JButton();
+         requiredInfoLabel = new javax.swing.JLabel();
+         authButton = new javax.swing.JButton();
++        rememberButton = new javax.swing.JButton();
+         extendedPanel = new javax.swing.JPanel();
+         jScrollPane6 = new javax.swing.JScrollPane();
+         occurrenceTable = new javax.swing.JTable();
+@@ -647,6 +648,8 @@
+ 
+         authButton.setText(&quot;aut&quot;);
+ 
++        rememberButton.setText(&quot;rem&quot;);
++
+         org.jdesktop.layout.GroupLayout buttonPanelLayout = new org.jdesktop.layout.GroupLayout(buttonPanel);
+         buttonPanel.setLayout(buttonPanelLayout);
+         buttonPanelLayout.setHorizontalGroup(
+@@ -659,15 +662,17 @@
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(authButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(rememberButton)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(requiredInfoLabel)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 412, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 325, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+                 .addContainerGap())
+         );
+ 
+-        buttonPanelLayout.linkSize(new java.awt.Component[] {authButton, cancelButton, helpButton, okButton, settingsButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++        buttonPanelLayout.linkSize(new java.awt.Component[] {authButton, cancelButton, helpButton, okButton, rememberButton, settingsButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+ 
+         buttonPanelLayout.setVerticalGroup(
+             buttonPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -679,7 +684,8 @@
+                     .add(cancelButton)
+                     .add(okButton)
+                     .add(requiredInfoLabel)
+-                    .add(authButton))
++                    .add(authButton)
++                    .add(rememberButton))
+                 .addContainerGap(16, Short.MAX_VALUE))
+         );
+ 
+@@ -1331,6 +1337,7 @@
+     protected javax.swing.JLabel publicationLabel;
+     protected javax.swing.JLabel quadrantLabel;
+     protected javax.swing.JTextField quadrantTextField;
++    protected javax.swing.JButton rememberButton;
+     private javax.swing.JLabel requiredInfoLabel;
+     protected javax.swing.JButton settingsButton;
+     protected javax.swing.JComboBox sourceCombo;
+
+Added: trunk/src/net/sf/plantlore/client/overview/InterestingFields.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/InterestingFields.java	2006-10-18 15:13:28 UTC (rev 853)
++++ trunk/src/net/sf/plantlore/client/overview/InterestingFields.java	2006-10-18 21:05:21 UTC (rev 854)
+@@ -0,0 +1,18 @@
++package net.sf.plantlore.client.overview;
++
++import net.sf.plantlore.common.Pair;
++
++/**
++ * The holder object of most important fields in the dialog whose state should be stored.
++ * The list of currently selected authors is not saved because that component may be a subject to change.
++ *
++ * This class must cannot be an inner class because then that inner class would become
++ * an object of serialization as well!
++ *
++ * @author kaimu
++ */
++public class InterestingFields implements java.io.Serializable {
++    public Pair&lt;String, Integer&gt; territory, phytochorion, town, publication, project;
++    public String description, locationNote, occurrenceNote, latitude, longitude, altitude, country, time, day, quadrant, herbarium, source;
++    public Integer month, year;
++}
+\ No newline at end of file
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001227.html">[Plantlore-dev] r853 - trunk/src/net/sf/plantlore/client/overview
+</A></li>
+	<LI>Next message: <A HREF="001230.html">[Plantlore-dev] [Bug #7749] Selecting an Author Name or a Revision	transfers focus
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1229">[ date ]</a>
+              <a href="thread.html#1229">[ thread ]</a>
+              <a href="subject.html#1229">[ subject ]</a>
+              <a href="author.html#1229">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

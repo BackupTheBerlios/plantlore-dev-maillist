@@ -1,0 +1,368 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r679 - in trunk/src/net/sf/plantlore:	client/checklist client/occurrenceimport client/tableimport	client/tableimport/parsers middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r679%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20client/occurrenceimport%20client/tableimport%0A%09client/tableimport/parsers%20middleware%20server&In-Reply-To=%3C200609051154.k85BsR9k013282%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000938.html">
+   <LINK REL="Next"  HREF="000940.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r679 - in trunk/src/net/sf/plantlore:	client/checklist client/occurrenceimport client/tableimport	client/tableimport/parsers middleware server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r679%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20client/occurrenceimport%20client/tableimport%0A%09client/tableimport/parsers%20middleware%20server&In-Reply-To=%3C200609051154.k85BsR9k013282%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r679 - in trunk/src/net/sf/plantlore:	client/checklist client/occurrenceimport client/tableimport	client/tableimport/parsers middleware server">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 13:54:27 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000938.html">[Plantlore-dev] r678 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000940.html">[Plantlore-dev] r680 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#939">[ date ]</a>
+              <a href="thread.html#939">[ thread ]</a>
+              <a href="subject.html#939">[ subject ]</a>
+              <a href="author.html#939">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-05 13:54:20 +0200 (Tue, 05 Sep 2006)
+New Revision: 679
+
+Modified:
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+   trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableParser.java
+   trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+   trunk/src/net/sf/plantlore/server/SubQueryImplementation.java
+Log:
+Extremely nasty bug fixed: resultset identifier &amp; its associated scrollable result were not removed in closeQuery(). This posed extreme memory requirements particularly during import (several thousands scrollable results were kept in the database layer which lead to increased memory consumption).
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -63,7 +63,6 @@
+ 		public void actionPerformed(ActionEvent arg0) {
+ 			model.addLines( view.checklist.getSelectedValues() );
+ 			view.setVisible(false);
+-			view.checklist.clearSelection();
+ 		}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -131,4 +131,15 @@
+     protected JFileChooser choice;
+ 
+     
++    @Override
++    public void setVisible(boolean arg0) {
++    	if( !arg0 ) {
++    		checklist.clearSelection();
++    		if(checklist.getModel().getSize() &gt; 0)
++    			checklist.ensureIndexIsVisible(0);
++    	}
++    	
++    	super.setVisible(arg0);
++    }
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -85,6 +85,9 @@
+ 			setChanged();
+ 			notifyObservers( TABLES_TO_UPDATE );
+ 		}
++		
++		setStatusMessage(L10n.getFormattedString(&quot;Import.RecordsProcessed&quot;, count, rejected));
++		
+ 		fireStopped(null);
+ 		return null;
+ 	}
+@@ -113,8 +116,8 @@
+ 	throws DBLayerException, RemoteException {
+ 		if( isCanceled() ) 
+ 			throw canceledByUser;
++		setStatusMessage(L10n.getFormattedString(&quot;Import.RecordsProcessed&quot;, count, rejected));
+ 		count++;
+-		setStatusMessage(L10n.getFormattedString(&quot;Import.RecordsProcessed&quot;, count, rejected));
+ 		try {
+ 			if(aos == null || aos.length == 0) {
+ 				logger.error(&quot;The occurrence record is either corrupted or incomplete. It will be skipped.&quot;);
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -89,6 +89,7 @@
+ 		setStatusMessage(L10n.getString(&quot;Import.Initialized&quot;));
+ 		setLength( parser.getNumberOfRecords() );
+ 				
++		try {
+ 		while( !isCanceled() &amp;&amp; parser.hasNext() ) {
+ 			DataHolder data = null;
+ 			try {
+@@ -153,6 +154,7 @@
+ 					updated ++;
+ 					break;
+ 				}
++				
+ 			} catch(ImportException ie) {
+ 				logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful! &quot; + ie.getMessage());
+ 				//setStatusMessage( ie.getMessage() );
+@@ -161,9 +163,15 @@
+ 				//setStatusMessage( L10n.getFormattedString(&quot;Import.UnableToProcess&quot;, count) + &quot; &quot; + 
+ 				//		((de.getMessage() == null) ? L10n.getString(&quot;Import.UnknownReason&quot;) : de.getMessage()) );
+ 			}
++			
+ 		}
++		}
++		finally {
++			parser.cleanup();
++		}
+ 		
+ 		
++		
+ 		if( !isCanceled() ) {
+ 			logger.info(&quot;Import completed. &quot;+count+&quot; records processed (&quot;+
+ 					inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+@@ -179,6 +187,8 @@
+ 		setChanged();
+ 		notifyObservers( new PlantloreConstants.Table[] { PlantloreConstants.classToTable.get(table) } );
+ 		
++		setStatusMessage(L10n.getFormattedString(&quot;Import.RecordsProcessed&quot;, count, (count - deleted - updated - inserted) ));
++		
+ 		fireStopped(null);
+ 		return null;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableParser.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableParser.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -60,5 +60,10 @@
+ 	 * @return	The total number of records on the input, or -1 if the number could not be determined. 
+ 	 */
+ 	int getNumberOfRecords();
+-
++	
++	/**
++	 * Made some final cleanup.
++	 * 
++	 */
++	void cleanup();
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -70,6 +70,7 @@
+ 	private int numberOfRecords = -1;
+ 	private Class rootTable;
+ 	private Iterator recIterator;
++	private SAXReader saxReader;
+ 	
+ 	private Reader reader;
+ 	
+@@ -100,8 +101,11 @@
+ 	 */
+ 	public Class initialize() throws ParserException {
+ 		try {
+-        	SAXReader saxReader = new SAXReader();
++        	saxReader = new SAXReader();
++        	
++        	System.out.println(&quot;ABOUT TO PARSER THE DOCUMENT WITH DOM4J&quot;);
+             document = saxReader.read( reader );
++            System.out.println(&quot;COMPLETED.&quot;);
+             
+             Node root = document.getRootElement();
+             if(root == null)
+@@ -149,8 +153,9 @@
+ 			
+ 			Node node = (Node) recIterator.next();
+ 			reconstruct( data.record, node );
+-			node = node.getParent();
+-			String name = (node == null) ? &quot;add&quot; : node.getName().toLowerCase();
++			Node parent = node.getParent();
++			String name = (parent == null) ? &quot;add&quot; : parent.getName().toLowerCase();
++			node.detach();
+ 			
+ 			if( name.startsWith(&quot;add&quot;) )
+ 				data.action = Action.INSERT;
+@@ -163,6 +168,7 @@
+ 					throw new ParserException(L10n.getString(&quot;Error.MissingUpdateRecord&quot;));
+ 				data.replacement = (Record)rootTable.newInstance();
+ 				reconstruct( data.replacement, node );
++				node.detach();
+ 			}
+ 		} catch(IllegalAccessException e) {
+ 			throw new ParserException(L10n.getString(&quot;Error.Internal&quot;));
+@@ -196,5 +202,18 @@
+     		part.setValue(property, value);
+     	}
+     }
++
++    
++	public void cleanup() {
++		recIterator = null;
++		saxReader.resetHandlers();
++		document.clearContent();
++		document = null;
++		data = null;
++		saxReader = null;
++		try {
++			reader.close();
++		} catch(Exception e) {}
++	}
+      
+ }
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -100,4 +100,9 @@
+      */
+     void addAssociation(String associationPath) throws RemoteException;
+     
++    
++    Integer getResultsetIdentifier() throws RemoteException;
++    
++    void setResultsetIdentifier(Integer id) throws RemoteException;
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -718,6 +718,7 @@
+         // Update current maximum result id and save the results
+         maxResultId++; 
+         results.put(maxResultId, res);
++        sq.setResultsetIdentifier( maxResultId );
+         return maxResultId;
+     }
+        
+@@ -791,7 +792,6 @@
+      *  @param query query we want to close
+      */
+     public void closeQuery(SelectQuery query) throws RemoteException, DBLayerException {
+-        
+         // TODO: Problem - we don't have any session for subqueries
+         // TODO: We should probably catch HibernateException...
+         Session session = sessions.remove(query);
+@@ -802,13 +802,16 @@
+         }
+         session.close();     
+     	// Remove the query from the list of opened queries
+-        SelectQuery selectQuery = queries.remove(query);        
++        SelectQuery selectQuery = queries.remove(query);
+         // Unexport the SelectQuery object
+         if(undertaker != null &amp;&amp; selectQuery != null) {
+             try {
+                 UnicastRemoteObject.unexportObject(selectQuery, true);
+             } catch(NoSuchObjectException e) {}
+         }
++        
++        Integer resultsetIdentifier = selectQuery.getResultsetIdentifier();
++        results.remove( resultsetIdentifier  );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -46,6 +46,7 @@
+ public class SelectQueryImplementation implements SelectQuery {
+ 	
+ 	private static final long serialVersionUID = 2006060433450880L;
++	private Integer resultsetIdentifier = null;
+ 	
+     // Hibernate criteria used in criteria query
+     private Criteria criteria;
+@@ -402,4 +403,14 @@
+     public void addAssociation(String associationPath) throws RemoteException {
+         criteria.createCriteria(associationPath);
+     }
++
++	public Integer getResultsetIdentifier() throws RemoteException {
++		return resultsetIdentifier;
++	}
++
++	public synchronized void setResultsetIdentifier(Integer id) throws RemoteException {
++		if(resultsetIdentifier != null)
++			throw new IllegalArgumentException(&quot;The identifier is set already!&quot;);
++		resultsetIdentifier = id;
++	}
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/SubQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SubQueryImplementation.java	2006-09-05 10:49:13 UTC (rev 678)
++++ trunk/src/net/sf/plantlore/server/SubQueryImplementation.java	2006-09-05 11:54:20 UTC (rev 679)
+@@ -328,4 +328,14 @@
+     public void addAssociation(String associationPath) throws RemoteException {
+         criteria.createCriteria(associationPath);
+     }
++
++	public Integer getResultsetIdentifier() throws RemoteException {
++		// TODO Auto-generated method stub
++		return null;
++	}
++
++	public void setResultsetIdentifier(Integer id) throws RemoteException {
++		// TODO Auto-generated method stub
++		
++	}
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000938.html">[Plantlore-dev] r678 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000940.html">[Plantlore-dev] r680 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#939">[ date ]</a>
+              <a href="thread.html#939">[ thread ]</a>
+              <a href="subject.html#939">[ subject ]</a>
+              <a href="author.html#939">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

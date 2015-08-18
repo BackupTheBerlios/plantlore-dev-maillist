@@ -1,0 +1,380 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r367 - in trunk/src/net/sf/plantlore: client/export/builders client/imports client/imports/parsers common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r367%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export/builders%20client/imports%20client/imports/parsers%20common/record&In-Reply-To=%3C200605270305.k4R35fo5014146%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000418.html">
+   <LINK REL="Next"  HREF="000421.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r367 - in trunk/src/net/sf/plantlore: client/export/builders client/imports client/imports/parsers common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r367%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export/builders%20client/imports%20client/imports/parsers%20common/record&In-Reply-To=%3C200605270305.k4R35fo5014146%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r367 - in trunk/src/net/sf/plantlore: client/export/builders client/imports client/imports/parsers common/record">krater at berlios.de
+       </A><BR>
+    <I>Sat May 27 05:05:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000418.html">[Plantlore-dev] r366 - trunk/src/net/sf/plantlore/client/export/builders
+</A></li>
+        <LI>Next message: <A HREF="000421.html">[Plantlore-dev] r368 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#420">[ date ]</a>
+              <a href="thread.html#420">[ thread ]</a>
+              <a href="subject.html#420">[ subject ]</a>
+              <a href="author.html#420">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-27 05:05:26 +0200 (Sat, 27 May 2006)
+New Revision: 367
+
+Added:
+   trunk/src/net/sf/plantlore/client/imports/parsers/
+   trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+   trunk/src/net/sf/plantlore/client/imports/AbstractParser.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+   trunk/src/net/sf/plantlore/client/imports/Parser.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+XMLBuilder modified a bit.
+
+Some records must have been fixed (possible null-pointer exceptions).
+
+My vision of the fucking XMLParser in imports.parsers/XMLParser.java; however that fucking piece of fuck won't work because of that unbelievable fucking dom4j. Why the fuck that fucking code works fine at one fucking place and returns a fucking nonsense at another?!
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -24,7 +24,7 @@
+ 
+     private Document document;
+     private String filename;
+-    private Element authors;
++    private Element occurrence;
+     
+     /**
+      * Create a new XML Builder.
+@@ -85,7 +85,7 @@
+     throws IOException {
+     	// One Occurrence can have many AuthorOccurrences [AOs]. 
+     	// All those AOs are in their own special node &lt;authors&gt;&lt;/authors&gt;.
+-    	decompose( (record instanceof AuthorOccurrence) ? authors : document.getRootElement(), record);
++    	decompose( (record instanceof AuthorOccurrence) ? occurrence : document.getRootElement(), record);
+     }
+     
+     /**
+@@ -100,7 +100,7 @@
+     	Element current = father.addElement(record.getClass().getSimpleName().toLowerCase());
+     	// Every occurrence may have 0..N associated AuthorOccurrences.
+     	if(record instanceof Occurrence) 
+-    		authors = current.addElement(&quot;authors&quot;);
++    		occurrence = current;
+     	
+     	for( String property : record.getProperties() ) {
+     		String value = record.getValue(property) == null ? &quot;&quot; : record.getValue(property).toString();
+
+Modified: trunk/src/net/sf/plantlore/client/imports/AbstractParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/AbstractParser.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/client/imports/AbstractParser.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -8,12 +8,10 @@
+ public abstract class AbstractParser implements Parser {
+ 	
+ 	protected Reader reader;
+-	protected Record torso;
++	protected AuthorOccurrence ao;
+ 	
+-	
+ 	public AbstractParser(Reader reader) {
+ 		this.reader = reader;
+-		torso = new AuthorOccurrence().createTorso();
+ 	}
+ 	
+ 	
+@@ -24,12 +22,9 @@
+ 	
+ 	public Record nextPart(Class table) 
+ 	throws ParserException {
+-		return torso.findSubrecord( table );
+-		// + nacteni dalsiho zaznamu k teto tabulce - tyka se jenom AO
++		return null;
+ 	}
+ 	
+-
+-
+ 	public Action intentedFor() {
+ 		return Parser.Action.UNKNOWN;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -99,6 +99,7 @@
+ 			Exception e = (Exception) parameter;
+ 			setTitle(L10n.getString(&quot;Import.Failed&quot;));
+ 			status.setText(e.getMessage());
++			progress.setIndeterminate(false);
+ 			progress.setValue(0);
+ 			abort.setText(L10n.getString(&quot;Import.Hide&quot;));
+ 			exceptionOccured = true;
+@@ -107,6 +108,7 @@
+ 			setTitle(L10n.getString(&quot;Import.Aborted&quot;));
+ 			count = model.getNumberOfImported();
+ 			status.setText(count + L10n.getString(&quot;Import.RecordsImported&quot;));
++			progress.setIndeterminate(false);
+ 			progress.setValue(0);
+ 			abort.setText(L10n.getString(&quot;Import.Hide&quot;));
+ 		} 
+@@ -116,6 +118,7 @@
+ 			setTitle(L10n.getString(&quot;Import.Completed&quot;));
+ 			status.setText(count + L10n.getString(&quot;Import.RecordsImported&quot;) + &quot;, &quot; 
+ 					+ rejected + L10n.getString(&quot;Import.RecordsRejected&quot;));
++			progress.setIndeterminate(false);
+ 			progress.setMaximum(100);
+ 			progress.setValue(100);
+ 			abort.setText(L10n.getString(&quot;Import.Hide&quot;));
+
+Modified: trunk/src/net/sf/plantlore/client/imports/Parser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -92,7 +92,7 @@
+ 	 * @return	The action the whole record is supposed to undergo.
+ 	 * @see #nextPart(Class)
+ 	 */
+-	Action fetchNextRecord();
++	Action fetchNextRecord() throws ParserException;
+ 	
+ 	/**
+ 	 * Get a part of the whole record. 
+
+Added: trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -0,0 +1,151 @@
++package net.sf.plantlore.client.imports.parsers;
++
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.Reader;
++import java.util.Iterator;
++import java.util.List;
++
++import net.sf.plantlore.client.imports.AbstractParser;
++import net.sf.plantlore.common.exception.ParserException;
++import net.sf.plantlore.common.record.*;
++import net.sf.plantlore.l10n.L10n;
++//import org.apache.log4j.Logger;
++import org.dom4j.Document;
++import org.dom4j.DocumentException;
++import org.dom4j.Element;
++import org.dom4j.Node;
++import org.dom4j.io.SAXReader;
++
++
++/**
++ *
++ * @author Lada Oberreiterova
++ */
++public class XMLParser extends AbstractParser {
++
++    private Document document;
++    private List occurrences;
++    private Iterator occIterator, aoIterator;
++    private Node currentOccurrence;
++    
++    private Occurrence occ;
++   
++
++    
++    public XMLParser(Reader reader) {
++        super(reader);               
++    }
++    
++    
++    public int getNumberOfRecords() {
++    	return occurrences.size();
++    }
++
++    
++    public void initialize() 
++    throws ParserException {
++        SAXReader saxReader = new SAXReader();        
++        try {            
++            document = saxReader.read( reader );
++        } catch (DocumentException ex) {
++            throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
++        } 
++        occurrences = document.selectNodes(&quot;//occurrence&quot;);
++        occIterator = occurrences.iterator();
++    }
++
++    
++    public void cleanup() {}
++
++    
++    public boolean hasNextRecord() {        
++        return occIterator.hasNext();
++    }
++
++    
++    public Action fetchNextRecord() 
++    throws ParserException {
++    	currentOccurrence = (Node) occIterator.next();
++    	List authors = currentOccurrence.selectNodes(AuthorOccurrence.class.getSimpleName());
++    	
++    	if(authors == null || authors.size() &lt;= 0)
++    		throw new ParserException(&quot;Error.IncompleteRecord&quot;);
++    		
++    	aoIterator = authors.iterator();    	
++    	    	
++    	ao = (AuthorOccurrence) new AuthorOccurrence().createTorso();
++    	occ = ao.getOccurrence();
++    	
++    	reconstruct( occ, currentOccurrence );
++    	
++        return Action.UNKNOWN;
++    }
++
++    
++    private void reconstruct(Record part, Node node) {
++    	if(part == null || node == null)
++    		return;
++    	// Retrieve properties.
++    	for(String property : part.getProperties()) {
++    		part.setValue(property, node.valueOf(property));
++    	}
++    	// Reconstruct subrecords as well.
++    	List&lt;String&gt; foreignKeys = part.getForeignKeys();
++    	if(part instanceof AuthorOccurrence)
++    		foreignKeys.remove(AuthorOccurrence.OCCURRENCE); // Occurrence is already reconstructed.
++    	for(String key : foreignKeys) {
++    		Node subNode = node.selectSingleNode(key);
++    		if(subNode != null)
++    			reconstruct( (Record)part.getValue(key), subNode );
++    		else
++    			part.setValue(key, null);
++    	}
++    }
++    
++    public Record nextPart(Class table) 
++    throws ParserException {
++    	if(table == AuthorOccurrence.class) {
++    		Node currentAO = (Node) aoIterator.next();
++    		reconstruct( ao, currentAO );
++    		return ao;
++    	} 
++    	else 
++    		return occ.findSubrecord(table);
++    }
++    
++    
++    public boolean hasNextPart(Class table) {
++    	if(table == AuthorOccurrence.class &amp;&amp; aoIterator.hasNext())
++    		return true;
++    	else
++    		return false;
++    }
++
++    
++    
++    public static void main(String[] args) 
++    throws FileNotFoundException {
++        XMLParser xmlParser = new XMLParser(new FileReader(&quot;c:/Documents and Settings/yaa/Dokumenty/Plantlore/part.OK.xml&quot;));       
++         try {
++             xmlParser.initialize();
++             while (xmlParser.hasNextRecord()) {
++            	 xmlParser.fetchNextRecord();
++            	 
++                 Occurrence occ = (Occurrence) xmlParser.nextPart(Occurrence.class);
++                 System.out.println(&quot;===========================================&quot;);
++                 System.out.println(occ);
++                 System.out.println(&quot;   -------------------------------------------------------&quot;);
++                 while (xmlParser.hasNextPart(AuthorOccurrence.class)) {
++                	 System.out.println(&quot;   -------------------------------------------------------&quot;);
++                	 AuthorOccurrence ao =  (AuthorOccurrence) xmlParser.nextPart(AuthorOccurrence.class);
++                	 System.out.println(&quot;   &quot; + ao);
++                 }  
++                 
++                 System.out.println(&quot;===========================================&quot;);
++             }
++         } catch (ParserException ex) {
++             ex.printStackTrace();
++         }
++    }
++}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -143,7 +143,7 @@
+     }
+     
+     public Date checkDate(Object value) {
+-        if (value.getClass() == String.class) {
++        if (value instanceof String) {
+              DateFormat myDateFormat = new SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;);                          
+             try {
+                 return myDateFormat.parse((String) value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-26 23:40:13 UTC (rev 366)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-27 03:05:26 UTC (rev 367)
+@@ -268,8 +268,11 @@
+ 	public boolean areAllNNSet() {
+ 		for( String column : getNN() ) { 
+ 			Object value = getValue(column);
+-			System.out.println(&quot; # &quot;+this.getClass().getSimpleName()+&quot;.&quot;+column+&quot; = [&quot;+value+&quot;].&quot;);
+-			if( value == null ) return false;
++			//System.out.println(&quot; # &quot;+this.getClass().getSimpleName()+&quot;.&quot;+column+&quot; = [&quot;+value+&quot;].&quot;);
++			if( value == null ) {
++				System.out.println(getClass().getSimpleName()+&quot;.&quot;+column+&quot; = 0&quot;);
++				return false;
++			}
+ 			if( value instanceof Record &amp;&amp; !((Record)value).areAllNNSet() ) return false;
+ 		}
+ 		return true;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000418.html">[Plantlore-dev] r366 - trunk/src/net/sf/plantlore/client/export/builders
+</A></li>
+	<LI>Next message: <A HREF="000421.html">[Plantlore-dev] r368 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#420">[ date ]</a>
+              <a href="thread.html#420">[ thread ]</a>
+              <a href="subject.html#420">[ subject ]</a>
+              <a href="author.html#420">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,170 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r290 - trunk/src/net/sf/plantlore/common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r290%20-%20trunk/src/net/sf/plantlore/common/record&In-Reply-To=%3C200605172247.k4HMlIIQ009481%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000341.html">
+   <LINK REL="Next"  HREF="000343.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r290 - trunk/src/net/sf/plantlore/common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r290%20-%20trunk/src/net/sf/plantlore/common/record&In-Reply-To=%3C200605172247.k4HMlIIQ009481%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r290 - trunk/src/net/sf/plantlore/common/record">krater at berlios.de
+       </A><BR>
+    <I>Thu May 18 00:47:18 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000341.html">[Plantlore-dev] r289 - in trunk/src/net/sf/plantlore/client: history metadata publication user
+</A></li>
+        <LI>Next message: <A HREF="000343.html">[Plantlore-dev] r291 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#342">[ date ]</a>
+              <a href="thread.html#342">[ thread ]</a>
+              <a href="subject.html#342">[ subject ]</a>
+              <a href="author.html#342">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-18 00:47:16 +0200 (Thu, 18 May 2006)
+New Revision: 290
+
+Modified:
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+Recursive value retrieval.
+
+Occurence sample = new Occurrence(...);
+sample.getValue(Village.class, Village.NAME);   ~&gt; returns the Occurrence.Habitat.NearestVillage.Name
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-17 19:13:14 UTC (rev 289)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-17 22:47:16 UTC (rev 290)
+@@ -3,6 +3,7 @@
+ import java.io.Serializable;
+ import java.lang.reflect.Method;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.HashSet;
+ import java.util.Hashtable;
+ 
+@@ -27,18 +28,17 @@
+ 	 * The other tables are database specific and are used by our System only
+ 	 * (concerns History, LastUpdate, User, AccessRights, and possibly more).
+ 	 */
+-	public final static Class[] BASIC_TABLES = new Class[] { 
+-		Author.class, AuthorOccurrence.class, Habitat.class,
+-		Metadata.class, Occurrence.class, Phytochorion.class,
+-		Plant.class, Publication.class, Territory.class,
+-		Village.class 
++	public final static Class[] BASIC_TABLES = new Class[] {
++		Occurrence.class, Habitat.class, Territory.class, Village.class, Phytochorion.class,
++		Plant.class, Metadata.class, Publication.class, Author.class, AuthorOccurrence.class 
+ 	};
+ 	
+ 	
+ 	/**
+ 	 * A set of tables that cannot be changed.
+ 	 */
+-	public final static HashSet&lt;Class&gt; IMMUTABLE = new HashSet( 10 );
++	public final static HashSet&lt;Class&gt; IMMUTABLE = new HashSet( Arrays.asList(
++			Plant.class, Territory.class, Village.class, Phytochorion.class, Metadata.class) );
+ 	
+ 	
+ 	/** The list of all getters (of all properties of all tables). */
+@@ -47,13 +47,6 @@
+ 	
+ 	/** Pre-load all getters. */
+ 	static {
+-		
+-		IMMUTABLE.add(Plant.class);
+-		IMMUTABLE.add(Territory.class);
+-		IMMUTABLE.add(Village.class);
+-		IMMUTABLE.add(Phytochorion.class);
+-		IMMUTABLE.add(Metadata.class);
+-		
+ 		// Take all basic tables.
+ 		for( Class table : BASIC_TABLES)
+ 			try {
+@@ -67,6 +60,15 @@
+ 			catch(InstantiationException e) { e.printStackTrace(); }
+ 	}
+ 
++	
++	public String alias() {
++		return alias( getClass() );
++	}
++	
++	public static String alias(Class table) {
++		return &quot;A&quot; + table.getSimpleName();
++	}
++	
+ 
+ 	/**
+ 	 * Return the value in the specified column.
+@@ -84,6 +86,29 @@
+ 	}
+ 	
+ 	/**
++	 * Return the value of the specified subrecord's column.
++	 *
++	 * @param table	The subrecord you are interested in.
++	 * @param column The name of the subrecord's column whose value you wish to obtain.
++	 */
++	public Object getValue(Class table, String column) {
++		Record subrecord = (  getClass().equals(table) ? this : findSubrecord(this, table)  );
++		return (subrecord == null) ? null : subrecord.getValue(column);
++	}
++	
++	private Record findSubrecord(Record base, Class type) {
++		for(String key : base.getForeignKeys()) {
++			Record sub = (Record)base.getValue(key);
++			if(sub == null) continue; // As a matter of fact this can happen - Publication can be NULL.
++			if(sub.getClass().equals(type)) return sub;
++			else sub = findSubrecord( sub, type); // dig deeper...
++			if(sub != null) return sub;
++		}
++		return null;
++	}
++	
++	
++	/**
+ 	 * Set the value in the specified column.
+ 	 * 
+ 	 * @param column	The name of the column.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000341.html">[Plantlore-dev] r289 - in trunk/src/net/sf/plantlore/client: history metadata publication user
+</A></li>
+	<LI>Next message: <A HREF="000343.html">[Plantlore-dev] r291 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#342">[ date ]</a>
+              <a href="thread.html#342">[ thread ]</a>
+              <a href="subject.html#342">[ subject ]</a>
+              <a href="author.html#342">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

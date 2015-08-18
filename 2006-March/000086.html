@@ -1,0 +1,162 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r87 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r87%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603302106.k2UL6eOu004358%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000085.html">
+   <LINK REL="Next"  HREF="000087.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r87 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r87%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603302106.k2UL6eOu004358%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r87 - trunk/src/net/sf/plantlore/server">krater at berlios.de
+       </A><BR>
+    <I>Thu Mar 30 23:06:40 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000085.html">[Plantlore-dev] r86 - trunk/documentation
+</A></li>
+        <LI>Next message: <A HREF="000087.html">[Plantlore-dev] r88 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#86">[ date ]</a>
+              <a href="thread.html#86">[ thread ]</a>
+              <a href="subject.html#86">[ subject ]</a>
+              <a href="author.html#86">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-03-30 23:06:39 +0200 (Thu, 30 Mar 2006)
+New Revision: 87
+
+Modified:
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+Log:
+Command line server manager. This temporary solution allows the user to control the running server or start another server.
+
+Usage: java net.sf.plantlore.server.plantlore [command] [host] [port]
+where: command = start | stop | who | kick=id; default is `start`
+       host = hostname (not IP); default is `localhost`
+       port = port; default is `1099`
+
+Do not forget that once the server runs on a remote machine, the java.policy must be set adequately on both machines
+(SocketPermission, FilePermission)!
+
+Besides, the client must have classes needed to create stubs for SelectQuery, DBLayer.
+This can be ensured by generating stubs manually from SelectQueryImplementation and HibernateDBLayer (using the rmic compiler).
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-03-30 03:21:53 UTC (rev 86)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-03-30 21:06:39 UTC (rev 87)
+@@ -1,9 +1,75 @@
+ package net.sf.plantlore.server;
+ 
++
++import java.rmi.registry.LocateRegistry;
++import java.rmi.registry.Registry;
++import java.util.Collection;
++
++
++/**
++ * Temporary solution.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 30.3.2006
++ * @version beta not tested
++ */
+ public class Plantlore {
++	
++	// Probably some more sophisticated method for obtaining a password from the user :)
++	public static String getPassword() {
++		return &quot;poweroverwhelming&quot;;
++	}
+ 
++	/**
++	 * 
++	 * @param args Controlling the server from the command line:
++	 * 		start|stop|who|kick=id [host] [port]
++	 */
+ 	public static void main(String[] args) {
+ 		
++		int m = args.length, port = RMIServer.DEFAULT_PORT, id = -1;
++		String command = &quot;start&quot;, host = null;
++		
++		// Parse the command line.
++		if(m &gt;= 1) command = args[0];
++		if(m &gt;= 2) try { int c = Integer.parseInt(args[1]); port = c; }
++			catch(NumberFormatException e) { host = args[1]; }
++		if(m &gt;= 3) port = Integer.parseInt(args[2]);
++			
++		if(command.startsWith(&quot;kick&quot;)) {
++			id = Integer.parseInt(command.substring(5));
++			command = &quot;kick&quot;;
++		}
++		 
++		// The server interface.		
++		Server server = null ;
++		
++		// Take the appropriate action.
++		try {
++			if (command.equalsIgnoreCase(&quot;start&quot;)) {
++				try { server = new RMIServer(port); } catch (Exception e) { System.err.println(e); server.stop(true); }
++			} 
++			else {
++				Registry registry = LocateRegistry.getRegistry(host, port);
++				Guard guard = (Guard) registry.lookup(Guard.ID);
++				server = guard.certify(getPassword());
++				if(server == null) { System.err.println(&quot;&lt;!&gt; No server on that port.&quot;); return; }
++				if(command.equalsIgnoreCase(&quot;stop&quot;)) server.stop(true);
++				else {
++					Collection&lt;ConnectionInfo&gt; clients = server.getClients();
++					int c = 0;
++					if(command.equalsIgnoreCase(&quot;who&quot;)) {
++						for(ConnectionInfo info : clients) System.out.println(&quot;(&quot; + c++ + &quot;) &quot; + info);
++					}
++					else if(command.equalsIgnoreCase(&quot;kick&quot;)) {
++						for(ConnectionInfo info : clients) if(c++ == id) { server.disconnect(info); break; }
++					}
++					else System.err.println(&quot;&lt;?&gt; Unknown command.&quot;);
++				}
++					
++			}
++		} catch(Exception e) { System.err.println(e); }
++		
+ 	}
+ 
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000085.html">[Plantlore-dev] r86 - trunk/documentation
+</A></li>
+	<LI>Next message: <A HREF="000087.html">[Plantlore-dev] r88 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#86">[ date ]</a>
+              <a href="thread.html#86">[ thread ]</a>
+              <a href="subject.html#86">[ subject ]</a>
+              <a href="author.html#86">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

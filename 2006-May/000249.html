@@ -1,0 +1,770 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r217 - in trunk/src/net/sf/plantlore: client/history l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r217%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/history%20l10n&In-Reply-To=%3C200605051616.k45GGNx7006251%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000248.html">
+   <LINK REL="Next"  HREF="000250.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r217 - in trunk/src/net/sf/plantlore: client/history l10n</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r217%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/history%20l10n&In-Reply-To=%3C200605051616.k45GGNx7006251%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r217 - in trunk/src/net/sf/plantlore: client/history l10n">lada at berlios.de
+       </A><BR>
+    <I>Fri May  5 18:16:23 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000248.html">[Plantlore-dev] r216 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000250.html">[Plantlore-dev] r218 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#249">[ date ]</a>
+              <a href="thread.html#249">[ thread ]</a>
+              <a href="subject.html#249">[ subject ]</a>
+              <a href="author.html#249">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-05 18:16:22 +0200 (Fri, 05 May 2006)
+New Revision: 217
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+History - add history for authors of occurrence. In urtax is new database for download. 
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-05 14:33:50 UTC (rev 216)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-05 16:16:22 UTC (rev 217)
+@@ -20,9 +20,11 @@
+ import java.util.Hashtable;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.HistoryChange;
+ import net.sf.plantlore.common.record.HistoryRecord;
++import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Phytochorion;
+ import net.sf.plantlore.common.record.Plant;
+@@ -77,6 +79,8 @@
+     
+     //*********************Record of history, ... ***************************************//    
+     private Occurrence occurrence;
++    private Habitat habitat;
++    private AuthorOccurrence authorOccurrence;
+     private HistoryRecord historyRecord;
+     private HistoryChange historyChange;
+     private Publication publication;
+@@ -116,13 +120,15 @@
+     private String location;
+     
+     //********************************************************//
+-    /** Mapping of entities */
++    /** Mapping of entities */           
++    private Hashtable&lt;String, Integer&gt; authorsOccurrenceHash;
++    private Hashtable&lt;String, Integer&gt; occurrenceHash; 
++    private Hashtable&lt;String, Integer&gt; authorHash;
++    private Hashtable&lt;String, Integer&gt; habitatHash;
++    private Hashtable&lt;String, Integer&gt; metadataHash;
+     private Hashtable&lt;String, Integer&gt; publicationHash;
+-    private Hashtable&lt;String, Integer&gt; habitatHash;
+-    private Hashtable&lt;String, Integer&gt; occurrenceHash;  
+-    private Hashtable&lt;String, Integer&gt; authorHash;
++    //pro territory, village a phytochorion neni treba tvorit mapovani
+     
+-    
+     /**
+      * Creates a new instance of History - history of whole database
+      */
+@@ -211,10 +217,10 @@
+        
+        //Searching for information about data entries concerned with specified occurrence
+        searchInsertInfo();
+-	   //Searching for information about data editing concerned with specified occurrence
+-	   searchEditHistory();
+-	   //Process results of a search &quot;edit&quot; query 
+-	   processResult(1,displayRows);
++       //Searching for information about data editing concerned with specified occurrence
++       searchEditHistory();
++       //Process results of a search &quot;edit&quot; query 
++       processResult(1,displayRows);
+     }	
+     
+     
+@@ -403,6 +409,7 @@
+     public void undoToDate(int toResult) {
+         
+         //Inicalization of hashTable
++        initAuthorsOccurrenceHash();
+     	initOccurrenceHash();
+     	initHabitatHash();   
+         initPublicationHash();
+@@ -464,8 +471,8 @@
+     		historyRecord = (HistoryRecord)historyDataList.get(i);    		
+     		historyChange = historyRecord.getHistoryChange();
+     		tableName = historyRecord.getHistoryColumn().getTableName();    		  		    			           
+-            recordId = historyChange.getRecordId();           	   
+-            operation = historyChange.getOperation();
++                recordId = historyChange.getRecordId();           	   
++                operation = historyChange.getOperation();
+        
+             
+             //zavolani funkce, ktera undo pro operaci edit
+@@ -477,40 +484,33 @@
+     
+     /**
+      * ??? Habitat - nemuselo by se zaznamenavat cDelete
+-     * ??? Phytochorion, Village, Territory - asi bude potreba cDelete, abychom nezobrazovali nektere polozky, co se historii odstrani
++     * v tabulkach Phytochorion, Village, Territory nebude mo&#382;no mazat zaznamy (ani se nepredpoklada, ze by k t&#233;to operaci m&#283;lo dochazet), proto v nich nen&#237; ani CDELETE.
+      * delete == 1 ... smazat
+      * delete == 0 ... obnovit
+      */
+-    public void undoInsertDelete(int delete) {
++    public void undoInsertDelete(int isDelete) {
+         if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){
+              Object[] object = searchObject(&quot;Occurrence&quot;,recordId);             
+-             Occurrence occurrence = (Occurrence)object[delete];
+-             occurrence.setDeleted(1);
+-      //  } else if (tableName.equals(&quot;Habitat&quot;)) {
+-      //       Object[] object = searchObject(&quot;v&quot;,recordId);  
+-      //       Habitat habitat = (Habitat)object[delete];
+-      //       habitat.setDeleted(1);
++             Occurrence occurrence = (Occurrence)object[0];
++             occurrence.setDeleted(isDelete);
++        } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
++             Object[] object = searchObject(&quot;AuthorOccurrence&quot;,recordId);  
++             AuthorOccurrence authorOccurrence = (AuthorOccurrence)object[0];
++             authorOccurrence.setDeleted(isDelete);             
++       } else if (tableName.equals(&quot;Habitat&quot;)) {
++            //jeste rozmyslet, zda to tu bude
++               Object[] object = searchObject(&quot;v&quot;,recordId);  
++               Habitat habitat = (Habitat)object[0];
++               habitat.setDeleted(isDelete);
+         } else if (tableName.equals(PlantloreConstants.ENTITY_PUBLICATION)) {
+              Object[] object = searchObject(&quot;Publication&quot;,recordId);  
+-             Publication publication = (Publication)object[delete];
+-             publication.setDeleted(1);
++             Publication publication = (Publication)object[0];
++             publication.setDeleted(isDelete);
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {
+              Object[] object = searchObject(&quot;Author&quot;,recordId);   
+-             Author author = (Author)object[delete];
+-             author.setDeleted(1);
+-        } else if (tableName.equals(PlantloreConstants.ENTITY_PHYTOCHORION)) {
+-             Object[] object = searchObject(&quot;Phytochorion&quot;,recordId);   
+-             Phytochorion phytochorion = (Phytochorion)object[delete];             
+-             //phytochorion.setDelete(1);
+-        } else if (tableName.equals(PlantloreConstants.ENTITY_TERRITORY)) {
+-             Object[] object = searchObject(&quot;Territory&quot;,recordId); 
+-             Territory territory = (Territory)object[delete];             
+-             //territory.setDelete(1);
+-        } else if (tableName.equals(PlantloreConstants.ENTITY_VILLAGE)) {
+-             Object[] object = searchObject(&quot;Village&quot;,recordId); 
+-             Village village = (Village)object[delete];             
+-             //village.setDelete(1);
+-        } else {
++             Author author = (Author)object[0];
++             author.setDeleted(isDelete);
++        }  else {
+             logger.error(&quot;No table defined&quot;);
+         }
+     }
+@@ -526,7 +526,9 @@
+         occurrenceId = historyChange.getOccurrence().getId();		           
+         oldValue = historyRecord.getOldValue();
+         
+-        if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){
++        if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
++                undoAuthorOccurrence();
++        } else if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){
+                 undoOccurrence();
+         } else if (tableName.equals(PlantloreConstants.ENTITY_HABITAT)) {
+                 undoHabitat();
+@@ -545,6 +547,55 @@
+         }
+     }
+ 
++    
++      /**
++     *
++     */
++    public void undoAuthorOccurrence() {
++        
++        Object[] object = searchObject(&quot;AuthorOccurrence&quot;, recordId);
++        authorOccurrence = (AuthorOccurrence)object[0];
++        
++        //test, zda jiz dany zaznam byl editovan
++        boolean objectList = editObjectList.contains(authorOccurrence); 
++        if (!objectList) {
++        	//pridani objektu do listu - informace o tom, ze byl dany objekt editovan
++            editObjectList.add(authorOccurrence);
++        }
++        logger.debug(&quot;editObjectList.contains: &quot;+objectList);
++        logger.debug(&quot;authorOccurrence: &quot;+ authorOccurrence.getId());
++        logger.debug(&quot;columnName: &quot;+columnName);
++        
++       // Get a specified number of columnName from habitat mapping.
++        int columnConstant;
++        if (authorsOccurrenceHash.containsKey(columnName)) {
++                 columnConstant = (Integer)authorsOccurrenceHash.get(columnName); 
++        } else {
++             columnConstant = 0;
++        }        	    			
++      
++        // Save new value for the column        		
++        switch (columnConstant) {
++            case 1:  //Author
++                if (authorOccurrence.getDeleted() == 1) {
++                    authorOccurrence.setDeleted(0);
++                } else {
++                    authorOccurrence.setDeleted(1);
++                }                
++                break;
++            case 2: //Role of author
++                authorOccurrence.setRole(oldValue);
++                logger.debug(&quot;Set selected value for update of attribe Role of Author.&quot;);
++                break;
++            case 3: //Result of revisition
++                authorOccurrence.setResultRevision(oldValue);
++                logger.debug(&quot;Set selected value for update of attribute Result of revision.&quot;);
++                break;
++            default:
++                logger.error(&quot;No column defined for name &quot;+ columnName);	                   
++        }
++    }
++    
+     /**
+      *
+      */
+@@ -670,18 +721,18 @@
+      */
+     public void undoHabitat() {
+         
+-        //zaznam v ramci, ktereho doslo k editaci tabulky tHabitats
+-        occurrence = historyChange.getOccurrence();
++        //zaznam v ramci, ktereho doslo k editaci tabulky tHabitats        
++        habitat = historyChange.getOccurrence().getHabitat();
+       
+-        //K editaci tabulky tHabitats dojde jen v pripade editace nejakeho konkretniho nalezu, proto nam staci nacist
+-        //data z tHabitats pres tOccurrence.cHabitatId a nasledne staci zavolat update jen na occurrence
+-        boolean objectList = editObjectList.contains(occurrence); 
++        //K editaci tabulky tHabitats dojde jen v pripade editace nejakeho konkretniho nalezu
++        //protoze neni k dispozici kaskadovy update musi se do seznamu objektu pridat i Habitat, i kdyz na nej muzem pristupovat pres konkretni zaznam
++        boolean objectList = editObjectList.contains(habitat); 
+         if (!objectList) {
+-        	//pridani objektu do listu - informace o tom, ze byl dany objekt editovan (editace habitat vzdy v ramci occurrence)
+-            editObjectList.add(occurrence);
++            //pridani objektu do listu - informace o tom, ze byl dany objekt editovan (editace habitat vzdy v ramci occurrence)
++            editObjectList.add(habitat);
+         }
+         logger.debug(&quot;editObjectList: &quot;+objectList);
+-        logger.debug(&quot;Habitat - OccurrenceID: &quot;+occurrence.getId());
++        logger.debug(&quot;Habitat - OccurrenceID: &quot;+habitat.getId());
+         logger.debug(&quot;columnName: &quot;+columnName);
+         
+         // Get a specified number of columnName from habitat mapping.
+@@ -821,7 +872,7 @@
+        // Get a specified number of columnName from habitat mapping.
+         int columnConstant;
+         if (publicationHash.containsKey(columnName)) {
+-                 columnConstant = (Integer)habitatHash.get(columnName); 
++                 columnConstant = (Integer)publicationHash.get(columnName); 
+         } else {
+              columnConstant = 0;
+         }        	    			
+@@ -1024,6 +1075,14 @@
+             	    System.err.println(&quot;RemoteException, searchObject() - Occurrence, createQuery&quot;);       	  
+             }            
+             
++    	} else if (typeObject.equals(&quot;AuthorOccurrence&quot;)){
++            try {
++            	query = database.createQuery(AuthorOccurrence.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.ID, null, id , null);
++            } catch(RemoteException e) {
++            	    System.err.println(&quot;RemoteException, searchObject() - AuthorOccurrence, createQuery&quot;);       	  
++            }            
++            
+     	} else if (typeObject.equals(&quot;Habitat&quot;)){
+             try {
+             	query = database.createQuery(Habitat.class);
+@@ -1084,9 +1143,9 @@
+     		logger.error(&quot;SearchObject() - Incorrect type of object.&quot;);
+     	}
+                         
+-        int resultIdPlant = 0;
++        int resultId = 0;
+         try {                   
+-            resultIdPlant = database.executeQuery(query);        
++            resultId = database.executeQuery(query);        
+         } catch (DBLayerException e) {                   
+             logger.error(&quot;Searching &quot; +typeObject+ &quot; failed. Unable to execute search query.&quot;);
+         } catch (RemoteException e) {		 
+@@ -1097,7 +1156,7 @@
+        try {
+        	    // Retrieve selected row interval         	
+             try {
+-                 objects = database.more(resultIdPlant, 0, 0);  
++                 objects = database.more(resultId, 0, 0);  
+             } catch(RemoteException e) {            	
+                 logger.debug(&quot;RemoteException- searchObject, more&quot;);            	
+             }   
+@@ -1110,6 +1169,51 @@
+            	        
+     }
+     
++    /*
++     * Funkce, ktera mi dohleda vsechny autory ke konkretnimu nalezu
++     */
++    public String getAllAuthors(Occurrence occurrence) {
++        String allAuthor = &quot;&quot;;
++        SelectQuery query = null;
++        
++        try {
++            	query = database.createQuery(AuthorOccurrence.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.OCCURRENCE, null, occurrence , null);
++            } catch(RemoteException e) {
++            	    System.err.println(&quot;RemoteException, getAllAuthors() - AuthorOccurrence, createQuery&quot;);       	  
++            }   
++        int resultId = 0;
++        try {
++                             
++            resultId = database.executeQuery(query);        
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }        
++       
++       Object[] objects = null;       
++       try {
++            objects = database.more(resultId, 0, 0);  
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }  
++        
++        int countResult = objects.length;  
++        logger.debug(&quot;Authos of occurrence. Results retrieved. Count: &quot;+ countResult);        
++        // Cast the results to the AuthorOccurrence objects
++        for (int i=0; i&lt;countResult; i++ ) {                    							
++            Object[] object = (Object[])objects[i];          
++            String author = ((AuthorOccurrence)object[0]).getAuthor().getWholeName();
++            String role = ((AuthorOccurrence)object[0]).getRole();
++            allAuthor = allAuthor + role + &quot;: &quot; + author + &quot;\n&quot;;
++        }           
++      
++       return allAuthor;     	    
++    }
++    
+     /**
+      *  ..... pri whole history se bude do promennych occurrence, atd. nacitat vice ruznych objektu s jinym ID
+      *  ....Musim si ty jednotlive objekty pamatovat --&gt; pole objektu, kde budou jednotlive editovane objekty
+@@ -1120,7 +1224,7 @@
+     	for (int i=0; i&lt; count; i++) {
+     		try {
+     			logger.debug(&quot;Object for update: &quot;+editObjectList.get(i));
+-                database.executeUpdateHistory(editObjectList.get(i));
++                        database.executeUpdateHistory(editObjectList.get(i));
+ 	        } catch (RemoteException e) {
+ 	                logger.error(&quot;CommitUpdate - RemoteException: &quot;+e.toString());
+ 	        } catch (DBLayerException e) {
+@@ -1255,11 +1359,12 @@
+                 
+         
+         //podle tableName najdeme podrobnosti o konkretnim objektu (autor, publikace, nalez,...)
+-         if (tableName.equals(&quot;Occurrence&quot;) || tableName.equals(&quot;Habitat&quot;)){           
++         if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE) || tableName.equals(PlantloreConstants.ENTITY_HABITAT) || tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {           
++              //Get details for occurrence
+               Occurrence occurrence = historyChange.getOccurrence();             
+               detailsMessage = &quot;Details of Occurrences \n\n&quot;;
+               detailsMessage = detailsMessage + &quot;Taxon: &quot;+ occurrence.getPlant().getTaxon()+&quot;\n&quot;;
+-              detailsMessage = detailsMessage + &quot;Author: ??? budu muset napsat fci pro dohledani autoru&quot;;
++              detailsMessage = detailsMessage + getAllAuthors(occurrence);
+               detailsMessage = detailsMessage + &quot;Date/Time: &quot; + occurrence.getIsoDateTimeBegin() +&quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Nearest village: &quot;+ occurrence.getHabitat().getNearestVillage().getName() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Place description: &quot;+ occurrence.getHabitat().getDescription() + &quot;\n&quot;;
+@@ -1271,7 +1376,8 @@
+               detailsMessage = detailsMessage + &quot;Herbarium: &quot; + occurrence.getHerbarium() +&quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Note (occurernce): &quot; + occurrence.getNote() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Note (habitat): &quot; + occurrence.getHabitat().getNote() +&quot;\n&quot;;
+-        } else if (tableName.equals(&quot;Publication&quot;)) {
++        } else if (tableName.equals(PlantloreConstants.ENTITY_PUBLICATION)) {
++              //Get details for Publication
+               Object[] object = searchObject(&quot;Publication&quot;,recordId); 
+               Publication publication = (Publication)object[0];
+               detailsMessage = &quot;Details of Publications \n\n&quot;;
+@@ -1281,7 +1387,8 @@
+               detailsMessage = detailsMessage + &quot;Author of journal: &quot; + publication.getJournalAuthorName() +&quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;URL: &quot; + publication.getUrl() +&quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Note: &quot; + publication.getNote() + &quot;\n&quot;;
+-        } else if (tableName.equals(&quot;Author&quot;)) {
++        } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {
++              //Get details for Author
+               Object[] object = searchObject(&quot;Author&quot;,recordId);   
+               Author author = (Author)object[0];
+               detailsMessage = &quot;Details of Author \n\n&quot;;
+@@ -1293,18 +1400,21 @@
+               detailsMessage = detailsMessage + &quot;Telephone number: &quot; + author.getPhoneNumber() + &quot;\n&quot;;            
+               detailsMessage = detailsMessage + &quot;URL: &quot; + author.getUrl() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Note: &quot; + author.getNote() + &quot;\n&quot;;
+-        } else if (tableName.equals(&quot;Phytochorion&quot;)) {
++        } else if (tableName.equals(PlantloreConstants.ENTITY_PHYTOCHORION)) {
++              //Get details for Phytochorion
+               Object[] object = searchObject(&quot;Phytochorion&quot;,recordId); 
+               Phytochorion  phytochorion = (Phytochorion)object[0];
+               detailsMessage = &quot;Details of Phytochorion \n\n&quot;;
+               detailsMessage = detailsMessage + &quot;Phytochorion: &quot; + phytochorion.getName() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Code of phytochorion: &quot; + phytochorion.getCode() + &quot;\n&quot;;
+-        } else if (tableName.equals(&quot;Territory&quot;)) {
++        } else if (tableName.equals(PlantloreConstants.ENTITY_TERRITORY)) {
++              //Get details for Territory
+               Object[] object = searchObject(&quot;Territory&quot;,recordId); 
+               Territory territory = (Territory)object[0];
+               detailsMessage = &quot;Details of Territory \n\n&quot;;
+               detailsMessage = detailsMessage + &quot;Territory: &quot; + territory.getName() + &quot;\n&quot;;
+-        } else if (tableName.equals(&quot;Village&quot;)) {
++        } else if (tableName.equals(PlantloreConstants.ENTITY_VILLAGE)) {
++              //Get details for Village
+               Object[] object = searchObject(&quot;Village&quot;,recordId);  
+               Village village = (Village)object[0];
+               detailsMessage = &quot;Details of Village \n\n&quot;;
+@@ -1322,55 +1432,81 @@
+     //****Init Hashtable*********//
+     //**************************//
+     
++    private void initAuthorsOccurrenceHash() {
++        authorsOccurrenceHash = new Hashtable&lt;String, Integer&gt;(3);
++        authorsOccurrenceHash.put(AuthorOccurrence.AUTHOR, 1);
++        authorsOccurrenceHash.put(AuthorOccurrence.ROLE, 2);
++        authorsOccurrenceHash.put(AuthorOccurrence.RESULTREVISION, 3);
++    }
++    
+     private void initOccurrenceHash() {
+-    	occurrenceHash = new Hashtable&lt;String, Integer&gt;(9); 
+-        occurrenceHash.put(&quot;plantId&quot;,1);
+-        occurrenceHash.put(&quot;yearCollected&quot;,2);
+-        occurrenceHash.put(&quot;monthCollected&quot;,3);
+-        occurrenceHash.put(&quot;dayCollected&quot;,4);
+-        occurrenceHash.put(&quot;timeCollected&quot;,5);           
+-        occurrenceHash.put(&quot;dataSource&quot;,6);
+-        occurrenceHash.put(&quot;herbarium&quot;,7);        
+-        occurrenceHash.put(&quot;noteOccurrence&quot;,8);
+-        occurrenceHash.put(&quot;publicationId&quot;,9);       
+-        //occurrenceHash.put(&quot;metadataId&quot;,10);
++    	occurrenceHash = new Hashtable&lt;String, Integer&gt;(10); 
++        occurrenceHash.put(Occurrence.PLANT, 1);
++        occurrenceHash.put(Occurrence.YEARCOLLECTED, 2);
++        occurrenceHash.put(Occurrence.MONTHCOLLECTED, 3);
++        occurrenceHash.put(Occurrence.DAYCOLLECTED, 4);
++        occurrenceHash.put(Occurrence.TIMECOLLECTED, 5);           
++        occurrenceHash.put(Occurrence.DATASOURCE, 6);
++        occurrenceHash.put(Occurrence.HERBARIUM, 7);        
++        occurrenceHash.put(Occurrence.NOTE, 8);
++        occurrenceHash.put(Occurrence.PUBLICATION, 9);       
++        occurrenceHash.put(Occurrence.METADATA, 10);
+     }    
+     
+     private void initHabitatHash() {
+     	habitatHash = new Hashtable&lt;String, Integer&gt;(11);         
+-        habitatHash.put(&quot;quadrant&quot;,1);
+-        habitatHash.put(&quot;description&quot;,2);
+-        habitatHash.put(&quot;country&quot;,3);
+-        habitatHash.put(&quot;altitude&quot;,4);
+-        habitatHash.put(&quot;latitude&quot;,5);
+-        habitatHash.put(&quot;longitude&quot;,6);      
+-        habitatHash.put(&quot;nameVillage&quot;,7);      
+-        habitatHash.put(&quot;namePhytochorion&quot;,8);
+-        habitatHash.put(&quot;code&quot;,8);
+-        habitatHash.put(&quot;nameTerritory&quot;,9);
+-        habitatHash.put(&quot;noteHabitat&quot;,10);
++        habitatHash.put(Habitat.QUADRANT, 1);
++        habitatHash.put(Habitat.DESCRIPTION, 2);
++        habitatHash.put(Habitat.COUNTRY, 3);
++        habitatHash.put(Habitat.ALTITUDE, 4);
++        habitatHash.put(Habitat.LATITUDE, 5);
++        habitatHash.put(Habitat.LONGITUDE, 6);      
++        habitatHash.put(Habitat.NEARESTVILLAGE, 7);      
++        habitatHash.put(Habitat.PHYTOCHORION, 8);
++        //habitatHash.put(Phytochorion.CODE, 8);
++        habitatHash.put(Habitat.TERRITORY,9);
++        habitatHash.put(Habitat.NOTE, 10);
+     }    
+     
++    private void initMetadataHash() {
++        metadataHash = new Hashtable&lt;String, Integer&gt;(16);
++        metadataHash.put(Metadata.TECHNICALCONTACTNAME, 1);
++        metadataHash.put(Metadata.TECHNICALCONTACTEMAIL, 2);
++        metadataHash.put(Metadata.TECHNICALCONTACTADDRESS, 3);
++        metadataHash.put(Metadata.CONTENTCONTACTNAME, 4);
++        metadataHash.put(Metadata.CONTENTCONTACTEMAIL, 5);
++        metadataHash.put(Metadata.CONTENTCONTACTADDRESS, 6);
++        metadataHash.put(Metadata.DATASETTITLE, 7);
++        metadataHash.put(Metadata.DATASETDETAILS, 8);
++        metadataHash.put(Metadata.SOURCEINSTITUTIONID, 9);
++        metadataHash.put(Metadata.SOURCEID, 10);
++        metadataHash.put(Metadata.OWNERORGANIZATIONABBREV, 11);
++        metadataHash.put(Metadata.DATECREATE, 12);
++        metadataHash.put(Metadata.DATEMODIFIED, 13);
++        metadataHash.put(Metadata.RECORDBASIS, 14);
++        metadataHash.put(Metadata.BIOTOPETEXT, 15);
++        metadataHash.put(Metadata.VERSIONPLANTSFILE, 16);
++    }
++    
+     private void initPublicationHash() {
+         publicationHash = new Hashtable&lt;String, Integer&gt;(6);
+-        publicationHash.put(&quot;collectionName&quot;,0);
+-        publicationHash.put(&quot;collectionYearPublication&quot;,1);
+-        publicationHash.put(&quot;journalName&quot;,2);
+-        publicationHash.put(&quot;journalAuthorName&quot;,3);
+-        publicationHash.put(&quot;referenceDetail&quot;,4);
+-        publicationHash.put(&quot;urlPublication&quot;,5);      
++        publicationHash.put(Publication.COLLECTIONNAME, 1);
++        publicationHash.put(Publication.COLLECTIONYEARPUBLICATION, 2);
++        publicationHash.put(Publication.JOURNALNAME, 3);
++        publicationHash.put(Publication.JOURNALAUTHORNAME, 4);
++        publicationHash.put(Publication.REFERENCEDETAIL, 5);
++        publicationHash.put(Publication.URL, 6);      
+     }
+     
+     private void initAuthorHash() {
+-        authorHash = new Hashtable&lt;String, Integer&gt;(8);
+-        authorHash.put(&quot;firstName&quot;,0);
+-        authorHash.put(&quot;surname&quot;,1);
+-        authorHash.put(&quot;organization&quot;,2);
+-        authorHash.put(&quot;role&quot;,3);
+-        authorHash.put(&quot;address&quot;,4);
+-        authorHash.put(&quot;email&quot;,5);
+-        authorHash.put(&quot;urlAuthor&quot;,6);
+-        authorHash.put(&quot;noteAuthor&quot;,7);        
++        authorHash = new Hashtable&lt;String, Integer&gt;(7);
++        authorHash.put(Author.WHOLENAME, 1);        
++        authorHash.put(Author.ORGANIZATION, 2);
++        authorHash.put(Author.ROLE, 3);
++        authorHash.put(Author.PHONENUMBER, 4);
++        authorHash.put(Author.EMAIL, 5);
++        authorHash.put(Author.URL, 6);
++        authorHash.put(Author.NOTE, 7);        
+     }              
+     
+        
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-05-05 14:33:50 UTC (rev 216)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-05-05 16:16:22 UTC (rev 217)
+@@ -69,7 +69,7 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {    	  
+     	   // Display help viewer            
+-    	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++    	   System.out.println(&quot;Tady se bude volat Help!&quot;);           
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-05-05 14:33:50 UTC (rev 216)
++++ trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-05-05 16:16:22 UTC (rev 217)
+@@ -84,12 +84,14 @@
+     	}
+     	//loud data for view
+         Object[][] editHistoryData = new Object[countRow][6];   
+-    	for (int i=firstRow-1; i &lt; countResult; i++) {  
+-    		String item = L10n.getString(((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName());    		
++    	for (int i=firstRow-1; i &lt; countResult; i++) { 
++                String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++                String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    		String item = L10n.getString(tableName+&quot;.&quot;+columnName);    		
+     		if (! selectAll){     			
+     			mark = isMark(item, i);
+     		}
+-    		editHistoryData[ii][0] = new Boolean(mark);    		
++            editHistoryData[ii][0] = new Boolean(mark);    		
+     	    editHistoryData[ii][1] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWhen();
+     	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();    	   
+     	    editHistoryData[ii][3] = item;
+@@ -185,8 +187,10 @@
+     public void initMarkAllItem() {    	
+     	editHistoryDataList = model.getHistoryDataList();    	
+     	int countResult = editHistoryDataList.size();    	
+-    	for (int i=0; i &lt; countResult; i++) {      		    		    	
+-    		String item = L10n.getString(((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName());
++    	for (int i=0; i &lt; countResult; i++) {    
++                String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++                String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    		String item = L10n.getString(tableName+&quot;.&quot;+columnName);        		
+     		updateMarkList(item, i, true);
+     	} 
+     	model.setMarkItem(markItem);
+@@ -195,7 +199,7 @@
+     }
+     
+     /**
+-     * 
++     * v markListId se drzi seznam polozek, ktere jsou oznaceny
+      *
+      */
+     public void updateMarkListId() {
+@@ -204,7 +208,9 @@
+     	markItem = model.getMarkItem();
+     	int countResult = editHistoryDataList.size();    	
+     	for (int i=0; i &lt; countResult; i++) {  
+-    		String item = L10n.getString(((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName());    		    		
++    		String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++                String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    		String item = L10n.getString(tableName+&quot;.&quot;+columnName);    
+     		if (isMark(item, i)){
+     			markListId.add(i);
+     		}
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java	2006-05-05 14:33:50 UTC (rev 216)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java	2006-05-05 16:16:22 UTC (rev 217)
+@@ -75,11 +75,14 @@
+         int ii = 0;
+     	//loud data for view
+         Object[][] editHistoryData = new Object[countRow][6];   
+-    	for (int i=firstRow-1; i &lt; countResult; i++) {      	            
++    	for (int i=firstRow-1; i &lt; countResult; i++) {     
++            String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++            String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++            String item = L10n.getString(tableName+&quot;.&quot;+columnName); 
+     	    editHistoryData[ii][0] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWhen();
+             editHistoryData[ii][1] = L10n.getString( &quot;operation&quot;+((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOperation());
+     	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();    	   
+-    	    editHistoryData[ii][3] = L10n.getString(((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName());
++    	    editHistoryData[ii][3] = item;
+     	    editHistoryData[ii][4] = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
+     	    editHistoryData[ii][5] = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
+     	    ii++;
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-05 14:33:50 UTC (rev 216)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-05 16:16:22 UTC (rev 217)
+@@ -154,36 +154,49 @@
+ operation2 = edit
+ operation3 = edit
+ operation4 = delete
+-#History - value of tHistoryColumn.cColumnName (use as value of table column Item)
+-plantId = Taxon
+-yearCollected = Year
+-monthCollected = Month
+-dayCollected = Day
+-timeCollected = Time
+-isoDateTimeBegin = IsoDate
+-dataSource = Data source
+-herbarium = Herbarium
+-noteOccurrence = Note of occurrence
+-metadataId = Metadata
+-collectionName = Collection
+-colletionYearPublication = Year of publication
+-journalName = Journal
+-journalAuthorName = Author of journal
+-referenceCitation = Reference citation
+-referenceDetail = Reference detail
+-url = URL of publication
+-notePublication = Note of publication
+-quadrant = Quadrant
+-description = Place description
+-country = Country
+-altitude = Altitude
+-latitude = Latitude
+-longitude = Longitude
+-noteHabitat = Note of habitat
+-nameVillage = Nearest bigger seat
+-nameTerritory = Territory
+-namePhytochorion = Phytochorion
+-code = Phytochorion code 
++#History - value of tHistoryColumn.cColumnName (use as value of table column Item
++authorOccurrence.author = Occurrence - Author
++authorOccurrence.role = Occurrence - Role of author
++authorOccurrence.resultRevision = Occurrence - Result of revision
++occurrence.plant = Occurrence - Taxon
++occurrence.yearCollected = Occurrence - Year
++occurrence.monthCollected = Occurrence - Month
++occurrence.dayCollected = Occurrence - Day
++occurrence.timeCollected = Occurrence - Time
++occurrence.dataSource = Occurrence - Data source
++occurrence.herbarium = Occurrence - Herbarium
++occurrence.note = Note of occurrence
++occurrence.metadata = Occurrence - Project
++habitat.territory = Occurrence - Territory
++habitat.phytochorion = Occurrence - Phytochorion
++habitat.nearestVillage = Occurrence - Village
++habitat.quadrant = Occurrence - Quadrant
++habitat.description = Occurrence - Place description
++habitat.country = Occurrence - Country
++habitat.altitude = Occurrence - Altitude
++habitat.latitude = Occurrence - Latitude
++habitat.longitude = Occurrence - Longitude
++habitat.note = Occurrence - Note of habitat
++author.wholeName = Name of author
++author.organization = Organization of author
++author.role = Role of author
++author.address = Address of author
++author.phoneNumber = Phone number of author
++author.email = Email of author
++author.ulr = Url of author
++author.note = Note of author
++publication.collectionName = Collection
++publication.colletionYearPublication = Year of publication
++publication.journalName = Journal
++publication.journalAuthorName = Author of journal
++publication.referenceCitation = Reference citation
++publication.referenceDetail = Reference detail
++publication.ulr = URL of publication
++publication.note = Note of publication
++village.name = Nearest bigger seat
++territory.name = Territory
++phytochorion.name = Phytochorion
++phytochorion.code = Phytochorion code 
+ #pravdepodobne budou smazany
+ updatedWho = updatedWho
+ metadata = metadata
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000248.html">[Plantlore-dev] r216 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000250.html">[Plantlore-dev] r218 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#249">[ date ]</a>
+              <a href="thread.html#249">[ thread ]</a>
+              <a href="subject.html#249">[ subject ]</a>
+              <a href="author.html#249">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

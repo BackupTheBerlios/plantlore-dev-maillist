@@ -1,0 +1,294 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r407 - in trunk/src/net/sf/plantlore: client/imports client/login l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r407%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/login%20l10n&In-Reply-To=%3C200605311204.k4VC4CN0029431%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000489.html">
+   <LINK REL="Next"  HREF="000491.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r407 - in trunk/src/net/sf/plantlore: client/imports client/login l10n</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r407%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/login%20l10n&In-Reply-To=%3C200605311204.k4VC4CN0029431%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r407 - in trunk/src/net/sf/plantlore: client/imports client/login l10n">krater at berlios.de
+       </A><BR>
+    <I>Wed May 31 14:04:12 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000489.html">[Plantlore-dev] [Bug #7692] Set a default button for each dialog
+</A></li>
+        <LI>Next message: <A HREF="000491.html">[Plantlore-dev] [Bug #7694] The size of the window should reflect the # of rows
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#490">[ date ]</a>
+              <a href="thread.html#490">[ thread ]</a>
+              <a href="subject.html#490">[ subject ]</a>
+              <a href="author.html#490">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-31 14:04:01 +0200 (Wed, 31 May 2006)
+New Revision: 407
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DecisionView.java
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/ItemView.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+The User's intervention dialog (DecisionView.java) works properly now.
+
+All dialogs in the client.login package have a default button now.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DecisionView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DecisionView.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/imports/DecisionView.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -134,8 +134,8 @@
+ 			}
+ 			// There is a shared record in the database that is to be updated.
+ 			else {
+-				question.setText(L10n.getString(&quot;Question.SharedRecord&quot;));
+-				recordView.setModel( model.getProblematicRecord() );
++				question.setText(L10n.getFormattedString(&quot;Question.SharedRecord&quot;, parameter.getClass().getSimpleName()));
++				recordView.setModel( model.getProblematicRecords() );
+ 				leave.setText(L10n.getString(&quot;Import.Insert&quot;));
+ 				update.setText(L10n.getString(&quot;Import.Update&quot;));
+ 				remember.setSelected(false);
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -212,8 +212,10 @@
+ 		problematicRecord = about;
+ 		observerNotifier.start(); // must be another thread
+ 		while( lastDecision == Action.UNKNOWN &amp;&amp; !aborted ) {
++			System.out.println(&quot;&gt;&gt;&gt;&gt; GOING TO SLEEP&quot;);
+ 			try { wait(); } catch( InterruptedException e ) {}
+ 		}
++		System.out.println(&quot;&gt;&gt;&gt;&gt; DECISION DONE =&gt; AWAKEN!&quot;);
+ 		return lastDecision;
+ 	}
+ 	
+@@ -309,6 +311,7 @@
+ 							&quot;records with the same Unique Identifier (&quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue()+&quot;)!&quot;);
+ 					setChanged();
+ 					notifyObservers(L10n.getFormattedString(&quot;Import.DuplicateRecord&quot;, count, occ.getUnitIdDb(), occ.getUnitValue()));
++					continue; // it is not clear which record should be updated!
+ 				}
+ 				Occurrence
+ 				occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
+@@ -588,6 +591,9 @@
+ 	 */
+ 	public int sharedBy(Record record, Class father, String column) 
+ 	throws RemoteException {
++		
++		System.out.println(&quot;&gt;&gt;&gt;&gt; SHARE TEST: &quot;+father+&quot;.&quot;+column+&quot; = &quot; +record);
++		
+ 		SelectQuery q = null;
+ 		int rows = 0;
+ 		try {
+@@ -601,6 +607,9 @@
+ 			if(q != null)
+ 				db.closeQuery(q);
+ 		}
++		
++		System.out.println(&quot;&gt;&gt;&gt;&gt; RESULT: &quot; + rows);
++		
+ 		return rows;
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -343,16 +343,25 @@
+ 		return parser.getNumberOfRecords();
+ 	}
+ 	
++	
++	private TableModel emptyTableModel = new javax.swing.table.DefaultTableModel();
++	
+ 	/**
+ 	 * 
+ 	 * @return	The record that is currently loaded from the database
+ 	 * and the record loaded from the file.
+ 	 */
+ 	public TableModel getProcessedRecords() {
+-		return (director == null) ? null : 
+-			new RecordTable(
+-					director.getProcessedRecordInDatabase(), 
+-					director.getProcessedRecordFromFile());
++		if(director == null)
++			return emptyTableModel;
++
++		Record inDB = director.getProcessedRecordInDatabase(),
++		fromFile = director.getProcessedRecordFromFile();
++		
++		if(fromFile == null || inDB == null)
++			return emptyTableModel;
++		else
++			return new RecordTable( inDB, fromFile );
+ 	}
+ 	
+ 	/**
+@@ -360,10 +369,40 @@
+ 	 * @return	The record that caused problems (exceptions).
+ 	 */
+ 	public TableModel getProblematicRecord() {
+-		return (director == null) ? null : new RecordTable( director.getProblematic() );
++		if(director == null)
++			return emptyTableModel;
++		
++		Record problematic = director.getProblematic();
++		
++		if(problematic == null)
++			return emptyTableModel;
++		else
++			return new RecordTable( problematic );
+ 	}
+ 	
++	/**
++	 * 
++	 * @return	The record that caused a problem and the counterpart in database.
++	 */
++	public TableModel getProblematicRecords() {
++		if(director == null)
++			return emptyTableModel;
++		
++		Record problematic = director.getProblematic(),
++		counterpart = director.getProcessedRecordInDatabase();
++		if(counterpart != null &amp;&amp; problematic != null)
++			counterpart = counterpart.findSubrecord( problematic.getClass() );
++		
++		if(problematic == null)
++			return emptyTableModel;
++		else
++			if( counterpart == null)
++				return new RecordTable( problematic );
++			else
++				return new RecordTable( counterpart, problematic );
++	}
+ 	
++	
+ 	/**
+ 	 * Notify the observers - some of our components has changed its state.
+ 	 * The parameter can carry either information about progress
+@@ -435,10 +474,13 @@
+ 		
+ 		private void traverse(Record...r) {
+ 			int n;
+-			if(r[0] != null) n = 0; else if(r.length &gt;= 2 &amp;&amp; r[1] != null) n = 1;
+-			else return;
++			for(n = 0; n &lt; r.length; n++) {
++				if(r[n] != null) break;
++			}
++			if(r[n] == null)
++				return;
++			
+ 			Class table = r[n].getClass(); 
+-				
+ 			for( String property : r[n].getProperties()) {
+ 				
+ 				value[0].add(L10n.getString(table.getSimpleName()+&quot;.&quot;+property));
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -29,6 +29,7 @@
+     	this.model = model;
+     	model.addObserver(this);
+         initComponents();
++        getRootPane().setDefaultButton(next);
+         setLocationRelativeTo(null); // center of the screen
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -25,6 +25,7 @@
+ 		this.model = model;
+ 		model.addObserver(this);
+ 		initComponents();
++		getRootPane().setDefaultButton(next);
+ 		setLocationRelativeTo(null);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-05-31 12:04:01 UTC (rev 407)
+@@ -26,6 +26,7 @@
+ 		model.addObserver(this);
+         initComponents();
+         setLocationRelativeTo(null); // center of the screen
++        getRootPane().setDefaultButton(next);
+         // See what's new.
+         update(null, Login.UPDATE_LIST);
+     }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 09:45:50 UTC (rev 406)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 12:04:01 UTC (rev 407)
+@@ -436,7 +436,7 @@
+ Import.Aborted = Import aborted.
+ Import.Completed = Import completed.
+ Import.DecisionExpected = Your intervention is required.
+-Import.RememberDecision = Do not ask me again.
++Import.RememberDecision = Do not ask again.
+ Import.RecordsInserted = inserted.
+ Import.RecordsDeleted = deleted.
+ Import.RecordsUpdated = updated.
+@@ -697,7 +697,7 @@
+ #=============================================================
+ Question.AbortExport = Export will be aborted.
+ Question.AbortImport = Import will be aborted.
+-Question.SharedRecord = This record is is shared. Updating it may affect other records.
++Question.SharedRecord = This {0} is is shared. Updating it may affect other records.
+ Question.NewerRecord = The record in the database is newer than the record in the file.
+ 
+ Question.DropUser = Access for user selected will be prohibit.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000489.html">[Plantlore-dev] [Bug #7692] Set a default button for each dialog
+</A></li>
+	<LI>Next message: <A HREF="000491.html">[Plantlore-dev] [Bug #7694] The size of the window should reflect the # of rows
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#490">[ date ]</a>
+              <a href="thread.html#490">[ thread ]</a>
+              <a href="subject.html#490">[ subject ]</a>
+              <a href="author.html#490">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

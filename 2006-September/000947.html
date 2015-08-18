@@ -1,0 +1,317 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r687 - in trunk/src/net/sf/plantlore: client/print	common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r687%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/print%0A%09common&In-Reply-To=%3C200609051433.k85EX6uq020679%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000946.html">
+   <LINK REL="Next"  HREF="000948.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r687 - in trunk/src/net/sf/plantlore: client/print	common</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r687%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/print%0A%09common&In-Reply-To=%3C200609051433.k85EX6uq020679%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r687 - in trunk/src/net/sf/plantlore: client/print	common">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 16:33:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000946.html">[Plantlore-dev] r686 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common
+</A></li>
+        <LI>Next message: <A HREF="000948.html">[Plantlore-dev] r688 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#947">[ date ]</a>
+              <a href="thread.html#947">[ thread ]</a>
+              <a href="subject.html#947">[ subject ]</a>
+              <a href="author.html#947">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-05 16:33:05 +0200 (Tue, 05 Sep 2006)
+New Revision: 687
+
+Modified:
+   trunk/src/net/sf/plantlore/client/print/Print.java
+   trunk/src/net/sf/plantlore/client/print/PrintCtrl.java
+   trunk/src/net/sf/plantlore/client/print/PrintView.form
+   trunk/src/net/sf/plantlore/client/print/PrintView.java
+   trunk/src/net/sf/plantlore/common/PostTaskAction.java
+Log:
+Print now uses Task and Dispatcher.
+It is also now possible to throw an exception from PostTaskAction.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/print/Print.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/print/Print.java	2006-09-05 14:23:06 UTC (rev 686)
++++ trunk/src/net/sf/plantlore/client/print/Print.java	2006-09-05 14:33:05 UTC (rev 687)
+@@ -30,6 +30,9 @@
+ import net.sf.plantlore.client.AppCoreCtrl;
+ import net.sf.plantlore.client.overview.JasperDataSource;
+ import net.sf.plantlore.common.Selection;
++import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import org.apache.log4j.Logger;
+ 
+@@ -100,35 +103,46 @@
+         notifyObservers(&quot;REPORT_CHOSEN&quot;);
+     }
+     
+-    public JasperPrint createJasperPrint() throws JRException {
+-        JasperReport jasperReport;
+-        switch (reportToUse) {
+-            case SCHEDA:
+-                jasperReport = schedaReport;
+-                break;
+-            case A4LIST:
+-                jasperReport = a4listReport;
+-                break;
+-            case OWNREPORT:
+-                jasperReport = this.jasperReport;
+-                break;
+-            default:
+-                jasperReport = a4listReport;
+-                logger.warn(&quot;Inconsistency detected. Unknown report constant: &quot;+reportToUse);
+-        }
++    public Task createJasperPrint() {
++        final JasperReport report = this.jasperReport;
+         
+-        if (jasperPrint == null || reportChanged) { //jasperPrint is nulled in setSource()
+-            Preferences prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
+-            String h1 = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set the first header in settings, please.&quot;);
+-            String h2 = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set the second header in settings, please.&quot;);
+-            HashMap params = new HashMap();
+-            params.put(&quot;HEADER_ONE&quot;,h1);
+-            params.put(&quot;HEADER_TWO&quot;,h2);
+-            jasperPrint = JasperFillManager.fillReport(
+-                  jasperReport, params, new JasperDataSource(database, selection)  );    
+-            reportChanged = false;
+-        }
+-        return jasperPrint;
++        Task task = new Task() {
++            public Object task() throws DBLayerException {
++                JasperReport jasperReport;
++                switch (reportToUse) {
++                    case SCHEDA:
++                        jasperReport = schedaReport;
++                        break;
++                    case A4LIST:
++                        jasperReport = a4listReport;
++                        break;
++                    case OWNREPORT:
++                        jasperReport = report;
++                        break;
++                    default:
++                        jasperReport = a4listReport;
++                        logger.warn(&quot;Inconsistency detected. Unknown report constant: &quot;+reportToUse);
++                }
++
++                if (jasperPrint == null || reportChanged) { //jasperPrint is nulled in setSource()
++                    Preferences prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
++                    String h1 = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set the first header in settings, please.&quot;);
++                    String h2 = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set the second header in settings, please.&quot;);
++                    HashMap params = new HashMap();
++                    params.put(&quot;HEADER_ONE&quot;,h1);
++                    params.put(&quot;HEADER_TWO&quot;,h2);
++                    try {
++                        jasperPrint = JasperFillManager.fillReport(
++                              jasperReport, params, new JasperDataSource(database, selection)  );    
++                    } catch (JRException jrException) {
++                        throw new DBLayerException(L10n.getString(&quot;Print.Message.BrokenReport&quot;),jrException);
++                    }
++                    reportChanged = false;
++                }
++                return jasperPrint;
++            }
++        };
++        return task;
+     }
+ 
+     public Selection getSelection() {
+
+Modified: trunk/src/net/sf/plantlore/client/print/PrintCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/print/PrintCtrl.java	2006-09-05 14:23:06 UTC (rev 686)
++++ trunk/src/net/sf/plantlore/client/print/PrintCtrl.java	2006-09-05 14:33:05 UTC (rev 687)
+@@ -20,6 +20,7 @@
+ import javax.swing.AbstractAction;
+ import javax.swing.JFileChooser;
+ import javax.swing.JOptionPane;
++import javax.swing.SwingUtilities;
+ import javax.swing.filechooser.FileFilter;
+ import net.sf.jasperreports.engine.JRException;
+ import net.sf.jasperreports.engine.JasperCompileManager;
+@@ -29,6 +30,10 @@
+ import net.sf.jasperreports.engine.JasperReport;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.client.overview.SchedaView;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
++import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ import org.xml.sax.SAXParseException;
+@@ -111,21 +116,20 @@
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Print&quot;));                                    
+         }
+         public void actionPerformed(ActionEvent e) {
+-            try {
+-                model.createJasperPrint();
+-            } catch (JRException ex) {
+-                logger.error(&quot;Broken report: &quot;+ex);
+-                JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);            
+-                return;
+-            }
+-            
+-            try {
+-                JasperPrintManager.printReport(model.getJasperPrint(), true);
+-            } catch (JRException ex) {
+-                logger.error(&quot;Problem while trying to print: &quot;+ex);
+-                JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.PrintProblem&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.PrintingProblemTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                return;
+-            }
++            Task task = model.createJasperPrint();
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) throws DBLayerException, Exception {
++                    if (value == null || !(value instanceof JasperPrint))
++                        throw new Exception(L10n.getString(&quot;Print.Message.PrintProblem&quot;));
++                    try {
++                        JasperPrintManager.printReport((JasperPrint)value, true);
++                    } catch (JRException ex) {
++                        logger.error(&quot;Problem while trying to print: &quot;+ex);
++                        throw new DBLayerException(L10n.getString(&quot;Print.Message.PrintProblem&quot;),ex);
++                    }
++                }
++            });
++            Dispatcher.getDispatcher().dispatch(task, view, false);
+         }
+         
+     }
+@@ -158,17 +162,22 @@
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Preview&quot;));                                    
+         }
+         public void actionPerformed(ActionEvent e) {     
+-            try {
+-                model.createJasperPrint();
+-            } catch (JRException ex) {
+-                logger.error(&quot;Broken report: &quot;+ex);
+-                JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);                            
+-                return;
+-            }
+-            new SchedaView((Frame) view.getParent(), true, model.getJasperPrint()).setVisible(true);
+-        }
++            Task task = model.createJasperPrint();
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(final Object value) throws Exception {
++                    if (value == null || !(value instanceof JasperPrint))
++                        throw new Exception(L10n.getString(&quot;Print.Message.PrintProblem&quot;));
++                    SwingUtilities.invokeLater(new Runnable() {
++                       public void run() {
++                            new SchedaView((Frame) view.getParent(), true, (JasperPrint)value).setVisible(true);                           
++                       } 
++                    });//SwingUtils
++                }//afterStopped
++            });//setPostTaskAction
++            Dispatcher.getDispatcher().dispatch(task, view, false);
++        }//actionPerformed
+         
+-    }
++    }//PreviewAction
+     
+     class PrintFileFilter extends FileFilter {
+         public boolean accept(File f) {
+
+Modified: trunk/src/net/sf/plantlore/client/print/PrintView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/print/PrintView.form	2006-09-05 14:23:06 UTC (rev 686)
++++ trunk/src/net/sf/plantlore/client/print/PrintView.form	2006-09-05 14:33:05 UTC (rev 687)
+@@ -10,6 +10,7 @@
+   &lt;/SyntheticProperties&gt;
+   &lt;AuxValues&gt;
+     &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_layoutCodeTarget&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+@@ -38,7 +39,7 @@
+               &lt;Component id=&quot;numOfRecordsLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Component id=&quot;jPanel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace pref=&quot;7&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace pref=&quot;8&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+       &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/print/PrintView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/print/PrintView.java	2006-09-05 14:23:06 UTC (rev 686)
++++ trunk/src/net/sf/plantlore/client/print/PrintView.java	2006-09-05 14:33:05 UTC (rev 687)
+@@ -9,6 +9,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ import net.sf.plantlore.client.*;
++import net.sf.plantlore.common.DefaultEscapeKeyPressed;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+@@ -39,6 +40,9 @@
+                 break;
+             default:                
+         }
++        
++        setLocationRelativeTo(parent);
++        new DefaultEscapeKeyPressed(this);
+     }
+     
+     /** This method is called from within the constructor to
+
+Modified: trunk/src/net/sf/plantlore/common/PostTaskAction.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PostTaskAction.java	2006-09-05 14:23:06 UTC (rev 686)
++++ trunk/src/net/sf/plantlore/common/PostTaskAction.java	2006-09-05 14:33:05 UTC (rev 687)
+@@ -14,5 +14,5 @@
+  * @author fraktalek
+  */
+ public interface PostTaskAction {    
+-    public void afterStopped(Object value);
++    public void afterStopped(Object value) throws Exception;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000946.html">[Plantlore-dev] r686 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common
+</A></li>
+	<LI>Next message: <A HREF="000948.html">[Plantlore-dev] r688 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#947">[ date ]</a>
+              <a href="thread.html#947">[ thread ]</a>
+              <a href="subject.html#947">[ subject ]</a>
+              <a href="author.html#947">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

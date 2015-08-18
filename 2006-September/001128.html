@@ -1,0 +1,174 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r817 - in trunk/src/net/sf/plantlore:	client/history server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r817%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20server&In-Reply-To=%3C200609180936.k8I9apOm029787%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001127.html">
+   <LINK REL="Next"  HREF="001129.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r817 - in trunk/src/net/sf/plantlore:	client/history server</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r817%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20server&In-Reply-To=%3C200609180936.k8I9apOm029787%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r817 - in trunk/src/net/sf/plantlore:	client/history server">lada at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 18 11:36:51 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001127.html">[Plantlore-dev] r816 - in trunk/src/net/sf/plantlore: client/login	middleware server
+</A></li>
+        <LI>Next message: <A HREF="001129.html">[Plantlore-dev] r818 - in trunk/src/net/sf/plantlore: client/login	client/resources common server/manager server/tools
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1128">[ date ]</a>
+              <a href="thread.html#1128">[ thread ]</a>
+              <a href="subject.html#1128">[ subject ]</a>
+              <a href="author.html#1128">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-09-18 11:36:50 +0200 (Mon, 18 Sep 2006)
+New Revision: 817
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fix bug in History - UNDO author of occurrence is working now correctly.
+HibernateDBLayer - change saving value for authorOccurrence:
+historyChange.recordId = occurrence.cId
+history.oldRecordId = authorOccurrence.cId
+
+Show only data from table tOccurrence in HISTORY OF RECORD.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-09-18 08:34:19 UTC (rev 816)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-09-18 09:36:50 UTC (rev 817)
+@@ -142,6 +142,7 @@
+     /** Constants used for description of errors */    
+     public static final String ERROR_SEARCH_OBJECT = &quot;Error.HistoryObjectSearchFailed&quot;;
+     public static final String ERROR_SEARCH_AUTHOR = &quot;Error.HistoryAuthorSearchFailed&quot;;
++    public static final String ERROR_SEARCH_AUTHOR_NULL = &quot;Error.HistoryAuthorSearchNull&quot;;
+     public static final String ERROR_PROCESS = &quot;Error.HistoryProcessResultsFailed&quot;; 
+     public static final String ERROR_PARSE_DATE = &quot;Error.HistoryParseData&quot;; // 
+     public static final String ERROR_NO_RIGHTS = &quot;Error.HistoryNoRights&quot;; //
+@@ -296,12 +297,14 @@
+ 
+     	//Select data from tHistory table
+         try {        	        	
+-		    query = database.createQuery(HistoryRecord.class);
++		query = database.createQuery(HistoryRecord.class);
+ 		    // Create aliases for table tHistoryChange.      
+-	        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);        
++	        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);  
++                query.createAlias(&quot;historyColumn&quot;, &quot;hcol&quot;);
+ 	        // Add restriction to COPERATION column of tHistoryChange table
+ 	        if (data instanceof Occurrence) {	        	       
+ 		        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.recordId&quot;, null, ((Occurrence)data).getId(), null);  
++                        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hcol.tableName&quot;, null, PlantloreConstants.ENTITY_OCCURRENCE, null);
+ 	        } else if (data instanceof Habitat) {	        	        
+ 		        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.recordId&quot;, null, ((Habitat)data).getId(), null);  
+ 	        }	
+@@ -500,7 +503,7 @@
+              //Update author of specific occurrence
+              isDelete = (isDelete == 1) ? 2 : isDelete;
+              Object[] objects = getAllAuthors(occurrence, 2-isDelete);
+-             if (isError()) return; //Search authors failed
++             if (isError()) return; //Search authors failed or null object
+              int countResult = objects.length;               
+              for (int i=0; i&lt;countResult; i++ ) {                    							
+                 Object[] autOcc = (Object[])objects[i];          
+@@ -640,7 +643,7 @@
+      */
+     public void undoAuthorOccurrence() {
+         
+-    	int authorOccId = historyChange.getRecordId();
++    	int authorOccId = oldRecordId;
+     	occurrenceId = historyChange.getRecordId();	
+     	AuthorOccurrence authorOccurrence = null;
+     	int placings = 0;
+@@ -658,7 +661,7 @@
+     	}    
+     	
+     	if (!contain) {
+-        	// Select record AuthorOccurrence where id = authorOccurrenceId 
++        	// Select record AuthorOccurrence where id = authorOccurrenceId                   
+     		Object[] object = searchObject(PlantloreConstants.ENTITY_AUTHOROCCURRENCE, authorOccId);
+     		if (isError()) return; //tAuthorOccurrence doesn`t contain required data
+                authorOccurrence = (AuthorOccurrence)object[0];
+@@ -680,7 +683,7 @@
+                 if (authorOccurrence.getDeleted() == 1) {
+                     authorOccurrence.setDeleted(0);
+                 } else {
+-                    authorOccurrence.setDeleted(1);
++                    authorOccurrence.setDeleted(1);                    
+                 }                
+                 break;
+             case 2: //Role of author
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-18 08:34:19 UTC (rev 816)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-18 09:36:50 UTC (rev 817)
+@@ -1585,7 +1585,7 @@
+                     updated = AuthorOccurrence.class;
+                     updatedId = ((AuthorOccurrence)data).getId();
+                     tableId = AuthorOccurrence.ID;                    
+-                    historyChange.setRecordId(((AuthorOccurrence)data).getId());
++                    historyChange.setRecordId(((AuthorOccurrence)data).getOccurrence().getId());
+                 } else
+                 if (data instanceof Habitat) {
+                     updated = Habitat.class;
+@@ -1732,7 +1732,7 @@
+                         HistoryRecord hist = new HistoryRecord(); 
+                         hist.setHistoryChange(historyChange);                        
+                         hist.setHistoryColumn((HistoryColumn)hc[0]);
+-                        hist.setOldRecordId(0);
++                        hist.setOldRecordId(newRec.getId());
+                         if ( newRec.getDeleted() == 1) {
+ 	                        hist.setNewValue(null);
+ 	                        hist.setOldValue(newRec.getAuthor().getWholeName());
+@@ -1769,7 +1769,7 @@
+ 	                            HistoryRecord hist = new HistoryRecord();
+ 	                            hist.setHistoryChange(historyChange);	                            	                           
+ 	                            hist.setHistoryColumn((HistoryColumn)colNames[0]);  
+-	                            hist.setOldRecordId(0);
++	                            hist.setOldRecordId(newRec.getId());
+ 	                            String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+ 	                           			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+ 	                      		hist.setOldValue(origValueString);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001127.html">[Plantlore-dev] r816 - in trunk/src/net/sf/plantlore: client/login	middleware server
+</A></li>
+	<LI>Next message: <A HREF="001129.html">[Plantlore-dev] r818 - in trunk/src/net/sf/plantlore: client/login	client/resources common server/manager server/tools
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1128">[ date ]</a>
+              <a href="thread.html#1128">[ thread ]</a>
+              <a href="subject.html#1128">[ subject ]</a>
+              <a href="author.html#1128">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

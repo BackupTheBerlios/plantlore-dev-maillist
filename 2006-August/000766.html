@@ -1,0 +1,207 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r562 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r562%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200608241228.k7OCS2D7021895%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000765.html">
+   <LINK REL="Next"  HREF="000767.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r562 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r562%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200608241228.k7OCS2D7021895%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r562 - in trunk/src/net/sf/plantlore: client common">krater at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 24 14:28:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000765.html">[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server
+</A></li>
+        <LI>Next message: <A HREF="000767.html">[Plantlore-dev] r563 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#766">[ date ]</a>
+              <a href="thread.html#766">[ thread ]</a>
+              <a href="subject.html#766">[ subject ]</a>
+              <a href="author.html#766">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-24 14:27:53 +0200 (Thu, 24 Aug 2006)
+New Revision: 562
+
+Added:
+   trunk/src/net/sf/plantlore/common/GlobalExceptionHandler.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+Log:
+Global exception handling created. An uncaught exception will cause the application to &quot;terminate in a civilized way&quot;. /Sorry, must have taken a break from the nasty database programming./
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-24 10:01:20 UTC (rev 561)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-24 12:27:53 UTC (rev 562)
+@@ -295,6 +295,8 @@
+ 	AbstractAction logoutAction = new LogoutAction();
+ 
+ 	ReconnectAction reconnectAction = new ReconnectAction();
++	
++	ExitListener silentFinalAction = new ExitListener();
+ 
+ 	/** Creates a new instance of AppCoreCtrl */
+ 	public AppCoreCtrl(AppCore model, AppCoreView view) {
+@@ -305,7 +307,7 @@
+ 		this.view = view;
+ 		view.setSettingsAction(settingsAction);
+ 		view.setPrintAction(printAction);
+-		view.addExitListener(new ExitListener());
++		view.addExitListener(silentFinalAction);
+ 		view.setHelpContentsAction(helpContentsAction);
+ 		view.setHelpAboutAction(helpAboutAction);
+ 		view.setExportAction(exportAction);
+@@ -518,9 +520,9 @@
+ 			try {
+ 				model.savePreferences();
+ 			} catch (IOException ex) {
+-				JOptionPane.showMessageDialog(view,
+-						&quot;Problem while saving configuration: &quot;
+-								+ ex.getMessage());
++//				JOptionPane.showMessageDialog(view,
++//						&quot;Problem while saving configuration: &quot;
++//								+ ex.getMessage());
+ 			}
+ 
+ 			// The database layer created by a DBLayerFactory MUST be
+@@ -614,7 +616,7 @@
+ 					exportModel.useProjections(true);
+ 					exportModel.setRootTable((Class) queryParam[2]);
+ 				}
+-
++				
+ 				exportModel.setSelectQuery(query);
+ 				exportModel.setSelection(model.getTableModel().getSelection());
+ 			} catch (DBLayerException e) {
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-08-24 10:01:20 UTC (rev 561)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-08-24 12:27:53 UTC (rev 562)
+@@ -22,6 +22,7 @@
+ import net.sf.plantlore.client.AppCore;
+ import net.sf.plantlore.client.AppCoreCtrl;
+ import net.sf.plantlore.client.AppCoreView;
++import net.sf.plantlore.common.GlobalExceptionHandler;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.debug.ConnectionMonitor;
+ import net.sf.plantlore.common.debug.MemoryMonitor;
+@@ -151,6 +152,10 @@
+             view.setVisible(true);
+             EventQueue.invokeLater( new SplashScreenCloser() );
+             logger.info(&quot;AppCore MVC constructed. Plantlore client should be visible now.&quot;);
++            
++            logger.debug(&quot;Installing global exception handler.&quot;);
++            GlobalExceptionHandler.install( ctrl.silentFinalAction );
++            
+         } catch(RuntimeException e) {
+             //new ExceptionDialog(view,&quot;Some exception was thrown: &quot;+e);
+             e.printStackTrace();
+
+Added: trunk/src/net/sf/plantlore/common/GlobalExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/GlobalExceptionHandler.java	2006-08-24 10:01:20 UTC (rev 561)
++++ trunk/src/net/sf/plantlore/common/GlobalExceptionHandler.java	2006-08-24 12:27:53 UTC (rev 562)
+@@ -0,0 +1,59 @@
++package net.sf.plantlore.common;
++
++import java.awt.event.ActionListener;
++import java.lang.Thread.UncaughtExceptionHandler;
++
++import javax.swing.JOptionPane;
++
++import org.apache.log4j.Logger;
++
++import net.sf.plantlore.l10n.L10n;
++
++
++/**
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 24.8.2006
++ *
++ */
++public class GlobalExceptionHandler implements UncaughtExceptionHandler {
++	
++	private static boolean installed = false;
++	private Logger logger = Logger.getLogger(net.sf.plantlore.client.Plantlore.class.getPackage().getName());
++	
++	private final ActionListener silentFinalAction;
++	
++	private GlobalExceptionHandler(ActionListener silentFinalAction) {
++		this.silentFinalAction = silentFinalAction;
++	}
++	
++	public void uncaughtException(Thread t, Throwable e) {
++		logger.fatal(
++				&quot;Thread &quot; + t.getName() + &quot; (&quot; + t.getClass().getName() + &quot;) &quot; +
++				&quot;spawned an unhandled exception &quot; + e +&quot;.\n&quot; +
++				&quot;The application will be terminated.&quot;
++		);
++		
++		JOptionPane.showMessageDialog( 
++				null,
++				L10n.getString(&quot;Error.UnhandledExceptionalState&quot;) +
++				&quot;\n&quot; +
++				e.getMessage(), 
++				L10n.getString(&quot;Error.Fatal&quot;), 
++				JOptionPane.ERROR_MESSAGE );
++		
++		if(silentFinalAction != null)
++			silentFinalAction.actionPerformed(null);
++	}
++
++	
++	public static synchronized void install(ActionListener silentFinalAction) {
++		if( !installed ) {
++			Thread.setDefaultUncaughtExceptionHandler( new GlobalExceptionHandler(silentFinalAction) );
++			installed = true;
++		} else
++			throw new IllegalArgumentException(L10n.getString(&quot;Error.ImproperUse&quot;));
++	}
++
++
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000765.html">[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server
+</A></li>
+	<LI>Next message: <A HREF="000767.html">[Plantlore-dev] r563 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#766">[ date ]</a>
+              <a href="thread.html#766">[ thread ]</a>
+              <a href="subject.html#766">[ subject ]</a>
+              <a href="author.html#766">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

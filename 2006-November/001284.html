@@ -1,0 +1,591 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r865 - in trunk/src/net/sf/plantlore/client: .	overview synonyms
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-November/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r865%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview%20synonyms&In-Reply-To=%3C200611291825.kATIPqP1014068%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001282.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r865 - in trunk/src/net/sf/plantlore/client: .	overview synonyms</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r865%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview%20synonyms&In-Reply-To=%3C200611291825.kATIPqP1014068%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r865 - in trunk/src/net/sf/plantlore/client: .	overview synonyms">krater at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 29 19:25:52 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001282.html">[Plantlore-dev] r864 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1284">[ date ]</a>
+              <a href="thread.html#1284">[ thread ]</a>
+              <a href="subject.html#1284">[ subject ]</a>
+              <a href="author.html#1284">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-11-29 19:25:51 +0100 (Wed, 29 Nov 2006)
+New Revision: 865
+
+Added:
+   trunk/src/net/sf/plantlore/client/synonyms/
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.form
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+Log:
+AddEditCtrl.java: PlantSearch almost bound to the controller (the button in the view is still missing).
+
+client/synonyms: MVC for searching plants by their synonyms/localized names. Haven't been tested. Implementing this feature turned out to be quite nasty... (Where do I get the plants (not just taxons) from? Where do I get the database layer? How do I keep being posted about changes so as to know when the plants have to be replaced with new ones?)
+
+
+
+Ideas about how Plantlore should have been written keep popping out of my ear. Too bad there ain't gonna be a version 2.
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-11-29 14:08:16 UTC (rev 864)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-11-29 18:25:51 UTC (rev 865)
+@@ -60,6 +60,9 @@
+ 
+ import net.sf.plantlore.client.checklist.ChecklistCtrl;
+ import net.sf.plantlore.client.checklist.ChecklistView;
++import net.sf.plantlore.client.synonyms.PlantSearch;
++import net.sf.plantlore.client.synonyms.PlantSearchCtrl;
++import net.sf.plantlore.client.synonyms.PlantSearchView;
+ import net.sf.plantlore.common.AutoComboBoxNG3;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
+@@ -87,6 +90,7 @@
+     
+     //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+     private ChecklistView checklistView;
++    private PlantSearchView plantSearchView;
+     
+     
+     /** 
+@@ -141,7 +145,8 @@
+         //------- Buttons --------
+         view.okButton.setAction(new OkButtonAction());
+         view.cancelButton.setAction(new CancelButtonAction());
+-        view.checklistButton.setAction(new ChecklistAction());        
++        view.checklistButton.setAction(new ChecklistAction());
++        //TODO----&gt;view.synonymSearchButton.setAction(new PlantSearchAction());
+         view.clearLocationButton.setAction(new ClearLocationAction());
+         view.clearOccurrenceButton.setAction(new ClearOccurrenceAction());
+         view.calendarButton.setAction(new CalendarAction());
+@@ -161,6 +166,22 @@
+     }
+     
+     
++    
++    class PlantSearchAction extends StandardAction {
++		public PlantSearchAction() {
++			super(&quot;PlantSearch&quot;);
++		}
++		
++		public void actionPerformed(ActionEvent isUseless) {
++			if(plantSearchView == null) {
++				PlantSearch plantSearchModel = new PlantSearch( model.getDatabase() );
++				plantSearchView = new PlantSearchView(view, plantSearchModel);
++				new PlantSearchCtrl(plantSearchView, plantSearchModel, (AutoTextArea) view.taxonTextArea);
++			}
++			plantSearchView.setVisible(true);
++		}
++    }
++    
+     class ChecklistAction extends AbstractAction {
+     	public ChecklistAction() {
+     		putValue(NAME, L10n.getString(&quot;Checklist.Title&quot;)); 
+
+Added: trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java	2006-11-29 14:08:16 UTC (rev 864)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java	2006-11-29 18:25:51 UTC (rev 865)
+@@ -0,0 +1,106 @@
++/*
++ * SynonymSearch.java
++ *
++ * Created on 23. &#345;&#237;jen 2006, 16:23
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client.synonyms;
++
++import java.util.ArrayList;
++import java.util.Observable;
++
++import org.apache.log4j.Logger;
++
++import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
++
++/**
++ *
++ * @author yaa
++ */
++public class PlantSearch extends Observable {
++
++	private Logger logger = Logger.getLogger(getClass().getPackage().getName());
++	
++    private Plant[] plants;
++    private static String[] names = { Plant.TAXON, Plant.CZECHNAME, Plant.SYNONYMS };
++    private ArrayList&lt;Pair&lt;String,Plant&gt;&gt; results;
++    private DBLayer database;
++
++
++	public PlantSearch(DBLayer database) {
++		this.database = database;
++	}
++    
++//    public void setPlants(Plant[] plants) {
++//        this.plants = plants;
++//    }
++    
++    public void loadPlantsFromDatabase() {
++    	// The good thing is that the database layer we have here is only a proxy 
++    	// and when we get notified that it is necessary to reload the plants from the database
++    	// the &quot;correct&quot; database layer is already there (i.e. we do not have to ask anyone for it).
++    	
++    	// Erase the old plants.
++    	plants = new Plant[] {};
++    	SelectQuery plantQuery = null;
++    	try {
++    		// Try to retrieve the plants from the database.
++    		plantQuery = database.createQuery(Plant.class);
++    		plantQuery.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
++    		Integer resultId = database.executeQuery(plantQuery);
++    		int resultCount = database.getNumRows(resultId);
++    		plants = new Plant[resultCount]; // Actually a non-trivial amount of memory!
++    		
++    		for(int i = 0; i &lt; resultCount; i++)
++    			// This ~(Plant)((Object[])db.more()[0])[0]~ shit should have been fixed a very long time ago!
++    			// In fact, the whole database layer should have been rewritten properly in the first place!
++    			plants[i] = (Plant)((Object[])database.more( resultId, i, i )[0])[0];
++    		
++    	} catch(Exception e) {
++    		// This better not happen...
++    		logger.error(&quot;Unable to retrieve plants from the database! &quot; + e);
++    		plants = new Plant[] {};
++    	} finally {
++    		if(plantQuery != null)
++    			try { 	database.closeQuery(plantQuery); } catch(Exception ex) {/* At least I tried.. */}
++    	}
++    }
++    
++    @SuppressWarnings(&quot;unchecked&quot;)
++	public Pair&lt;String,Plant&gt;[] getResults() {
++        if(results == null)
++            return null;
++        return (Pair&lt;String,Plant&gt;[])results.toArray();
++    }
++    
++    
++    public void findPlants(String byName) {
++        if(byName == null || &quot;&quot;.equals(byName))
++            return;
++        
++        String byNameLC = byName.toLowerCase();
++        results = new ArrayList&lt;Pair&lt;String,Plant&gt;&gt;();
++        for(Plant p : plants) {
++            for(String column : names) {
++                Object t = p.getValue( column );
++                if( !(t instanceof String) )
++                    continue;
++                String name = (String) t;
++                if(name.toLowerCase().contains(byNameLC)) {
++                    results.add( new Pair&lt;String,Plant&gt;(p.toString() + &quot; (&quot;+column+&quot; = &quot;+byName+&quot;)&quot;, p) );
++                    break;
++                }
++            }
++        }
++        setChanged();
++        notifyObservers();
++    }
++    
++}
+
+Added: trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java	2006-11-29 14:08:16 UTC (rev 864)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java	2006-11-29 18:25:51 UTC (rev 865)
+@@ -0,0 +1,65 @@
++/*
++ * PlantSearchCtrl.java
++ *
++ * Created on 23. &#345;&#237;jen 2006, 17:44
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client.synonyms;
++
++import java.awt.event.ActionEvent;
++import java.beans.PropertyChangeEvent;
++import java.beans.PropertyChangeListener;
++
++import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.DefaultCancelAction;
++import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.StandardAction;
++import net.sf.plantlore.common.record.Plant;
++
++/**
++ *
++ * @author yaa
++ */
++public class PlantSearchCtrl {
++    
++    private PlantSearchView view;
++    private PlantSearch model;
++    private AutoTextArea plantAbsorber;
++    
++    /** Creates a new instance of PlantSearchCtrl */
++    public PlantSearchCtrl(PlantSearchView searchView, PlantSearch searchModel, AutoTextArea textArea) {
++        this.view = searchView;
++        this.model = searchModel;
++        this.plantAbsorber = textArea;
++        
++        view.cancel.setAction( new DefaultCancelAction(this.view) );
++        
++        view.find.setAction( new StandardAction(&quot;PlantSearch.Find&quot;) {
++            public void actionPerformed(ActionEvent e) {
++                model.findPlants( view.pattern.getText() );
++            }
++        });
++        
++        view.insert.setAction( new StandardAction(&quot;PlantSearch.Insert&quot;) {
++            @SuppressWarnings(&quot;unchecked&quot;)
++			public void actionPerformed(ActionEvent e) {
++                Object value = view.results.getSelectedValue();
++                if(value != null)
++                    plantAbsorber.addLines(new String[] { ((Pair&lt;String,Plant&gt;)value).getSecond().getTaxon() } );
++            }
++        });
++        
++        plantAbsorber.addPropertyChangeListener(
++				AutoTextArea.ALLOWED_VALUES_CHANGED,
++				new PropertyChangeListener() {
++					public void propertyChange(PropertyChangeEvent arg0) {
++						model.loadPlantsFromDatabase();
++					}
++				});
++        
++    }
++    
++}
+
+Added: trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.form	2006-11-29 14:08:16 UTC (rev 864)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.form	2006-11-29 18:25:51 UTC (rev 865)
+@@ -0,0 +1,126 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;pattern&quot; pref=&quot;273&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;find&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;insert&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;cancel&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;find&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;pattern&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;296&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;cancel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;insert&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Synonym.Synonym&quot; replaceFormat=&quot;java.util.ResourceBundle.getBundle(&quot;{bundleNameSlashes}&quot;).getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;find&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Synonym.Find&quot; replaceFormat=&quot;java.util.ResourceBundle.getBundle(&quot;{bundleNameSlashes}&quot;).getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;insert&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Synonym.Insert&quot; replaceFormat=&quot;java.util.ResourceBundle.getBundle(&quot;{bundleNameSlashes}&quot;).getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JList&quot; name=&quot;results&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ListModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ListModelEditor&quot;&gt;
++              &lt;StringArray count=&quot;0&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;selectionMode&quot; type=&quot;int&quot; value=&quot;0&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Common.Cancel&quot; replaceFormat=&quot;java.util.ResourceBundle.getBundle(&quot;{bundleNameSlashes}&quot;).getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;pattern&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java	2006-11-29 14:08:16 UTC (rev 864)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java	2006-11-29 18:25:51 UTC (rev 865)
+@@ -0,0 +1,134 @@
++/*
++ * SynonymSearch.java
++ *
++ * Created on 23. &#345;&#237;jen 2006, 16:08
++ */
++
++package net.sf.plantlore.client.synonyms;
++
++import java.util.Observable;
++import java.util.Observer;
++import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.record.Plant;
++
++/**
++ *
++ * @author  yaa
++ */
++public class PlantSearchView extends javax.swing.JDialog implements Observer {
++    
++    private PlantSearch model;
++    
++    /** Creates new form SynonymSearch */
++    public PlantSearchView(javax.swing.JDialog parent, PlantSearch model) {
++        super(parent, true);
++        
++        this.model = model;
++        
++        initComponents();
++        setLocationRelativeTo(parent);
++        
++        new DefaultEscapeKeyPressed( this );
++        getRootPane().setDefaultButton( find );
++        model.addObserver(this);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jLabel1 = new javax.swing.JLabel();
++        find = new javax.swing.JButton();
++        insert = new javax.swing.JButton();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        results = new javax.swing.JList();
++        cancel = new javax.swing.JButton();
++        pattern = new javax.swing.JTextField();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        jLabel1.setText(java.util.ResourceBundle.getBundle(&quot;net/sf/plantlore/l10n/Plantlore&quot;).getString(&quot;Synonym.Synonym&quot;));
++
++        find.setText(java.util.ResourceBundle.getBundle(&quot;net/sf/plantlore/l10n/Plantlore&quot;).getString(&quot;Synonym.Find&quot;));
++
++        insert.setText(java.util.ResourceBundle.getBundle(&quot;net/sf/plantlore/l10n/Plantlore&quot;).getString(&quot;Synonym.Insert&quot;));
++
++        results.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
++        jScrollPane1.setViewportView(results);
++
++        cancel.setText(java.util.ResourceBundle.getBundle(&quot;net/sf/plantlore/l10n/Plantlore&quot;).getString(&quot;Common.Cancel&quot;));
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, layout.createSequentialGroup()
++                        .add(jLabel1)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(pattern, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 273, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(find))
++                    .add(layout.createSequentialGroup()
++                        .add(insert)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(cancel)))
++                .addContainerGap())
++        );
++
++        layout.linkSize(new java.awt.Component[] {cancel, insert}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel1)
++                    .add(find)
++                    .add(pattern, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 296, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(cancel)
++                    .add(insert))
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++
++    
++    public void update(Observable o, Object arg) {
++        java.awt.EventQueue.invokeLater(new Runnable() {
++            public void run() {
++                Pair&lt;String,Plant&gt;[] plants = model.getResults();
++                if(plants != null)
++                    results.setListData( plants );
++                else
++                    results.setListData(new Object[0]);
++            }
++        });
++    }
++    
++
++    
++    
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton cancel;
++    protected javax.swing.JButton find;
++    protected javax.swing.JButton insert;
++    private javax.swing.JLabel jLabel1;
++    private javax.swing.JScrollPane jScrollPane1;
++    protected javax.swing.JTextField pattern;
++    protected javax.swing.JList results;
++    // End of variables declaration//GEN-END:variables
++    
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001282.html">[Plantlore-dev] r864 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1284">[ date ]</a>
+              <a href="thread.html#1284">[ thread ]</a>
+              <a href="subject.html#1284">[ subject ]</a>
+              <a href="author.html#1284">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

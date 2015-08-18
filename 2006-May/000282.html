@@ -1,0 +1,819 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r243 - in trunk: analysis/database src/net/sf/plantlore/common/record src/net/sf/plantlore/config/hibernate
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r243%20-%20in%20trunk%3A%20analysis/database%20src/net/sf/plantlore/common/record%20src/net/sf/plantlore/config/hibernate&In-Reply-To=%3C200605082225.k48MPfV5009875%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000279.html">
+   <LINK REL="Next"  HREF="000284.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r243 - in trunk: analysis/database src/net/sf/plantlore/common/record src/net/sf/plantlore/config/hibernate</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r243%20-%20in%20trunk%3A%20analysis/database%20src/net/sf/plantlore/common/record%20src/net/sf/plantlore/config/hibernate&In-Reply-To=%3C200605082225.k48MPfV5009875%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r243 - in trunk: analysis/database src/net/sf/plantlore/common/record src/net/sf/plantlore/config/hibernate">lada at berlios.de
+       </A><BR>
+    <I>Tue May  9 00:25:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000279.html">[Plantlore-dev] r242 - in trunk/src/net/sf/plantlore: client client/authors client/export client/history client/imports client/login client/metadata client/publication client/publications client/user common common/exception middleware server
+</A></li>
+        <LI>Next message: <A HREF="000284.html">[Plantlore-dev] r244 - in trunk/analysis/database: . Old DB model
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#282">[ date ]</a>
+              <a href="thread.html#282">[ thread ]</a>
+              <a href="subject.html#282">[ subject ]</a>
+              <a href="author.html#282">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-09 00:25:40 +0200 (Tue, 09 May 2006)
+New Revision: 243
+
+Added:
+   trunk/src/net/sf/plantlore/common/record/LastDataVersion.java
+   trunk/src/net/sf/plantlore/config/hibernate/LastDataVersion.hbm.xml
+Removed:
+   trunk/src/net/sf/plantlore/common/record/LastUpdate.java
+   trunk/src/net/sf/plantlore/config/hibernate/LastUpdate.hbm.xml
+Modified:
+   trunk/analysis/database/DBModel_postgres.sql
+   trunk/analysis/database/DBmodel.sql
+   trunk/analysis/database/DBmodel_MySQL.sql
+   trunk/analysis/database/UkladaniHistorie.odt
+   trunk/src/net/sf/plantlore/config/hibernate/hibernate.cfg.xml
+Log:
+Repair SQL of DBmodel. Add new table, whitch contains information about last version of Plants, Villages, Territories and Pyhtochoria. New database is in urtax. Empty database and test database (contains only ten occurernces) are in urtax, too.
+
+Modified: trunk/analysis/database/DBModel_postgres.sql
+===================================================================
+--- trunk/analysis/database/DBModel_postgres.sql	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/analysis/database/DBModel_postgres.sql	2006-05-08 22:25:40 UTC (rev 243)
+@@ -12,6 +12,15 @@
+ 
+ SET default_with_oids = true;
+ 
++CREATE TABLE TLASTDATAVERSION (
++    CID                  INTEGER NOT NULL,
++    CDATE                DATE NOT NULL,
++    CPLANTSVERSION    INTEGER DEFAULT 0 NOT NULL,
++    CVILLAGESVERSION     INTEGER DEFAULT 0 NOT NULL,
++    CPHYTOCHORIAVERSION  INTEGER DEFAULT 0 NOT NULL,
++    CTERRITORYVERSION    INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
+ /* Table: TAUTHORS, Owner: SYSDBA */
+ CREATE TABLE TAUTHORS (
+     CID               SERIAL NOT NULL,    
+@@ -23,7 +32,8 @@
+     CEMAIL            VARCHAR(100),
+     CURL              VARCHAR(255),
+     CNOTE             VARCHAR(4096),
+-    CDELETE           SMALLINT DEFAULT 0,
++    CCREATEWHO        INTEGER NOT NULL, 
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TAUTHORSOCCURRENCES, Owner: SYSDBA */
+@@ -32,8 +42,8 @@
+     COCCURRENCEID      INTEGER NOT NULL,
+     CID                INTEGER NOT NULL,
+     CROLE              VARCHAR(20),
+-    CRESULTREVISION  VARCHAR(30),
+-    CDELETE           SMALLINT DEFAULT 0,
++    CNOTE  VARCHAR(4096),
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: THABITATS, Owner: SYSDBA */
+@@ -49,7 +59,7 @@
+     CLATITUDE          DOUBLE PRECISION,
+     CLONGITUDE         DOUBLE PRECISION,
+     CNOTE              VARCHAR(4096),
+-    CDELETE            SMALLINT DEFAULT 0,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: THISTORY, Owner: SYSDBA */
+@@ -64,7 +74,7 @@
+ /* Table: THISTORYCHANGE, Owner: SYSDBA */
+ CREATE TABLE THISTORYCHANGE (
+     CID            SERIAL NOT NULL,
+-    COCCURRENCEID  INTEGER  DEFAULT 0 NOT NULL,
++    COCCURRENCEID  INTEGER  DEFAULT 0,
+     CRECORDID      INTEGER  DEFAULT 0 NOT NULL,
+     COLDRECORDID   INTEGER,
+     COPERATION     SMALLINT  DEFAULT 0 NOT NULL,
+@@ -97,7 +107,7 @@
+     CDATEMODIFIED             TIMESTAMP NOT NULL,
+     CRECORDBASIS              VARCHAR(15),
+     CBIOTOPETEXT              VARCHAR(50),
+-    CVERSIONPLANTSFILE        SMALLINT DEFAULT 0,
++    CDELETE                   SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TOCCURRENCES, Owner: SYSDBA */
+@@ -121,7 +131,7 @@
+     CUPDATEWHO         INTEGER NOT NULL,
+     CNOTE              VARCHAR(4096),
+     CMETADATAID        INTEGER NOT NULL,
+-    CDELETE            SMALLINT DEFAULT 0,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TPHYTOCHORIA, Owner: SYSDBA */
+@@ -156,18 +166,18 @@
+     CREFERENCEDETAIL            VARCHAR(20),
+     CURL                        VARCHAR(100),
+     CNOTE                       VARCHAR(4096),
+-    CDELETE                     SMALLINT DEFAULT 0,
++    CCREATEWHO                  INTEGER NOT NULL,
++    CDELETE                     SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TRIGHT, Owner: SYSDBA */
+ CREATE TABLE TRIGHT (
+     CID             SERIAL NOT NULL,
+-    CADMINISTRATOR  SMALLINT,
+-    CEDITALL        SMALLINT,
+-    CEDITOWN        SMALLINT,
++    CADMINISTRATOR  SMALLINT DEFAULT 0 NOT NULL,
++    CEDITALL        SMALLINT DEFAULT 0 NOT NULL,
+     CEDITGROUP      VARCHAR(4096),
+     CSEECOLUMNS     VARCHAR(4096),
+-    CADD            SMALLINT,
++    CADD            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TTERRITORIES, Owner: SYSDBA */
+@@ -180,9 +190,10 @@
+ CREATE TABLE TUSER (
+     CID          SERIAL NOT NULL,
+     CLOGIN       VARCHAR(20) NOT NULL,
++    CPASSWORD    VARCHAR(20) NOT NULL,
+     CFIRSTNAME   VARCHAR(20),
+     CSURNAME     VARCHAR(30),
+-    CWHOLENAME   VARCHAR(50),
++    CWHOLENAME   VARCHAR(50) NOT NULL,
+     CEMAIL       VARCHAR(50),
+     CADDRESS     VARCHAR(255),
+     CCREATEWHEN  TIMESTAMP NOT NULL,
+@@ -230,6 +241,11 @@
+ 
+ ALTER TABLE TUSER ADD FOREIGN KEY (CRIGHTID) REFERENCES TRIGHT (CID);
+ 
++ALTER TABLE TAUTHORS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TPUBLICATIONS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++
+ /* Grant role for this database */
+ 
+ /* Role: BOTANIK, Owner: SYSDBA 
+
+Modified: trunk/analysis/database/DBmodel.sql
+===================================================================
+--- trunk/analysis/database/DBmodel.sql	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/analysis/database/DBmodel.sql	2006-05-08 22:25:40 UTC (rev 243)
+@@ -18,8 +18,17 @@
+ CREATE GENERATOR GEN_TTERRITORIES;
+ CREATE GENERATOR GEN_TUSER;
+ CREATE GENERATOR GEN_TVILLAGES;
+-CREATE GENERATOR GEN_TLASTUPDATE;
++CREATE GENERATOR GEN_TLASTVERSION;
+ 
++/* Table: TLASTVERSION, Owner: SYSDBA */
++CREATE TABLE TLASTDATAVERSION (
++    CID                  INTEGER NOT NULL,
++    CDATE                DATE NOT NULL,
++    CPLANTSVERSION    INTEGER DEFAULT 0 NOT NULL,
++    CVILLAGESVERSION     INTEGER DEFAULT 0 NOT NULL,
++    CPHYTOCHORIAVERSION  INTEGER DEFAULT 0 NOT NULL,
++    CTERRITORYVERSION    INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
+ 
+ /* Table: TAUTHORS, Owner: SYSDBA */
+ CREATE TABLE TAUTHORS (
+@@ -32,17 +41,18 @@
+     CEMAIL            VARCHAR(100),
+     CURL              VARCHAR(255),
+     CNOTE             VARCHAR(4096),
+-    CDELETE           SMALLINT DEFAULT 0,
++    CCREATEWHO        INTEGER NOT NULL,
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TAUTHORSOCCURRENCES, Owner: SYSDBA */
+ CREATE TABLE TAUTHORSOCCURRENCES (
+     CAUTHORID          INTEGER NOT NULL,
+-    COCCURRENCEID      INTEGER,
++    COCCURRENCEID      INTEGER NOT NULL,
+     CID                INTEGER NOT NULL,
+     CROLE              VARCHAR(20),
+-    CRESULTREVISION  VARCHAR(30),
+-    CDELETE           SMALLINT DEFAULT 0,
++    CNOTE              VARCHAR(4096),
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: THABITATS, Owner: SYSDBA */
+@@ -58,7 +68,7 @@
+     CLATITUDE          DOUBLE PRECISION,
+     CLONGITUDE         DOUBLE PRECISION,
+     CNOTE              VARCHAR(4096),
+-    CDELETE            SMALLINT DEFAULT 0 ,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: THISTORY, Owner: SYSDBA */
+@@ -73,9 +83,9 @@
+ /* Table: THISTORYCHANGE, Owner: SYSDBA */
+ CREATE TABLE THISTORYCHANGE (
+     CID            INTEGER NOT NULL,
+-    COCCURRENCEID  INTEGER  DEFAULT 0 NOT NULL,
++    COCCURRENCEID  INTEGER,
+     CRECORDID      INTEGER  DEFAULT 0 NOT NULL,
+-    COLDRECORDID   INTEGER,
++    COLDRECORDID   INTEGER  DEFAULT 0,
+     COPERATION     SMALLINT  DEFAULT 0 NOT NULL,
+     CWHEN          TIMESTAMP NOT NULL,
+     CWHO           INTEGER NOT NULL,
+@@ -105,8 +115,8 @@
+     CDATECREATE               TIMESTAMP NOT NULL,
+     CDATEMODIFIED             TIMESTAMP NOT NULL,
+     CRECORDBASIS              VARCHAR(15),
+-    CBIOTOPETEXT              VARCHAR(50),
+-    CVERSIONPLANTSFILE        SMALLINT DEFAULT 0,
++    CBIOTOPETEXT              VARCHAR(50),    
++    CDELETE                   SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TOCCURRENCES, Owner: SYSDBA */
+@@ -130,7 +140,7 @@
+     CUPDATEWHO         INTEGER NOT NULL,
+     CNOTE              VARCHAR(4096),
+     CMETADATAID        INTEGER NOT NULL,
+-    CDELETE            SMALLINT DEFAULT 0,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TPHYTOCHORIA, Owner: SYSDBA */
+@@ -165,18 +175,19 @@
+     CREFERENCEDETAIL            VARCHAR(20),
+     CURL                        VARCHAR(100),
+     CNOTE                       VARCHAR(4096),
+-    CDELETE                     SMALLINT DEFAULT 0,
++    CCREATEWHO                  INTEGER NOT NULL,
++    CDELETE                     SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TRIGHT, Owner: SYSDBA */
+ CREATE TABLE TRIGHT (
+     CID             INTEGER NOT NULL,
+-    CADMINISTRATOR  SMALLINT,
+-    CEDITALL        SMALLINT,
+-    CEDITOWN        SMALLINT,
++    CADMINISTRATOR  SMALLINT NOT NULL,
++    CEDITALL        SMALLINT NOT NULL,
++    CEDITOWN        SMALLINT NOT NULL,
+     CEDITGROUP      VARCHAR(4096),
+     CSEECOLUMNS     VARCHAR(4096),
+-    CADD            SMALLINT,
++    CADD            SMALLINT NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ /* Table: TTERRITORIES, Owner: SYSDBA */
+@@ -189,10 +200,10 @@
+ CREATE TABLE TUSER (
+     CID          INTEGER NOT NULL,
+     CLOGIN       VARCHAR(20) NOT NULL,
+-    CPASSWORD    SMALLINT,
++    CPASSWORD    SMALLINT DEFAULT 0 NOT NULL,
+     CFIRSTNAME   VARCHAR(20),
+     CSURNAME     VARCHAR(30),
+-    CWHOLENAME   VARCHAR(50),
++    CWHOLENAME   VARCHAR(50) NOT NULL,
+     CEMAIL       VARCHAR(50),
+     CADDRESS     VARCHAR(255),
+     CCREATEWHEN  TIMESTAMP NOT NULL,
+@@ -207,12 +218,6 @@
+     CNAME  VARCHAR(50) NOT NULL,
+ PRIMARY KEY (CID)); 
+ 
+-/* Table: TLASTUPDATE, Owner: SYSDBA */
+-CREATE TABLE TLASTUPDATE (
+-    CID          INTEGER NOT NULL,
+-    CTABLENAME   VARCHAR(20) NOT NULL,
+-    CLASTUPDATE  TIMESTAMP NOT NULL,
+-PRIMARY KEY (CID));
+ 
+ ALTER TABLE TAUTHORSOCCURRENCES ADD FOREIGN KEY (CAUTHORID) REFERENCES TAUTHORS (CID);
+ 
+@@ -246,6 +251,10 @@
+ 
+ ALTER TABLE TUSER ADD FOREIGN KEY (CRIGHTID) REFERENCES TRIGHT (CID);
+ 
++ALTER TABLE TAUTHORS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TPUBLICATIONS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
+ /* Grant role for this database */
+ 
+ /* Role: BOTANIK, Owner: SYSDBA */
+@@ -279,12 +288,12 @@
+     CWHOLENAME,
+     CEMAIL,
+     CADDRESS,
+-    CRESULTREVISION,
++    CNOTE,
+     CDAY,
+     CMONTH,
+     CYEAR)
+ AS
+-select AO.CID, AO.coccurrenceid, A.cwholename, A.CEMAIL, A.CADDRESS, AO.cresultrevision, O.cdaycollected, O.cmonthcollected, O.cyearcollected
++select AO.CID, AO.coccurrenceid, A.cwholename, A.CEMAIL, A.CADDRESS, AO.CNOTE, O.cdaycollected, O.cmonthcollected, O.cyearcollected
+ from TAUTHORS A JOIN TAUTHORSOCCURRENCES AO JOIN toccurrences O  ON (A.CID = AO.cauthorid) ON (AO.coccurrenceid = O.cid)
+ WHERE AO.crole = 'revision'
+ ;
+
+Modified: trunk/analysis/database/DBmodel_MySQL.sql
+===================================================================
+--- trunk/analysis/database/DBmodel_MySQL.sql	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/analysis/database/DBmodel_MySQL.sql	2006-05-08 22:25:40 UTC (rev 243)
+@@ -1,3 +1,11 @@
++CREATE TABLE TLASTDATAVERSION (
++    CID                  INTEGER NOT NULL,
++    CDATE                DATE NOT NULL,
++    CPLANTSVERSION    INTEGER DEFAULT 0 NOT NULL,
++    CVILLAGESVERSION     INTEGER DEFAULT 0 NOT NULL,
++    CPHYTOCHORIAVERSION  INTEGER DEFAULT 0 NOT NULL,
++    CTERRITORYVERSION    INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
+ 
+ CREATE TABLE TAUTHORS (
+     CID               INTEGER NOT NULL auto_increment,    
+@@ -9,8 +17,10 @@
+     CEMAIL            VARCHAR(100) CHARACTER SET UTF8,
+     CURL              VARCHAR(255) CHARACTER SET UTF8,
+     CNOTE             VARCHAR(4096) CHARACTER SET UTF8,
++    CCRATEWHO         INTEGER NOT NULL,
+     CDELETE           SMALLINT DEFAULT 0,
+-PRIMARY KEY (CID));
++PRIMARY KEY (CID),
++FOREIGN KEY (CCREATEWHO) REFERENCES TUSER(CID));
+ 
+ CREATE TABLE TMETADATA (
+     CID                       INTEGER NOT NULL auto_increment,
+@@ -28,8 +38,7 @@
+     CDATECREATE               TIMESTAMP NOT NULL,
+     CDATEMODIFIED             TIMESTAMP NOT NULL,
+     CRECORDBASIS              VARCHAR(15) CHARACTER SET UTF8,
+-    CBIOTOPETEXT              VARCHAR(50) CHARACTER SET UTF8,
+-    CVERSIONPLANTSFILE        SMALLINT DEFAULT 0,
++    CBIOTOPETEXT              VARCHAR(50) CHARACTER SET UTF8,    
+ PRIMARY KEY (CID));
+ 
+ CREATE TABLE TPLANTS (
+@@ -54,17 +63,18 @@
+     CREFERENCEDETAIL            VARCHAR(20) CHARACTER SET UTF8,
+     CURL                        VARCHAR(100) CHARACTER SET UTF8,
+     CNOTE                       VARCHAR(4096) CHARACTER SET UTF8,
++    CCRATEWHO                   INTEGER NOT NULL,
+     CDELETE                     SMALLINT DEFAULT 0,
+-PRIMARY KEY (CID));
++PRIMARY KEY (CID),
++FOREIGN KEY (CCREATEWHO) REFERENCES TUSER(CID));
+ 
+ CREATE TABLE TRIGHT (
+     CID             INTEGER NOT NULL auto_increment,
+-    CADMINISTRATOR  SMALLINT,
+-    CEDITALL        SMALLINT,
+-    CEDITOWN        SMALLINT,
++    CADMINISTRATOR  SMALLINT DEFAULT 0 NOT NULL,
++    CEDITALL        SMALLINT DEFAULT 0 NOT NULL,
+     CEDITGROUP      VARCHAR(4096) CHARACTER SET UTF8,
+     CSEECOLUMNS     VARCHAR(4096) CHARACTER SET UTF8,
+-    CADD            SMALLINT,
++    CADD            SMALLINT DEFAULT 0 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+ CREATE TABLE TTERRITORIES (
+@@ -83,19 +93,13 @@
+     CNAME  VARCHAR(50) CHARACTER SET UTF8 NOT NULL,
+ PRIMARY KEY (CID));
+ 
+-CREATE TABLE TLASTUPDATE (
+-    CID          INTEGER NOT NULL auto_increment,
+-    CTABLENAME   VARCHAR(20) CHARACTER SET UTF8 NOT NULL,
+-    CLASTUPDATE  TIMESTAMP NOT NULL,
+-PRIMARY KEY (CID));
+-
+ CREATE TABLE TUSER (
+     CID          INTEGER NOT NULL auto_increment,
+     CLOGIN       VARCHAR(20) NOT NULL,
+-    CPASSWORD    SMALLINT,
++    CPASSWORD    SMALLINT NOT NULL,
+     CFIRSTNAME   VARCHAR(20) CHARACTER SET UTF8,
+     CSURNAME     VARCHAR(30) CHARACTER SET UTF8,
+-    CWHOLENAME   VARCHAR(50) CHARACTER SET UTF8,
++    CWHOLENAME   VARCHAR(50) CHARACTER SET UTF8 NOT NULL,
+     CEMAIL       VARCHAR(50) CHARACTER SET UTF8,
+     CADDRESS     VARCHAR(255) CHARACTER SET UTF8,
+     CCREATEWHEN  TIMESTAMP NOT NULL,
+@@ -158,7 +162,7 @@
+     COCCURRENCEID      INTEGER,
+     CID                INTEGER NOT NULL,
+     CROLE              VARCHAR(20) CHARACTER SET UTF8,
+-    CRESULTREVISION  VARCHAR(30) CHARACTER SET UTF8,
++    Cnote  VARCHAR(4096) CHARACTER SET UTF8,
+     CDELETE           SMALLINT DEFAULT 0,
+ PRIMARY KEY (CID),
+ FOREIGN KEY (CAUTHORID) REFERENCES TAUTHORS(CID),
+@@ -172,7 +176,7 @@
+ 
+ CREATE TABLE THISTORYCHANGE (
+     CID            INTEGER NOT NULL auto_increment,
+-    COCCURRENCEID  INTEGER  DEFAULT 0 NOT NULL,
++    COCCURRENCEID  INTEGER  DEFAULT 0,
+     CRECORDID      INTEGER  DEFAULT 0 NOT NULL,
+     COLDRECORDID   INTEGER,
+     COPERATION     SMALLINT  DEFAULT 0 NOT NULL,
+@@ -228,12 +232,12 @@
+     CWHOLENAME,
+     CEMAIL,
+     CADDRESS,
+-    CRESULTREVISION,
++    CNOTE,
+     CDAY,
+     CMONTH,
+     CYEAR)
+ AS
+-select AO.CID, AO.coccurrenceid, A.cwholename, A.CEMAIL, A.CADDRESS, AO.cresultrevision, O.cdaycollected, O.cmonthcollected, O.cyearcollected
++select AO.CID, AO.coccurrenceid, A.cwholename, A.CEMAIL, A.CADDRESS, AO.CNOTE, O.cdaycollected, O.cmonthcollected, O.cyearcollected
+ from TAUTHORS A JOIN TAUTHORSOCCURRENCES AO JOIN toccurrences O  ON (A.CID = AO.cauthorid) ON (AO.coccurrenceid = O.cid)
+ WHERE AO.crole = 'revision'
+ ;
+
+Modified: trunk/analysis/database/UkladaniHistorie.odt
+===================================================================
+(Binary files differ)
+
+Added: trunk/src/net/sf/plantlore/common/record/LastDataVersion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/LastDataVersion.java	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/src/net/sf/plantlore/common/record/LastDataVersion.java	2006-05-08 22:25:40 UTC (rev 243)
+@@ -0,0 +1,149 @@
++package net.sf.plantlore.common.record;
++
++import java.util.Date;
++
++/**
++ *  Data holder object representing TLASTVERSION table in the DB. This object is used as a data
++ *  holder for Hibernate operations on the server side. On the side of the client, it represents part
++ *  of a lastUpdate record we are working with. It is being sent from client to server and back when
++ *  executing database queries.
++ *
++ *  @author Lada Oberreiterova  
++ */
++public class LastDataVersion extends Record {
++
++	 /**
++     * Parameters of the LastDataVersion. For detailed explanation see data model documentation.
++     */
++    private Integer id;
++    private Integer plantsVersion;
++    private Integer villagesVersion;
++    private Integer territoryVersion;
++    private Integer phytochoriaVersion;
++    private Date date;
++    
++    /** Constants with column mapping (used for building select queries) */
++    public static final String ID = &quot;id&quot;;
++    public static final String DATE = &quot;date&quot;;      
++    public static final String PLANTSVERSION = &quot;tableName&quot;;    
++    public static final String VILLAGEVERSION = &quot;lastUpdate&quot;;
++    public static final String TERRITORYVERSION = &quot;territoryVersion&quot;;
++    public static final String PHYTOCHORIAVERSION = &quot;phytochoriaVersion&quot;;
++            
++    /**
++     *   Default constructor to create new class LastDataVersion
++     */
++    public LastDataVersion() {
++        
++    }
++    
++        
++    /**
++     *   Get LastDataVersion record id
++     * 
++     * @return id of the LaLastDataVersionecord
++     * @see setId
++     */
++    public Integer getId() {
++        return this.id;
++    }
++    
++    /**
++     *   Set LastDataVersion record id
++     * 
++     * @param id   id of the LaLastDataVersionecord
++     * @see getId
++     */
++    public void setId(Integer id) {
++        this.id = id;
++    }
++    
++    /**
++     *   Get version of data in table tVillages
++     *   @return version of data in table tVillages
++     *   @see setVillagesVersion
++     */
++    public Integer getVillagesVersion() {
++        return this.villagesVersion;
++    }
++    
++    /**
++     *   Set version of data in table tVillages
++     *   @param villagesVersion string containing version of data in table tVillages
++     *   @see getVillagesVersion
++     */
++    public void setVillagesVersion (Integer villagesVersion) {
++        this.villagesVersion = villagesVersion;
++    }
++    
++    /**
++     *   Get version of data in table tTerritory
++     *   @return version of data in table tTerritory
++     *   @see setTerritoryVersion
++     */
++    public Integer getTerritoryVersion() {
++        return this.territoryVersion;
++    }
++    
++    /**
++     *   Set version of data in table tTerritory
++     *   @param territoryVersion string containing version of data in table tTerritory
++     *   @see getTerritoryVersion
++     */
++    public void setTerritoryVersion (Integer territoryVersion) {
++        this.territoryVersion = territoryVersion;
++    }
++    
++    /**
++     *   Get version of data in table tPlants
++     *   @return version of data in table tPlants
++     *   @see setPlantsVersion
++     */
++    public Integer getPlantsVersion() {
++        return this.plantsVersion;
++    }
++    
++    /**
++     *   Set version of data in table tPlants
++     *   @param tableName string containing version of data in table tPlants
++     *   @see getPlantsVersion
++     */
++    public void setPlantsVersion (Integer plantsVersion) {
++        this.plantsVersion = plantsVersion;
++    }
++    /**
++     *   Get version of data in table tPhytochoria
++     *   @return version of data in table tPhytochoria
++     *   @see setPhytochoriaVersion
++     */
++    public Integer getPhytochoriaVersion() {
++        return this.phytochoriaVersion;
++    }
++    
++    /**
++     *   Set version of data in table tPhytochoria
++     *   @param hytochoriaVersion string containing version of data in table tPhytochoria
++     *   @see getPhytochoriaVersion
++     */
++    public void setPhytochoriaVersion (Integer phytochoriaVersion) {
++        this.phytochoriaVersion = phytochoriaVersion;
++    }
++
++    /**
++     *   Get date and time of table last update
++     *   @return date and time of table last update
++     *   @see setDate
++     */
++    public java.util.Date getDate() {
++        return this.date;
++    }
++    
++    /**
++     *   Set date and time of table last update
++     *   @param date date and time of table last update
++     *   @see getDate
++     */
++    public void setDate(java.util.Date date) {
++        this.date = date;
++    }
++}
+
+Deleted: trunk/src/net/sf/plantlore/common/record/LastUpdate.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/LastUpdate.java	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/src/net/sf/plantlore/common/record/LastUpdate.java	2006-05-08 22:25:40 UTC (rev 243)
+@@ -1,84 +0,0 @@
+-package net.sf.plantlore.common.record;
+-
+-/**
+- *  Data holder object representing TLASTUPDATE table in the DB. This object is used as a data
+- *  holder for Hibernate operations on the server side. On the side of the client, it represents part
+- *  of a lastUpdate record we are working with. It is being sent from client to server and back when
+- *  executing database queries.
+- *
+- *  @author Lada Oberreiterova  
+- */
+-public class LastUpdate extends Record {
+-
+-	 /** Parameters of the LastUpdate. For detailed explanation see data model documentation. */
+-    private Integer id;
+-    private String tableName;
+-    private java.util.Date lastUpdate;    
+-    
+-    /** Constants with column mapping (used for building select queries) */
+-    public static final String ID = &quot;id&quot;;
+-    public static final String TABLENAME = &quot;tableName&quot;;    
+-    public static final String LASTUPDATE = &quot;lastUpdate&quot;;
+-   
+-    /**
+-     *   Default constructor to create new class LastUpdate
+-     */
+-    public LastUpdate() {
+-        
+-    }
+-    
+-        
+-    /**
+-     *   Get LastUpdate record id
+-     *   @return id of the LastUpdate record
+-     *   @see setId
+-     */
+-    public Integer getId() {
+-        return this.id;
+-    }
+-    
+-    /**
+-     *   Set LastUpdate record id
+-     *   @param id   id of the LastUpdate record
+-     *   @see getId
+-     */
+-    public void setId(Integer id) {
+-        this.id = id;
+-    }
+-    
+-    /**
+-     *   Get name of the table where the value was changed
+-     *   @return of the table where the value was changed
+-     *   @see setTableName
+-     */
+-    public String getTableName() {
+-        return this.tableName;
+-    }
+-    
+-    /**
+-     *   Set name of the table where the value was changed
+-     *   @param tableName string containing of the table where the value was changed
+-     *   @see getTableName
+-     */
+-    public void setTableName(String tableName) {
+-        this.tableName = tableName;
+-    }
+-
+-    /**
+-     *   Get date and time of table last update
+-     *   @return date and time of table last update
+-     *   @see setLastUpdate
+-     */
+-    public java.util.Date getLastUpdate() {
+-        return this.lastUpdate;
+-    }
+-    
+-    /**
+-     *   Set date and time of table last update
+-     *   @param lastUpdate date and time of table last update
+-     *   @see getLastUpdate
+-     */
+-    public void setLastUpdate(java.util.Date lastUpdate) {
+-        this.lastUpdate = lastUpdate;
+-    }
+-}
+
+Added: trunk/src/net/sf/plantlore/config/hibernate/LastDataVersion.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/LastDataVersion.hbm.xml	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/src/net/sf/plantlore/config/hibernate/LastDataVersion.hbm.xml	2006-05-08 22:25:40 UTC (rev 243)
+@@ -0,0 +1,33 @@
++&lt;?xml version=&quot;1.0&quot;?&gt;
++&lt;!DOCTYPE hibernate-mapping PUBLIC
++          &quot;-//Hibernate/Hibernate Mapping DTD 3.0//EN&quot;
++          &quot;<A HREF="http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd</A>&quot;&gt;
++
++&lt;hibernate-mapping&gt;
++   &lt;class name=&quot;net.sf.plantlore.common.record.LastDataVersion&quot; table=&quot;TLASTDATAVERSION&quot; lazy=&quot;false&quot;&gt;
++      &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
++         &lt;generator class=&quot;increment&quot;/&gt;
++      &lt;/id&gt;
++
++      &lt;property column=&quot;CPLANTSVERSION&quot;
++                name=&quot;plantsVersion&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.lang.Integer&quot;/&gt;             
++      &lt;property column=&quot;CVILLAGESVERSION&quot;
++                name=&quot;villagesVersion&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.lang.Integer&quot;/&gt;               
++      &lt;property column=&quot;CPHYTOCHORIAVERSION&quot;
++                name=&quot;phytochoriaVersion&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.lang.Integer&quot;/&gt;               
++      &lt;property column=&quot;CTERRITORYVERSION&quot;
++                name=&quot;territoryVersion&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.lang.Integer&quot;/&gt;               
++      &lt;property column=&quot;CDATE&quot;
++                name=&quot;date&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.util.Date&quot;/&gt;
++   &lt;/class&gt;
++&lt;/hibernate-mapping&gt;
+
+Deleted: trunk/src/net/sf/plantlore/config/hibernate/LastUpdate.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/LastUpdate.hbm.xml	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/src/net/sf/plantlore/config/hibernate/LastUpdate.hbm.xml	2006-05-08 22:25:40 UTC (rev 243)
+@@ -1,22 +0,0 @@
+-&lt;?xml version=&quot;1.0&quot;?&gt;
+-&lt;!DOCTYPE hibernate-mapping PUBLIC
+-          &quot;-//Hibernate/Hibernate Mapping DTD 3.0//EN&quot;
+-          &quot;<A HREF="http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd</A>&quot;&gt;
+-
+-&lt;hibernate-mapping&gt;
+-   &lt;class name=&quot;net.sf.plantlore.common.record.LastUpdate&quot; table=&quot;TLASTUPDATE&quot; lazy=&quot;false&quot;&gt;
+-      &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+-         &lt;generator class=&quot;increment&quot;/&gt;
+-      &lt;/id&gt;
+-
+-      &lt;property column=&quot;CTABLENAME&quot;
+-                length=&quot;20&quot;
+-                name=&quot;tableName&quot;
+-                not-null=&quot;true&quot;                
+-                type=&quot;java.lang.String&quot;/&gt;             
+-      &lt;property column=&quot;CLASTUPDATE&quot;
+-                name=&quot;lastUpdate&quot;
+-                not-null=&quot;true&quot;                
+-                type=&quot;java.util.Date&quot;/&gt;               
+-   &lt;/class&gt;
+-&lt;/hibernate-mapping&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/hibernate.cfg.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/hibernate.cfg.xml	2006-05-08 21:59:19 UTC (rev 242)
++++ trunk/src/net/sf/plantlore/config/hibernate/hibernate.cfg.xml	2006-05-08 22:25:40 UTC (rev 243)
+@@ -29,6 +29,6 @@
+       &lt;mapping file=&quot;Territories.hbm.xml&quot;/&gt;
+       &lt;mapping file=&quot;User.hbm.xml&quot;/&gt;
+       &lt;mapping file=&quot;Villages.hbm.xml&quot;/&gt;  
+-      &lt;mapping file=&quot;LastUpdate.hbm.xml&quot;/&gt; 
++      &lt;mapping file=&quot;LastDataVersion.hbm.xml&quot;/&gt; 
+    &lt;/session-factory&gt;
+ &lt;/hibernate-configuration&gt;
+\ No newline at end of file
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000279.html">[Plantlore-dev] r242 - in trunk/src/net/sf/plantlore: client client/authors client/export client/history client/imports client/login client/metadata client/publication client/publications client/user common common/exception middleware server
+</A></li>
+	<LI>Next message: <A HREF="000284.html">[Plantlore-dev] r244 - in trunk/analysis/database: . Old DB model
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#282">[ date ]</a>
+              <a href="thread.html#282">[ thread ]</a>
+              <a href="subject.html#282">[ subject ]</a>
+              <a href="author.html#282">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,448 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r296 - in trunk/src/net/sf/plantlore/common: . record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r296%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%20record&In-Reply-To=%3C200605182229.k4IMTtEo013342%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000345.html">
+   <LINK REL="Next"  HREF="000349.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r296 - in trunk/src/net/sf/plantlore/common: . record</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r296%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%20record&In-Reply-To=%3C200605182229.k4IMTtEo013342%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r296 - in trunk/src/net/sf/plantlore/common: . record">fraktalek at berlios.de
+       </A><BR>
+    <I>Fri May 19 00:29:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000345.html">[Plantlore-dev] r295 - in trunk/src/net/sf/plantlore: client client/export client/export/component common
+</A></li>
+        <LI>Next message: <A HREF="000349.html">[Plantlore-dev] r297 - in trunk: lib lib/jasper src/net/sf/plantlore/client src/net/sf/plantlore/config
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#348">[ date ]</a>
+              <a href="thread.html#348">[ thread ]</a>
+              <a href="subject.html#348">[ subject ]</a>
+              <a href="author.html#348">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-19 00:29:54 +0200 (Fri, 19 May 2006)
+New Revision: 296
+
+Modified:
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+   trunk/src/net/sf/plantlore/common/Selection.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+   trunk/src/net/sf/plantlore/common/record/HistoryColumn.java
+   trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+   trunk/src/net/sf/plantlore/common/record/LastDataVersion.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Right.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/User.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+Log:
+getAuthorsOf(Occurrence occ) method added to DBLayerUtils
+getValues() method to Selection to be able to cycle through the values
+Table enum added to PlantloreConstants - it is used by JasperDataSource which I will commit shortly
+Also added a Column enum to each record class but it's commented out now because it would need too much changes in code to use them isntead of the public static finals
+
+
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -11,6 +11,7 @@
+ 
+ import java.rmi.RemoteException;
+ import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -57,6 +58,32 @@
+         }
+         return null;
+     }
++
++    public AuthorOccurrence[] getAuthorsOf(Occurrence o) {
++        AuthorOccurrence[] authorResults = null;
++        //FIXME:
++        try {
++            SelectQuery sq = db.createQuery(AuthorOccurrence.class);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++            sq.addRestriction(PlantloreConstants.RESTR_NE,AuthorOccurrence.DELETED,null,1,null);
++            int resultid = db.executeQuery(sq);
++            int resultCount = db.getNumRows(resultid);
++            authorResults = new AuthorOccurrence[resultCount];
++            Object[] results = db.more(resultid, 0, resultCount-1);
++            Object[] tmp;
++            AuthorOccurrence ao;
++            for (int i = 0; i &lt; resultCount; i++) {
++                tmp = (Object[]) results[i];
++                ao = (AuthorOccurrence)tmp[0];
++                authorResults[i] = ao;
++            }
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        }
++        return authorResults;
++    }
+     
+     public static void main(String[] args) throws DBLayerException, RemoteException {
+         DBLayer db = new HibernateDBLayer();
+
+Modified: trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -14,22 +14,38 @@
+ public class PlantloreConstants {
+ 
+     /** Constants with names of entities */
+-    public static final String ENTITY_AUTHOR            = &quot;author&quot;;
+-    public static final String ENTITY_AUTHOROCCURRENCE  = &quot;authorOccurrence&quot;;            
+-    public static final String ENTITY_HABITAT           = &quot;habitat&quot;;
+-    public static final String ENTITY_HISTORYCHANGE     = &quot;historyChange&quot;;
+-    public static final String ENTITY_HISTORYCOLUMN     = &quot;historyColumn&quot;;
+-    public static final String ENTITY_HISTORYRECORD     = &quot;historyRecord&quot;;
+-    public static final String ENTITY_METADATA          = &quot;metadata&quot;;
+-    public static final String ENTITY_OCCURRENCE        = &quot;occurrence&quot;;
+-    public static final String ENTITY_PHYTOCHORION      = &quot;phytochorion&quot;;
+-    public static final String ENTITY_PLANT             = &quot;plant&quot;;
+-    public static final String ENTITY_PUBLICATION       = &quot;publication&quot;;
+-    public static final String ENTITY_RIGHT             = &quot;right&quot;;
+-    public static final String ENTITY_TERRITORY         = &quot;territory&quot;;
+-    public static final String ENTITY_USER              = &quot;user&quot;;
+-    public static final String ENTITY_VILLAGE           = &quot;village&quot;;
++    public static final String ENTITY_AUTHOR            = Table.AUTHOR.toString();
++    public static final String ENTITY_AUTHOROCCURRENCE  = Table.AUTHOROCCURRENCE.toString();            
++    public static final String ENTITY_HABITAT           = Table.HABITAT.toString();
++    public static final String ENTITY_HISTORYCHANGE     = Table.HISTORYCHANGE.toString();
++    public static final String ENTITY_HISTORYCOLUMN     = Table.HISTORYCOLUMN.toString();
++    public static final String ENTITY_HISTORYRECORD     = Table.HISTORYRECORD.toString();
++    public static final String ENTITY_METADATA          = Table.METADATA.toString();
++    public static final String ENTITY_OCCURRENCE        = Table.OCCURRENCE.toString();
++    public static final String ENTITY_PHYTOCHORION      = Table.PHYTOCHORION.toString();
++    public static final String ENTITY_PLANT             = Table.PLANT.toString();
++    public static final String ENTITY_PUBLICATION       = Table.PUBLICATION.toString();
++    public static final String ENTITY_RIGHT             = Table.RIGHT.toString();
++    public static final String ENTITY_TERRITORY         = Table.TERRITORY.toString();
++    public static final String ENTITY_USER              = Table.USER.toString();
++    public static final String ENTITY_VILLAGE           = Table.VILLAGE.toString();
+     
++    public enum Table {AUTHOR, 
++    AUTHOROCCURRENCE,
++    HABITAT,
++    HISTORYCHANGE,
++    HISTORYCOLUMN,
++    HISTORYRECORD,
++    METADATA,
++    OCCURRENCE,
++    PHYTOCHORION,
++    PLANT,
++    PUBLICATION,
++    RIGHT,
++    TERRITORY,
++    USER,
++    VILLAGE};
++    
+     /** Constants for restrictions in select query */
+     public static final int RESTR_BETWEEN       = 1;
+     public static final int RESTR_EQ            = 2;
+
+Modified: trunk/src/net/sf/plantlore/common/Selection.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Selection.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/Selection.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -109,5 +109,8 @@
+ 	public Selection clone() {
+ 		return new Selection( this );
+ 	}
+-
++        
++        public Collection&lt;Integer&gt; values() {
++            return selected;
++        }
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -36,6 +36,8 @@
+     public static final String NOTE = &quot;note&quot;;
+     public static final String DELETED = &quot;deleted&quot;;
+     
++    //public enum Column {ID, AUTHOR, OCCURRENCE, ROLE, NOTE, DELETED }
++    
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+     	return Arrays.asList( AUTHOR, OCCURRENCE ); 
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -48,6 +48,8 @@
+     public static final String DELETED = &quot;deleted&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+     
++    //public enum Column {ID, TERRITORY, PHYTOCHORION, NEARESTVILLAGE, QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, DELETED, NOTE};
++    
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+     	return Arrays.asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE ); 
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -41,6 +41,8 @@
+     public static final String WHEN = &quot;when&quot;;
+     public static final String WHO = &quot;who&quot;;    
+     
++    //public enum Column {ID, OCCURRENCE, RECORDID, OLDRECORDID, OPERATION, WHEN, WHO};
++    
+     /**
+      *   Default constructor to create new class HistoryChange
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryColumn.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryColumn.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/HistoryColumn.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -26,6 +26,8 @@
+     public static final String TABLENAME = &quot;tableName&quot;;    
+     public static final String COLUMNNAME = &quot;columnName&quot;;
+ 
++    //public enum Column {ID, TABLENAME, COLUMNNAME};
++    
+     /**
+      *   Default constructor to create new class HistoryColumn
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -24,6 +24,8 @@
+     public static final String OLDVALUE = &quot;oldValue&quot;;    
+     public static final String NEWVALUE = &quot;newValue&quot;;
+ 
++    //public enum Column {ID, HISTORYCOLUMN, HISTORYCHANGE, OLDVALUE, NEWVALUE};
++    
+     /** Creates a new instance of HistoryRecord */
+     public HistoryRecord() {
+         
+
+Modified: trunk/src/net/sf/plantlore/common/record/LastDataVersion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/LastDataVersion.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/LastDataVersion.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -30,6 +30,8 @@
+     public static final String TERRITORYVERSION = &quot;territoryVersion&quot;;
+     public static final String PHYTOCHORIAVERSION = &quot;phytochoriaVersion&quot;;
+             
++    //public enum Column {ID, DATE, PLANTSVERSION, VILLAGEVERSION, TERRITORYVERSION, PHYTOCHORIAVERSION};
++    
+     /**
+      *   Default constructor to create new class LastDataVersion
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -58,6 +58,10 @@
+     public static final String BIOTOPETEXT = &quot;biotopeText&quot;;    
+     public static final String DELETED = &quot;deleted&quot;;
+     
++    
++    //public enum Column {ID, TECHNICALCONTACTNAME, TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, CONTENTCONTACTNAME, CONTENTCONTACTADDRESS, CONTENTCONTACTEMAIL,
++    //DATASETTITLE, DATASETDETAILS, SOURCEINSTITUTIONID, SOURCEID, OWNERORGANIZATIONABBREV, DATECREATE, DATEMODIFIED, RECORDBASIS, BIOTOPTEXT, DELETED};
++    
+     /**
+      *   Default constructor to create new class Metadata
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -65,6 +65,8 @@
+     public static final String DELETED = &quot;deleted&quot;;
+     public static final String NOTE = &quot;note&quot;;        
+     
++    //public enum Column {ID, UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED, MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, ISODATETIMEBEGIN, DATASOURCE, PUBLICATION,
++    //HERBARIUM, CREATEDWHEN, CREATEDWHO, UPDATEDWHEN, UPDATEDWHO, METADATA, DELETED, NOTE};
+     
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -30,6 +30,8 @@
+     public static final String CODE = &quot;code&quot;;    
+     public static final String NAME = &quot;name&quot;;
+     
++    //public enum Column {ID, CODE, NAME};
++    
+     /**
+      *   Default constructor to create new class Phytochoria
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -42,6 +42,8 @@
+     public static final String SYNONYMS = &quot;synonyms&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+ 
++    //public enum Column {ID, SURVEYTAXID, TAXON, GENUS, SPECIES, SCIENTIFICNAMEAUTHOR, CZECHNAME, SYNONYMS, NOTE};
++    
+     /** Creates a new instance of PlantRecord */
+     public Plant() {
+         
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -46,6 +46,9 @@
+     public static final String CREATEDWHO = &quot;createdWho&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+     
++    //public enum Column {ID, COLLECTIONNAME, COLLECTIONYEARPUBLICATION, JOURNALNAME, JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL,
++    //URL, DELETED, CREATEDWHO, NOTE};    
++    
+     /** Creates a new instance of PublicationRecord */
+     public Publication() {
+         
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -30,8 +30,7 @@
+ 		Occurrence.class, Habitat.class, Territory.class, Village.class, Phytochorion.class,
+ 		Plant.class, Metadata.class, Publication.class, Author.class, AuthorOccurrence.class 
+ 	};
+-	
+-	
++	        
+ 	/**
+ 	 * A set of tables that cannot be changed.
+ 	 */
+
+Modified: trunk/src/net/sf/plantlore/common/record/Right.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Right.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Right.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -32,6 +32,8 @@
+     public static final String EDITGROUP = &quot;editGroup&quot;;    
+     public static final String SEECOLUMNS = &quot;seeColumns&quot;;    
+     public static final String ADD = &quot;add&quot;;    
++
++    //public enum Column {ID, ADMINISTRATOR, EDITALL, EDITGROUP, SEECOLUMNS, ADD};
+     
+     /**
+      *   Default constructor to create new class Right
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -28,6 +28,7 @@
+     public static final String ID = &quot;id&quot;;
+     public static final String NAME = &quot;name&quot;;    
+     
++    //public enum Column {ID, NAME};
+     
+     @Override
+     public void setValue(String column, Object value) {
+
+Modified: trunk/src/net/sf/plantlore/common/record/User.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/User.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/User.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -41,6 +41,8 @@
+     public static final String DROPWHEN = &quot;dropWhen&quot;;    
+     public static final String RIGHT = &quot;right&quot;;    
+     public static final String NOTE = &quot;note&quot;;    
++
++    //public enum Column {ID, LOGIN, PASSWORD, FIRSTNAME, SURNAME, WHOLENAME, EMAIL, ADDRESS, CREATEWHEN, DROPWHEN, RIGHT, NOTE};
+         
+     /** Creates a new instance of UserRecord */
+     public User() {
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-05-18 11:54:34 UTC (rev 295)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-05-18 22:29:54 UTC (rev 296)
+@@ -28,6 +28,7 @@
+     public static final String ID = &quot;id&quot;;
+     public static final String NAME = &quot;name&quot;;    
+ 
++    //public enum Column {ID, NAME};
+     
+     @Override
+     public void setValue(String column, Object value) {
+@@ -43,7 +44,7 @@
+     public List&lt;String&gt; getColumns() {
+     	return Arrays.asList( NAME );
+     }
+-    
++        
+     public List&lt;String&gt; getNN() {
+     	return Arrays.asList(NAME);
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000345.html">[Plantlore-dev] r295 - in trunk/src/net/sf/plantlore: client client/export client/export/component common
+</A></li>
+	<LI>Next message: <A HREF="000349.html">[Plantlore-dev] r297 - in trunk: lib lib/jasper src/net/sf/plantlore/client src/net/sf/plantlore/config
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#348">[ date ]</a>
+              <a href="thread.html#348">[ thread ]</a>
+              <a href="subject.html#348">[ subject ]</a>
+              <a href="author.html#348">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

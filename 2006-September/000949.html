@@ -1,0 +1,2275 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r689 - in trunk/src/net/sf/plantlore:	client/createdb client/login client/overview common	common/exception config config/database middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r689%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/createdb%20client/login%20client/overview%20common%0A%09common/exception%20config%20config/database%20middleware%20server&In-Reply-To=%3C200609051733.k85HXliP016085%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000948.html">
+   <LINK REL="Next"  HREF="000950.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r689 - in trunk/src/net/sf/plantlore:	client/createdb client/login client/overview common	common/exception config config/database middleware server</H1>
+    <B>kovo at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r689%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/createdb%20client/login%20client/overview%20common%0A%09common/exception%20config%20config/database%20middleware%20server&In-Reply-To=%3C200609051733.k85HXliP016085%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r689 - in trunk/src/net/sf/plantlore:	client/createdb client/login client/overview common	common/exception config config/database middleware server">kovo at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 19:33:47 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000948.html">[Plantlore-dev] r688 - trunk/src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000950.html">[Plantlore-dev] r690 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#949">[ date ]</a>
+              <a href="thread.html#949">[ thread ]</a>
+              <a href="subject.html#949">[ subject ]</a>
+              <a href="author.html#949">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-09-05 19:33:32 +0200 (Tue, 05 Sep 2006)
+New Revision: 689
+
+Added:
+   trunk/src/net/sf/plantlore/config/database/
+   trunk/src/net/sf/plantlore/config/database/createtables_postgres.sql
+   trunk/src/net/sf/plantlore/config/database/createusers_postgres.sql
+Modified:
+   trunk/src/net/sf/plantlore/client/createdb/CreateDB.java
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Update of the DBLayer in order to solve Hibernate-RMI problem which caused exceptions when saving associated tables. DBLayer interface was changed as well therefore you have to update your sources in order to compile Plantlore. For details see my email to plantlore-dev.
+The following was implemented as well:
+* Assigning unique database identifier and unique record identifier to newlz created occurrences
+* Create database - it only works for PostgreSQL database and still needs testing and minor adjustments (currently it will only work on fresh Postgre installations)
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDB.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDB.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -2,6 +2,11 @@
+ 
+ import java.util.ArrayList;
+ import java.util.Observable;
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.common.record.User;
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.DBLayerFactory;
++import net.sf.plantlore.middleware.RMIDBLayerFactory;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -43,7 +48,9 @@
+ 	private MainConfig config;
+ 	private DBInfo info;
+ 	private boolean leaveEmpty = false;
+-		
++	private DBLayerFactory factory = null;
++	private DBLayer currentDBLayer; 
++		        
+ 	/**
+ 	 * Create a new CreateDB.
+ 	 * 
+@@ -135,15 +142,68 @@
+ 		public Object task() throws Exception {
+ 			
+ 			try {
+-				if(isCanceled())
++				if(isCanceled()) {
+ 					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
++                                }				
++                                                               
++				// Create a new database layer ~ ask the DBLayerFactory to create it for us..
++				logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + dbinfo.getHost() + &quot;:&quot; + dbinfo.getPort());
++				setStatusMessage(L10n.getString(&quot;Login.Connecting&quot;) );
++                                factory = RMIDBLayerFactory.getDBLayerFactory();
++				currentDBLayer = factory.create(dbinfo);
++				if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }		
++                                logger.debug(&quot;Connection successful.&quot;);
+ 				
++				// Initialize the database layer.
++				setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
++				logger.debug(&quot;Initializing that DBLayer.&quot;);				
++                                // Connect to template1 database. TODO: this should not be hardcoded
++				currentDBLayer.initializeNewDB(&quot;template1&quot;, name, password);
++				if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
++				logger.debug(&quot;Initialization successful. Connected to template1 database&quot;);
++                                
++                                // Create users in the database
++                                setStatusMessage(L10n.getString(&quot;CreateDB.CreatingUsers&quot;) );                                
++                                currentDBLayer.executeSQLScript(DBLayer.CREATE_USERS, dbinfo.getDatabaseIdentifier(), name, password);
++                                logger.debug(&quot;Database &quot;+dbinfo.getDatabaseIdentifier()+&quot; users created successfuly&quot;);
++                                
++                                // Create new database
++                                setStatusMessage(L10n.getString(&quot;CreateDB.CreatingDatabase&quot;) );                                
++                                currentDBLayer.createDatabase(dbinfo.getDatabaseIdentifier());
++                                logger.debug(&quot;New database created succesfully&quot;);
++
++                                // Disconnect - destroy DBLayer
++                                factory.destroy(currentDBLayer);
++                                logger.debug(&quot;Disconnected from the database template1&quot;);
++                                
++                                // Connect to the newly created database
++				currentDBLayer = factory.create(dbinfo);
++				if(isCanceled()) { throw new Exception(L10n.getString(&quot;Common.Canceled&quot;)); }
++				logger.debug(&quot;Connection successful.&quot;);
++				setStatusMessage( L10n.getString(&quot;Login.Connected&quot;) );
++				
++				// Initialize the database layer.
++				setStatusMessage(L10n.getString(&quot;Login.InitializingDBLayer&quot;));
++				logger.debug(&quot;Initializing that DBLayer.&quot;);
++				
++				currentDBLayer.initializeNewDB(dbinfo.getDatabaseIdentifier(), name, password);
++				if(isCanceled()) { throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;)); }
++				logger.debug(&quot;Initialization successful. Connected to database &quot;+dbinfo.getDatabaseIdentifier());
++                                
++                                // Create tables in the new database
++				setStatusMessage(L10n.getString(&quot;CreateDB.CreatingTables&quot;));                                
++                                currentDBLayer.executeSQLScript(DBLayer.CREATE_TABLES, dbinfo.getDatabaseIdentifier(), name, password);
++                                logger.debug(&quot;New database tables created&quot;);
++                                // Disconnect - destroy DBLayer
++                                factory.destroy(currentDBLayer);
++                                logger.debug(&quot;Disconnected from the database &quot;+dbinfo.getDatabaseIdentifier());
++                                
+ 				/*
+ 				 * TODO:
+ 				 * 
+ 				 * HERE GOES YOUR CODE THAT PERFORMS 
+ 				 * 1. THE CONNECTION TO THE DATABASE ENGINE
+-				 *    You should use ifnormation stored in dbinfo and the stored name and password.
++				 *    You should use inormation stored in dbinfo and the stored name and password.
+ 				 *    See HibernateDBLayer.initialize().
+ 				 * 2. THE CREATION OF THE NEW DATABASE
+ 				 *    Here it is up to you, I have no idea what should be done here.
+@@ -159,8 +219,7 @@
+ 
+ 			} 
+ 			catch (Exception e) {
+-				logger.error(&quot;The creation of the database failed! &quot; + e.getMessage());
+-				
++				logger.error(&quot;The creation of the database failed! &quot; + e.getMessage());			
+ 				// Re-throw the exception so that the view is updated as well.
+ 				throw e;
+ 			}
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBCtrl.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -1,10 +1,13 @@
+ package net.sf.plantlore.client.createdb;
+ 
+ import java.awt.event.ActionEvent;
++import java.awt.event.FocusEvent;
++import java.awt.event.FocusListener;
+ 
+ import javax.swing.JOptionPane;
+ 
+ import net.sf.plantlore.common.DefaultCancelAction;
++import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -33,7 +36,7 @@
+ 		/*authCtrl =*/ new CreateDBAuthCtrl( model, authView );
+ 		
+ 		view.cancel.setAction( new DefaultCancelAction(view) );
+-		
++                view.databaseEngineAddFocusListener(new DatabaseEngineComboFocusListener());
+ 		view.next.setAction( new StandardAction(&quot;Login.Next&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				String 
+@@ -61,6 +64,32 @@
+ 			}
+ 		});
+ 	}
+-	
++        
++    /**
++     *  Focus listener for the &lt;strong&gt;DatabaseEngine combobox&lt;/strong&gt;. After losing focus
++     *  automaticaly loads default port for the given database.
++     */
++    class DatabaseEngineComboFocusListener implements FocusListener {
++        public void focusLost(FocusEvent e) {
++            switch (view.getDatabaseEngine()) {
++                case 0: // PostgreSQL
++                    view.setDatabasePort(PlantloreConstants.POSTGRE_PORT);
++                    break;
++                case 1: // Firebird
++                    view.setDatabasePort(PlantloreConstants.FIREBIRD_PORT);
++                    break;                    
++                case 2: // MySQL
++                    view.setDatabasePort(PlantloreConstants.MYSQL_PORT);
++                    break;                    
++                case 3: // Oracle
++                    view.setDatabasePort(PlantloreConstants.ORACLE_PORT);
++                    break;
++            }
++        }        
+ 
++        public void focusGained(FocusEvent e) {
++            // Empty, no action when focus gained
++        }
++    }            	
++
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBView.form	2006-09-05 17:33:32 UTC (rev 689)
+@@ -73,11 +73,11 @@
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseEngine&quot; pref=&quot;144&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
++                  &lt;Component id=&quot;databaseEngine&quot; pref=&quot;149&quot; max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databasePort&quot; pref=&quot;71&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;databasePort&quot; pref=&quot;76&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+@@ -166,8 +166,8 @@
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;11&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;databaseAlias&quot; alignment=&quot;0&quot; pref=&quot;268&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;0&quot; pref=&quot;268&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;databaseAlias&quot; alignment=&quot;0&quot; pref=&quot;278&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;0&quot; pref=&quot;278&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBView.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -1,6 +1,7 @@
+ package net.sf.plantlore.client.createdb;
+ 
+ import java.awt.Frame;
++import java.awt.event.FocusListener;
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+@@ -223,5 +224,28 @@
+     		}
+ 		});
+ 	}
++ 
++    /**
++     *  Add FocusListener to DatabaseEngine combo.
++     *  @param fl FocusListener for the DatabaseEngine combo
++     */    
++    void databaseEngineAddFocusListener(FocusListener fl) {
++        databaseEngine.addFocusListener(fl);
++    }
++        
++    /**
++     *  Return index of the selected database engine in the combobox
++     *  @return index of the selected item in the combobox
++     */
++    public int getDatabaseEngine() {
++        return databaseEngine.getSelectedIndex();
++    }
+     
++    /**
++     *  Set the database port in the dialog to the given value
++     *  @param port port number to set
++     */
++    public void setDatabasePort(String port) {
++        databasePort.setText(port);
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -8,6 +8,7 @@
+ import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.common.record.User;
+ 
+ import org.apache.log4j.Logger;
+@@ -454,12 +455,17 @@
+ 			return wrappedDBLayer.initialize(dbID, user, password);
+ 		}
+ 
++		synchronized public void initializeNewDB(String dbID, String user, String password) throws DBLayerException, RemoteException {
++			verifyValidity();
++			wrappedDBLayer.initializeNewDB(dbID, user, password);
++		}
++                
+ 		synchronized public void setLanguage(String locale) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			wrappedDBLayer.setLanguage(locale);
+ 		}
+ 
+-		synchronized public int executeInsert(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeInsert(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			return wrappedDBLayer.executeInsert(data);
+ 		}
+@@ -469,12 +475,12 @@
+ 			wrappedDBLayer.executeDelete(data);
+ 		}
+ 
+-		synchronized public void executeUpdate(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeUpdate(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+-			wrappedDBLayer.executeUpdate(data);
++			return wrappedDBLayer.executeUpdate(data);
+ 		}
+ 
+-		synchronized public int executeInsertHistory(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeInsertHistory(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			return wrappedDBLayer.executeInsertHistory(data);
+ 		}
+@@ -489,14 +495,14 @@
+ 			wrappedDBLayer.executeDeleteInTransactionHistory(data);
+ 		}
+                 
+-		synchronized public void executeUpdateHistory(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeUpdateHistory(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+-			wrappedDBLayer.executeUpdateHistory(data);
++			return wrappedDBLayer.executeUpdateHistory(data);
+ 		}
+ 
+-		synchronized public void executeUpdateInTransactionHistory(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeUpdateInTransactionHistory(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+-			wrappedDBLayer.executeUpdateInTransactionHistory(data);
++			return wrappedDBLayer.executeUpdateInTransactionHistory(data);
+ 		}
+ 
+ 		synchronized public Object[] more(int resultId, int from, int to) throws DBLayerException, RemoteException {
+@@ -564,19 +570,19 @@
+ 			return wrappedDBLayer.rollbackTransaction();
+ 		}
+ 
+-		synchronized public int executeInsertInTransaction(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeInsertInTransaction(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			return wrappedDBLayer.executeInsertInTransaction(data);
+ 		}
+-
+-		synchronized public int executeInsertInTransactionHistory(Object data) throws DBLayerException, RemoteException {
++               
++		synchronized public Record executeInsertInTransactionHistory(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			return wrappedDBLayer.executeInsertInTransactionHistory(data);
+ 		}
+ 
+-		synchronized public void executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException {
++		synchronized public Record executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+-			wrappedDBLayer.executeUpdateInTransaction(data);
++			return wrappedDBLayer.executeUpdateInTransaction(data);
+ 		}
+ 
+ 		synchronized public void executeDeleteInTransaction(Object data) throws DBLayerException, RemoteException {
+@@ -613,6 +619,16 @@
+ 			throw new Error(&quot;It is forbidden to call this method. The proper way to destroy a database layer is the logout() method!&quot;);
+ 		}
+ 		
++                synchronized public void createDatabase(String dbname) throws RemoteException, DBLayerException {
++			verifyValidity();
++			wrappedDBLayer.createDatabase(dbname);
++                }
++
++                synchronized public void executeSQLScript(int scriptid, String dbname, String username, String password) throws RemoteException, DBLayerException {
++			verifyValidity();
++			wrappedDBLayer.executeSQLScript(scriptid, dbname, username, password);
++                }                
++                
+ 		@Override
+ 		public String toString() {
+ 			return &quot;Safety wrapper of &quot; + super.toString();
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -888,8 +888,7 @@
+         } else {
+             //we've already created and set up a new Habitat now we have to store it into the database
+             h.setDeleted(0);
+-            int habId = database.executeInsertInTransaction(h);
+-            h.setId(habId);
++            h = (Habitat)database.executeInsertInTransaction(h);
+         }
+         
+         m = o.getMetadata();
+@@ -959,8 +958,7 @@
+         hTmp.setTerritory(o.getHabitat().getTerritory());
+         hTmp.setDeleted(0);
+         
+-        int habId = database.executeInsertInTransaction(hTmp);
+-        hTmp.setId(habId);
++        hTmp = (Habitat)database.executeInsertInTransaction(hTmp);
+         
+         occTmp.setDataSource(o.getDataSource());
+         occTmp.setDayCollected(o.getDayCollected());
+@@ -1106,8 +1104,7 @@
+                                 logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
+                                 Occurrence occTmp = cloneOccurrence();
+                                 occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
+-                                int occId = database.executeInsertInTransaction(occTmp);
+-                                occTmp.setId(occId);
++                                occTmp = (Occurrence)database.executeInsertInTransaction(occTmp);
+                                 logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
+                                 Integer id = lookupPlant(taxonList.get(j));
+                                 if (!id.equals(-1)) {
+@@ -1187,23 +1184,22 @@
+ 
+                             logger.info(&quot;Creating a shared habitat&quot;);
+                             Record rec = dlu.findMatchInDB(h);
++
+                             if (rec == null) {
+                                 logger.debug(&quot;THIS HABITAT is NOT in the database yet. Creating a new one.&quot;);
+-                                int habId = database.executeInsertInTransaction(h);//insert the shared habitat
+-                                h.setId(habId);
++                                h = (Habitat)database.executeInsertInTransaction(h);//insert the shared habitat                                
+                                 logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
+                             } else {
+                                 logger.debug(&quot;THIS HABITAT ALREADY IS in the database! Using it.&quot;);
+                                 h = (Habitat) rec;
+                             }
+-
++                            int aoTmpId = 0;
+                             for (int j = 0; j &lt; taxonList.size(); j++) {
+                                 logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
+                                 Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
+-                                int occId = database.executeInsertInTransaction(occ);
+-                                occ.setId(occId);
++                                occ = (Occurrence)database.executeInsertInTransaction(occ);
+                                 logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
+-
++                                
+                                 for (int k = 0; k &lt; authorList.size(); k++) {
+                                     Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
+                                     logger.info(&quot;Creating an AuthorOccurrence for &quot;+occ.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
+@@ -1213,12 +1209,11 @@
+                                     aoTmp.setNote(resultRevision.get(k));
+                                     aoTmp.setOccurrence(occ);
+                                     aoTmp.setDeleted(0);
+-                                    database.executeInsertInTransaction(aoTmp);                            
++                                    aoTmp = (AuthorOccurrence)database.executeInsertInTransaction(aoTmp);
+                                 }//for authorList
+-                            }// for taxonList
+-
++                            }// for taxonList                            
+                             database.commitTransaction();
+-                            occurrenceTableModel.load(h.getId());
++                            occurrenceTableModel.load(h.getId());                                
+                         }//add mode
+                 } catch (DBLayerException ex) {
+                     database.rollbackTransaction();
+
+Modified: trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -143,9 +143,10 @@
+     /** Constants used for Preferences keys */
+     public static final String PREF_DYNAMIC_PAGE_SIZE = &quot;Overview.dynamicPageSize&quot;;
+     
+-    
+-//    /** Creates a new instance of PlantloreConstants */
+-//    public PlantloreConstants() {
+-//    }
+-    
++    /** Default port numbers for different databases */
++    public static final String POSTGRE_PORT = &quot;5432&quot;;
++    public static final String FIREBIRD_PORT = &quot;3050&quot;;
++    public static final String MYSQL_PORT = &quot;3306&quot;;
++    public static final String ORACLE_PORT = &quot;1521&quot;;        
++        
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -61,7 +61,9 @@
+         /** Out of memmory error occurred */
+         public static final int ERROR_OUT_OF_MEMORY = 15;        
+         /** Maximum number of connections achieved */
+-        public static final int ERROR_MAX_CONNECTIONS = 16;                
++        public static final int ERROR_MAX_CONNECTIONS = 16;  
++        /** CREATE DATABASE statement failed or unable to create tables/users */
++        public static final int ERROR_CREATEDB = 17;
+         /** Some other error */        
+         public static final int ERROR_OTHER = 20;
+         // ==============================================
+
+Added: trunk/src/net/sf/plantlore/config/database/createtables_postgres.sql
+===================================================================
+--- trunk/src/net/sf/plantlore/config/database/createtables_postgres.sql	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/config/database/createtables_postgres.sql	2006-09-05 17:33:32 UTC (rev 689)
+@@ -0,0 +1,360 @@
++SET client_encoding = 'UNICODE';
++
++SET search_path = public, pg_catalog;
++
++SET default_tablespace = '';
++
++SET default_with_oids = true;
++
++CREATE TABLE TUNITIDDATABASE (
++    CID                  INTEGER NOT NULL,
++    CUNITIDDB            VARCHAR(30) NOT NULL,    
++PRIMARY KEY (CID));
++
++CREATE TABLE TAUTHORS (
++    CID               SERIAL NOT NULL,    
++    CWHOLENAME        VARCHAR(50) NOT NULL,
++    CORGANIZATION     VARCHAR(50),
++    CTELEPHONENUMBER  VARCHAR(20),
++    CROLE             VARCHAR(30),
++    CADDRESS          VARCHAR(255),
++    CEMAIL            VARCHAR(100),
++    CURL              VARCHAR(255),
++    CNOTE             VARCHAR(4096),
++    CCREATEWHO        INTEGER NOT NULL, 
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TAUTHORSOCCURRENCES (
++    CAUTHORID          SERIAL NOT NULL,
++    COCCURRENCEID      INTEGER NOT NULL,
++    CID                INTEGER NOT NULL,
++    CROLE              VARCHAR(20),
++    CNOTE              VARCHAR(4096),
++    CDELETE           SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE THABITATS (
++    CID                SERIAL NOT NULL,
++    CTERRITORYID       INTEGER NOT NULL,
++    CPHYTOCHORIAID     INTEGER NOT NULL,
++    CQUADRANT          VARCHAR(10),
++    CDESCRIPTION       VARCHAR(255),
++    CNEARESTVILLAGEID  INTEGER NOT NULL,
++    CCOUNTRY           VARCHAR(30),
++    CALTITUDE          DECIMAL(6,2),
++    CLATITUDE          DOUBLE PRECISION,
++    CLONGITUDE         DOUBLE PRECISION,
++    CNOTE              VARCHAR(4096),
++    CCREATEWHO        INTEGER NOT NULL,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE THISTORY (
++        CID       SERIAL NOT NULL,
++        CCOLUMNID INTEGER NOT NULL,
++        CCHANGEID INTEGER NOT NULL,
++        COLDVALUE VARCHAR(4096),
++        CNEWVALUE VARCHAR(4096),
++        COLDRECORDID   INTEGER,
++        CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE THISTORYCHANGE (
++    CID            SERIAL NOT NULL,    
++    CRECORDID      INTEGER  DEFAULT 0 NOT NULL,    
++    COPERATION     SMALLINT  DEFAULT 0 NOT NULL,
++    CWHEN          TIMESTAMP NOT NULL,
++    CWHO           INTEGER NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE THISTORYCOLUMN (
++    CID          SERIAL NOT NULL,
++    CTABLENAME   VARCHAR(20) NOT NULL,
++    CCOLUMNNAME  VARCHAR(30),
++PRIMARY KEY (CID));
++
++CREATE TABLE TMETADATA (
++    CID                       SERIAL NOT NULL,
++    CTECHNICALCONTACTNAME     VARCHAR(50) NOT NULL,
++    CTECHNICALCONTACTEMAIL    VARCHAR(100),
++    CTECHNICALCONTACTADDRESS  VARCHAR(255),
++    CCONTENTCONTACTNAME       VARCHAR(50) NOT NULL,
++    CCONTENTCONTACTEMAIL      VARCHAR(100),
++    CCONTENTCONTACTADDRESS    VARCHAR(255),
++    CDATASETTITLE             VARCHAR(50) NOT NULL,
++    CDATASETDETAILS           VARCHAR(255),
++    CSOURCEINSTITUTIONID      VARCHAR(50) NOT NULL,
++    CSOURCEID                 VARCHAR(50) NOT NULL,
++    COWNERORGANIZATIONABBREV  VARCHAR(50),
++    CDATECREATE               TIMESTAMP NOT NULL,
++    CDATEMODIFIED             TIMESTAMP NOT NULL,
++    CRECORDBASIS              VARCHAR(15),
++    CBIOTOPETEXT              VARCHAR(50),
++    CDELETE                   SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TOCCURRENCES (
++    CID                SERIAL NOT NULL,
++    CUNITIDDB          VARCHAR(40) NOT NULL,
++    CUNITVALUE         INTEGER NOT NULL,
++    CHABITATID         INTEGER NOT NULL,
++    CPLANTID           INTEGER NOT NULL,
++    CYEARCOLLECTED     SMALLINT DEFAULT 0 NOT NULL,
++    CMONTHCOLLECTED    SMALLINT DEFAULT 0,
++    CDAYCOLLECTED      SMALLINT DEFAULT 0,
++    CTIMECOLLECTED     TIME,
++    CISODATETIMEBEGIN  TIMESTAMP,
++    CDATASOURCE        VARCHAR(50),
++    CPUBLICATIONSID    INTEGER,
++    CHERBARIUM         VARCHAR(20),
++    CCREATEWHEN        TIMESTAMP NOT NULL,
++    CCREATEWHO         INTEGER NOT NULL,
++    CUPDATEWHEN        TIMESTAMP NOT NULL,
++    CUPDATEWHO         INTEGER NOT NULL,
++    CNOTE              VARCHAR(4096),
++    CMETADATAID        INTEGER NOT NULL,
++    CDELETE            SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TPHYTOCHORIA (
++    CID    SERIAL NOT NULL,
++    CCODE  VARCHAR(5) NOT NULL,
++    CNAME  VARCHAR(50) NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TPLANTS (
++    CID                    SERIAL NOT NULL,
++    CSURVEYTAXID           VARCHAR(20) NOT NULL,
++    CTAXON                 VARCHAR(255) NOT NULL,
++    CGENUS                 VARCHAR(30),
++    CSPECIES               VARCHAR(100),
++    CSCIENTIFICNAMEAUTHOR  VARCHAR(150),
++    CCZECHNAME             VARCHAR(50),
++    CSYNONYMS              VARCHAR(255),
++    CNOTE                  VARCHAR(255),
++PRIMARY KEY (CID));
++
++CREATE TABLE TPUBLICATIONS (
++    CID                         SERIAL NOT NULL,
++    CCOLLECTIONNAME             VARCHAR(255),
++    CCOLLECTIONYEARPUBLICATION  SMALLINT,
++    CJOURNALNAME                VARCHAR(255),
++    CJOURNALAUTHORNAME          VARCHAR(255),
++    CREFERENCECITATION          VARCHAR(4096) NOT NULL,
++    CREFERENCEDETAIL            VARCHAR(100),
++    CURL                        VARCHAR(100),
++    CNOTE                       VARCHAR(4096),
++    CCREATEWHO                  INTEGER NOT NULL,
++    CDELETE                     SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TRIGHT (
++    CID             SERIAL NOT NULL,
++    CADMINISTRATOR  SMALLINT DEFAULT 0 NOT NULL,
++    CEDITALL        SMALLINT DEFAULT 0 NOT NULL,
++    CEDITGROUP      VARCHAR(4096),
++    CADD            SMALLINT DEFAULT 0 NOT NULL,
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TTERRITORIES (
++    CID    SERIAL NOT NULL,
++    CNAME  VARCHAR(100) NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TUSER (
++    CID          SERIAL NOT NULL,
++    CLOGIN       VARCHAR(20) NOT NULL,   
++    CFIRSTNAME   VARCHAR(20),
++    CSURNAME     VARCHAR(30),
++    CWHOLENAME   VARCHAR(50) NOT NULL,
++    CEMAIL       VARCHAR(50),
++    CADDRESS     VARCHAR(255),
++    CCREATEWHEN  TIMESTAMP NOT NULL,
++    CDROPWHEN    TIMESTAMP,
++    CRIGHTID     INTEGER NOT NULL,
++    CNOTE        VARCHAR(4096),
++    CVERSION          INTEGER DEFAULT 0 NOT NULL,
++PRIMARY KEY (CID));
++
++CREATE TABLE TVILLAGES (
++    CID    SERIAL NOT NULL,
++    CNAME  VARCHAR(50) NOT NULL,
++PRIMARY KEY (CID));
++
++ALTER TABLE TAUTHORSOCCURRENCES ADD FOREIGN KEY (CAUTHORID) REFERENCES TAUTHORS (CID);
++
++ALTER TABLE TAUTHORSOCCURRENCES ADD FOREIGN KEY (COCCURRENCEID) REFERENCES TOCCURRENCES (CID);
++
++ALTER TABLE THABITATS ADD FOREIGN KEY (CTERRITORYID) REFERENCES TTERRITORIES (CID);
++
++ALTER TABLE THABITATS ADD FOREIGN KEY (CPHYTOCHORIAID) REFERENCES TPHYTOCHORIA (CID);
++
++ALTER TABLE THABITATS ADD FOREIGN KEY (CNEARESTVILLAGEID) REFERENCES TVILLAGES (CID);
++
++ALTER TABLE THISTORY ADD FOREIGN KEY (CCOLUMNID) REFERENCES THISTORYCOLUMN (CID);
++
++ALTER TABLE THISTORY ADD FOREIGN KEY (CCHANGEID) REFERENCES THISTORYCHANGE (CID);
++
++ALTER TABLE THISTORYCHANGE ADD FOREIGN KEY (CWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CHABITATID) REFERENCES THABITATS (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CPLANTID) REFERENCES TPLANTS (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CUPDATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CMETADATAID) REFERENCES TMETADATA (CID);
++
++ALTER TABLE TOCCURRENCES ADD FOREIGN KEY (CPUBLICATIONSID) REFERENCES TPUBLICATIONS (CID);
++
++ALTER TABLE TUSER ADD FOREIGN KEY (CRIGHTID) REFERENCES TRIGHT (CID);
++
++ALTER TABLE TAUTHORS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE TPUBLICATIONS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++ALTER TABLE THABITATS ADD FOREIGN KEY (CCREATEWHO) REFERENCES TUSER (CID);
++
++CREATE VIEW voccurrences AS SELECT * FROM toccurrences WHERE cdelete = 0;        
++
++CREATE VIEW vmetadata AS SELECT * FROM tmetadata WHERE cdelete = 0;
++
++CREATE VIEW vhabitats AS SELECT * FROM thabitats WHERE cdelete = 0;
++
++CREATE VIEW vpublications AS SELECT * FROM tpublications WHERE cdelete = 0;
++
++CREATE OR REPLACE VIEW vauthorscollected AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid WHERE ao.crole = 'collected' AND ao.cdelete = 0;
++
++CREATE OR REPLACE VIEW vauthorsrevised AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid WHERE ao.crole = 'revised' AND ao.cdelete = 0;
++
++CREATE OR REPLACE VIEW vauthorsidentified AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid WHERE ao.crole = 'identified' AND ao.cdelete = 0;
++
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON tauthors TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON tauthorsoccurrences TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THABITATS TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THISTORY TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THISTORYCHANGE TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THISTORYCOLUMN TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TMETADATA TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TOCCURRENCES TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPHYTOCHORIA TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPLANTS TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TTERRITORIES TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TUSER TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TRIGHT TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TVILLAGES TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPUBLICATIONS TO Plantlore_Role_Admin;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TUNITIDDATABASE TO Plantlore_Role_Admin;
++
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TAUTHORS TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TAUTHORSOCCURRENCES TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THABITATS TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THISTORY TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON THISTORYCHANGE TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TMETADATA TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TOCCURRENCES TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPHYTOCHORIA TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPLANTS TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TTERRITORIES TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TVILLAGES TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPUBLICATIONS TO Plantlore_Role_User;
++GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TUNITIDDATABASE TO Plantlore_Role_User;
++
++GRANT SELECT, REFERENCES ON THISTORYCOLUMN TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TUSER TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TRIGHT TO Plantlore_Role_User;
++
++GRANT SELECT ON vhabitats TO Plantlore_Role_www;
++GRANT SELECT ON vmetadata TO Plantlore_Role_www;
++GRANT SELECT ON voccurrences TO Plantlore_Role_www;
++GRANT SELECT ON tphytochoria TO Plantlore_Role_www;
++GRANT SELECT ON tplants TO Plantlore_Role_www;
++GRANT SELECT ON tterritories TO Plantlore_Role_www;
++GRANT SELECT ON tuser TO Plantlore_Role_www;
++GRANT SELECT ON tvillages TO Plantlore_Role_www;
++GRANT SELECT ON vpublications TO Plantlore_Role_www;
++GRANT SELECT ON vauthorscollected TO Plantlore_Role_www;
++GRANT SELECT ON vauthorsrevised TO Plantlore_Role_www;
++GRANT SELECT ON vauthorsidentified TO Plantlore_Role_www;
++
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (1, 'AUTHOROCCURRENCE', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (2, 'OCCURRENCE', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (3, 'HABITAT', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (4, 'AUTHOR', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (5, 'METADATA', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (6, 'PUBLICATION', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (7, 'TERRITORY', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (8, 'VILLAGE', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (9, 'PHYTOCHORION', NULL);
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (10, 'AUTHOROCCURRENCE', 'role');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (11, 'AUTHOROCCURRENCE', 'note');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (12, 'OCCURRENCE', 'plant');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (13, 'OCCURRENCE', 'habitat');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (14, 'OCCURRENCE', 'yearCollected');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (15, 'OCCURRENCE', 'monthCollected');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (16, 'OCCURRENCE', 'dayCollected');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (17, 'OCCURRENCE', 'timeCollected');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (18, 'OCCURRENCE', 'dataSource');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (19, 'OCCURRENCE', 'publication');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (20, 'OCCURRENCE', 'herbarium');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (21, 'OCCURRENCE', 'metadata');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (22, 'OCCURRENCE', 'note');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (23, 'HABITAT', 'territory');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (24, 'HABITAT', 'phytochorion');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (25, 'HABITAT', 'village');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (26, 'HABITAT', 'quadrant');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (27, 'HABITAT', 'description');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (28, 'HABITAT', 'country');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (29, 'HABITAT', 'altitude');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (30, 'HABITAT', 'latitude');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (31, 'HABITAT', 'longitude');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (32, 'HABITAT', 'note');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (33, 'AUTHOR', 'wholeName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (34, 'AUTHOR', 'organization');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (35, 'AUTHOR', 'role');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (36, 'AUTHOR', 'address');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (37, 'AUTHOR', 'phoneNumber');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (38, 'AUTHOR', 'email');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (39, 'AUTHOR', 'url');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (40, 'AUTHOR', 'note');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (41, 'METADATA', 'technicalContactName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (42, 'METADATA', 'technicalContactAddress');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (43, 'METADATA', 'technicalContactEmail');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (44, 'METADATA', 'contentContactName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (45, 'METADATA', 'contentContactAddress');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (46, 'METADATA', 'contentContactEmail');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (47, 'METADATA', 'dataSetTitle');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (48, 'METADATA', 'dataSetDetails');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (49, 'METADATA', 'sourceInstitutionId');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (50, 'METADATA', 'sourceId');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (51, 'METADATA', 'ownerOrganizationAbbrev');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (52, 'METADATA', 'dateCreate');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (53, 'METADATA', 'dateModified');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (54, 'METADATA', 'recordBasis');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (55, 'METADATA', 'biotopeText');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (56, 'METADATA', 'versionPlantsFile');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (57, 'PUBLICATION', 'collectionName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (58, 'PUBLICATION', 'collectionYearPUBLICATION');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (59, 'PUBLICATION', 'journalName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (60, 'PUBLICATION', 'journalAuthorName');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (61, 'PUBLICATION', 'referenceCitation');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (62, 'PUBLICATION', 'referenceDetail');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (63, 'PUBLICATION', 'url');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (64, 'PUBLICATION', 'note');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (65, 'VILLAGE', 'name');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (66, 'TERRITORY', 'name');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (67, 'PHYTOCHORIA', 'name');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (68, 'PHYTOCHORIA', 'code');
++INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (69, 'HABITAT', 'nearestVillage');
+
+Added: trunk/src/net/sf/plantlore/config/database/createusers_postgres.sql
+===================================================================
+--- trunk/src/net/sf/plantlore/config/database/createusers_postgres.sql	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/config/database/createusers_postgres.sql	2006-09-05 17:33:32 UTC (rev 689)
+@@ -0,0 +1,11 @@
++SET client_encoding = 'UNICODE';
++
++SET search_path = public, pg_catalog;
++
++SET default_tablespace = '';
++
++SET default_with_oids = true;
++
++CREATE ROLE Plantlore_Role_www WITH NOSUPERUSER NOCREATEDB NOCREATEROLE LOGIN;
++CREATE ROLE  Plantlore_Role_User WITH NOSUPERUSER NOCREATEDB NOCREATEROLE LOGIN;
++CREATE ROLE Plantlore_Role_Admin WITH SUPERUSER CREATEDB CREATEROLE LOGIN;
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -10,6 +10,7 @@
+ import java.io.Serializable;
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
++import net.sf.plantlore.common.record.Record;
+ 
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+@@ -23,18 +24,22 @@
+  */
+ public interface DBLayer extends Remote, Serializable {
+ 	
++    public static final int CREATE_USERS = 1;
++    public static final int CREATE_TABLES = 2;
++    
+     /**
+      *  Initialize database connection. Authenticate user and Load rights of this user
+      *
+      *  @param dbID identifier of the database we want to connect to
+      *  @param user username for the access to plantlore on the server
+      *  @param password password for the access to plantlore on the server
+-     *  @return array with two objects - User object with logged in user (index 0) and user's rights 
++ t     *  @return array with two objects - User object with logged in user (index 0) and user's rights 
+      *          (Right object, index 1)
+      *  @throws DBLayerException when the database connection cannot be initialized
+      */
+     public User initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
+ 
++    public void initializeNewDB(String dbID, String user, String password) throws DBLayerException, RemoteException;
+     /**
+      * The database layer performs several kinds of operations each of which may
+      * fail at any time. In order to notify the User and present him with a reasonable
+@@ -51,10 +56,10 @@
+      *  Insert data into the database.
+      *
+      *  @param data data to insert (one of the data holder objects)
+-     *  @return identifier (primary key) of the inserted row
++     *  @return inserted record including the primary key ID
+      *  @throws DBLayerException when saving data into the database fails
+      */    
+-    public int executeInsert(Object data) throws DBLayerException, RemoteException;
++    public Record executeInsert(Object data) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Delete data from the database.
+@@ -68,18 +73,19 @@
+      *  Update data in the database.
+      *
+      *  @param data to update (must be one of the holder objects)
++     *  @return updated record
+      *  @throws DBLayerException when updating data fails
+      */    
+-    public void executeUpdate(Object data) throws DBLayerException, RemoteException;
++    public Record executeUpdate(Object data) throws DBLayerException, RemoteException;
+ 
+     /**
+      *  Insert data into the database without modifying history tables
+      *
+      *  @param data data to insert (one of the data holder objects)
+-     *  @return identifier (primary key) of the inserted row
++     *  @return inserted record including the primary key ID
+      *  @throws DBLayerException when saving data into the database fails
+      */    
+-    public int executeInsertHistory(Object data) throws DBLayerException, RemoteException;
++    public Record executeInsertHistory(Object data) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Delete data from the database without modifying history tables
+@@ -93,9 +99,10 @@
+      *  Update data in the database without modifying history tables.
+      *
+      *  @param data to update (must be one of the holder objects)
++     *  @return updated record
+      *  @throws DBLayerException when updating data fails
+      */    
+-    public void executeUpdateHistory(Object data) throws DBLayerException, RemoteException;
++    public Record executeUpdateHistory(Object data) throws DBLayerException, RemoteException;
+ 
+     /**
+      *  Execute DB update using a long running transaction. For this method to work, it is neccessary
+@@ -104,11 +111,12 @@
+      *  This method checks whether the user has appropriate priviliges and DOES NOT save history
+      *
+      *  @param data holder object with the record we want to update
++     *  @return updated record
+      *  @throws DBLayerException in case we are not connected to the database or an error occurred
+      *                           while executing the update
+      *  @throws RemoteException in case network connection failed
+      */
+-    public void executeUpdateInTransactionHistory(Object data) throws DBLayerException, RemoteException;
++    public Record executeUpdateInTransactionHistory(Object data) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Get more rows from the current result set.
+@@ -244,12 +252,13 @@
+      *  the holder with the author (CCREATEDWHO) and time of creation (CREATEDWHEN).
+      *
+      *  @param data holder object with the record we want to insert
++     *  @return inserted record including the primary key ID
+      *  @throws DBLayerException in case we are not connected to the database or an error occurred
+      *                           while executing the insert
+      *  @throws RemoteException in case server connection failed
+      */        
+-    public int executeInsertInTransaction(Object data) throws DBLayerException, RemoteException;
+-            
++    public Record executeInsertInTransaction(Object data) throws DBLayerException, RemoteException;
++                
+     /**
+      *  Execute DB insert using a long running transaction. For this method to work, it is neccessary
+      *  to begin long running transaction using beginTransaction() method of this class.
+@@ -258,11 +267,12 @@
+      *  updates the holder with the author (CCREATEDWHO) and time of creation (CREATEDWHEN).
+      *
+      *  @param data holder object with the record we want to insert
++     *  @return inserted record including the primary key ID
+      *  @throws DBLayerException in case we are not connected to the database or an error occurred
+      *                           while executing the insert
+      *  @throws RemoteException in case server connection failed
+      */    
+-    public int executeInsertInTransactionHistory(Object data) throws DBLayerException, RemoteException;
++    public Record executeInsertInTransactionHistory(Object data) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Execute DB update using a long running transaction. For this method to work, it is neccessary
+@@ -271,11 +281,12 @@
+      *  This method checks whether the user has appropriate priviliges and saves history
+      *
+      *  @param data holder object with the record we want to update
++     *  @return updated record
+      *  @throws DBLayerException in case we are not connected to the database or an error occurred
+      *                           while executing the update
+      *  @throws RemoteException in case network connection failed
+      */
+-    public void executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException;
++    public Record executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Execute DB delete using a long running transaction. For this method to work, it is neccessary
+@@ -353,6 +364,16 @@
+     public int getConnectionCount() throws RemoteException;
+     
+     /**
++     *  TODO: JavaDoc pending     
++     */
++    public void createDatabase(String dbname) throws DBLayerException, RemoteException;
++
++    /**
++     *  TODO: JavaDoc pending     
++     */    
++    public void executeSQLScript(int scriptid, String dbname, String username, String password) throws DBLayerException, RemoteException;
++    
++    /**
+      * This method is intended for final cleanup. &lt;b&gt;Do not call this method
+      * yourself! The proper way for you to get rid of a DBLayer is to call
+      * DBLayerFactory.destroy() method!&lt;/b&gt; &lt;br/&gt; Terminates all processes running in
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-05 15:41:51 UTC (rev 688)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-05 17:33:32 UTC (rev 689)
+@@ -1,14 +1,12 @@
+-/*
+- * HibernateDBLayer.java
+- *
+- * Created on April 18, 2006, 22:31
+- *
+- */
+ 
+ package net.sf.plantlore.server;
+ 
++import java.io.BufferedReader;
+ import java.io.File;
++import java.io.FileReader;
+ import java.io.IOException;
++import java.io.InputStreamReader;
++import java.net.URL;
+ import java.rmi.NoSuchObjectException;
+ import java.rmi.RemoteException;
+ import java.rmi.server.UnicastRemoteObject;
+@@ -16,6 +14,7 @@
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.SQLException;
++import java.sql.Statement;
+ import java.util.Date;
+ import java.util.HashSet;
+ import java.util.Hashtable;
+@@ -57,6 +56,7 @@
+ import java.util.ArrayList;
+ 
+ import org.hibernate.Transaction;
++import org.hibernate.criterion.Projections;
+ import org.hibernate.criterion.Restrictions;
+ import org.hibernate.exception.JDBCConnectionException;
+ 
+@@ -64,11 +64,9 @@
+ /**
+  *  Implementation of DBLayer using Hibernate OR mapping to access the database.
+  *  
+- *  TODO: Nezapominat generovat stub! (rmic net.sf.plantlore.server.HibernateDBLayer)
+- *
+  *  @author Tomas Kovarik (database parts), 
+  *  @author Erik Kratochv&#237;l (RMI parts, some code purification)
+- *  @version far from ready!
++ *  @version almost complete!
+  */
+ public class HibernateDBLayer implements DBLayer, Unreferenced {
+ 	
+@@ -98,7 +96,7 @@
+     private Right rights;    
+     /** Unique identifier of the database we are connected to */
+     private String databaseID;
+-     /** Plantlore prefix of user name */
++     /** Default prefix of database username */
+     private String userPrefix = &quot;plantlore_&quot;;
+     
+     private Session txSession;
+@@ -126,8 +124,7 @@
+         logger = Logger.getLogger(this.getClass().getPackage().getName());
+         logger.debug(&quot;Constructing a new HibernateDBLayer.&quot;);
+         
+-        this.settings = settings;
+-           
++        this.settings = settings;         
+         
+         // Initialize pool of result sets, initial capacity = INITIAL POOL SIZE
+         results = new Hashtable&lt;Integer, ScrollableResults&gt;(INITIAL_POOL_SIZE); 
+@@ -223,11 +220,20 @@
+             // Load unique database identifier
+             sr = sess.createCriteria(UnitIdDatabase.class).scroll();            
+             if( ! sr.next() ) {
+-            	logger.debug(&quot;DBLayer Initialization - things are not going well. sr.get() returned null!&quot;);
+-            	throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), DBLayerException.ERROR_CONNECT);
++                // No record in the table - we have to insert it (this is the first time the database is accessed)
++                UnitIdDatabase unitid = new UnitIdDatabase();
++                unitid.setUnitIdDb(UniqueIDGenerator.generate());
++                sess.save(unitid);
++                if (unitid.getUnitIdDb() == null) {
++                    logger.error(&quot;Failed to generate unique id for the database&quot;);
++                    throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;));
++                } else {
++                    this.databaseID = unitid.getUnitIdDb();
++                }
++            } else {
++                Object[] unitiddatabase = sr.get();
++                this.databaseID = ((UnitIdDatabase)unitiddatabase[0]).getUnitIdDb();            
+             }
+-            Object[] unitiddatabase = sr.get();
+-            this.databaseID = ((UnitIdDatabase)unitiddatabase[0]).getUnitIdDb();            
+             logger.debug(&quot;DBLayer Initialization - finished!&quot;);
+         } 
+         catch (JDBCException e) {
+@@ -254,6 +260,33 @@
+         return plantloreUser;
+     }
+     
++    // TODO: JavaDoc, cleanup
++    public void initializeNewDB(String dbID, String user, String password) throws DBLayerException, RemoteException {
++        Configuration cfg;
++        // Load Hibernate configuration
++        try {
++            cfg = new Configuration().configure(); //load the configuration from application's resource called hibernate.cfg.xml
++        } catch (HibernateException e) {
++            logger.fatal(&quot;Cannot load Hibernate configuration. Details: &quot;+e.getMessage());
++            throw new DBLayerException(L10n.getString(&quot;Error.InvalidConfiguration&quot;), DBLayerException.ERROR_LOAD_CONFIG, e);
++        }
++        // Create connections string from the provided data
++        if( settings.getConnectionStringSuffix() == null || &quot;&quot;.equals(settings.getConnectionStringSuffix()) )
++        	cfg.setProperty(&quot;hibernate.connection.url&quot;, settings.getConnectionStringPrefix() + dbID);
++        else
++        	cfg.setProperty(&quot;hibernate.connection.url&quot;, settings.getConnectionStringPrefix() + dbID 
++        			+ &quot;?&quot; + settings.getConnectionStringSuffix());
++        // Set username and password to access database
++        cfg.setProperty(&quot;hibernate.connection.username&quot;, user);            
++        cfg.setProperty(&quot;hibernate.connection.password&quot;, password);
++        try {
++        	logger.debug(&quot;DBLayer Initialization - building session factory.&quot;);
++        	sessionFactory = cfg.buildSessionFactory();
++        } catch (HibernateException e) {
++            logger.fatal(&quot;DBLayer initialization: Could not build session factory&quot;);
++            throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), DBLayerException.ERROR_CONNECT, e);
++        }   
++    }
+     
+     protected void touchRecord(Object record) {
+     	java.util.Date now = new Date();
+@@ -265,6 +298,22 @@
+         	((Metadata)record).setDateModified(now);
+         }
+     }
++        
++    protected int getUniqueRecordId() throws DBLayerException {
++        Session sess = sessionFactory.openSession();
++        ScrollableResults sr = sess.createCriteria(Occurrence.class)
++            .setProjection(Projections.max(Occurrence.UNITVALUE))
++            .scroll();
++        if (!sr.next()) {
++            // No records in the database, set the first unitvalue to 1
++            return 1;
++        }
++        Object[] result = sr.get();
++        sess.close();
++        int maxUnitValue = (Integer)result[0];
++        maxUnitValue++;
++        return maxUnitValue;
++    }
+     
+     protected void completeRecord(Object record) throws DBLayerException {
+     	java.util.Date now = new Date();
+@@ -272,10 +321,11 @@
+             Occurrence occ = (Occurrence)record;
+             occ.setCreatedWhen(now);
+             occ.setCreatedWho(this.plantloreUser);
++//            occ.getHabitat().setCreatedWho(this.plantloreUser);
+             // Set UniqueID for the record and database
+             occ.setUnitIdDb(this.databaseID);
+-            //TODO zjiskat unikatni identifikator zaznamu !!!
+-            occ.setUnitValue(1);
++            // Unique identifier of the record
++            occ.setUnitValue(getUniqueRecordId());
+         } else if(record instanceof Habitat) {
+             ((Habitat)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Publication) {
+@@ -283,9 +333,19 @@
+         } else if(record instanceof Author) {
+             ((Author)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Metadata) {
+-        	((Metadata)record).setDateCreate(now);
+-        }
+-        
++            ((Metadata)record).setDateCreate(now);                
++        } else if (record instanceof AuthorOccurrence) {
++            AuthorOccurrence ao = (AuthorOccurrence)record;
++//            ao.getOccurrence().setCreatedWhen(now);
++//            ao.getOccurrence().setCreatedWho(this.plantloreUser);
++//            ao.getOccurrence().setUpdatedWhen(now);
++//            ao.getOccurrence().setUpdatedWho(this.plantloreUser);
++//            ao.getOccurrence().getHabitat().setCreatedWho(this.plantloreUser);
++            // Set UniqueID for the record and database
++//            ao.getOccurrence().setUnitIdDb(&quot;aaa&quot;);
++            //TODO zjiskat unikatni identifikator zaznamu !!!
++//            ao.getOccurrence().setUnitValue(1);       
++         }        
+         touchRecord(record);
+     }
+     
+@@ -295,21 +355,20 @@
+             logger.warn(&quot;SessionFactory not available. Not connected to the database. Must call initialize() prior to any other method!&quot;);
+             throw new DBLayerException(&quot;Exception.NotConnected&quot;, DBLayerException.ERROR_CONNECT, null);
+         }
+-    }
++    }       
+     
+-    
+-    
+-    protected int lowLevelOperation(int operation, Object data, boolean saveHistory, boolean useOwnTransaction) 
++    protected Record lowLevelOperation(int operation, Object data, boolean saveHistory, boolean useOwnTransaction) 
+     throws DBLayerException, RemoteException {
+     	 // Check whether the connection to the databse has been established.
+         checkConnection();
+         
+         // INSERT: Fill in missing parts that DBLayer must complete.
+         // UPDATE &amp; DELETE: Update timestamps of the record.
+-        if(operation == INSERT)
++        if(operation == INSERT) {
+         	completeRecord(data);
+-        else
++        } else {
+         	touchRecord(data);
++        }
+         
+         // Check whether we have sufficient rights.
+         checkRights(data, operation);
+@@ -320,6 +379,7 @@
+         // If we should not use our own transaction, we must use the stored one.
+         Session session = useOwnTransaction ? sessionFactory.openSession() : this.txSession;
+         int recordId = -1;
++        Record record = null;
+         try {            
+             // Begin transaction, if it is required. If not, the `tx` stays null.
+             if(useOwnTransaction) tx = session.beginTransaction();
+@@ -327,12 +387,15 @@
+             // Make changes in the database.
+             switch(operation) {
+                 case INSERT:
+-                    recordId = (Integer)session.save(data);
++                    recordId = (Integer)session.save(data);                    
+                     if(saveHistory) saveHistory(session, data, INSERT, recordId);
++                    record = (Record)data;
++                    record.setId(recordId);
+                     break;
+                 case UPDATE:
+                     session.update(data);
+                     if(saveHistory) saveHistory(session, data, UPDATE, null);
++                    record = (Record)data;                    
+                     break;
+                 case DELETE:
+                     session.delete(data);
+@@ -376,7 +439,7 @@
+             // We must close only our own sessions!
+             if(useOwnTransaction) session.close();
+         }
+-        return recordId;
++        return record;
+     }
+     
+     
+@@ -384,11 +447,10 @@
+      *  Insert data into the database.
+      *
+      *  @param data data to insert (one of the data holder objects)
+-     *  @return identifier (primary key) of the inserted row
++     *  @return inserted record including ID which was used as a primary key
+      *  @throws DBLayerException when saving data into the database fails
+      */
+-    public int executeInsert(Object data) 
+-    throws DBLayerException, RemoteException {
++    public Record executeInsert(Object data) throws DBLayerException, RemoteException {
+        return lowLevelOperation(INSERT, data, true, true);
+     }
+ 
+@@ -396,11 +458,10 @@
+      *  Insert data into the database without modifying history tables
+      *
+      *  @param data data to insert (one of the data holder objects)
+-     *  @return identifier (primary key) of the inserted row
++     *  @return inserted record including ID which was used as a primary key
+      *  @throws DBLayerException when saving data into the database fails
+      */
+-    public int executeInsertHistory(Object data) 
+-    throws DBLayerException, RemoteException {
++    public Record executeInsertHistory(Object data) throws DBLayerException, RemoteException {
+       return lowLevelOperation(INSERT, data, false, true);  
+     }
+     
+@@ -410,8 +471,7 @@
+      *  @param data data we want to delete (must be one of the holder objects)
+      *  @throws DBLayerException when deleting data fails
+      */
+-    public void executeDelete(Object data) 
+-    throws DBLayerException, RemoteException {
++    public void executeDelete(Object data) throws DBLayerException, RemoteException {
+         lowLevelOperation(DELETE, data, true, true);
+     }
+ 
+@@ -421,8 +481,7 @@
+      *  @param data data we want to delete (must be one of the holder objects)
+      *  @throws DBLayerException when deleting data fails
+      */
+-    public void executeDeleteHistory(Object data) 
+-    throws DBLayerException, RemoteException {
++    public void executeDeleteHistory(Object data) throws DBLayerException, RemoteException {
+     	lowLevelOperation(DELETE, data, false, true);
+     }
+     
+@@ -430,22 +489,22 @@
+      *  Update data in the database.
+      *
+      *  @param data to update (must be one of the holder objects)
++     *  @return updated record
+      *  @throws DBLayerException when updating data fails
+      */
+-    public void executeUpdate(Object data) 
+-    throws DBLayerException, RemoteException {
+-    	lowLevelOperation(UPDATE, data, true, true);
++    public Record executeUpdate(Object data) throws DBLayerException, RemoteException {
++    	return lowLevelOperation(UPDATE, data, true, true);
+     }
+ 
+     /**
+      *  Update data in the database without modifying history tables.
+      *
+      *  @param data to update (must be one of the holder objects)
++     *  @return updated record
+      *  @throws DBLayerException when updating data fails
+      */
+-    public void executeUpdateHistory(Object data) 
+-    throws DBLayerException, RemoteException {
+-    	lowLevelOperation(UPDATE, data, false, true);
++    public Record executeUpdateHistory(Object data) throws DBLayerException, RemoteException {
++    	return lowLevelOperation(UPDATE, data, false, true);
+     }
+     
+     /**
+@@ -459,9 +518,8 @@
+      *                           while executing the update
+      *  @throws RemoteException in case network connection failed
+      */
+-    public void executeUpdateInTransactionHistory(Object data) 
+-    throws DBLayerException, RemoteException {
+-       lowLevelOperation(UPDATE, data, false, false);
++    public Record executeUpdateInTransactionHistory(Object data) throws DBLayerException, RemoteException {
++       return lowLevelOperation(UPDATE, data, false, false);
+     }
+     
+     /**
+@@ -478,15 +536,11 @@
+         // Check validity of arguments
+         if (from&gt;to) {
+             logger.error(&quot;Cannot read rows from &quot;+from+&quot; to &quot;+to+&quot; because from &gt; to&quot;);            
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.ERROR_OTHER, &quot;Cannot read rows from &quot;+from+&quot; to &quot;+to+&quot; because from &gt; to&quot;);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;));            
+         } 
+         if (from &lt; 0) {
+             logger.error(&quot;Cannot read rows starting at the given index: &quot;+from);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.ERROR_OTHER, &quot;Cannot read rows starting at the given index: &quot;+from);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;));
+         }
+         // Get results for the given resultId
+         ScrollableResults res = results.get(resultId);
+@@ -500,14 +554,10 @@
+             }
+         } catch (JDBCException e) {
+             logger.fatal(&quot;JDBC Exception caught while retrieving the data from the database. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;), DBLayerException.ERROR_LOAD_DATA, e);
+         } catch (HibernateException e) {
+             logger.error(&quot;Cannot move to the given row of results: &quot;+from+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.ERROR_LOAD_DATA, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;), DBLayerException.ERROR_LOAD_DATA, e);
+         }
+         // Allocate space for data
+         Object[] data = new Object[to-from+1];
+@@ -518,16 +568,12 @@
+                     data[i] = res.get();
+                 } else {
+                     logger.error(&quot;Result doesn't have enough rows&quot;);
+-                    DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);                
+-                    ex.setError(ex.ERROR_LOAD_DATA, &quot;Result doesn't have enough rows&quot;);
+-                    throw ex;
++                    throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;));
+                 }                
+             }
+         } catch (HibernateException e) {
+             logger.error(&quot;Cannot read data from the results&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.ERROR_LOAD_DATA, &quot;Cannot read data from the results&quot;);
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;));
+         }
+         return data;
+     }
+@@ -550,9 +596,7 @@
+             }
+         } catch (HibernateException e) {
+             logger.error(&quot;Call to next() failed&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RetrieveData&quot;);
+-            ex.setError(ex.ERROR_LOAD_DATA, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.RetrieveData&quot;), DBLayerException.ERROR_LOAD_DATA, e);
+         }        
+         return res.get();        
+     }
+@@ -572,8 +616,7 @@
+             logger.error(&quot;HibernateDBLayer: getNumRows(): trying to ask about nonexisting resultId.&quot;);                    
+             return 0; //this may be better than throwing nullpointerexception on res.getRowNumber() a few lines lower
+                       //the application may well recover from this state later
+-        }
+-        
++        }        
+         // Get the current row in the results
+         int currentRow = res.getRowNumber();
+         // Go to the first row of the results        
+@@ -595,18 +638,8 @@
+         }
+         return numRows;
+     }
+-    
++        
+     /**
+-     *  Close the DBLayer. Close the session factory
+-     *
+-     *  @throws DBLayerException when closing session fails
+-     */
+-    @Deprecated
+-    public void close() throws DBLayerException, RemoteException {    
+-    	throw new Error(&quot;THIS CODE MUST NOT BE INVOKED YOU IDIOT! SEE shutdown() INSTEAD!&quot;);
+-    }
+-    
+-    /**
+      *  Start building a select query.
+      *
+      *  @param classname entity we want to select from the database (given holder object class)
+@@ -615,12 +648,7 @@
+      */
+     public SelectQuery createQuery(Class classname) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         SelectQuery query = null;
+         Session session = null;
+         try {
+@@ -628,9 +656,7 @@
+             query = new SelectQueryImplementation(session.createCriteria(classname), queries);
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot create new query (Failed to create session)&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DatabaseQuery&quot;);
+-            ex.setError(ex.ERROR_SELECT, e.getMessage());
+-            throw ex;                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.DatabaseQuery&quot;), DBLayerException.ERROR_SELECT, e);
+         }
+         SelectQuery stub = query;
+         
+@@ -655,12 +681,7 @@
+      */
+     public SelectQuery createSubQuery(Class classname, String alias) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         SelectQuery query = new SubQueryImplementation(classname, alias), 
+         	stub = query;
+         
+@@ -681,9 +702,7 @@
+     	SelectQuery selectQuery = queries.get(query);
+     	if(selectQuery == null) {
+             logger.error(&quot;You can only pass queries created by this DBLayer!&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DatabaseQuery&quot;);
+-            ex.setError(ex.ERROR_SELECT, &quot;You can only pass queries created by this DBLayer!&quot;);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Exception.DatabaseQuery&quot;));
+         }
+     	
+     	assert(selectQuery instanceof SelectQueryImplementation);
+@@ -702,18 +721,17 @@
+             // Commit transaction
+             tx.commit();  
+         } catch (JDBCException e) {
++            if (tx != null) {
++                tx.rollback();
++            }            
+             logger.fatal(&quot;JDBC Exception caught while executing Select query. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DatabaseQuery&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());
+-            throw ex;                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.DatabaseQuery&quot;), DBLayerException.ERROR_SELECT, e);            
+         } catch (HibernateException e) {
+             if (tx != null) {
+                 tx.rollback();
+             }
+             logger.fatal(&quot;Selecting records from the database failed. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DatabaseQuery&quot;);
+-            ex.setError(ex.ERROR_SELECT, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.DatabaseQuery&quot;), DBLayerException.ERROR_SELECT, e);            
+         }
+         // Update current maximum result id and save the results
+         maxResultId++; 
+@@ -737,12 +755,7 @@
+         int deletedEntities = 0;
+         
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         Transaction tx = null;
+         Session session = null;
+         try {
+@@ -770,16 +783,13 @@
+                 tx.rollback();
+             }
+             logger.fatal(&quot;JDBC Exception caught while deleting the record from the database. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DeleteRecord&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());            
++            throw new DBLayerException(L10n.getString(&quot;Exception.DeleteRecord&quot;), DBLayerException.ERROR_DELETE, e);
+         } catch (HibernateException e) {
+             if (tx != null) {
+                 tx.rollback();
+             }            
+             logger.fatal(&quot;Cannot execute conditional delete on table &quot;+tableClass.getName());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DeleteRecord&quot;);
+-            ex.setError(ex.ERROR_DELETE, tableClass.getName());
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Exception.DeleteRecord&quot;), DBLayerException.ERROR_DELETE, e);            
+         } finally {
+             if (session != null) session.close();
+         }
+@@ -811,7 +821,11 @@
+         }
+         
+         Integer resultsetIdentifier = selectQuery.getResultsetIdentifier();
+-        results.remove( resultsetIdentifier  );
++        // resultsetIdentifier is null in case executeQuery() failed and no result was returned (but
++        // we still have to close the query). Thx goes to Fraktalek
++        if (resultsetIdentifier != null) {
++            results.remove(resultsetIdentifier);
++        }
+     }
+     
+     /**
+@@ -841,12 +855,7 @@
+      */
+     synchronized public boolean beginTransaction() throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether there is some other running transaction
+         if (this.longTx != null) {
+             return false;               // Return with an error indicating other transaction is running
+@@ -858,13 +867,10 @@
+             this.longTx = this.txSession.beginTransaction();
+        } catch (JDBCException e) {
+             logger.fatal(&quot;JDBC Exception caught while starting database transaction. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.StartTransaction&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.StartTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot start database transaction&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.StartTransaction&quot;);
+-            ex.setError(ex.ERROR_TRANSACTION, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.StartTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);
+         }
+         return true;                    // Transaction succesfully started
+     }
+@@ -880,12 +886,7 @@
+      */    
+     public boolean commitTransaction() throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether we have an opened session and running transaction
+         if ((this.longTx == null) || (this.txSession == null)) {
+             return false;               // Return with an error indicating we don't have proper conditions
+@@ -898,14 +899,13 @@
+             // Close the session
+             this.txSession.close();            
+        } catch (JDBCException e) {
++            this.rollbackTransaction();
+             logger.fatal(&quot;JDBC Exception caught while commiting database transaction. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.CommitTransaction&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.CommitTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);
+         } catch (HibernateException e) {
++            this.rollbackTransaction();            
+             logger.fatal(&quot;Cannot commit database transaction&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.CommitTransaction&quot;);
+-            ex.setError(ex.ERROR_TRANSACTION, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.CommitTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);        
+         }
+         return true;
+     }
+@@ -922,12 +922,7 @@
+      */
+     public boolean rollbackTransaction() throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether we have an opened session and running transaction
+         if ((this.longTx == null) || (this.txSession == null)) {
+             return false;               // Return with an error indicating we don't have proper conditions
+@@ -941,13 +936,10 @@
+             this.txSession.close();
+        } catch (JDBCException e) {
+             logger.fatal(&quot;JDBC Exception caught while rollbacking database transaction. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RollbackTransaction&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.RollbackTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot rollback database transaction&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.RollbackTransaction&quot;);
+-            ex.setError(ex.ERROR_TRANSACTION, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.RollbackTransaction&quot;), DBLayerException.ERROR_TRANSACTION, e);            
+         }            
+         return true;        
+     }
+@@ -964,11 +956,47 @@
+      *                           while executing the insert
+      *  @throws RemoteException in case server connection failed
+      */    
+-    public int executeInsertInTransaction(Object data) 
+-    throws DBLayerException, RemoteException {
++    public Record executeInsertInTransaction(Object data) throws DBLayerException, RemoteException {
+     	return lowLevelOperation(INSERT, data, true, false);
+     }
+ 
++    public Object executeInsertInTransactionTest(Object data) 
++    throws DBLayerException, RemoteException {
++        
++    	 // Check whether the connection to the databse has been established.
++        checkConnection();
++        // Complete record
++      	completeRecord(data);
++        // Check whether we have sufficient rights.
++        checkRights(data, 1);
++
++        // If we should not use our own transaction, we must use the stored one.
++        Session session = this.txSession;
++        int recordId = -1;
++        try {                       
++            recordId = (Integer)session.save(data);
++            ((Record)data).setId(recordId);
++            saveHistory(session, data, INSERT, recordId);           
++        } 
++        catch (StaleObjectStateException e) {
++            this.rollbackTransaction();
++            logger.warn(&quot;StaleObjectStateException caught (Concurrent transactions running and trying to commit). Details: &quot;+e.getMessage());
++            throw new DBLayerException(&quot;Error.ConcurrentUpdate&quot;, DBLayerException.ERROR_TRANSACTION, e);
++        } 
++        catch (JDBCException e) {
++            this.rollbackTransaction();
++            logger.fatal(&quot;JDBC Exception caught while saving the record into the database. SQL State: &quot;+e.getSQLState()+&quot;; Details: &quot;+e.getMessage());
++            throw new DBLayerException(L10n.getString(&quot;Error.DatabaseOperationFailed&quot;), e);
++        } 
++        catch (HibernateException e) {
++            this.rollbackTransaction();
++            logger.fatal(&quot;Saving record into the database failed. Details: &quot;+e.getMessage());
++            int exceptionType = -1;
++            throw new DBLayerException(L10n.getString(&quot;Error.DatabaseOperationFailed&quot;), exceptionType, e);
++        }
++        return data;
++    }
++    
+     /**
+      *  Execute DB insert using a long running transaction. For this method to work, it is neccessary
+      *  to begin long running transaction using beginTransaction() method of this class.
+@@ -981,8 +1009,7 @@
+      *                           while executing the insert
+      *  @throws RemoteException in case server connection failed
+      */    
+-    public int executeInsertInTransactionHistory(Object data) 
+-    throws DBLayerException, RemoteException {
++    public Record executeInsertInTransactionHistory(Object data) throws DBLayerException, RemoteException {
+     	return lowLevelOperation(INSERT, data, false, false);
+     }    
+     
+@@ -997,8 +1024,8 @@
+      *                           while executing the update
+      *  @throws RemoteException in case network connection failed
+      */
+-    public void executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException {
+-    	lowLevelOperation(UPDATE, data, true, false);
++    public Record executeUpdateInTransaction(Object data) throws DBLayerException, RemoteException {
++    	return lowLevelOperation(UPDATE, data, true, false);
+     }
+     
+     /**
+@@ -1045,11 +1072,9 @@
+                     .scroll();
+                 // If we haven't found the author in the database, raise exception
+                 if (!sc.next()) {
++                    sess.close();                    
+                     logger.error(&quot;To-be-updated/deleted author not found in the database. Author ID:&quot;+((Author)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted author not found in the database. Author ID:&quot;+((Author)data).getId());
+-                    ex.setError(ex.ERROR_OTHER, null);
+-                    sess.close();
+-                    throw ex;                                        
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));
+                 }
+                 Object[] res = sc.get();
+                 Author aut = (Author)res[0];
+@@ -1082,18 +1107,14 @@
+                 }
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOR);                    
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }
+             }
+             if (type == INSERT) {
+                 // Insert only if CADD = 1
+                 if (this.rights.getAdd() == 0) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOR);
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }                
+             }            
+         }
+@@ -1102,9 +1123,7 @@
+             // Only admin can insert/update/delete from this table
+             if (this.rights.getAdministrator() != 1) {
+                 logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_USER);
+-                ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_USER);
+-                ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_USER);
+-                throw ex;
++                throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+             }
+             // User can edit his own data except for login name
+             
+@@ -1123,17 +1142,13 @@
+             // Only admin can insert/update/delete from this table
+             if (this.rights.getAdministrator() != 1) {
+                 logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+entity);
+-                ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+entity);
+-                ex.setError(ex.ERROR_RIGHTS, entity);
+-                throw ex;
+-            }            
++                throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);            
++            }
+         }
+         // Check rights for table THISTORYCOLUMN
+         if (data instanceof HistoryColumn) {
+             logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HISTORYCOLUMN);
+-            ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HISTORYCOLUMN);
+-            ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_HISTORYCOLUMN);
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);        
+         }
+         // Check rights for table THISTORY and THISTORYCHANGE
+         if ((data instanceof HistoryChange) || (data instanceof HistoryRecord)) {
+@@ -1142,12 +1157,10 @@
+                 if (data instanceof HistoryChange) { entity = PlantloreConstants.ENTITY_HISTORYCHANGE; }
+                 if (data instanceof HistoryRecord) { entity = PlantloreConstants.ENTITY_HISTORYRECORD; }                
+                 logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+entity);
+-                ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+entity);
+-                ex.setError(ex.ERROR_RIGHTS, entity);
+-                throw ex;                            
++                throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);          
+             } else if (type == DELETE) {
+                 // Tu to bude zlozitejsie...
+-                // TODO
++                // TODO ???
+             }           
+         }        
+         // Check rights for table TPUBLICATIONS
+@@ -1160,11 +1173,9 @@
+                     .scroll();
+                 // If we haven't found the publication in the database, raise exception
+                 if (!sc.next()) {
++                    sess.close();                    
+                     logger.error(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());                    
+-                    ex.setError(ex.ERROR_OTHER, null);
+-                    sess.close();
+-                    throw ex;                                        
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));        
+                 }
+                 Object[] res = sc.get();
+                 Publication pub = (Publication)res[0];
+@@ -1194,18 +1205,14 @@
+                 }
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_PUBLICATION);
+-                    throw ex;
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);          
+                 }
+             }
+             if (type == INSERT) {
+                 // Only if CADD = 1
+                 if (this.rights.getAdd() == 0) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_PUBLICATION);
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }                
+             }                        
+         }
+@@ -1219,11 +1226,9 @@
+                     .scroll();
+                 // If we haven't found the occurrence in the database, raise exception
+                 if (!sc.next()) {
++                    sess.close();                    
+                     logger.error(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
+-                    ex.setError(ex.ERROR_OTHER, null);
+-                    sess.close();
+-                    throw ex;                                        
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));        
+                 }
+                 Object[] res = sc.get();
+                 Occurrence occ = (Occurrence)res[0];
+@@ -1254,18 +1259,14 @@
+                 }
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_OCCURRENCE);
+-                    throw ex;
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }
+             }
+             if (type == INSERT) {
+                 // Insert only if CADD = 1
+                 if (this.rights.getAdd() == 0) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_OCCURRENCE);
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }                
+             }                            
+         }
+@@ -1279,11 +1280,9 @@
+                     .scroll();
+                 // If we haven't found the habitat in the database, raise exception
+                 if (!sc.next()) {
++                    sess.close();                    
+                     logger.error(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
+-                    ex.setError(ex.ERROR_OTHER, null);
+-                    sess.close();
+-                    throw ex;                                        
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));        
+                 }
+                 Object[] res = sc.get();
+                 Habitat hab = (Habitat)res[0];
+@@ -1296,11 +1295,9 @@
+                     .scroll();
+                 // If no occurrence was found
+                 if (!sc.next()) {
+-                    logger.error(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());
+-                    ex = new DBLayerException(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());
+-                    ex.setError(ex.ERROR_DB, null);
+                     sess.close();
+-                    throw ex;                          
++                    logger.error(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));        
+                 }    
+                 res = sc.get();
+                 Occurrence occ = (Occurrence)res[0];
+@@ -1330,18 +1327,14 @@
+                 }
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_HABITAT);
+-                    throw ex;
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }
+             }            
+             if (type == INSERT) {
+                 // Insert only if CADD = 1
+                 if (this.rights.getAdd() == 0) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_HABITAT);
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS); 
+                 }                
+             }                                        
+         }
+@@ -1355,11 +1348,9 @@
+                     .scroll();
+                 // If we haven't found the occurrence in the database, raise exception
+                 if (!sc.next()) {
++                    sess.close();                    
+                     logger.error(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
+-                    ex.setError(ex.ERROR_OTHER, null);
+-                    sess.close();
+-                    throw ex;                                        
++                    throw new DBLayerException(L10n.getString(&quot;Error.RecordNotFound&quot;));        
+                 }
+                 Object[] res = sc.get();
+                 AuthorOccurrence ao = (AuthorOccurrence)res[0];
+@@ -1391,18 +1382,14 @@
+                 }
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    throw ex;
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+                 }
+             }            
+             if (type == INSERT) {
+                 // Insert only if CADD = 1
+                 if (this.rights.getAdd() == 0) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
+-                    throw ex;                    
++                    throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);   
+                 }                
+             }            
+         }        
+@@ -1668,7 +1655,6 @@
+                     		continue;
+                     	
+                     	if( origValue == null || newValue == null || !origValue.equals(newValue) ) {
+-                    		System.out.println(&quot; &gt;&gt; DIFFERENT_COLUMN: &quot; + columnName);
+                     		// Read record from THISTORYCOLUMN first
+                     		res = sess.createCriteria(HistoryColumn.class).
+                     		add(Restrictions.eq(HistoryColumn.TABLENAME, PlantloreConstants.ENTITY_OCCURRENCE)).
+@@ -1796,7 +1782,6 @@
+                         Object origValue = (origRec.getValue((String)cols.get(i)) == null) ? new String(&quot;&quot;) : origRec.getValue((String)cols.get(i));                        
+                         Object newValue = (newRec.getValue((String)cols.get(i)) == null) ? new String(&quot;&quot;) : newRec.getValue((String)cols.get(i));                                                                        
+                         if (!origValue.equals(newValue)) {
+-                        	System.out.println(&quot; &gt;&gt; DIFFERENT_COLUMN: &quot; + (String)cols.get(i));
+                             // Read record from THISTORYCOLUMN first                           	
+                             res = sess.createCriteria(HistoryColumn.class)
+                                 .add(Restrictions.eq(HistoryColumn.TABLENAME, PlantloreConstants.ENTITY_HABITAT))
+@@ -2065,18 +2050,11 @@
+      */
+     public void createUser(String name, String password, boolean isAdmin) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.error(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether the user is administrator - only admin can modify users
+         if (this.rights.getAdministrator() != 1) {
+             logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_USER);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.InsufficientRights&quot;);
+-            ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_USER);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+         }
+         // TODO: This is PostgreSQL specific. Think of a way how to provide different statements for
+         //       different databases
+@@ -2094,14 +2072,10 @@
+             pstmtGrant.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.CreateUser&quot;);
+-            ex.setError(ex.ERROR_SAVE, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.CreateUser&quot;), DBLayerException.ERROR_SAVE, e);            
+         } catch (SQLException e) {
+             logger.warn(&quot;Unable to create new database user using CREATE USER statement. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.CreateUser&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());
+-            throw ex;                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.CreateUser&quot;), DBLayerException.ERROR_SAVE, e);            
+         }
+     }
+     
+@@ -2121,18 +2095,11 @@
+      */    
+     public void alterUser(String name, String password, boolean isAdmin, boolean changeRight ) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.error(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether the user is administrator - only admin can modify users
+         if (this.rights.getAdministrator() != 1) {
+             logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_USER);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.InsufficientRights&quot;);
+-            ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_USER);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+         }
+         // TODO: This is PostgreSQL specific. Think of a way how to provide different statements for
+         //       different databases
+@@ -2172,14 +2139,10 @@
+             }            
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.AlterUser&quot;);
+-            ex.setError(ex.ERROR_SAVE, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.AlterUser&quot;), DBLayerException.ERROR_SAVE, e);
+         } catch (SQLException e) {
+             logger.warn(&quot;Unable to alter the database user using ALTER USER statement. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.AlterUser&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());
+-            throw ex;                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.AlterUser&quot;), DBLayerException.ERROR_SAVE, e);
+         }        
+     }
+     
+@@ -2196,18 +2159,11 @@
+      */    
+     public void dropUser(String name) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+-        if (sessionFactory == null) {
+-            logger.error(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+-            ex.setError(ex.ERROR_CONNECT, null);
+-            throw ex;
+-        }
++        checkConnection();
+         // Check whether the user is administrator - only admin can modify users
+         if (this.rights.getAdministrator() != 1) {
+             logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_USER);
+-            DBLayerException ex = new DBLayerException(&quot;Exception.InsufficientRights&quot;);
+-            ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_USER);
+-            throw ex;
++            throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;), DBLayerException.ERROR_RIGHTS);
+         }
+         try {
+             Connection conn = txSession.connection();        
+@@ -2215,14 +2171,10 @@
+             pstmt.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DropUser&quot;);
+-            ex.setError(ex.ERROR_SAVE, e.getMessage());
+-            throw ex;            
++            throw new DBLayerException(L10n.getString(&quot;Exception.DropUser&quot;), DBLayerException.ERROR_SAVE, e);            
+         } catch (SQLException e) {
+             logger.warn(&quot;Unable to drop database user using the DROP USER statement. Details: &quot;+e.getMessage());
+-            DBLayerException ex = new DBLayerException(&quot;Exception.DropUser&quot;);
+-            ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());
+-            throw ex;                        
++            throw new DBLayerException(L10n.getString(&quot;Exception.DropUser&quot;), DBLayerException.ERROR_SAVE, e);            
+         }
+     }
+             
+@@ -2235,7 +2187,90 @@
+         return sessions.size();
+     }
+     
++    public void createDatabase(String dbname) throws DBLayerException, RemoteException {
++        // Check whether we are connected and obtain a session
++        checkConnection();     
++        // Open new session
++        Session session = sessionFactory.openSession();
++        // Obtain JDBC connection from session
++        Connection con = session.connection();
++        // Execute CREATE DATABASE statement
++        try {
++            con.setAutoCommit(true);
++            Statement stmt = con.createStatement();
++            logger.debug(&quot;----- SQL: CREATE DATABASE &quot;+dbname+&quot; WITH OWNER = plantlore_role_admin ENCODING = 'UTF8' TABLESPACE = pg_default&quot;);
++            stmt.execute(&quot;CREATE DATABASE &quot;+dbname+&quot; WITH OWNER = plantlore_role_admin ENCODING = 'UTF8' TABLESPACE = pg_default&quot;);            
++        } catch (SQLException e) {
++            // Deal with the exception
++            logger.error(&quot;SQLException caught while executing SQL script. Details: &quot;+e.getMessage()+&quot;; SQL State: &quot;+e.getSQLState());
++            throw new DBLayerException(L10n.getString(&quot;Error.CreateDatabase&quot;), DBLayerException.ERROR_CREATEDB, e);            
++        }
++    }
+     
++    public void executeSQLScript(int scriptid, String dbname, String username, String password) throws DBLayerException, RemoteException {
++        String file;
++        switch (scriptid) {
++            case DBLayer.CREATE_USERS: file = &quot;net/sf/plantlore/config/database/createusers_postgres.sql&quot;;
++                    break;
++            case DBLayer.CREATE_TABLES: file = &quot;net/sf/plantlore/config/database/createtables_postgres.sql&quot;;
++                    break;
++            default: file = &quot;&quot;;
++                    break;
++        }
++        // Check whether we are connected and obtain a session
++        checkConnection();     
++        // Read the script file from resources
++        StringBuffer sql = new StringBuffer();
++        try {
++            ClassLoader cl = HibernateDBLayer.class.getClassLoader();
++            URL sqlfile = cl.getResource(file);
++            BufferedReader in = new BufferedReader(new InputStreamReader(sqlfile.openStream()));
++            String str;
++            while ((str = in.readLine()) != null) {
++                sql.append(str);
++            }
++            in.close();
++        } catch (IOException e) {
++            // Deal with I/O Exception
++            logger.error(&quot;I/O Exception caught. Cannot read sql script from file. Details: &quot;+e.getMessage());
++            throw new DBLayerException(L10n.getString(&quot;Error.CreateDatabase&quot;), DBLayerException.ERROR_CREATEDB, e);
++        }
++        // Open new session
++        Session session = sessionFactory.openSession();
++        // Obtain JDBC connection from session
++        Connection con = session.connection();        
++        // In case we are creating users, add statement to create first user for accesing plantlore
++        if (scriptid == DBLayer.CREATE_USERS) {
++            sql.append(&quot;CREATE USER &quot;+dbname+&quot;_&quot;+username+&quot; PASSWORD '&quot;+password+&quot;';&quot;);
++            sql.append(&quot;GRANT Plantlore_Role_Admin TO &quot;+dbname+&quot;_&quot;+username+&quot;;&quot;);
++        }
++        // In case we are creating tables, insert data into TUSER table so that the user can login
++        if (scriptid == DBLayer.CREATE_TABLES) {
++            sql.append(&quot;INSERT INTO tright (cid, cadministrator, cadd, ceditall) VALUES (1,1, 1, 1);&quot;);
++            sql.append(&quot;INSERT INTO tuser (clogin, cwholename, ccreatewhen, crightid) VALUES ('&quot;+username+&quot;', '', 'NOW', 1);&quot;);
++        }
++        // Split the file with semicolon as the separator
++        String[] statements = sql.toString().split(&quot;;&quot;);        
++        // Execute batch SQL
++        try {
++            con.setAutoCommit(false);        
++            Statement stmt = con.createStatement();
++            for (int i=0;i&lt;statements.length;i++) {
++                logger.debug(&quot;----- SQL: &quot;+statements[i]);
++                stmt.addBatch(statements[i]);
++            }
++            int [] updateCounts = stmt.executeBatch();
++            con.commit();
++            con.setAutoCommit(true);                
++        } catch (SQLException e) {
++            // Deal with the exception
++            logger.error(&quot;SQLException caught while executing SQL script. Details: &quot;+e.getMessage()+&quot;; SQL State: &quot;+e.getSQLState());
++            throw new DBLayerException(L10n.getString(&quot;Error.CreateDatabase&quot;), DBLayerException.ERROR_CREATEDB, e);
++        } finally {
++            session.close();
++        }
++    }
++    
+     /**
+      * This method is intended for final cleanup. &lt;b&gt;Do not call this method
+      * yourself! The proper way for you to get rid of a DBLayer is to call
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000948.html">[Plantlore-dev] r688 - trunk/src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000950.html">[Plantlore-dev] r690 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#949">[ date ]</a>
+              <a href="thread.html#949">[ thread ]</a>
+              <a href="subject.html#949">[ subject ]</a>
+              <a href="author.html#949">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,161 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r592 - trunk/src/net/sf/plantlore/common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r592%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200608290945.k7T9jhme019366%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000825.html">
+   <LINK REL="Next"  HREF="000827.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r592 - trunk/src/net/sf/plantlore/common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r592%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200608290945.k7T9jhme019366%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r592 - trunk/src/net/sf/plantlore/common">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug 29 11:45:43 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000825.html">[Plantlore-dev] r591 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+        <LI>Next message: <A HREF="000827.html">[Plantlore-dev] Fw: Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#826">[ date ]</a>
+              <a href="thread.html#826">[ thread ]</a>
+              <a href="subject.html#826">[ subject ]</a>
+              <a href="author.html#826">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-29 11:45:43 +0200 (Tue, 29 Aug 2006)
+New Revision: 592
+
+Added:
+   trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+Log:
+THe missing ExceptionHandler.
+
+Added: trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-08-29 09:37:08 UTC (rev 591)
++++ trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-08-29 09:45:43 UTC (rev 592)
+@@ -0,0 +1,85 @@
++package net.sf.plantlore.common;
++
++import java.rmi.*;
++import java.rmi.server.ExportException;
++
++import javax.swing.JOptionPane;
++
++import org.hibernate.JDBCException;
++
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 28.8.2006
++ *
++ */
++public class DefaultExceptionHandler {
++
++	private DefaultExceptionHandler() {}
++	
++	
++	public static void handle(java.awt.Component parent, Exception e) {
++		handle(parent, e, L10n.getString(&quot;Error.General&quot;));		
++	}
++	
++	
++	public static void handle(java.awt.Component parent, Exception e, String title) {
++		/*
++		 * REMOTE EXCEPTION HANDLER
++		 */
++		if( e instanceof RemoteException ) {
++			String problemDescription = e.getMessage();
++			
++			if( e instanceof AccessException )
++				problemDescription = L10n.getString(&quot;Error.Server.AccessDenied&quot;);
++			else if( e instanceof ConnectException )
++				problemDescription = L10n.getString(&quot;Error.Server.ConnectionRefused&quot;);
++			else if( e instanceof ConnectIOException )
++				problemDescription = L10n.getString(&quot;Error.Server.ConnectionRefused&quot;);
++			else if( e instanceof ExportException )
++				problemDescription = L10n.getString(&quot;Error.Server.ExportFailed&quot;);
++			else if( e instanceof MarshalException )
++				problemDescription = L10n.getString(&quot;Error.Server.MarshallingFailed&quot;);
++			else if( e instanceof NoSuchObjectException )
++				problemDescription = L10n.getString(&quot;Error.Server.ObjectDoesNotExistAnymore&quot;);
++			else if( e instanceof ServerError )
++				problemDescription = L10n.getString(&quot;Error.Server.InTrouble&quot;);
++			else if( e instanceof ServerException )
++				problemDescription = L10n.getString(&quot;Error.Server.InTrouble&quot;);
++			else if( e instanceof StubNotFoundException )
++				problemDescription = L10n.getString(&quot;Error.Server.StubNotFound&quot;);
++			else if( e instanceof UnexpectedException )
++				problemDescription = L10n.getString(&quot;Error.Server.UnexpectedProblem&quot;);
++			else if( e instanceof UnknownHostException )
++				problemDescription = L10n.getString(&quot;Error.Server.UnknownHost&quot;);
++			else if( e instanceof UnmarshalException )
++				problemDescription = L10n.getString(&quot;Error.Server.UnmarshallingFailed&quot;);
++
++			DefaultReconnectDialog.show(parent, problemDescription);
++		}
++		
++		/*
++		 * DBLAYER EXCEPTION HANDLER
++		 */
++		else if( e instanceof DBLayerException &amp;&amp; ((DBLayerException)e).isReconnectNecessary() ) {
++			DBLayerException d = (DBLayerException)e;
++			String problemDescription = d.getMessage();
++			if(d.getCause() instanceof JDBCException)
++				problemDescription = d.getMessage() + &quot;\n&quot;  + d.getErrorInfo();
++			DefaultReconnectDialog.show(parent, problemDescription);
++		}
++		
++		/*
++		 * OTHER EXCEPTIONS HANDLER
++		 */
++		else
++			JOptionPane.showMessageDialog( 
++					parent, 
++					e.getMessage(), 
++					title, 
++					JOptionPane.ERROR_MESSAGE );
++	}
++	
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000825.html">[Plantlore-dev] r591 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+	<LI>Next message: <A HREF="000827.html">[Plantlore-dev] Fw: Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#826">[ date ]</a>
+              <a href="thread.html#826">[ thread ]</a>
+              <a href="subject.html#826">[ subject ]</a>
+              <a href="author.html#826">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

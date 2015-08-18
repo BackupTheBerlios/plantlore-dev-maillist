@@ -1,0 +1,467 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r295 - in trunk/src/net/sf/plantlore: client client/export client/export/component common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r295%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/export%20client/export/component%20common&In-Reply-To=%3C200605181154.k4IBsZ4S014320%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000347.html">
+   <LINK REL="Next"  HREF="000348.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r295 - in trunk/src/net/sf/plantlore: client client/export client/export/component common</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r295%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/export%20client/export/component%20common&In-Reply-To=%3C200605181154.k4IBsZ4S014320%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r295 - in trunk/src/net/sf/plantlore: client client/export client/export/component common">krater at berlios.de
+       </A><BR>
+    <I>Thu May 18 13:54:35 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000347.html">[Plantlore-dev] r294 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+        <LI>Next message: <A HREF="000348.html">[Plantlore-dev] r296 - in trunk/src/net/sf/plantlore/common: . record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#345">[ date ]</a>
+              <a href="thread.html#345">[ thread ]</a>
+              <a href="subject.html#345">[ subject ]</a>
+              <a href="author.html#345">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-18 13:54:34 +0200 (Thu, 18 May 2006)
+New Revision: 295
+
+Modified:
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/component/XFilter.java
+   trunk/src/net/sf/plantlore/common/Selection.java
+Log:
+Export framework supporting projections. To be tested.
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-18 11:09:52 UTC (rev 294)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-18 11:54:34 UTC (rev 295)
+@@ -531,7 +531,11 @@
+                 // This restriction is in question; 
+                 // sometimes you want to export deleted data from the source database
+                 // so that they are deleted in the target database, too.
+-                exportQuery.addRestriction(PlantloreConstants.RESTR_NE, Occurrence.DELETED, null, 1, null);
++                // The restriction doesn't apply here. Dead records may be exported, it is the Filter describing
++                // the file format that decides whether dead record shall be exported or not.
++                
++                //exportQuery.addRestriction(PlantloreConstants.RESTR_NE, Occurrence.DELETED, null, 1, null);
++                
+                 //---------------------------------------------------------------------------------------
+                 for (Column column : columns) {
+                     switch (column.type) {
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-18 11:09:52 UTC (rev 294)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-18 11:54:34 UTC (rev 295)
+@@ -41,7 +41,7 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- * @version 1.0 RC 2
++ * @version 2.0
+  *
+  * @see net.sf.plantlore.client.common.Selection
+  * @see net.sf.plantlore.client.export.Builder
+@@ -65,7 +65,7 @@
+ 	
+ 	private int count = 0;
+ 	
+-	private Class rootTable;
++	//private Class rootTable;
+ 
+ 
+ 	/**
+@@ -107,7 +107,7 @@
+ 		this(builder, result, database, selection);
+ 		this.useProjections = useProjections;
+ 		this.description = description;
+-		this.rootTable = rootTable;
++		//this.rootTable = rootTable;
+ 		if(rootTable != null) try { 
+ 			torso = (Record)rootTable.newInstance();
+ 			torso.createTorso();
+@@ -254,7 +254,8 @@
+ 				
+ 				
+ 				logger.debug(&quot;New record No. &quot;+i+&quot; fetched: &quot;+record);
+-				if( !selection.contains( record ) ) continue; // Is the record selected?
++				if( !selection.contains( record ) || (ignoreDead &amp;&amp; record.isDead()) ) 
++					continue; // Is the record selected?
+ 				
+ 				logger.debug(&quot;The record is in the selection. It will be exported.&quot;);
+ 			
+@@ -294,9 +295,17 @@
+ 		aborted = true;
+ 	}
+ 	
+-	
++	/**
++	 * The base of the record to be reconstructed.
++	 */
+ 	private Record torso;
+ 	
++	/**
++	 * Reconstruct the record from the given values. 
++	 * 
++	 * @param values	Values of columns (in the same order as in the Description).
++	 * @return	The reconstructed record.
++	 */
+ 	private Record reconstruct(Object[] values) {
+ 		for(int i = 0; i &lt; description.size(); i++ ) {
+ 			Pair&lt;Class, String&gt; d = description.get(i);
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-18 11:09:52 UTC (rev 294)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-18 11:54:34 UTC (rev 295)
+@@ -16,14 +16,7 @@
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.common.exception.DBLayerException;
+-import net.sf.plantlore.common.record.Habitat;
+-import net.sf.plantlore.common.record.Metadata;
+-import net.sf.plantlore.common.record.Occurrence;
+-import net.sf.plantlore.common.record.Phytochorion;
+-import net.sf.plantlore.common.record.Plant;
+-import net.sf.plantlore.common.record.Publication;
+-import net.sf.plantlore.common.record.Territory;
+-import net.sf.plantlore.common.record.Village;
++import net.sf.plantlore.common.record.*;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -54,10 +47,20 @@
+  * instead of creating the object partially using setters!
+  * The participating entities may depend on each other and
+  * therefore their setters must be called in a specific order.
++ * &lt;br/&gt;
++ * The most important is the order of these entities:
++ * &lt;ol&gt;
++ * &lt;li&gt;UseProjections&lt;/li&gt;
++ * &lt;li&gt;RootTable&lt;/li&gt;
++ * &lt;li&gt;DBLayer&lt;/li&gt;
++ * &lt;li&gt;SelectQuery&lt;/li&gt;
++ * &lt;li&gt;Template&lt;/li&gt;
++ * &lt;/ol&gt;
++ * The first two steps may be omited if projections are not to be used.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-29 
+- * @version 1.0
++ * @version 2.0
+  * @see net.sf.plantlore.client.export.DefaultDirector
+  * @see net.sf.plantlore.client.export.Builder
+  */
+@@ -67,34 +70,34 @@
+ 	 * List of all filters the Export Manager is capable to handle.
+ 	 */
+ 	protected XFilter[] filters = new XFilter[] {
+-			new XFilter(L10n.getString(&quot;FilterPlantloreNative&quot;), &quot;.xml&quot;, &quot;.pln&quot;),
+-			new XFilter(L10n.getString(&quot;FilterXML&quot;), true, &quot;.xml&quot;),
+-			new XFilter(L10n.getString(&quot;FilterCSV&quot;), true, &quot;.txt&quot;, &quot;.csv&quot;),	
++			new XFilter(L10n.getString(&quot;FilterPlantloreNative&quot;), false, false, &quot;.xml&quot;, &quot;.pln&quot;),
++			new XFilter(L10n.getString(&quot;FilterXML&quot;), true, true, &quot;.xml&quot;),
++			new XFilter(L10n.getString(&quot;FilterCSV&quot;), true, true, &quot;.txt&quot;, &quot;.csv&quot;),	
+ 			new XFilter(L10n.getString(&quot;FilterABCD&quot;), &quot;.xml&quot;),	
+ 			new XFilter(L10n.getString(&quot;FilterDC&quot;), &quot;.xml&quot;),
+-			new XFilter(L10n.getString(&quot;FilterStdOut&quot;), true, &quot;.out&quot;)
++			new XFilter(L10n.getString(&quot;FilterStdOut&quot;), true, false, &quot;.out&quot;)
+ 	};
+ 	
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+-	protected DBLayer db ;
+-	protected Template template;
+-	protected Selection select;
+-	protected XFilter filter;
+-	protected String filename;
+-	protected Integer resultId;
+-	protected DefaultDirector director;
+-	protected Builder builder;
+-	protected boolean aborted = false, exportInProgress = false;
+-	protected int results = -1, selectedResults = -1;
+-	protected SelectQuery query = null;
++	private DBLayer db ;
++	private Template template;
++	private Selection select;
++	private XFilter filter;
++	private String filename;
++	private Integer resultId;
++	private DefaultDirector director;
++	private Builder builder;
++	private boolean aborted = false, exportInProgress = false;
++	private int results = -1, selectedResults = -1;
++	private SelectQuery query = null;
+ 	
+-	protected Writer writer;
+-	protected Thread current;
++	private Writer writer;
++	private Thread current;
+ 		
+ 	
+-	protected boolean useProjections = false;
+-	protected Class rootTable;
++	private boolean useProjections = false;
++	private Class rootTable = Occurrence.class;
+ 	
+ 	
+ 	/**
+@@ -107,17 +110,13 @@
+ 	 */
+ 	public ExportMng(DBLayer dblayer, SelectQuery query, Selection selection, Template template) 
+ 	throws ExportException, DBLayerException, RemoteException {
+-		setDBLayer(dblayer);
+-		setSelectQuery(query);
+-		setSelection(selection);
+-		setTemplate(template);
++		this(dblayer, query, selection, template, null, null, false, null);
+ 	}
+ 
+ 	
+ 	/**
+ 	 * Create a new Export manager.
+ 	 * &lt;b&gt;Mark all records AND columns as selected&lt;/b&gt;.
+-	 * Note: This constructor is for the first initialization only. 
+ 	 * &lt;b&gt;You will have to specify the SelectQuery&lt;/b&gt;
+ 	 * before you call &lt;code&gt;start()&lt;/code&gt;. 
+ 	 * 
+@@ -126,10 +125,6 @@
+ 	public ExportMng(DBLayer dblayer) 
+ 	throws ExportException {
+ 		setDBLayer(dblayer);
+-		setTemplate(null);
+-		
+-		Selection select = new Selection(); select.all();
+-		setSelection(select);
+ 	}
+ 	
+ 	/**
+@@ -158,9 +153,21 @@
+ 	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+ 	 * @param filter	The filter which will be used to determine the appropriate builder of the output.
+ 	 * @param file	The name of the file where the output will be written.
++	 * @param useProjections	Should projections be used.
++	 * @param rootTable	The root table (only if projections are used).
+ 	 */
+-	public ExportMng(DBLayer dblayer, SelectQuery query, Selection selection, Template template, XFilter filter, String filename) 
++	public ExportMng(
++			DBLayer dblayer, 
++			SelectQuery query, 
++			Selection selection, 
++			Template template, 
++			XFilter filter, 
++			String filename,
++			boolean useProjections,
++			Class rootTable) 
+ 	throws ExportException, DBLayerException, RemoteException  {
++		useProjections( useProjections );
++		setRootTable( rootTable );
+ 		setDBLayer(dblayer);
+ 		setSelectQuery(query);
+ 		setSelection(selection);
+@@ -175,7 +182,7 @@
+ 	 * which is why the Export Manager has to use projections.
+ 	 * 
+ 	 * @param useProjections	True if the Export manager shall use projections instead of regular records.
+-	 * @throws ExportException
++	 * @throws ExportException	If the export is already in progress.
+ 	 */
+ 	synchronized public void useProjections(boolean useProjections) 
+ 	throws ExportException {
+@@ -186,7 +193,13 @@
+ 		this.useProjections = useProjections;
+ 	}
+ 	
+-	
++	/**
++	 * If projections are used, the root table must be specified explicitely.
++	 * The default root table is the Occurrence table.
++	 * 
++	 * @param rootTable	The root table (the table the query started with). 
++	 * @throws ExportException	If the export is already in progress.
++	 */
+ 	synchronized public void setRootTable(Class rootTable) 
+ 	throws ExportException {
+ 		if(isExportInProgress()) {
+@@ -224,7 +237,7 @@
+ 	 * If projections are used, they will be added to the SelectQuery and
+ 	 * the SelectQuery will be executed here.
+ 	 * 
+-	 * @throws ExportException 
++	 * @throws ExportException	If the export is already in progress.
+ 	 */
+ 	synchronized public void setTemplate(Template template) 
+ 	throws ExportException {
+@@ -258,10 +271,12 @@
+ 		 *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+ 		
+ 		if(useProjections) {
+-			template.addProjections( query, 
++			if( rootTable == AuthorOccurrence.class || rootTable == Author.class )
++				template.addProjections( query, AuthorOccurrence.class, Author.class );
++			else
++				template.addProjections( query, 
+ 					Occurrence.class, Plant.class, Metadata.class, Publication.class, 
+ 					Habitat.class, Territory.class, Village.class, Phytochorion.class );
+-			
+ 			//Execute the SelectQuery and update the resultId and the number of results.
+ 			try {
+ 				resultId = db.executeQuery( query );
+@@ -362,6 +377,8 @@
+ 			throw new ExportException(L10n.getString(&quot;error.InvalidFilter&quot;));
+ 		if( filename == null || filename.length() == 0 ) 
+ 			throw new ExportException(L10n.getString(&quot;error.MissingFileName&quot;));
++		if( useProjections &amp;&amp; rootTable == null)
++			throw new ExportException(L10n.getString(&quot;error.InvalidRootTable&quot;));
+ 			
+ 		
+ 		logger.debug(&quot;Initializing the export environment.&quot;);
+@@ -387,7 +404,10 @@
+ 			builder = new TrainingBuilder(template);
+ 
+ 		// Create a new Director and run it in a separate thread.
+-		director = new DefaultDirector(builder, resultId, db, select, useProjections, template.getDescription(), rootTable);
++		director = new DefaultDirector(
++				builder, resultId, db, select, useProjections, 
++				template.getDescription(), rootTable);
++		director.ignoreDead( filter.ignoreDead() );
+ 		director.addObserver(this);
+ 		
+ 		current = new Thread( director, &quot;Export&quot; );
+
+Modified: trunk/src/net/sf/plantlore/client/export/component/XFilter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/component/XFilter.java	2006-05-18 11:09:52 UTC (rev 294)
++++ trunk/src/net/sf/plantlore/client/export/component/XFilter.java	2006-05-18 11:54:34 UTC (rev 295)
+@@ -23,6 +23,7 @@
+ 	private String description;
+ 	private ArrayList&lt;String&gt; extensions;
+ 	private boolean columnSelection = false;
++	private boolean ignoreDead = true;
+ 	
+ 	/**
+ 	 * Create a new XFilter.
+@@ -43,9 +44,10 @@
+ 	 * @param columnSelectionEnabled	The format allows further modifications.
+ 	 * @param extensions	The list of extensions that are related to this filter.
+ 	 */
+-	public XFilter(String description, boolean columnSelectionEnabled, String... extensions) {
++	public XFilter(String description, boolean columnSelectionEnabled, boolean ignoreDead, String... extensions) {
+ 		this(description, extensions);
+ 		this.columnSelection = columnSelectionEnabled;
++		this.ignoreDead = ignoreDead;
+ 	}
+ 
+ 	/**
+@@ -54,6 +56,13 @@
+ 	public boolean isColumnSelectionEnabled() {
+ 		return this.columnSelection;
+ 	}
++	
++	/**
++	 *	@return True if dead records should be omited.
++	 */
++	public boolean ignoreDead() {
++		return ignoreDead;
++	}
+ 
+ 	/**
+ 	 * Decide whether the file meets the requierements - has the correct extension
+
+Modified: trunk/src/net/sf/plantlore/common/Selection.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Selection.java	2006-05-18 11:09:52 UTC (rev 294)
++++ trunk/src/net/sf/plantlore/common/Selection.java	2006-05-18 11:54:34 UTC (rev 295)
+@@ -38,34 +38,45 @@
+ 	 * Add another record to the selection. 
+ 	 * @param id	The primary key of the record.
+ 	 */
+-	public void add(Integer id) {
++	public Selection add(Integer id) {
+ 		if( !inverted ) selected.add(id);
+ 		else selected.remove(id);
++		return this;
+ 	}
+ 		
+ 	/**
+ 	 * Remove a selected record from the selection (deselect).
+ 	 * @param id Of the record that is deselected.
+ 	 */
+-	public void remove(Integer id) {
++	public Selection remove(Integer id) {
+ 		if( !inverted ) selected.remove(id);
+ 		else selected.add(id);
++		return this;
+ 	}
+ 	
+ 	/**
+ 	 * Invert the current selection.
+ 	 */
+-	public void invert() { inverted = !inverted; }
++	public Selection invert() { 
++		inverted = !inverted;
++		return this;
++	}
+ 
+ 	/**
+ 	 * Deselect all records.
+ 	 */
+-	public void none() { selected.clear(); inverted = false; }
++	public Selection none() { 
++		selected.clear(); inverted = false;
++		return this;
++	}
+ 
+ 	/**
+ 	 * Select all records.
+ 	 */
+-	public void all() { selected.clear(); inverted = true; }
++	public Selection all() { 
++		selected.clear(); inverted = true;
++		return this;
++	}
+ 
+ 	/**
+ 	 * @param id	The primary key of the record.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000347.html">[Plantlore-dev] r294 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+	<LI>Next message: <A HREF="000348.html">[Plantlore-dev] r296 - in trunk/src/net/sf/plantlore/common: . record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#345">[ date ]</a>
+              <a href="thread.html#345">[ thread ]</a>
+              <a href="subject.html#345">[ subject ]</a>
+              <a href="author.html#345">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

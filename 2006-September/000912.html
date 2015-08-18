@@ -1,0 +1,485 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r654%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200609040103.k8413q6r021311%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000911.html">
+   <LINK REL="Next"  HREF="000913.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r654%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200609040103.k8413q6r021311%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 03:03:52 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000911.html">[Plantlore-dev] r653 - in trunk/src/net/sf/plantlore: client	client/createdb client/history client/metadata	client/overview/tree client/publications common
+</A></li>
+        <LI>Next message: <A HREF="000913.html">[Plantlore-dev] r655 - trunk/src/net/sf/plantlore/client/overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#912">[ date ]</a>
+              <a href="thread.html#912">[ thread ]</a>
+              <a href="subject.html#912">[ subject ]</a>
+              <a href="author.html#912">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-04 03:03:25 +0200 (Mon, 04 Sep 2006)
+New Revision: 654
+
+Modified:
+   trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+   trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateView.form
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+Log:
+Now, with another way to handle the tasks, the DefaultExceptionHandler can have the ReconnectAction disabled globally.
+
+Server makes use of the new (non-freezing?) progress bar wherever applicable.
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -20,7 +20,26 @@
+  */
+ public class DefaultExceptionHandler {
+ 	
++	private static boolean isReconnectDisabled = false;
++	
++	
+ 	private DefaultExceptionHandler() {}
++	
++	/**
++	 * Do not offer reconnect at all.
++	 *
++	 */
++	public static void disableReconnect() {
++		isReconnectDisabled = true;
++	}
++	
++	/**
++	 * Offer the reconnect procedure only where applicable.
++	 *
++	 */
++	public static void enableReconnect() {
++		isReconnectDisabled = false;
++	}
+ 
+ 
+ 	/**
+@@ -151,7 +170,7 @@
+ 		}
+ 		
+ 		// Announce the error and offer the reconnection.
+-		if( isReconnectReasonable &amp;&amp; ! doNotOfferReconnect )
++		if( !isReconnectDisabled &amp;&amp; isReconnectReasonable &amp;&amp; ! doNotOfferReconnect )
+ 			DefaultReconnectDialog.show(parent, problemDescription);
+ 		// Just announce the problem.
+ 		else
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -72,7 +72,9 @@
+ 	 * @param problemDescription	The string that will be displayed to the User.
+ 	 */
+ 	public static void show(Component parent, String problemDescription) {
+-		defaultReconnectAction.setParent(parent);
++		if(defaultReconnectAction != null)
++			defaultReconnectAction.setParent(parent);
++		
+ 		int choice = JOptionPane.showOptionDialog(
+ 				parent, 
+ 				problemDescription, 
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -12,6 +12,7 @@
+ 
+ import com.jgoodies.looks.plastic.PlasticXPLookAndFeel;
+ 
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.exception.PlantloreException;
+ import net.sf.plantlore.l10n.L10n;
+@@ -53,6 +54,9 @@
+         } catch (PlantloreException e) {
+             // TODO: Display error message
+         }
++        
++        // Disable reconnect
++        DefaultExceptionHandler.disableReconnect();
+ 
+ 
+         java.awt.EventQueue.invokeLater(new Runnable(){
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -2,7 +2,7 @@
+ 
+ import java.awt.event.ActionEvent;
+ 
+-import net.sf.plantlore.common.DefaultProgressBar;
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.server.DatabaseSettings;
+@@ -22,6 +22,8 @@
+ 	private ServerMngView mngView;
+ 	
+ 	public ServerCreateCtrl(final ServerMng model, final ServerCreateView view) {
++            
++		Dispatcher.initialize( view.progress );
+ 		
+ 		mngView = new ServerMngView(model);
+ 		new ServerMngCtrl(model, mngView);
+@@ -76,8 +78,7 @@
+ 					
+ 					// Create and run a new server.
+ 					Task createServer = model.createNewServerTask( serverPassword );
+-					new DefaultProgressBar(createServer, view, true, true);
+-					createServer.start();
++					Dispatcher.getDispatcher().dispatch(createServer, view, true);
+ 					break;
+ 				
+ 					
+@@ -93,8 +94,7 @@
+ 					
+ 					Task connectToServer = model.createConnectToRunningServerTask(
+ 							view.remoteHost.getText(), port, password );
+-					new DefaultProgressBar(connectToServer, view, true, true);
+-					connectToServer.start();
++					Dispatcher.getDispatcher().dispatch(connectToServer, view, true);
+ 					
+ 					break;
+ 				}
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateView.form	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateView.form	2006-09-04 01:03:25 UTC (rev 654)
+@@ -73,15 +73,33 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace min=&quot;0&quot; pref=&quot;408&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace pref=&quot;165&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;progress&quot; min=&quot;-2&quot; pref=&quot;233&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace min=&quot;0&quot; pref=&quot;100&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace pref=&quot;71&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;progress&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;progress&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;borderPainted&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;next&quot;&gt;
+       &lt;Properties&gt;
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -50,6 +50,9 @@
+         
+         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+         
++        // Show the progress bar only when necessary.
++        progress.setVisible( false );
++        
+         DocumentSizeFilter.patch(serverPassword, 20);
+         DocumentSizeFilter.patch(serverPort, 5);
+         DocumentSizeFilter.patch(databaseType, 30);
+@@ -68,6 +71,7 @@
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+     private void initComponents() {
+         plantloreLogo = new javax.swing.JPanel();
++        progress = new javax.swing.JProgressBar();
+         next = new javax.swing.JButton();
+         help = new javax.swing.JButton();
+         choicePane = new javax.swing.JTabbedPane();
+@@ -99,15 +103,23 @@
+         setResizable(false);
+         plantloreLogo.setBackground(new java.awt.Color(0, 0, 0));
+         plantloreLogo.setPreferredSize(new java.awt.Dimension(300, 100));
++        progress.setBorderPainted(false);
++
+         org.jdesktop.layout.GroupLayout plantloreLogoLayout = new org.jdesktop.layout.GroupLayout(plantloreLogo);
+         plantloreLogo.setLayout(plantloreLogoLayout);
+         plantloreLogoLayout.setHorizontalGroup(
+             plantloreLogoLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(0, 408, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, plantloreLogoLayout.createSequentialGroup()
++                .addContainerGap(165, Short.MAX_VALUE)
++                .add(progress, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 233, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap())
+         );
+         plantloreLogoLayout.setVerticalGroup(
+             plantloreLogoLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(0, 100, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, plantloreLogoLayout.createSequentialGroup()
++                .addContainerGap(71, Short.MAX_VALUE)
++                .add(progress, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap())
+         );
+ 
+         next.setText(L10n.getString(&quot;Server.Continue&quot;));
+@@ -350,6 +362,7 @@
+     private javax.swing.JPanel jPanel5;
+     protected javax.swing.JButton next;
+     protected javax.swing.JPanel plantloreLogo;
++    protected javax.swing.JProgressBar progress;
+     protected javax.swing.JTextField remoteHost;
+     protected javax.swing.JPasswordField remoteServerPassword;
+     protected javax.swing.JTextField remoteServerPort;
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -2,7 +2,7 @@
+ 
+ import java.awt.event.ActionEvent;
+ 
+-import net.sf.plantlore.common.DefaultProgressBar;
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.server.ConnectionInfo;
+@@ -21,24 +21,21 @@
+ 		view.kick.setAction(new StandardAction(&quot;Server.KickUser&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createKickTask( (ConnectionInfo)view.users.getSelectedValue() );
+-				new DefaultProgressBar(t, view, true, true);
+-				t.start();			
++				Dispatcher.getDispatcher().dispatch(t, view, true);			
+ 			}
+ 		});
+ 		
+ 		view.terminate.setAction(new StandardAction(&quot;Server.Terminate&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createTerminateServerTask();
+-				new DefaultProgressBar(t, view, true, true);
+-				t.start();	
++				Dispatcher.getDispatcher().dispatch(t, view, true);
+ 			}
+ 		});
+ 		
+ 		view.refresh.setAction(new StandardAction(&quot;Server.Refresh&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createUpdateConnectedUsersTask();
+-				new DefaultProgressBar(t, view, true, true);
+-				t.start();
++				Dispatcher.getDispatcher().dispatch(t, view, true);
+ 			}
+ 		});
+ 		
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-09-04 01:03:25 UTC (rev 654)
+@@ -20,22 +20,21 @@
+   &lt;Layout&gt;
+     &lt;DimensionLayout dim=&quot;0&quot;&gt;
+       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++          &lt;Component id=&quot;jToolBar1&quot; alignment=&quot;0&quot; pref=&quot;364&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;343&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;344&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;help&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;166&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;167&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;terminate&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;hide&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;10&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+-          &lt;Component id=&quot;jToolBar1&quot; alignment=&quot;0&quot; pref=&quot;363&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+@@ -125,6 +124,14 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;progress&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;borderPainted&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;terminate&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-09-04 00:44:12 UTC (rev 653)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-09-04 01:03:25 UTC (rev 654)
+@@ -9,6 +9,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.server.ConnectionInfo;
+@@ -36,6 +37,9 @@
+         PlantloreHelp.addKeyHelp(PlantloreHelp.SERVER, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.SERVER, this.help);
+         
++        // Show the progress bar only when necessary.
++        progress.setVisible( false );
++        
+         setLocationRelativeTo(null); // center of the screen
+     }
+     
+@@ -53,6 +57,7 @@
+         jToolBar1 = new javax.swing.JToolBar();
+         refresh = new javax.swing.JButton();
+         kick = new javax.swing.JButton();
++        progress = new javax.swing.JProgressBar();
+         terminate = new javax.swing.JButton();
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+@@ -71,25 +76,27 @@
+         kick.setText(L10n.getString(&quot;Server.KickUser&quot;));
+         jToolBar1.add(kick);
+ 
++        progress.setBorderPainted(false);
++        jToolBar1.add(progress);
++
+         terminate.setText(L10n.getString(&quot;Server.Terminate&quot;));
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+         layout.setHorizontalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
++            .add(jToolBar1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 364, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 343, Short.MAX_VALUE)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 344, Short.MAX_VALUE)
++                    .add(layout.createSequentialGroup()
+                         .add(help)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 166, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 167, Short.MAX_VALUE)
+                         .add(terminate)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(hide)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+-                .addContainerGap())
+-            .add(jToolBar1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 363, Short.MAX_VALUE)
++                        .add(hide)))
++                .add(10, 10, 10))
+         );
+ 
+         layout.linkSize(new java.awt.Component[] {hide, terminate}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+@@ -118,6 +125,7 @@
+     private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JToolBar jToolBar1;
+     protected javax.swing.JButton kick;
++    protected javax.swing.JProgressBar progress;
+     protected javax.swing.JButton refresh;
+     protected javax.swing.JButton terminate;
+     protected javax.swing.JList users;
+@@ -136,12 +144,15 @@
+ 			else 
+ 				users.setListData(new String[] {&quot;&quot;});
+ 		} 
+-		else if( parameter == ServerMng.CONNECTED ) 
++		else if( parameter == ServerMng.CONNECTED ) {
+ 			java.awt.EventQueue.invokeLater(new Runnable() {
+ 				public void run() {
+ 					setVisible(true);
+ 				}
+ 			});
++			
++			Dispatcher.initialize( progress );
++		}
+ 	}
+     
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000911.html">[Plantlore-dev] r653 - in trunk/src/net/sf/plantlore: client	client/createdb client/history client/metadata	client/overview/tree client/publications common
+</A></li>
+	<LI>Next message: <A HREF="000913.html">[Plantlore-dev] r655 - trunk/src/net/sf/plantlore/client/overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#912">[ date ]</a>
+              <a href="thread.html#912">[ thread ]</a>
+              <a href="subject.html#912">[ subject ]</a>
+              <a href="author.html#912">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

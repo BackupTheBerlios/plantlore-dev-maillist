@@ -1,0 +1,1141 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r558 - trunk/src/net/sf/plantlore/client/overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r558%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200608231255.k7NCtjnx001672%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000761.html">
+   <LINK REL="Next"  HREF="000763.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r558 - trunk/src/net/sf/plantlore/client/overview</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r558%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200608231255.k7NCtjnx001672%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r558 - trunk/src/net/sf/plantlore/client/overview">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Wed Aug 23 14:55:45 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000761.html">[Plantlore-dev] r557 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000763.html">[Plantlore-dev] r559 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#762">[ date ]</a>
+              <a href="thread.html#762">[ thread ]</a>
+              <a href="subject.html#762">[ subject ]</a>
+              <a href="author.html#762">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-23 14:55:26 +0200 (Wed, 23 Aug 2006)
+New Revision: 558
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java
+Log:
+Closing select query in OccurrenceTableModel, exception propagation fix in AddEdit model.
+AddEdit dialog is now much shorter (about 720px high) and it's resizing behaviour is vastly improved though not ideal yet.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-23 12:05:50 UTC (rev 557)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-23 12:55:26 UTC (rev 558)
+@@ -134,6 +134,9 @@
+     public int setRecord(Integer occurrenceId) throws DBLayerException, RemoteException {
+         logger.debug(&quot;Loading AddEdit data for occurrence id &quot;+occurrenceId);
+         
++        clearOccurrence();
++        clearLocation();
++        
+         DBLayerUtils dlu = new DBLayerUtils(database);
+         this.o = (Occurrence) dlu.getObjectFor(occurrenceId, Occurrence.class);
+         coordinateSystem = WGS84;
+@@ -1098,42 +1101,37 @@
+     /**As a side effect stores the AuthorOccurrence objects into &lt;code&gt;authorOccurrences&lt;/code&gt;
+      * Also creates new resultRevision arrayList and loads data into it... :-/
+      */
+-    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; getAuthorsOf(Occurrence o) {
++    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; getAuthorsOf(Occurrence o) throws RemoteException, DBLayerException {
+         ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorResults = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
+         authorOccurrences = new HashMap&lt;Integer,AuthorOccurrence&gt;();
+         resultRevision = new ArrayList();
+-        //FIXME:
+-        try {
+-            //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
+-            SelectQuery sq = database.createQuery(AuthorOccurrence.class);        
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 0, null);
+-            int resultid = database.executeQuery(sq);
+-            int resultCount = database.getNumRows(resultid);
+-            Object[] results = database.more(resultid, 0, resultCount-1);
+-            Object[] tmp;
+-            AuthorOccurrence ao;
+-            Author a;
+-            for (int i = 0; i &lt; resultCount; i++) {
+-                tmp = (Object[]) results[i];
+-                ao = (AuthorOccurrence)tmp[0];
+-                a = ao.getAuthor();
+-                String role = ao.getRole();
+-                if (role == null)
+-                    role = &quot;&quot;;/* avoid problems with null value... (we need to compare role for example in checkData() where we do role.equals())
+-                            * so if we didn't set it here to empty string a NullPointerException could be thrown
+-                            */
+-                authorResults.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(
+-                        new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),role ) );
+-                authorOccurrences.put(a.getId(),ao);
+-                resultRevision.add(ao.getNote());
+-            }
+-            database.closeQuery(sq);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
++
++        //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
++        SelectQuery sq = database.createQuery(AuthorOccurrence.class);        
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 0, null);
++        int resultid = database.executeQuery(sq);
++        int resultCount = database.getNumRows(resultid);
++        Object[] results = database.more(resultid, 0, resultCount-1);
++        Object[] tmp;
++        AuthorOccurrence ao;
++        Author a;
++        for (int i = 0; i &lt; resultCount; i++) {
++            tmp = (Object[]) results[i];
++            ao = (AuthorOccurrence)tmp[0];
++            a = ao.getAuthor();
++            String role = ao.getRole();
++            if (role == null)
++                role = &quot;&quot;;/* avoid problems with null value... (we need to compare role for example in checkData() where we do role.equals())
++                        * so if we didn't set it here to empty string a NullPointerException could be thrown
++                        */
++            authorResults.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(
++                    new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),role ) );
++            authorOccurrences.put(a.getId(),ao);
++            resultRevision.add(ao.getNote());
+         }
++        database.closeQuery(sq);
++        
+         return authorResults;
+     }
+     
+@@ -1308,28 +1306,8 @@
+     //the not null values are forced by calling checkData before store()
+     public void clear() {
+         logger.debug(&quot;Clearing add model&quot;);
+-        if (! preloadAuthors)
+-            clearAuthors();
+-        habitatDescription = null;
+-        year = Calendar.getInstance().get(Calendar.YEAR);
+-        habitatNote = null;
+-        occurrenceNote = null;
+-        phytCountry = null;
+-        quadrant = null;
+-        altitude = null;
+-        longitude = null;
+-        latitude = null;
+-        source = null;
+-        publication = null;//new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
+-        herbarium = null;
+-        
+-        month = Calendar.getInstance().get(Calendar.MONTH);
+-        day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+-        time = null;
+-        
+-        occurrenceTableModel.clear();
+-        setChanged();
+-        notifyObservers(&quot;CLEAR&quot;);
++        clearLocation();
++        clearOccurrence();
+     }
+     
+     public void clearLocation() {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-23 12:05:50 UTC (rev 557)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-23 12:55:26 UTC (rev 558)
+@@ -39,10 +39,7 @@
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;jScrollPane8&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-          &lt;/Group&gt;
++          &lt;Component id=&quot;jScrollPane8&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+   &lt;/Layout&gt;
+@@ -50,7 +47,7 @@
+     &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane8&quot;&gt;
+       &lt;Properties&gt;
+         &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-          &lt;Dimension value=&quot;[920, 803]&quot;/&gt;
++          &lt;Dimension value=&quot;[920, 685]&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+ 
+@@ -62,7 +59,7 @@
+               &lt;Dimension value=&quot;[700, 100]&quot;/&gt;
+             &lt;/Property&gt;
+             &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-              &lt;Dimension value=&quot;[700, 700]&quot;/&gt;
++              &lt;Dimension value=&quot;[920, 680]&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+ 
+@@ -82,7 +79,7 @@
+                   &lt;Dimension value=&quot;[600, 0]&quot;/&gt;
+                 &lt;/Property&gt;
+                 &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-                  &lt;Dimension value=&quot;[900, 622]&quot;/&gt;
++                  &lt;Dimension value=&quot;[900, 520]&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+@@ -97,23 +94,23 @@
+               &lt;Layout&gt;
+                 &lt;DimensionLayout dim=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jPanel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;914&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;Component id=&quot;jPanel7&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;3&quot;/&gt;
++                              &lt;Component id=&quot;jPanel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+                 &lt;DimensionLayout dim=&quot;1&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jPanel5&quot; min=&quot;-2&quot; pref=&quot;291&quot; max=&quot;-2&quot; attributes=&quot;2&quot;/&gt;
++                          &lt;Component id=&quot;jPanel5&quot; min=&quot;-2&quot; pref=&quot;240&quot; max=&quot;-2&quot; attributes=&quot;2&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jPanel7&quot; min=&quot;-2&quot; pref=&quot;296&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jPanel7&quot; min=&quot;-2&quot; pref=&quot;248&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;103&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+@@ -141,71 +138,63 @@
+                     &lt;DimensionLayout dim=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;7&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
++                                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;7&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                          &lt;Component id=&quot;territoryNameLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;quadrantLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;/Group&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                                          &lt;Component id=&quot;quadrantTextField&quot; linkSize=&quot;19&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;territoryNameCombo&quot; linkSize=&quot;19&quot; alignment=&quot;0&quot; pref=&quot;145&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                      &lt;/Group&gt;
++                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;requiredInfoLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;/Group&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                                          &lt;Component id=&quot;phytCountryCombo&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;phytNameCombo&quot; alignment=&quot;0&quot; pref=&quot;133&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                      &lt;/Group&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;townLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;townComboBox&quot; min=&quot;-2&quot; pref=&quot;150&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                   &lt;/Group&gt;
+                                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;7&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;placeDescriptionLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;/Group&gt;
+-                                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+-                                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Component id=&quot;jScrollPane2&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;placeDescriptionLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;434&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+-                                                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;7&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                                          &lt;Component id=&quot;territoryNameLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                          &lt;Component id=&quot;quadrantLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;/Group&gt;
++                                                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;536&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                                          &lt;Component id=&quot;quadrantTextField&quot; linkSize=&quot;19&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                          &lt;Component id=&quot;territoryNameCombo&quot; linkSize=&quot;19&quot; alignment=&quot;0&quot; pref=&quot;145&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                      &lt;/Group&gt;
+-                                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                                          &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;/Group&gt;
+-                                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                                          &lt;Component id=&quot;phytCountryCombo&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                          &lt;Component id=&quot;phytNameCombo&quot; alignment=&quot;0&quot; pref=&quot;133&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                      &lt;/Group&gt;
+                                                   &lt;/Group&gt;
+                                               &lt;/Group&gt;
+-                                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                                  &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;286&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                                          &lt;Component id=&quot;locationNoteLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                          &lt;Component id=&quot;townLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;/Group&gt;
+-                                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                      &lt;Component id=&quot;townComboBox&quot; min=&quot;-2&quot; pref=&quot;150&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                                  &lt;/Group&gt;
++                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;Component id=&quot;locationNoteLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Component id=&quot;jScrollPane4&quot; min=&quot;-2&quot; pref=&quot;286&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                               &lt;/Group&gt;
+                                           &lt;/Group&gt;
+                                       &lt;/Group&gt;
+-                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;162&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                               &lt;/Group&gt;
+-                              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;69&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                     &lt;/DimensionLayout&gt;
+@@ -225,7 +214,7 @@
+                                           &lt;Component id=&quot;quadrantTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;countryLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;/Group&gt;
+-                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;11&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;placeDescriptionLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;locationNoteLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -244,21 +233,13 @@
+                                   &lt;/Group&gt;
+                               &lt;/Group&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;jScrollPane2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                  &lt;Component id=&quot;jScrollPane4&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;jScrollPane4&quot; min=&quot;0&quot; pref=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;jScrollPane2&quot; min=&quot;-2&quot; pref=&quot;54&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                  &lt;/Group&gt;
+-                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+-                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;14&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;17&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;/Group&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+@@ -470,7 +451,6 @@
+                                       &lt;Component id=&quot;gpsChangeButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;coordinateSystemLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;EmptySpace pref=&quot;17&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                           &lt;/Group&gt;
+                         &lt;/DimensionLayout&gt;
+@@ -591,11 +571,6 @@
+                         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                       &lt;/AuxValues&gt;
+                     &lt;/Component&gt;
+-                    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;requiredInfoLabel&quot;&gt;
+-                      &lt;Properties&gt;
+-                        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;requiredInfoLabel&quot;/&gt;
+-                      &lt;/Properties&gt;
+-                    &lt;/Component&gt;
+                   &lt;/SubComponents&gt;
+                 &lt;/Container&gt;
+                 &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel7&quot;&gt;
+@@ -615,7 +590,7 @@
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;taxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -623,17 +598,19 @@
+                                       &lt;/Group&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;checklistButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Component id=&quot;checklistButton&quot; linkSize=&quot;21&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;EmptySpace pref=&quot;232&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;Component id=&quot;clearOccurrenceButton&quot; linkSize=&quot;21&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;/Group&gt;
+                                           &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                       &lt;/Group&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;Component id=&quot;jScrollPane1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;645&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;clearOccurrenceButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;sourceLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;projectLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -642,18 +619,24 @@
+                                       &lt;/Group&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;0&quot; pref=&quot;139&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;Component id=&quot;publicationCombo&quot; alignment=&quot;0&quot; pref=&quot;139&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;Component id=&quot;projectCombo&quot; alignment=&quot;0&quot; pref=&quot;139&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;0&quot; pref=&quot;132&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;publicationCombo&quot; alignment=&quot;0&quot; pref=&quot;132&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;projectCombo&quot; alignment=&quot;0&quot; pref=&quot;132&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Component id=&quot;sourceCombo&quot; pref=&quot;139&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                              &lt;Component id=&quot;sourceCombo&quot; pref=&quot;132&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;/Group&gt;
+                                       &lt;/Group&gt;
++                                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;Component id=&quot;jScrollPane5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                          &lt;Component id=&quot;jLabel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;jScrollPane5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                      &lt;/Group&gt;
++                                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;/Group&gt;
+                               &lt;/Group&gt;
+-                              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                     &lt;/DimensionLayout&gt;
+@@ -662,51 +645,54 @@
+                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                      &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;checklistButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                      &lt;Component id=&quot;jScrollPane5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;taxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;111&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                      &lt;/Group&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;Component id=&quot;checklistButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                                  &lt;Component id=&quot;clearOccurrenceButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;/Group&gt;
+                                           &lt;/Group&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Component id=&quot;publicationLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;publicationCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;Component id=&quot;taxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;111&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                              &lt;/Group&gt;
++                                              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                      &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;/Group&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;publicationLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                      &lt;Component id=&quot;publicationCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;/Group&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;projectLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                      &lt;Component id=&quot;projectCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;/Group&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                                      &lt;Component id=&quot;herbariumLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                      &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;/Group&gt;
++                                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                              &lt;/Group&gt;
+                                           &lt;/Group&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Component id=&quot;projectLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;projectCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;/Group&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                              &lt;Component id=&quot;herbariumLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;/Group&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;/Group&gt;
+-                                  &lt;/Group&gt;
+-                              &lt;/Group&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;jScrollPane5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;clearOccurrenceButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; pref=&quot;82&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;130&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+@@ -762,18 +748,18 @@
+                         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;dayLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;dayTextField&quot; linkSize=&quot;20&quot; min=&quot;-2&quot; pref=&quot;45&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;/Group&gt;
+                                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;timeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;timeTextField&quot; linkSize=&quot;20&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;timeTextField&quot; linkSize=&quot;20&quot; pref=&quot;45&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                       &lt;/Group&gt;
+                                   &lt;/Group&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -800,9 +786,9 @@
+                                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                              &lt;Component id=&quot;monthLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                               &lt;Component id=&quot;dayLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                               &lt;Component id=&quot;dayTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                              &lt;Component id=&quot;monthLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;/Group&gt;
+                                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+@@ -1038,7 +1024,7 @@
+             &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;buttonPanel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-                  &lt;Dimension value=&quot;[1010, 50]&quot;/&gt;
++                  &lt;Dimension value=&quot;[800, 50]&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;Constraints&gt;
+@@ -1055,7 +1041,9 @@
+                           &lt;Component id=&quot;helpButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jButton1&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;524&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;64&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;350&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;okButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -1072,6 +1060,7 @@
+                               &lt;Component id=&quot;jButton1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;okButton&quot; linkSize=&quot;13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;requiredInfoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace pref=&quot;13&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+@@ -1111,6 +1100,11 @@
+                     &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Nastaven&amp;#xed;&quot;/&gt;
+                   &lt;/Properties&gt;
+                 &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;requiredInfoLabel&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;requiredInfoLabel&quot;/&gt;
++                  &lt;/Properties&gt;
++                &lt;/Component&gt;
+               &lt;/SubComponents&gt;
+             &lt;/Container&gt;
+             &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;extendedPanel&quot;&gt;
+@@ -1124,10 +1118,10 @@
+                   &lt;/Border&gt;
+                 &lt;/Property&gt;
+                 &lt;Property name=&quot;minimumSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-                  &lt;Dimension value=&quot;[1005, 100]&quot;/&gt;
++                  &lt;Dimension value=&quot;[800, 50]&quot;/&gt;
+                 &lt;/Property&gt;
+                 &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-                  &lt;Dimension value=&quot;[1005, 100]&quot;/&gt;
++                  &lt;Dimension value=&quot;[800, 50]&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;Constraints&gt;
+@@ -1149,7 +1143,7 @@
+                 &lt;DimensionLayout dim=&quot;1&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jScrollPane6&quot; min=&quot;-2&quot; pref=&quot;99&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jScrollPane6&quot; min=&quot;-2&quot; pref=&quot;83&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-23 12:05:50 UTC (rev 557)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-23 12:55:26 UTC (rev 558)
+@@ -141,7 +141,6 @@
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+         clearLocationButton = new javax.swing.JButton();
+-        requiredInfoLabel = new javax.swing.JLabel();
+         jPanel7 = new javax.swing.JPanel();
+         jScrollPane3 = new javax.swing.JScrollPane();
+ 
+@@ -177,6 +176,7 @@
+         okButton = new javax.swing.JButton();
+         helpButton = new javax.swing.JButton();
+         jButton1 = new javax.swing.JButton();
++        requiredInfoLabel = new javax.swing.JLabel();
+         extendedPanel = new javax.swing.JPanel();
+         jScrollPane6 = new javax.swing.JScrollPane();
+         occurrenceTable = new javax.swing.JTable();
+@@ -194,14 +194,14 @@
+         });
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+-        jScrollPane8.setPreferredSize(new java.awt.Dimension(920, 803));
++        jScrollPane8.setPreferredSize(new java.awt.Dimension(920, 685));
+         topPanel.setLayout(new java.awt.BorderLayout());
+ 
+         topPanel.setMinimumSize(new java.awt.Dimension(700, 100));
+-        topPanel.setPreferredSize(new java.awt.Dimension(700, 700));
++        topPanel.setPreferredSize(new java.awt.Dimension(920, 680));
+         basicPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.BasicData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         basicPanel.setMinimumSize(new java.awt.Dimension(600, 0));
+-        basicPanel.setPreferredSize(new java.awt.Dimension(900, 622));
++        basicPanel.setPreferredSize(new java.awt.Dimension(900, 520));
+         jPanel5.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.LocationPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         jPanel5.setPreferredSize(new java.awt.Dimension(914, 500));
+         quadrantLabel.setText(&quot;Quadrant:&quot;);
+@@ -318,8 +318,7 @@
+                     .add(gpsShowButton)
+                     .add(gpsTableLabel)
+                     .add(gpsChangeButton)
+-                    .add(coordinateSystemLabel))
+-                .addContainerGap(17, Short.MAX_VALUE))
++                    .add(coordinateSystemLabel)))
+         );
+ 
+         jPanel1Layout.linkSize(new java.awt.Component[] {gpsLoadButton, gpsShowButton}, org.jdesktop.layout.GroupLayout.VERTICAL);
+@@ -335,61 +334,54 @@
+ 
+         clearLocationButton.setText(&quot;Vyma\u017e&quot;);
+ 
+-        requiredInfoLabel.setText(&quot;requiredInfoLabel&quot;);
+-
+         org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
+         jPanel5.setLayout(jPanel5Layout);
+         jPanel5Layout.setHorizontalGroup(
+             jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel5Layout.createSequentialGroup()
++                .add(7, 7, 7)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createSequentialGroup()
+-                        .addContainerGap()
+-                        .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(7, 7, 7)
++                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                            .add(territoryNameLabel)
++                            .add(quadrantLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
++                            .add(org.jdesktop.layout.GroupLayout.LEADING, quadrantTextField)
++                            .add(org.jdesktop.layout.GroupLayout.LEADING, territoryNameCombo, 0, 145, Short.MAX_VALUE))
++                        .add(12, 12, 12)
+                         .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(clearLocationButton)
+-                            .add(requiredInfoLabel)))
++                            .add(org.jdesktop.layout.GroupLayout.TRAILING, phytNameLabel)
++                            .add(org.jdesktop.layout.GroupLayout.TRAILING, countryLabel))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                            .add(phytCountryCombo, 0, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                            .add(phytNameCombo, 0, 133, Short.MAX_VALUE))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(townLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 150, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(jPanel5Layout.createSequentialGroup()
+-                        .add(7, 7, 7)
+-                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                            .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel5Layout.createSequentialGroup()
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(placeDescriptionLabel))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel5Layout.createSequentialGroup()
+-                                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
+-                                    .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel5Layout.createSequentialGroup()
+-                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                        .add(jScrollPane2))
+-                                    .add(jPanel5Layout.createSequentialGroup()
+-                                        .add(7, 7, 7)
+-                                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                                            .add(territoryNameLabel)
+-                                            .add(quadrantLabel))
+-                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
+-                                            .add(org.jdesktop.layout.GroupLayout.LEADING, quadrantTextField)
+-                                            .add(org.jdesktop.layout.GroupLayout.LEADING, territoryNameCombo, 0, 145, Short.MAX_VALUE))
+-                                        .add(12, 12, 12)
+-                                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                                            .add(org.jdesktop.layout.GroupLayout.TRAILING, phytNameLabel)
+-                                            .add(org.jdesktop.layout.GroupLayout.TRAILING, countryLabel))
+-                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                                            .add(phytCountryCombo, 0, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                            .add(phytNameCombo, 0, 133, Short.MAX_VALUE))))
++                                .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                .add(clearLocationButton))
++                            .add(jPanel5Layout.createSequentialGroup()
+                                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                                    .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 286, Short.MAX_VALUE)
+                                     .add(jPanel5Layout.createSequentialGroup()
+-                                        .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                                            .add(locationNoteLabel)
+-                                            .add(townLabel))
+-                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                        .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 150, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))))
+-                        .add(162, 162, 162)))
+-                .addContainerGap())
++                                        .add(placeDescriptionLabel)
++                                        .add(434, 434, 434))
++                                    .add(jPanel5Layout.createSequentialGroup()
++                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 536, Short.MAX_VALUE)
++                                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
++                                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                                    .add(locationNoteLabel)
++                                    .add(jScrollPane4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 286, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
++                .add(69, 69, 69))
+         );
+ 
+         jPanel5Layout.linkSize(new java.awt.Component[] {quadrantTextField, territoryNameCombo}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+@@ -408,7 +400,7 @@
+                             .add(quadrantLabel)
+                             .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                             .add(countryLabel))
+-                        .add(11, 11, 11)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                             .add(placeDescriptionLabel)
+                             .add(locationNoteLabel))
+@@ -422,18 +414,12 @@
+                         .add(phytCountryCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(jScrollPane4))
++                    .add(jScrollPane4, 0, 0, Short.MAX_VALUE)
++                    .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 54, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(jPanel5Layout.createSequentialGroup()
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                    .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel5Layout.createSequentialGroup()
+-                        .add(14, 14, 14)
+-                        .add(requiredInfoLabel)
+-                        .add(17, 17, 17)
+-                        .add(clearLocationButton)))
++                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(clearLocationButton))
+                 .addContainerGap())
+         );
+ 
+@@ -470,17 +456,17 @@
+         jPanel4Layout.setHorizontalGroup(
+             jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel4Layout.createSequentialGroup()
+-                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel4Layout.createSequentialGroup()
+                         .add(19, 19, 19)
+                         .add(dayLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                         .add(dayTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 45, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(jPanel4Layout.createSequentialGroup()
+                         .addContainerGap()
+                         .add(timeLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(timeTextField)))
++                        .add(timeTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 45, Short.MAX_VALUE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel4Layout.createSequentialGroup()
+@@ -504,9 +490,9 @@
+                     .add(jPanel4Layout.createSequentialGroup()
+                         .add(1, 1, 1)
+                         .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                            .add(monthLabel)
+                             .add(dayLabel)
+-                            .add(dayTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(monthLabel))
++                            .add(dayTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .add(6, 6, 6)
+                         .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                             .add(timeLabel)
+@@ -572,20 +558,21 @@
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel7Layout.createSequentialGroup()
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(taxonLabel)
+                             .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(checklistButton)
++                            .add(jPanel7Layout.createSequentialGroup()
++                                .add(checklistButton)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 232, Short.MAX_VALUE)
++                                .add(clearOccurrenceButton))
+                             .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+-                    .add(jScrollPane1))
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jLabel1)
+-                    .add(clearOccurrenceButton)
+                     .add(jPanel7Layout.createSequentialGroup()
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                             .add(sourceLabel)
+@@ -594,55 +581,63 @@
+                             .add(herbariumLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 139, Short.MAX_VALUE)
+-                            .add(publicationCombo, 0, 139, Short.MAX_VALUE)
+-                            .add(projectCombo, 0, 139, Short.MAX_VALUE)
++                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 132, Short.MAX_VALUE)
++                            .add(publicationCombo, 0, 132, Short.MAX_VALUE)
++                            .add(projectCombo, 0, 132, Short.MAX_VALUE)
+                             .add(jPanel7Layout.createSequentialGroup()
+-                                .add(sourceCombo, 0, 139, Short.MAX_VALUE)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))))
+-                    .add(jScrollPane5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .add(19, 19, 19))
++                                .add(sourceCombo, 0, 132, Short.MAX_VALUE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
++                        .add(19, 19, 19))
++                    .add(jPanel7Layout.createSequentialGroup()
++                        .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jLabel1)
++                            .add(jScrollPane5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .addContainerGap())))
+         );
++
++        jPanel7Layout.linkSize(new java.awt.Component[] {checklistButton, clearOccurrenceButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
+         jPanel7Layout.setVerticalGroup(
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel7Layout.createSequentialGroup()
+-                        .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(jLabel1)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(checklistButton))
+-                    .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
+-                        .add(jPanel7Layout.createSequentialGroup()
+-                            .add(taxonLabel)
+-                            .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                            .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 111, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                        .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel7Layout.createSequentialGroup()
+-                            .addContainerGap()
+-                            .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                .add(sourceLabel)
+-                                .add(sourceCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                            .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                .add(publicationLabel)
+-                                .add(publicationCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                            .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                .add(projectLabel)
+-                                .add(projectCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                            .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                .add(herbariumLabel)
+-                                .add(herbariumTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(jScrollPane5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(jPanel7Layout.createSequentialGroup()
+-                        .add(jLabel1)
++                        .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                            .add(jPanel7Layout.createSequentialGroup()
++                                .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                    .add(checklistButton)
++                                    .add(clearOccurrenceButton)))
++                            .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
++                                .add(jPanel7Layout.createSequentialGroup()
++                                    .add(taxonLabel)
++                                    .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                    .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 111, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel7Layout.createSequentialGroup()
++                                    .addContainerGap()
++                                    .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                        .add(sourceLabel)
++                                        .add(sourceCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                    .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                    .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                        .add(publicationLabel)
++                                        .add(publicationCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                    .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                    .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                        .add(projectLabel)
++                                        .add(projectCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                    .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                                    .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                        .add(herbariumLabel)
++                                        .add(herbariumTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                    .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jScrollPane5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                        .add(clearOccurrenceButton))
+-                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 130, Short.MAX_VALUE))
++                        .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 82, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addContainerGap())
+         );
+ 
+@@ -653,21 +648,21 @@
+             .add(basicPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(basicPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 914, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(jPanel7, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap())
++                    .add(jPanel7, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+         basicPanelLayout.setVerticalGroup(
+             basicPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(basicPanelLayout.createSequentialGroup()
+-                .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 291, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 240, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel7, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 296, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .add(4, 4, 4))
++                .add(jPanel7, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 248, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(103, 103, 103))
+         );
+         topPanel.add(basicPanel, java.awt.BorderLayout.NORTH);
+ 
+-        buttonPanel.setPreferredSize(new java.awt.Dimension(1010, 50));
++        buttonPanel.setPreferredSize(new java.awt.Dimension(800, 50));
+         cancelButton.setText(&quot;Cancel&quot;);
+ 
+         okButton.setText(&quot;Ok&quot;);
+@@ -681,6 +676,8 @@
+ 
+         jButton1.setText(&quot;Nastaven\u00ed&quot;);
+ 
++        requiredInfoLabel.setText(&quot;requiredInfoLabel&quot;);
++
+         org.jdesktop.layout.GroupLayout buttonPanelLayout = new org.jdesktop.layout.GroupLayout(buttonPanel);
+         buttonPanel.setLayout(buttonPanelLayout);
+         buttonPanelLayout.setHorizontalGroup(
+@@ -690,7 +687,9 @@
+                 .add(helpButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jButton1)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 524, Short.MAX_VALUE)
++                .add(64, 64, 64)
++                .add(requiredInfoLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 350, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+@@ -707,7 +706,8 @@
+                     .add(helpButton)
+                     .add(jButton1)
+                     .add(cancelButton)
+-                    .add(okButton))
++                    .add(okButton)
++                    .add(requiredInfoLabel))
+                 .addContainerGap(13, Short.MAX_VALUE))
+         );
+ 
+@@ -716,8 +716,8 @@
+         topPanel.add(buttonPanel, java.awt.BorderLayout.SOUTH);
+ 
+         extendedPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.ExtendedData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+-        extendedPanel.setMinimumSize(new java.awt.Dimension(1005, 100));
+-        extendedPanel.setPreferredSize(new java.awt.Dimension(1005, 100));
++        extendedPanel.setMinimumSize(new java.awt.Dimension(800, 50));
++        extendedPanel.setPreferredSize(new java.awt.Dimension(800, 50));
+         occurrenceTable.setModel(new javax.swing.table.DefaultTableModel(
+             new Object [][] {
+                 {&quot;Pampeliska&quot;, &quot;Vysockij&quot;, &quot;1.1.1900&quot;},
+@@ -757,7 +757,7 @@
+         extendedPanelLayout.setVerticalGroup(
+             extendedPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(extendedPanelLayout.createSequentialGroup()
+-                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 99, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 83, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+         topPanel.add(extendedPanel, java.awt.BorderLayout.CENTER);
+@@ -772,9 +772,7 @@
+         );
+         layout.setVerticalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
+-                .add(jScrollPane8, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++            .add(jScrollPane8, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+@@ -1031,7 +1029,8 @@
+         
+         if (arg instanceof String) {
+             String s = (String)arg;
+-            if (s.equals(&quot;CLEAR&quot;))
++            
++            if (s.equals(&quot;CLEAR&quot;)) //obsolete and not used anymore
+                 clearComponentData();
+             
+             if (s.equals(&quot;CLEAR_LOCATION&quot;))
+
+Modified: trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java	2006-08-23 12:05:50 UTC (rev 557)
++++ trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java	2006-08-23 12:55:26 UTC (rev 558)
+@@ -125,6 +125,8 @@
+                                              // in case that other threads want to read the data.
+                 
+         Object[] records = dblayer.more(resultid, 0, resultCount - 1);
++        dblayer.closeQuery(sq);
++
+         Object[] projArray;
+         Integer id = -1;
+         Row row = null;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000761.html">[Plantlore-dev] r557 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000763.html">[Plantlore-dev] r559 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#762">[ date ]</a>
+              <a href="thread.html#762">[ thread ]</a>
+              <a href="subject.html#762">[ subject ]</a>
+              <a href="author.html#762">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,196 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r816 - in trunk/src/net/sf/plantlore: client/login	middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r816%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09middleware%20server&In-Reply-To=%3C200609180834.k8I8YKnC022426%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001126.html">
+   <LINK REL="Next"  HREF="001128.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r816 - in trunk/src/net/sf/plantlore: client/login	middleware server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r816%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09middleware%20server&In-Reply-To=%3C200609180834.k8I8YKnC022426%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r816 - in trunk/src/net/sf/plantlore: client/login	middleware server">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 18 10:34:20 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001126.html">[Plantlore-dev] r815 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="001128.html">[Plantlore-dev] r817 - in trunk/src/net/sf/plantlore:	client/history server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1127">[ date ]</a>
+              <a href="thread.html#1127">[ thread ]</a>
+              <a href="subject.html#1127">[ subject ]</a>
+              <a href="author.html#1127">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-18 10:34:19 +0200 (Mon, 18 Sep 2006)
+New Revision: 816
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Login::DatabaseSelection works on double click (behaves the same way as if Next is pressed).
+ConnectionInfo::Fixed a minor bug that used toString on DBLayer stubs leading to an improper description of the database layer.
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-09-17 22:10:01 UTC (rev 815)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-09-18 08:34:19 UTC (rev 816)
+@@ -636,6 +636,10 @@
+ 			return &quot;Safety wrapper of &quot; + super.toString();
+ 		}
+ 		
++		public String getDescription() {
++			return super.toString();
++		}
++		
+ 	}
+         
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-09-17 22:10:01 UTC (rev 815)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-09-18 08:34:19 UTC (rev 816)
+@@ -1,6 +1,9 @@
+ package net.sf.plantlore.client.login;
+ 
++import java.awt.Rectangle;
+ import java.awt.event.ActionEvent;
++import java.awt.event.MouseAdapter;
++import java.awt.event.MouseEvent;
+ 
+ import javax.swing.AbstractAction;
+ import javax.swing.JDialog;
+@@ -45,6 +48,7 @@
+ 		new AuthCtrl(model, authView);
+ 		
+ 		view.choice.addListSelectionListener(new ChoiceChanged());
++		view.choice.addMouseListener( new DoubleClictListener() );
+ 		view.add.setAction(new AddRecordAction());
+ 		view.edit.setAction(new EditRecordAction());
+ 		view.remove.setAction(new RemoveRecordAction());
+@@ -134,5 +138,19 @@
+ 				authView.setVisible(true);
+ 		}
+ 	}
++	
++	class DoubleClictListener extends MouseAdapter {
++		@Override
++		public void mouseClicked(MouseEvent me) {
++			if( me.getClickCount() == 2 &amp;&amp; model.getSelected() != null ) {
++				
++				int index = view.choice.getSelectedIndex();
++				if(index &lt; 0) return;
++				Rectangle area = view.choice.getCellBounds(index, index);
++				if( area != null &amp;&amp; area.contains( me.getPoint() ) )
++					authView.setVisible(true);
++			}
++		}
++	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-17 22:10:01 UTC (rev 815)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-18 08:34:19 UTC (rev 816)
+@@ -390,5 +390,13 @@
+      * created by this DBLayer. &lt;br/&gt; 
+      */
+     public void shutdown() throws RemoteException;
++    
++    
++    /**
++     * 
++     * @return	description of this database layer so that the user can easily identify it
++     * @throws RemoteException	in case network error occurred
++     */
++    public String getDescription() throws RemoteException;
+            
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-09-17 22:10:01 UTC (rev 815)
++++ trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-09-18 08:34:19 UTC (rev 816)
+@@ -1,6 +1,7 @@
+ package net.sf.plantlore.server;
+ 
+ import java.io.Serializable;
++import java.rmi.RemoteException;
+ 
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+@@ -74,7 +75,11 @@
+ 
+ 	@Override
+ 	public String toString() {
+-		return database + &quot; @ &quot; + description;
++		try {
++			return database.getDescription() + &quot; @ &quot; + description;
++		} catch( RemoteException e ) {
++			return &quot;? @ &quot; + description;
++		}
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-17 22:10:01 UTC (rev 815)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-18 08:34:19 UTC (rev 816)
+@@ -2409,4 +2409,11 @@
+ 				&quot; (&quot; + currentlyConnectedUser + &quot;)&quot;; 
+ 		return currentlyConnectedUser ; 
+ 	}
++	
++	/**
++	 * @return description of this database layer: Name Surname (login).
++	 */
++	public String getDescription() {
++		return toString();
++	}
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001126.html">[Plantlore-dev] r815 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="001128.html">[Plantlore-dev] r817 - in trunk/src/net/sf/plantlore:	client/history server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1127">[ date ]</a>
+              <a href="thread.html#1127">[ thread ]</a>
+              <a href="subject.html#1127">[ subject ]</a>
+              <a href="author.html#1127">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

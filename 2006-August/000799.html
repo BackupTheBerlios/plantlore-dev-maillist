@@ -1,0 +1,322 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r581 - in trunk/src/net/sf/plantlore/client: .	overview overview/search
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r581%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview%20overview/search&In-Reply-To=%3C200608271730.k7RHUQMB032248%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000798.html">
+   <LINK REL="Next"  HREF="000800.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r581 - in trunk/src/net/sf/plantlore/client: .	overview overview/search</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r581%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview%20overview/search&In-Reply-To=%3C200608271730.k7RHUQMB032248%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r581 - in trunk/src/net/sf/plantlore/client: .	overview overview/search">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 27 19:30:26 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000798.html">[Plantlore-dev] Reconnect
+</A></li>
+        <LI>Next message: <A HREF="000800.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#799">[ date ]</a>
+              <a href="thread.html#799">[ thread ]</a>
+              <a href="subject.html#799">[ subject ]</a>
+              <a href="author.html#799">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-27 19:30:03 +0200 (Sun, 27 Aug 2006)
+New Revision: 581
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/search/Search.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+Log:
+Real fix of bug #008588	Author table breaks sometimes. Hacked a little the DefaultCellEditor with ComboBox... (+one more tweak so that Plantlore would work even without this fix).
+
+Implemented RFE #007768	Searching should be case insensitive where applicable.
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-27 16:51:46 UTC (rev 580)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
+@@ -1696,7 +1696,7 @@
+ 	private Task refreshOverview(boolean createTask) {
+ 		if (createTask) {
+ 			Task task = new Task() {
+-				public Object task() {
++				public Object task() throws DBLayerException, RemoteException {
+ 					searchModel.clear();
+ 					searchModel.constructQuery();
+ 					fireStopped(null);
+@@ -1727,15 +1727,8 @@
+ 		public void actionPerformed(ActionEvent e) {
+ 			// e can be null !!! - we call actionPerformed(null) in DeleteAction
+ 			Task task = refreshOverview(true);
+-			ProgressBar progressBar = new ProgressBar(task, view, true) {
+-				public void exceptionHandler(Exception ex) {
+-					// FIXME
+-					ex.printStackTrace();
+-					getTask().stop();
+-				}
+-			};
+-			progressBar.setTitle(L10n
+-					.getString(&quot;Overview.Refresh.ProgressTitle&quot;));
++			ProgressBar progressBar = new DefaultProgressBar(task, view, true);
++			progressBar.setTitle(L10n.getString(&quot;Overview.Refresh.ProgressTitle&quot;));
+ 
+ 			task.start();
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-27 16:51:46 UTC (rev 580)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-27 17:30:03 UTC (rev 581)
+@@ -1368,6 +1368,10 @@
+     }
+     
+     public void setAuthorRole(int i, String role) {
++        if (i &gt;= authorList.size()) {
++            logger.error(&quot;AddEdit: trying to add an author to a non-existent row!&quot;);
++            return;            
++        }
+         authorList.get(i).setSecond(role);
+         logger.debug(&quot;Author role in row &quot;+i+&quot; set to &quot;+role);
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-27 16:51:46 UTC (rev 580)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-27 17:30:03 UTC (rev 581)
+@@ -7,6 +7,7 @@
+ package net.sf.plantlore.client.overview;
+ 
+ import java.awt.Dimension;
++import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+ import java.text.DateFormat;
+ import java.text.MessageFormat;
+@@ -28,6 +29,8 @@
+ import javax.swing.ListSelectionModel;
+ import javax.swing.SpinnerDateModel;
+ import javax.swing.SpinnerNumberModel;
++import javax.swing.event.PopupMenuEvent;
++import javax.swing.event.PopupMenuListener;
+ import javax.swing.table.AbstractTableModel;
+ import javax.swing.table.TableColumn;
+ import javax.swing.text.PlainDocument;
+@@ -767,6 +770,31 @@
+     }//GEN-LAST:event_helpButtonActionPerformed
+     
+     
++    /** Used for to hack DefaultCellEditor's behaviour with JComboBox. Fix of Bug #008588	Author table breaks sometimes
++     *
++     * Normally the editing doesn't stop when the comboboxe's popup menu is cancelled (user didn't choose an item and clicked somewhere else).
++     * This listener cancels further editing which makes the combobox disappear as it should have (I think).
++     */
++    class PopupListener implements PopupMenuListener {
++        DefaultCellEditor dce;
++        
++        public void setCellEditor(DefaultCellEditor dce) {
++            assert dce != null;
++            
++            this.dce = dce;
++        }
++        
++        public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
++        }
++
++        public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
++        }
++
++        public void popupMenuCanceled(PopupMenuEvent e) {
++            dce.cancelCellEditing();
++        }
++    }
++    
+     //musn't delete contents of tableModel, because it's also called to update the table's user interface unfortunately...
+     protected void initAuthorTable() {
+         if (tableModel == null) 
+@@ -804,14 +832,18 @@
+         else
+             cb = new JComboBox(model.getAuthors());
+         
+-        tc1.setCellEditor(new DefaultCellEditor(cb));  
++        //Fix of Bug #008588	Author table breaks sometimes
++        PopupListener pl = new PopupListener(); cb.addPopupMenuListener(pl); DefaultCellEditor dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
++        tc1.setCellEditor(dce);  
+         
+         if (model.getAuthorRoles() == null) 
+             cb = new JComboBox();
+         else
+             cb = new JComboBox(model.getAuthorRoles());
+         
+-        tc2.setCellEditor(new DefaultCellEditor(cb));
++        //Fix of Bug #008588	Author table breaks sometimes
++        pl = new PopupListener(); cb.addPopupMenuListener(pl); dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
++        tc2.setCellEditor(dce);
+ //  
+         ButtonEditor be = new ButtonEditor(model);
+         tc3.setCellEditor(be);
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-08-27 16:51:46 UTC (rev 580)
++++ trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-08-27 17:30:03 UTC (rev 581)
+@@ -41,6 +41,7 @@
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_EQ;
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_BETWEEN;
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_LIKE;
++import static net.sf.plantlore.common.PlantloreConstants.RESTR_ILIKE;
+ 
+ /**
+  *
+@@ -776,13 +777,13 @@
+                     restrictions.add(new Restriction(-1, null, exportQueryArgs));
+                 }
+                 if (isNotEmpty(localityDescription)) {
+-                    sq.addRestriction(PlantloreConstants.RESTR_LIKE,&quot;habitat.&quot;+Habitat.DESCRIPTION,null,&quot;%&quot;+localityDescription+&quot;%&quot;,null);
+-                    restrictions.add(new Restriction(RESTR_LIKE, habitatAlias+Habitat.DESCRIPTION, &quot;%&quot;+localityDescription+&quot;%&quot;));
++                    sq.addRestriction(PlantloreConstants.RESTR_ILIKE,&quot;habitat.&quot;+Habitat.DESCRIPTION,null,&quot;%&quot;+localityDescription+&quot;%&quot;,null);
++                    restrictions.add(new Restriction(RESTR_ILIKE, habitatAlias+Habitat.DESCRIPTION, &quot;%&quot;+localityDescription+&quot;%&quot;));
+                 }
+                 
+                 if (isNotEmpty(occurrenceNote)) {
+-                    sq.addRestriction(PlantloreConstants.RESTR_LIKE,&quot;occ.&quot;+Occurrence.NOTE,null,&quot;%&quot;+occurrenceNote+&quot;%&quot;,null);
+-                    restrictions.add(new Restriction(RESTR_LIKE, Occurrence.NOTE, &quot;%&quot;+occurrenceNote+&quot;%&quot;));
++                    sq.addRestriction(PlantloreConstants.RESTR_ILIKE,&quot;occ.&quot;+Occurrence.NOTE,null,&quot;%&quot;+occurrenceNote+&quot;%&quot;,null);
++                    restrictions.add(new Restriction(RESTR_ILIKE, Occurrence.NOTE, &quot;%&quot;+occurrenceNote+&quot;%&quot;));
+                 }
+                 
+                 if (isNotEmpty(habitatId)) {
+@@ -792,8 +793,8 @@
+                 }
+                 
+                 if (isNotEmpty(habitatNote)) {
+-                    sq.addRestriction(PlantloreConstants.RESTR_LIKE,&quot;habitat.&quot;+Habitat.NOTE,null,&quot;%&quot;+habitatNote+&quot;%&quot;,null);
+-                    restrictions.add(new Restriction(RESTR_LIKE, habitatAlias+Habitat.NOTE, &quot;%&quot;+habitatNote+&quot;%&quot;));
++                    sq.addRestriction(PlantloreConstants.RESTR_ILIKE,&quot;habitat.&quot;+Habitat.NOTE,null,&quot;%&quot;+habitatNote+&quot;%&quot;,null);
++                    restrictions.add(new Restriction(RESTR_ILIKE, habitatAlias+Habitat.NOTE, &quot;%&quot;+habitatNote+&quot;%&quot;));
+                 }
+                 
+                 if (isNotEmpty(territoryName)) {
+@@ -956,7 +957,8 @@
+     }
+     
+     public void setAuthorRole(int i, String role) {
+-        authorList.get(i).setSecond(role);
++        if (i &lt; authorList.size())
++            authorList.get(i).setSecond(role);
+         logger.debug(&quot;Author role in row &quot;+i+&quot; set to &quot;+role);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-08-27 16:51:46 UTC (rev 580)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-08-27 17:30:03 UTC (rev 581)
+@@ -13,6 +13,8 @@
+ import javax.swing.DefaultComboBoxModel;
+ import javax.swing.JComboBox;
+ import javax.swing.JDialog;
++import javax.swing.event.PopupMenuEvent;
++import javax.swing.event.PopupMenuListener;
+ import javax.swing.table.TableColumn;
+ import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.*;
+@@ -684,7 +686,31 @@
+ // TODO add your handling code here:
+     }//GEN-LAST:event_extendedButtonMouseClicked
+     
+-    
++    /** Used for to hack DefaultCellEditor's behaviour with JComboBox. Fix of Bug #008588	Author table breaks sometimes
++     *
++     * Normally the editing doesn't stop when the comboboxe's popup menu is cancelled (user didn't choose an item and clicked somewhere else).
++     * This listener cancels further editing which makes the combobox disappear as it should have (I think).
++     */
++    class PopupListener implements PopupMenuListener {
++        DefaultCellEditor dce;
++        
++        public void setCellEditor(DefaultCellEditor dce) {
++            assert dce != null;
++            
++            this.dce = dce;
++        }
++        
++        public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
++        }
++
++        public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
++        }
++
++        public void popupMenuCanceled(PopupMenuEvent e) {
++            dce.cancelCellEditing();
++        }
++    }
++        
+     //musn't delete contents of tableModel, because it's also called to update the table's user interface unfortunately...
+     protected void initAuthorTable() {
+         if (tableModel == null) 
+@@ -705,13 +731,18 @@
+         else
+             cb = new AutoComboBoxNG3(model.getAuthors());
+         
+-        tc1.setCellEditor(new DefaultCellEditor(cb));  
++        //Fix of Bug #008588	Author table breaks sometimes
++        PopupListener pl = new PopupListener(); cb.addPopupMenuListener(pl); DefaultCellEditor dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
++        tc1.setCellEditor(dce);  
+ 
+         if (model.getAuthorRoles() == null) 
+             cb = new AutoComboBoxNG3();
+         else
+             cb = new AutoComboBoxNG3(model.getAuthorRoles());
+-        tc2.setCellEditor(new DefaultCellEditor(cb));
++
++        //Fix of Bug #008588	Author table breaks sometimes
++        pl = new PopupListener(); cb.addPopupMenuListener(pl); dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
++        tc2.setCellEditor(dce);
+         
+         ButtonEditorSearch be = new ButtonEditorSearch(model);
+         tc3.setCellEditor(be);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000798.html">[Plantlore-dev] Reconnect
+</A></li>
+	<LI>Next message: <A HREF="000800.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#799">[ date ]</a>
+              <a href="thread.html#799">[ thread ]</a>
+              <a href="subject.html#799">[ subject ]</a>
+              <a href="author.html#799">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

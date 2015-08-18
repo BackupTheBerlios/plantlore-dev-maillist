@@ -1,0 +1,646 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r542 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common common/record server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r542%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/occurrenceimport%20client/occurrenceimport/parsers%0A%09common%20common/record%20server&In-Reply-To=%3C200608211828.k7LISWMH003186%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000742.html">
+   <LINK REL="Next"  HREF="000744.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r542 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common common/record server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r542%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/occurrenceimport%20client/occurrenceimport/parsers%0A%09common%20common/record%20server&In-Reply-To=%3C200608211828.k7LISWMH003186%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r542 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common common/record server">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 21 20:28:32 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000742.html">[Plantlore-dev] [Bug #8497] Overview cannot deal with empty database
+</A></li>
+        <LI>Next message: <A HREF="000744.html">[Plantlore-dev] [Bug #8504] HibernateDBLayer bug removal
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#743">[ date ]</a>
+              <a href="thread.html#743">[ thread ]</a>
+              <a href="subject.html#743">[ subject ]</a>
+              <a href="author.html#743">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-21 20:28:24 +0200 (Mon, 21 Aug 2006)
+New Revision: 542
+
+Modified:
+   trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMng.java
+   trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMngCtrl.java
+   trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Several bugfixes throughout the code.
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMng.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMng.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -46,7 +46,7 @@
+ 		if( filename == null ) 
+ 			throw new ImportException(L10n.getString(&quot;Error.MissingFileName&quot;));
+ 			
+-		logger.debug(&quot;Initializing the table-import environment.&quot;);
++		logger.debug(&quot;Initializing the occurrence-import environment.&quot;);
+ 		
+ 		// Create a new reader.
+ 		File file = new File( filename );
+@@ -62,10 +62,12 @@
+ 			throw new ImportException(L10n.getString(&quot;Error.ReaderNotCreated&quot;));
+ 		}
+ 		
++		logger.debug(&quot;Preparing new OccurrenceImport task.&quot;);
+ 		OccurrenceParser parser = new XMLOccurrenceParser(reader);
+ 		Task occurrenceImportTask = new OccurrenceImportTask(db, parser);
+ 		occurrenceImportTask.addObserver( tableChangeObserver );
+ 		
++		logger.debug(&quot;OccurrenceImport task prepared.&quot;);
+ 		return occurrenceImportTask;
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMngCtrl.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportMngCtrl.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -21,7 +21,7 @@
+ 		this.view = view;
+ 		choice = new JFileChooser();
+ 		choice.setAcceptAllFileFilterUsed(false);
+-		choice.addChoosableFileFilter( new FileFormat(&quot;Table update files (*.xml)&quot;, &quot;.xml&quot;) );
++		choice.addChoosableFileFilter( new FileFormat(L10n.getString(&quot;Format.XML&quot;), true, true, &quot;.xml&quot;) ); 
+ 	}
+ 	
+ 	public void setVisible(boolean visible) {
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -5,6 +5,7 @@
+ import java.util.ArrayList;
+ import java.util.Stack;
+ 
++import org.apache.log4j.Logger;
+ import org.xml.sax.Attributes;
+ import org.xml.sax.InputSource;
+ import org.xml.sax.SAXException;
+@@ -22,6 +23,8 @@
+ 
+ public class XMLOccurrenceParser extends DefaultHandler implements OccurrenceParser {
+ 	
++	private Logger logger = Logger.getLogger(XMLOccurrenceParser.class.getPackage().getName());
++	
+ 	private RecordProcessor processor;
+ 	private XMLReader xmlReader;
+ 	private Reader reader;
+@@ -52,6 +55,7 @@
+ 	throws IOException, SAXException {
+ 		try {
+ 			
++			logger.debug(&quot;Executing the parsing routines...&quot;);
+ 			xmlReader.parse( new InputSource(reader) );
+ 			
+ 		} finally {
+@@ -64,6 +68,7 @@
+ 	@Override
+ 	public void startDocument() {
+ 		ao = (AuthorOccurrence) new AuthorOccurrence().createTorso();
++		stack.push(ao);
+ 	}
+ 	
+ 	@Override
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -38,6 +38,7 @@
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.client.imports.Parser.Intention;
+ 
++
+ import org.apache.log4j.Logger;
+ 
+ /** 
+@@ -73,7 +74,7 @@
+ 		// &gt;&gt;Occurrence&lt;&lt; MUST NOT BE LISTED HERE!
+ 		// It would cause problems with DELETE and INSERT...
+ 
+-		parentColumn.put(Village.class, Habitat.VILLAGE);
++		parentColumn.put(Village.class, Habitat.NEARESTVILLAGE);
+ 		parentColumn.put(Phytochorion.class, Habitat.PHYTOCHORION);
+ 		parentColumn.put(Territory.class, Habitat.TERRITORY);
+ 		parentColumn.put(Metadata.class, Occurrence.METADATA);
+@@ -372,31 +373,33 @@
+ 		// Create a query that will look for the record with the same properties.
+ 		SelectQuery query = db.createQuery( table );
+ 
+-		// Equal properties.
+-		for(String property : record.getProperties()) {
+-			Object value = record.getValue(property);
+-			if( value != null ) 
+-				query.addRestriction(RESTR_EQ, property, null, value, null);
++		try {
++			// Equal properties.
++			for(String property : record.getProperties()) {
++				Object value = record.getValue(property);
++				if( value != null ) 
++					query.addRestriction(RESTR_EQ, property, null, value, null);
++			}
++			// Equal foreign keys (by their ID's)!
++			for(String key : record.getForeignKeys() ) {
++				Record subrecord = (Record) record.getValue(key);
++				query.addRestriction(RESTR_EQ, key, null, subrecord, null);
++			}
++			
++			// Is there such record?
++			int results = db.executeQuery( query );
++			int rows = db.getNumRows( results );
++			if( rows &gt; 1 ) 
++				logger.info(&quot;There are &quot; + rows + 
++						&quot; completely identical records in the &quot; + table.getSimpleName() + &quot; table!&quot;);
++			
++			record = null;
++			if( rows != 0 ) 
++				record = (Record)((Object[])(db.more(results, 0, 0)[0]))[0]; // Well, THIS is ugly!
++		} finally {
++			db.closeQuery( query );
+ 		}
+-		// Equal foreign keys (by their ID's)!
+-		for(String key : record.getForeignKeys() ) {
+-			Record subrecord = (Record) record.getValue(key);
+-			query.addRestriction(RESTR_EQ, key, null, subrecord, null);
+-		}
+ 		
+-		// Is there such record?
+-		int results = db.executeQuery( query );
+-		int rows = db.getNumRows( results );
+-		if( rows &gt; 1 ) 
+-			logger.info(&quot;There are &quot; + rows + 
+-					&quot; completely identical records in the &quot; + table.getSimpleName() + &quot; table!&quot;);
+-		
+-		record = null;
+-		if( rows != 0 ) 
+-			record = (Record)((Object[])(db.more(results, 0, 0)[0]))[0]; // Well, THIS is ugly!
+-		
+-		db.closeQuery( query );
+-		
+ 		// Update the cache appropriately - store the record for future generations.
+ 		if( record != null &amp;&amp; isCacheEnabled ) {
+ 			cache.remove(table);
+@@ -733,7 +736,7 @@
+ 	throws RemoteException, DBLayerException {
+ 		logger.info(&quot;Deleting [&quot; + record + &quot;] from the database.&quot;);
+ 		if( !Record.BASIC_TABLES.contains(record.getClass()) )
+-			throw new IllegalArgumentException(L10n.getString(&quot;Error.DiscouragedUse&quot;));
++			throw new IllegalArgumentException(L10n.getString(&quot;Error.ImproperUse&quot;));
+ 		
+ 		// (O) OCCURRENCE RECORDS
+ 		if( record instanceof Occurrence ) {
+@@ -755,21 +758,21 @@
+ 		if(record instanceof Deletable) {
+ 			// How many records, that are alive, share this one?
+ 			int sharers = sharedBy( record );
+-			if( sharers &gt; 1 ) {
+-				logger.error(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
+-				throw new DBLayerException(L10n.getFormattedString(&quot;Error.DeletingSharedRecord&quot;, record, sharers));
++			if( sharers == 0 ) {
++				// Mark the record as deleted.
++				// [!] If all AuthorOccurrences are to be deleted because their Occurrence is deleted, 
++				// the delete value is 2 (instead of 1), so that they can be revived properly 
++				// when the Occurrence is revived!  
++				((Deletable)record).setDeleted( 
++						(record instanceof AuthorOccurrence &amp;&amp; deletingAllAuthorOccurrences) ? 2 : 1 );
++				db.executeUpdateInTransaction( record );
+ 			}
+-			// Mark the record as deleted.
+-			// [!] If all AuthorOccurrences are to be deleted because their Occurrence is deleted, 
+-			// the delete value is 2 (instead of 1), so that they can be revived properly 
+-			// when the Occurrence is revived!  
+-			((Deletable)record).setDeleted( 
+-					(record instanceof AuthorOccurrence &amp;&amp; deletingAllAuthorOccurrences) ? 2 : 1 );
+-			db.executeUpdateInTransaction( record );
++			else 
++				logger.info(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
+ 		}
+ 		// (I) IMMUTABLE RECORDS
+ 		else {
+-			throw new IllegalArgumentException(L10n.getString(&quot;Error.DiscouragedUse&quot;));
++			throw new IllegalArgumentException(L10n.getString(&quot;Error.ImproperUse&quot;));
+ 			/* 
+ 			 * Proper handling:
+ 			 * 
+@@ -906,20 +909,25 @@
+ 		// If the record is dead, then it is clearly meant to be deleted!
+ 		Intention intention =  occ.isDead() ? Intention.DELETE : Intention.UNKNOWN; 
+ 			
++		boolean isInDB, isDead;
++		Occurrence occInDB;
+ 		 // Try to find a matching Occurrence record in the database.
+ 		SelectQuery q = db.createQuery(Occurrence.class);
+-		q.addRestriction(RESTR_EQ, Occurrence.UNITIDDB, null, occ.getUnitIdDb(), null);
+-		q.addRestriction(RESTR_EQ, Occurrence.UNITVALUE, null, occ.getUnitValue(), null);
+-		int resultId = db.executeQuery( q );
+-		int rows = db.getNumRows( resultId );
+-		if(rows &gt; 1)
+-			throw new DBLayerException(L10n.getString(&quot;Error.AmbiguousRecord&quot;));
+-
+-		boolean isInDB = (rows != 0);
+-		Occurrence occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
+-		db.closeQuery(q); 
+-		boolean isDead = isInDB ? occInDB.isDead() : false;
++		try {
++			q.addRestriction(RESTR_EQ, Occurrence.UNITIDDB, null, occ.getUnitIdDb(), null);
++			q.addRestriction(RESTR_EQ, Occurrence.UNITVALUE, null, occ.getUnitValue(), null);
++			int resultId = db.executeQuery( q );
++			int rows = db.getNumRows( resultId );
++			if(rows &gt; 1)
++				throw new DBLayerException(L10n.getString(&quot;Error.AmbiguousRecord&quot;));
+ 			
++			isInDB = (rows != 0);
++			occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
++			isDead = isInDB ? occInDB.isDead() : false;
++		} finally {
++			db.closeQuery(q);	
++		}
++			
+ 		// Begin a new transaction.
+ 		db.beginTransaction();
+ 			
+@@ -956,62 +964,53 @@
+ 					occInDB = (Occurrence) insert( occ );
+ 				}
+ 			
+-		} catch(DBLayerException e) {
+-			// Roll back the transaction.
+-			db.rollbackTransaction();
+-			throw e;
+-		} catch(RemoteException e) {
+-			// Roll back the transaction.
+-			db.rollbackTransaction();
+-			throw e;
+-		}
+ 			
+-		 // Now, deal with Authors associated with this Occurrence.
+-		int numberOfUndeadAuthors = 0; 
++			// Now, deal with Authors associated with this Occurrence.
++			int numberOfUndeadAuthors = 0; 
+ 			
+-		// If the Occurrence record should have been DELETED,
+-		// there is nothing more to be done.
+-		if( intention == Intention.DELETE ) {
+-			db.commitTransaction();
+-		}
+-		// The intention was to ADD or UPDATE the existing Occurrence record.  
+-		else {
+-			AuthorOccurrence[] aosInDB = new AuthorOccurrence[0];
+-			if( isInDB ) 
+-				aosInDB = findAllAuthors(occInDB, false);
+-			// Compute the number of undead authors (authors, that are not marked as deleted). 
+-			for(AuthorOccurrence ao : aosInDB) {
+-				ao.setOccurrence( null ); // simplify the comparison
+-				if( !ao.isDead() ) 
+-					numberOfUndeadAuthors++ ;
++			// If the Occurrence record should have been DELETED,
++			// there is nothing more to be done.
++			if( intention == Intention.DELETE ) {
++				db.commitTransaction();
++				return;
+ 			}
++			// The intention was to ADD or UPDATE the existing Occurrence record.  
++			else {
++				AuthorOccurrence[] aosInDB = new AuthorOccurrence[0];
++				if( isInDB ) 
++					aosInDB = findAllAuthors(occInDB, false);
++				// Compute the number of undead authors (authors, that are not marked as deleted). 
++				for(AuthorOccurrence ao : aosInDB) {
++					ao.setOccurrence( null ); // simplify the comparison
++					if( !ao.isDead() ) numberOfUndeadAuthors++ ;
++				}
+ 				
+-			for( AuthorOccurrence ao : aos ) {
+-				if( !ao.areAllNNSet() ) {
+-					logger.warn(&quot;The AuthorOccurrence is incomplete - the Author is missing or a NN column is not set!&quot;);
+-					continue;
+-				}
++				for( AuthorOccurrence ao : aos ) {
++					if( !ao.areAllNNSet() ) {
++						logger.warn(&quot;The AuthorOccurrence is incomplete - the Author is missing or a NN column is not set!&quot;);
++						continue;
++					}
+ 					
+-				// Simplify the comparison (the Occurrence is known...)
+-				ao.setOccurrence( null );
++					// Simplify the comparison (the Occurrence is known...)
++					ao.setOccurrence( null );
+ 					
+-				// Check if that AuthorOccurrence is already in the database.
+-				AuthorOccurrence aoInDB = null;
+-				for( AuthorOccurrence alpha : aosInDB ) {
+-					if( alpha.equalsUpTo( ao, AuthorOccurrence.DELETED ) ) {
+-						aoInDB = alpha;
+-						break;
++					// Check if that AuthorOccurrence is already in the database.
++					AuthorOccurrence aoInDB = null;
++					for( AuthorOccurrence alpha : aosInDB ) {
++						if( alpha.equalsUpTo( ao, AuthorOccurrence.DELETED ) ) {
++							aoInDB = alpha;
++							break;
++						}
+ 					}
+-				}
+ 					
+-				//	The Occurrence `occInDB` is in the database, that is for sure.
+-				// The ao.Occurrence, however, is NOT from the database.
+-				ao.setOccurrence( occInDB ); // now it's fine
++					//	The Occurrence `occInDB` is in the database, that is for sure.
++					// The ao.Occurrence, however, is NOT from the database.
++					ao.setOccurrence( occInDB ); // now it's fine
+ 					
+-				// The intention with this AuthorOccurrence. 
+-				intention = ao.isDead() ? Intention.DELETE : Intention.UNKNOWN;
++					// The intention with this AuthorOccurrence. 
++					intention = ao.isDead() ? Intention.DELETE : Intention.UNKNOWN;
+ 					
+-				try {
++
+ 					// [A] AO is not in the database.
+ 					if(aoInDB == null)
+ 						switch(intention) {
+@@ -1019,42 +1018,44 @@
+ 							break;
+ 						default:
+ 							insert( ao );							
+-							numberOfUndeadAuthors++;
++						numberOfUndeadAuthors++;
+ 						}
+-						// [B] AO is in the database already.
+-						else
+-							switch(intention) {
+-							case DELETE:
+-								if( !aoInDB.isDead() ) {
+-									aoInDB.setOccurrence( occInDB ); // repair the simplified ao
+-									delete( aoInDB ); // delete the ao
+-									numberOfUndeadAuthors--;
+-								}
+-								break;
+-							default:
+-								if( aoInDB.isDead() ) {
+-									aoInDB.setOccurrence( occInDB ); // repair the simplified ao
+-									aoInDB.setDeleted(0);
+-									db.executeUpdateInTransaction( aoInDB ); // revive the ao
+-									numberOfUndeadAuthors++;
+-								}
+-								break;
++					// [B] AO is in the database already.
++					else
++						switch(intention) {
++						case DELETE:
++							if( !aoInDB.isDead() ) {
++								aoInDB.setOccurrence( occInDB ); // repair the simplified ao
++								delete( aoInDB ); // delete the ao
++								numberOfUndeadAuthors--;
+ 							}
+-				} catch (DBLayerException e) {
+-					continue;
++							break;
++						default:
++							if( aoInDB.isDead() ) {
++								aoInDB.setOccurrence( occInDB ); // repair the simplified ao
++								aoInDB.setDeleted(0);
++								db.executeUpdateInTransaction( aoInDB ); // revive the ao
++								numberOfUndeadAuthors++;
++							}
++						}
+ 				}
+-					
+-			}
+ 			
+-			// Transaction is valid iff everything went fine and the number of undead authors is positive.
+-			if( numberOfUndeadAuthors &gt; 0 )
++				// Transaction is valid iff everything went fine and the number of undead authors is positive.
++				if( numberOfUndeadAuthors &lt;= 0 )
++					throw new DBLayerException(L10n.getString(&quot;Error.NoAuthorsLeft&quot;));
++				
+ 				db.commitTransaction();
+-			else {
+-				db.rollbackTransaction();
+-				throw new DBLayerException(L10n.getString(&quot;Error.NoAuthorsLeft&quot;));
+ 			}
+ 			
+-			
++		} catch(DBLayerException e) {
++			// Roll back the transaction.
++			e.printStackTrace();
++			db.rollbackTransaction();
++			throw e;
++		} catch(RemoteException e) {
++			// Roll back the transaction.
++			db.rollbackTransaction();
++			throw e;
+ 		}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -59,16 +59,16 @@
+     
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+-    	return asList( TERRITORY, PHYTOCHORION, VILLAGE ); 
++    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE ); 
+     }
+     
+     public List&lt;String&gt; getColumns() {
+-    	return asList( TERRITORY, PHYTOCHORION, VILLAGE, 
++    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
+     			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE, DELETED );
+     }
+     
+     public List&lt;String&gt; getHistoryColumns() {
+-        return asList(  TERRITORY, PHYTOCHORION, VILLAGE, 
++        return asList(  TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
+                         QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -38,7 +38,7 @@
+ 	 * A set of tables that cannot be changed.
+ 	 */
+ 	public final static HashSet&lt;Class&gt; IMMUTABLE = new HashSet&lt;Class&gt;( Arrays.asList(
+-			Plant.class, Territory.class, Village.class, Phytochorion.class, Metadata.class) 
++			Plant.class, Territory.class, Village.class, Phytochorion.class/*, Metadata.class*/) 
+ 	);
+ 	
+ 	
+@@ -387,7 +387,7 @@
+ 			s.setCharAt(3, Character.toUpperCase(s.charAt(3)));
+ 			// Take it. 
+ 			return table.getMethod( s.toString(), new Class[0] );
+-		} catch(NoSuchMethodException e) {/* Nothing we can do.. */}
++		} catch(NoSuchMethodException e) { e.printStackTrace(); }
+ 		return null;
+ 	}
+ 	
+@@ -419,7 +419,7 @@
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+ 			sigma.append(getClass().getSimpleName()).append('.').
+-			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;\n&quot;);
++			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;; &quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+ 			if(subrecord != null)	sigma.append( subrecord.toString() );
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-21 11:38:57 UTC (rev 541)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-21 18:28:24 UTC (rev 542)
+@@ -1178,33 +1178,16 @@
+             Author aut = (Author)data;
+             aut.setCreatedWho(this.plantloreUser);
+             data = aut;
+-        }        
++        }
++        if( data instanceof Metadata) {
++        	Metadata met = (Metadata)data;
++        	met.setDateCreate(new java.util.Date());
++        	met.setDateModified(new java.util.Date());
++        	data = met;
++        }
+         // Check whether we have rights for this operation
+         checkRights(data, INSERT);
+         
+-        if (data instanceof Occurrence) {
+-            Occurrence occ = (Occurrence)data;
+-            occ.setCreatedWhen(new java.util.Date());
+-            occ.setUpdatedWhen(new java.util.Date());
+-            occ.setCreatedWho(this.plantloreUser);
+-            occ.setUpdatedWho(this.plantloreUser);
+-            data = occ;
+-        }
+-        if (data instanceof Habitat) {
+-            Habitat hab = (Habitat)data;
+-            hab.setCreatedWho(this.plantloreUser);
+-            data = hab;
+-        }
+-        if (data instanceof Publication) {
+-            Publication pub = (Publication)data;
+-            pub.setCreatedWho(this.plantloreUser);
+-            data = pub;
+-        }
+-        if (data instanceof Author) {
+-            Author aut = (Author)data;
+-            aut.setCreatedWho(this.plantloreUser);
+-            data = aut;
+-        }
+         try {
+             // Save item into the database
+             recordId = (Integer)this.txSession.save(data);            
+@@ -1213,7 +1196,15 @@
+             DBLayerException ex = new DBLayerException(&quot;Exception.RollbackTransaction&quot;);
+             ex.setError(ex.translateSQLState(e.getSQLState()), e.getMessage());                        
+         } catch (HibernateException e) {
+-            logger.fatal(&quot;Cannot rollback database transaction&quot;);
++        	e.printStackTrace();
++        	/*-------------------------------------------------------------------------------------
++        	 * FIXME:
++        	 * 
++        	 * THIS NEEDS A SERIOUS UPDATE! 
++        	 * If txSession.save() fails, it certainly does not mean there are problems with rollback!
++        	 * Or does it?!
++        	 *-------------------------------------------------------------------------------------*/
++            logger.fatal(&quot;Cannot rollback database transaction&quot;); 
+             DBLayerException ex = new DBLayerException(&quot;Exception.RollbackTransaction&quot;);
+             ex.setError(ex.ERROR_TRANSACTION, e.getMessage());
+             throw ex;            
+@@ -1269,32 +1260,14 @@
+             aut.setCreatedWho(this.plantloreUser);
+             data = aut;
+         }        
++        if( data instanceof Metadata) {
++        	Metadata met = (Metadata)data;
++        	met.setDateCreate(new java.util.Date());
++        	met.setDateModified(new java.util.Date());
++        	data = met;
++        }
+         // Check whether we have rights for this operation
+         checkRights(data, INSERT);
+-        
+-        if (data instanceof Occurrence) {
+-            Occurrence occ = (Occurrence)data;
+-            occ.setCreatedWhen(new java.util.Date());
+-            occ.setUpdatedWhen(new java.util.Date());
+-            occ.setCreatedWho(this.plantloreUser);
+-            occ.setUpdatedWho(this.plantloreUser);
+-            data = occ;
+-        }
+-        if (data instanceof Habitat) {
+-            Habitat hab = (Habitat)data;
+-            hab.setCreatedWho(this.plantloreUser);
+-            data = hab;
+-        }
+-        if (data instanceof Publication) {
+-            Publication pub = (Publication)data;
+-            pub.setCreatedWho(this.plantloreUser);
+-            data = pub;
+-        }
+-        if (data instanceof Author) {
+-            Author aut = (Author)data;
+-            aut.setCreatedWho(this.plantloreUser);
+-            data = aut;
+-        }
+ 
+         // Save item into the database
+         recordId = (Integer)this.txSession.save(data);            
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000742.html">[Plantlore-dev] [Bug #8497] Overview cannot deal with empty database
+</A></li>
+	<LI>Next message: <A HREF="000744.html">[Plantlore-dev] [Bug #8504] HibernateDBLayer bug removal
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#743">[ date ]</a>
+              <a href="thread.html#743">[ thread ]</a>
+              <a href="subject.html#743">[ subject ]</a>
+              <a href="author.html#743">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

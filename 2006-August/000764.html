@@ -1,0 +1,139 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r560 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r560%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200608240902.k7O920po005567%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000763.html">
+   <LINK REL="Next"  HREF="000765.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r560 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r560%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200608240902.k7O920po005567%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r560 - trunk/src/net/sf/plantlore/server">krater at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 24 11:02:00 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000763.html">[Plantlore-dev] r559 - trunk/src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000765.html">[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#764">[ date ]</a>
+              <a href="thread.html#764">[ thread ]</a>
+              <a href="subject.html#764">[ subject ]</a>
+              <a href="author.html#764">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-24 11:02:00 +0200 (Thu, 24 Aug 2006)
+New Revision: 560
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+HibernateDBLayer: Proper handling of INSERT/UPDATE/DELETE of a record. It is the DBLayer that must set columns CREATEDWHO, UPDATEDWHO, CREATEDWHEN, UPDATEDWHEN in order to ensure that proper values are used (server-side check)! 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-24 08:39:33 UTC (rev 559)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-24 09:02:00 UTC (rev 560)
+@@ -202,30 +202,37 @@
+     }
+     
+     
++    protected void touchRecord(Object record) {
++    	java.util.Date now = new Date();
++        if(record instanceof Occurrence) {
++            Occurrence occ = (Occurrence)record;
++            occ.setUpdatedWhen(now);
++            occ.setUpdatedWho(this.plantloreUser);
++        } else if(record instanceof Metadata) {
++        	((Metadata)record).setDateModified(now);
++        }
++    }
++    
+     protected void completeRecord(Object record) {
+     	java.util.Date now = new Date();
+         if(record instanceof Occurrence) {
+             Occurrence occ = (Occurrence)record;
+             occ.setCreatedWhen(now);
+-            occ.setUpdatedWhen(now);
+             occ.setCreatedWho(this.plantloreUser);
+-            occ.setUpdatedWho(this.plantloreUser);
+             /*
+-             * UNIQUE ID MUST BE SET AS WELL
++             * TODO: UNIQUE ID MUST BE SET AS WELL
+              */
+         } else if(record instanceof Habitat) {
+-            Habitat hab = (Habitat)record;
+-            hab.setCreatedWho(this.plantloreUser);
++            ((Habitat)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Publication) {
+-            Publication pub = (Publication)record;
+-            pub.setCreatedWho(this.plantloreUser);
++            ((Publication)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Author) {
+-            Author aut = (Author)record;
+-            aut.setCreatedWho(this.plantloreUser);
++            ((Author)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Metadata) {
+-        	Metadata met = (Metadata)record;        	
+-        	met.setDateModified(now);
++        	((Metadata)record).setDateCreate(now);
+         }
++        
++        touchRecord(record);
+     }
+     
+     protected void checkConnection()
+@@ -243,8 +250,12 @@
+     	 // Check whether the connection to the databse has been established.
+         checkConnection();
+         
+-        // Fill in missing parts that DBLayer must complete.
+-        completeRecord(data);
++        // INSERT: Fill in missing parts that DBLayer must complete.
++        // UPDATE &amp; DELETE: Update timestamps of the record.
++        if(operation == INSERT)
++        	completeRecord(data);
++        else
++        	touchRecord(data);
+         
+         // Check whether we have sufficient rights.
+         checkRights(data, operation);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000763.html">[Plantlore-dev] r559 - trunk/src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000765.html">[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#764">[ date ]</a>
+              <a href="thread.html#764">[ thread ]</a>
+              <a href="subject.html#764">[ subject ]</a>
+              <a href="author.html#764">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

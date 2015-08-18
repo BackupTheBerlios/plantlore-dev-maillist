@@ -1,0 +1,148 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r269 - trunk/src/net/sf/plantlore/client
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r269%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605131054.k4DAsOaJ001588%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000316.html">
+   <LINK REL="Next"  HREF="000318.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r269 - trunk/src/net/sf/plantlore/client</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r269%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605131054.k4DAsOaJ001588%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r269 - trunk/src/net/sf/plantlore/client">fraktalek at berlios.de
+       </A><BR>
+    <I>Sat May 13 12:54:24 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000316.html">[Plantlore-dev] r268 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000318.html">[Plantlore-dev] r270 - trunk/documentation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#317">[ date ]</a>
+              <a href="thread.html#317">[ thread ]</a>
+              <a href="subject.html#317">[ subject ]</a>
+              <a href="author.html#317">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-13 12:54:22 +0200 (Sat, 13 May 2006)
+New Revision: 269
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+Log:
+Make overview react properly on new search.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-13 10:28:21 UTC (rev 268)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-13 10:54:22 UTC (rev 269)
+@@ -204,7 +204,7 @@
+                 ex.printStackTrace();
+             }
+             setChanged();
+-            notifyObservers();        
++            notifyObservers(&quot;PAGE_CHANGED&quot;);        
+         }
+     }
+     
+@@ -220,7 +220,7 @@
+                 ex.printStackTrace();
+             }
+             setChanged();
+-            notifyObservers();
++            notifyObservers(&quot;PAGE_CHANGED&quot;);
+         }
+     }
+ 
+@@ -277,6 +277,8 @@
+     
+     public void setResultId(int resultId) {
+         tableModel.setResultId(resultId);
++        setChanged();
++        notifyObservers(&quot;NEW_QUERY&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPlants() {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-13 10:28:21 UTC (rev 268)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-13 10:54:22 UTC (rev 269)
+@@ -116,10 +116,19 @@
+ 
+     public void update(Observable observable, Object object)
+     {
+-        recordsCount.setText(&quot;&quot;+model.getResultsCount());
+-        pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount());
+-        //FIXME: change selection only if really required
+-        overview.changeSelection(model.getSelectedRowNumber(),0,false,false);
++        if (object != null &amp;&amp; object instanceof String) {
++            String arg = (String) object;
++            if (arg.equals(&quot;PAGE_CHANGED&quot;)) {
++                recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount());
++                //FIXME: change selection only if really required
++                overview.changeSelection(model.getSelectedRowNumber(),0,false,false);
++            }
++            if (arg.equals(&quot;NEW_QUERY&quot;)) {
++                recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount());                
++            }
++        }
+     }
+     
+     /** Calls all the constructing init methods.
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-13 10:28:21 UTC (rev 268)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-13 10:54:22 UTC (rev 269)
+@@ -528,6 +528,7 @@
+         //FIXME
+         try {
+             loadData2();
++            fireTableDataChanged(); //let the table compoment know it should redraw itself
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         } catch (RemoteException ex) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000316.html">[Plantlore-dev] r268 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000318.html">[Plantlore-dev] r270 - trunk/documentation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#317">[ date ]</a>
+              <a href="thread.html#317">[ thread ]</a>
+              <a href="subject.html#317">[ subject ]</a>
+              <a href="author.html#317">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

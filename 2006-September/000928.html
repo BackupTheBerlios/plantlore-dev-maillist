@@ -1,0 +1,186 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r668 - in trunk/src/net/sf/plantlore/client: .	overview/tree
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r668%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview/tree&In-Reply-To=%3C200609041927.k84JRwYq023972%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000927.html">
+   <LINK REL="Next"  HREF="000929.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r668 - in trunk/src/net/sf/plantlore/client: .	overview/tree</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r668%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview/tree&In-Reply-To=%3C200609041927.k84JRwYq023972%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r668 - in trunk/src/net/sf/plantlore/client: .	overview/tree">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 21:27:58 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000927.html">[Plantlore-dev] r667 - trunk/src/net/sf/plantlore/client/settings
+</A></li>
+        <LI>Next message: <A HREF="000929.html">[Plantlore-dev] r669 - in trunk/src/net/sf/plantlore: client/export	common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#928">[ date ]</a>
+              <a href="thread.html#928">[ thread ]</a>
+              <a href="subject.html#928">[ subject ]</a>
+              <a href="author.html#928">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-04 21:27:14 +0200 (Mon, 04 Sep 2006)
+New Revision: 668
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+Log:
+Habitat tree is now showed using Task and dispatcher.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-04 19:02:14 UTC (rev 667)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-04 19:27:14 UTC (rev 668)
+@@ -928,16 +928,17 @@
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {
+                         habitatTreeModel.setDBLayer(model.getDatabase());
+-                        try {
+-                            habitatTreeModel.loadData();
+-                        } catch (RemoteException ex) {
+-                            DefaultExceptionHandler.handle(view,ex);
+-                            return;
+-                        } catch (DBLayerException ex) {
+-                            DefaultExceptionHandler.handle(view,ex);
+-                            return;
+-                        }
+-                        habitatTreeView.setVisible(true);
++                        Task task = habitatTreeModel.loadData();
++                        task.setPostTaskAction(new PostTaskAction() {
++                           public void afterStopped(Object value) {
++                               SwingUtilities.invokeLater(new Runnable() {
++                                  public void run() {
++                                    habitatTreeView.setVisible(true);                                      
++                                  } 
++                               });
++                           } 
++                        });
++                        Dispatcher.getDispatcher().dispatch(task, view, false);
+ 		}//actionPerformed
+ 	}// HabitatTreeAction
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-09-04 19:02:14 UTC (rev 667)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-09-04 19:27:14 UTC (rev 668)
+@@ -21,6 +21,7 @@
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.Occurrence;
+@@ -58,33 +59,39 @@
+         this.dblayer = dblayer;
+     }
+     
+-    public void loadData() throws DBLayerException, RemoteException {
+-        SelectQuery subQuery = dblayer.createSubQuery(Habitat.class,&quot;h&quot;);
+-        subQuery.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;h.&quot; + Habitat.TERRITORY);
+-        subQuery.addRestriction(PlantloreConstants.RESTR_EQ,&quot;h.&quot;+Habitat.DELETED,null,0,null);
+-        
+-        SelectQuery query = dblayer.createQuery(Territory.class);
+-        query.addRestriction(PlantloreConstants.SUBQUERY_IN,Territory.ID,null,subQuery,null);
+-        
+-        int resultid = dblayer.executeQuery(query);
+-        int resultsCount = dblayer.getNumRows(resultid);
+-        if (resultsCount &lt;= 0) {
+-            dblayer.closeQuery(query);
+-            return;
+-        }
+-        Object[] records = (Object[]) dblayer.more(resultid, 0,resultsCount - 1);
+-        dblayer.closeQuery(query);
+-        Territory territory;
+-        DefaultMutableTreeNode node;
+-        for (Object record : records) {
+-            territory = (Territory) ((Object [])record)[0];
+-            node = new DefaultMutableTreeNode(new NodeInfo(NodeInfo.NodeType.TERRITORY,territory.getName(),territory.getId(),getPhythochoriaCount(territory)));
+-            rootNode.add(node);
+-            addPhythochoria(node,territory);
+-        }
+-        
+-        setChanged();
+-        notifyObservers(&quot;LOADED_DATA&quot;);
++    public Task loadData() {
++        final HabitatTree model = this;
++        return new Task() {
++            public Object task() throws DBLayerException, RemoteException {
++                SelectQuery subQuery = dblayer.createSubQuery(Habitat.class,&quot;h&quot;);
++                subQuery.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;h.&quot; + Habitat.TERRITORY);
++                subQuery.addRestriction(PlantloreConstants.RESTR_EQ,&quot;h.&quot;+Habitat.DELETED,null,0,null);
++
++                SelectQuery query = dblayer.createQuery(Territory.class);
++                query.addRestriction(PlantloreConstants.SUBQUERY_IN,Territory.ID,null,subQuery,null);
++
++                int resultid = dblayer.executeQuery(query);
++                int resultsCount = dblayer.getNumRows(resultid);
++                if (resultsCount &lt;= 0) {
++                    dblayer.closeQuery(query);
++                    return null;
++                }
++                Object[] records = (Object[]) dblayer.more(resultid, 0,resultsCount - 1);
++                dblayer.closeQuery(query);
++                Territory territory;
++                DefaultMutableTreeNode node;
++                for (Object record : records) {
++                    territory = (Territory) ((Object [])record)[0];
++                    node = new DefaultMutableTreeNode(new NodeInfo(NodeInfo.NodeType.TERRITORY,territory.getName(),territory.getId(),getPhythochoriaCount(territory)));
++                    rootNode.add(node);
++                    addPhythochoria(node,territory);
++                }
++
++                model.setChanged();
++                model.notifyObservers(&quot;LOADED_DATA&quot;);
++                return null;
++            }
++        };//return new Task;
+     }
+     
+     public int getPhythochoriaCount(Territory t) throws RemoteException, DBLayerException {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000927.html">[Plantlore-dev] r667 - trunk/src/net/sf/plantlore/client/settings
+</A></li>
+	<LI>Next message: <A HREF="000929.html">[Plantlore-dev] r669 - in trunk/src/net/sf/plantlore: client/export	common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#928">[ date ]</a>
+              <a href="thread.html#928">[ thread ]</a>
+              <a href="subject.html#928">[ subject ]</a>
+              <a href="author.html#928">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

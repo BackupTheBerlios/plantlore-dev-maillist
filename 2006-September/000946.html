@@ -1,0 +1,179 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r686 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r686%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/tableimport%20client/tableimport/parsers%20common&In-Reply-To=%3C200609051423.k85EN8aT019993%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000945.html">
+   <LINK REL="Next"  HREF="000947.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r686 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r686%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/tableimport%20client/tableimport/parsers%20common&In-Reply-To=%3C200609051423.k85EN8aT019993%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r686 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 16:23:08 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000945.html">[Plantlore-dev] r685 - trunk/lib
+</A></li>
+        <LI>Next message: <A HREF="000947.html">[Plantlore-dev] r687 - in trunk/src/net/sf/plantlore: client/print	common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#946">[ date ]</a>
+              <a href="thread.html#946">[ thread ]</a>
+              <a href="subject.html#946">[ subject ]</a>
+              <a href="author.html#946">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-05 16:23:06 +0200 (Tue, 05 Sep 2006)
+New Revision: 686
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+   trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+   trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+Log:
+Reconnect is dispatched by the dispatcher now.
+
+*************************************************
+System.gc() is called immediately after the OutOfMemoryError occurs in the table import. It is still error prone - if the creation of the DOM4j tree consumes all memory, a call from EDT may occur and it may not have enough memory -&gt; the program ends in a loop that announces OutOfMemoryException. EDT's behaviour....
+*************************************************
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 13:37:27 UTC (rev 685)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 14:23:06 UTC (rev 686)
+@@ -1697,7 +1697,7 @@
+ 					// the last task surely had one and it will become
+ 					// active once we start the task again.
+ 					logger.debug(&quot;Performing the connection procedure again...&quot;);
+-					t.start(); 
++					Dispatcher.getDispatcher().dispatch(t, view, false);
+ 				}
+ 			}
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-09-05 13:37:27 UTC (rev 685)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-09-05 14:23:06 UTC (rev 686)
+@@ -88,8 +88,7 @@
+ 		try {
+ 			table = parser.initialize();
+ 		} catch(OutOfMemoryError e) {
+-			parser.cleanup();
+-			throw new Exception(L10n.getString(&quot;Error.OutOfMemory&quot;), e);
++			throw new Exception(L10n.getString(&quot;Error.OutOfMemory&quot;));
+ 		}
+ 		
+ 		setStatusMessage(L10n.getString(&quot;Import.Initialized&quot;));
+@@ -174,6 +173,9 @@
+ 		}
+ 		finally {
+ 			parser.cleanup();
++			parser = null;
++			logger.debug(&quot;Removing the DOM4J tree from memory?&quot;);
++			System.gc();
+ 		}
+ 		
+ 		
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-09-05 13:37:27 UTC (rev 685)
++++ trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-09-05 14:23:06 UTC (rev 686)
+@@ -94,6 +94,7 @@
+ 	 */
+ 	public UnifiedTableParser(Reader reader) {
+ 		this.reader = reader;
++		saxReader = new SAXReader();
+ 	}
+ 	
+ 	/**
+@@ -101,11 +102,7 @@
+ 	 */
+ 	public Class initialize() throws ParserException {
+ 		try {
+-        	saxReader = new SAXReader();
+-        	
+-        	System.out.println(&quot;ABOUT TO PARSER THE DOCUMENT WITH DOM4J&quot;);
+             document = saxReader.read( reader );
+-            System.out.println(&quot;COMPLETED.&quot;);
+             
+             Node root = document.getRootElement();
+             if(root == null)
+@@ -123,6 +120,8 @@
+             	throw new ParserException(L10n.getString(&quot;Error.EmptyXMLFile&quot;));
+ 			
+ 		} catch( OutOfMemoryError er ) {
++			cleanup();
++			System.gc();
+ 			throw new ParserException(L10n.getString(&quot;Error.OutOfMemory&quot;));			
+         } catch (DocumentException e) {
+         	throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));
+@@ -214,8 +213,6 @@
+ 		try {
+ 			reader.close();
+ 		} catch(Exception e) {}
+-		// Get rid of the ugly memory consuming DOM4J tree.
+-		System.gc();
+ 	}
+      
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-05 13:37:27 UTC (rev 685)
++++ trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-05 14:23:06 UTC (rev 686)
+@@ -173,12 +173,13 @@
+ 		if( !isReconnectDisabled &amp;&amp; isReconnectReasonable &amp;&amp; ! doNotOfferReconnect )
+ 			DefaultReconnectDialog.show(parent, problemDescription);
+ 		// Just announce the problem.
+-		else
++		else {
+ 			JOptionPane.showMessageDialog( 
+ 					parent, 
+ 					problemDescription, 
+ 					title, 
+ 					JOptionPane.ERROR_MESSAGE );
++		}
+ 		
+ 	}
+ 	
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000945.html">[Plantlore-dev] r685 - trunk/lib
+</A></li>
+	<LI>Next message: <A HREF="000947.html">[Plantlore-dev] r687 - in trunk/src/net/sf/plantlore: client/print	common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#946">[ date ]</a>
+              <a href="thread.html#946">[ thread ]</a>
+              <a href="subject.html#946">[ subject ]</a>
+              <a href="author.html#946">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

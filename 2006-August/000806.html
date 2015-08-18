@@ -1,0 +1,379 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r584 - in trunk: analysis/database	src/net/sf/plantlore/client/login	src/net/sf/plantlore/client/user src/net/sf/plantlore/l10n	src/net/sf/plantlore/middleware src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r584%20-%20in%20trunk%3A%20analysis/database%0A%09src/net/sf/plantlore/client/login%0A%09src/net/sf/plantlore/client/user%20src/net/sf/plantlore/l10n%0A%09src/net/sf/plantlore/middleware%20src/net/sf/plantlore/server&In-Reply-To=%3C200608281014.k7SAEOBb013928%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000805.html">
+   <LINK REL="Next"  HREF="000807.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r584 - in trunk: analysis/database	src/net/sf/plantlore/client/login	src/net/sf/plantlore/client/user src/net/sf/plantlore/l10n	src/net/sf/plantlore/middleware src/net/sf/plantlore/server</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r584%20-%20in%20trunk%3A%20analysis/database%0A%09src/net/sf/plantlore/client/login%0A%09src/net/sf/plantlore/client/user%20src/net/sf/plantlore/l10n%0A%09src/net/sf/plantlore/middleware%20src/net/sf/plantlore/server&In-Reply-To=%3C200608281014.k7SAEOBb013928%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r584 - in trunk: analysis/database	src/net/sf/plantlore/client/login	src/net/sf/plantlore/client/user src/net/sf/plantlore/l10n	src/net/sf/plantlore/middleware src/net/sf/plantlore/server">lada at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 28 12:14:24 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000805.html">[Plantlore-dev] r583 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000807.html">[Plantlore-dev] [Bug #8587] Define access privileges for user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#806">[ date ]</a>
+              <a href="thread.html#806">[ thread ]</a>
+              <a href="subject.html#806">[ subject ]</a>
+              <a href="author.html#806">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-28 12:14:20 +0200 (Mon, 28 Aug 2006)
+New Revision: 584
+
+Modified:
+   trunk/analysis/database/DBModel_postgres.sql
+   trunk/analysis/database/DBmodel.sql
+   trunk/analysis/database/DBmodel_MySQL.sql
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+User manager - defined access permission during create user and alter user. For user with administrator right set role Plantlore_Role_Admin and for user withour administrator right set role Plantlore_Role_User.
+
+DBLayer.alterUser(...), HibernateDBLayer.alterUser(...) and Login.DBLayerProxy.alterUser(...) - add parameter &quot;changeRight&quot;. This parametr is true if rights of user has been changed and we have to call REVOKE and GRANT.
+
+User cannot drop himself now ;-) 
+
+Add permission SELECT on Plantlore_Role_User to tUser, tRight and tColumns.
+
+Modified: trunk/analysis/database/DBModel_postgres.sql
+===================================================================
+--- trunk/analysis/database/DBModel_postgres.sql	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/analysis/database/DBModel_postgres.sql	2006-08-28 10:14:20 UTC (rev 584)
+@@ -292,7 +292,11 @@
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TTERRITORIES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TVILLAGES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPUBLICATIONS TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON THISTORYCOLUMN TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TUSER TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TRIGHT TO Plantlore_Role_User;
+ 
++
+ /* Grant permissions for this database - www user */
+ GRANT SELECT ON vhabitats TO Plantlore_Role_www;
+ GRANT SELECT ON vmetadata TO Plantlore_Role_www;
+
+Modified: trunk/analysis/database/DBmodel.sql
+===================================================================
+--- trunk/analysis/database/DBmodel.sql	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/analysis/database/DBmodel.sql	2006-08-28 10:14:20 UTC (rev 584)
+@@ -298,6 +298,9 @@
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TTERRITORIES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TVILLAGES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPUBLICATIONS TO Plantlore_Role_User;
++GRANT SELECT REFERENCES, ON THISTORYCOLUMN TO Plantlore_Role_User;
++GRANT SELECT REFERENCES, ON TUSER TO Plantlore_Role_User;
++GRANT SELECT REFERENCES, ON TRIGHT TO Plantlore_Role_User;
+ 
+ /* Grant permissions for this database - www user */
+ GRANT SELECT ON vhabitats TO Plantlore_Role_www;
+
+Modified: trunk/analysis/database/DBmodel_MySQL.sql
+===================================================================
+--- trunk/analysis/database/DBmodel_MySQL.sql	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/analysis/database/DBmodel_MySQL.sql	2006-08-28 10:14:20 UTC (rev 584)
+@@ -319,6 +319,9 @@
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TTERRITORIES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TVILLAGES TO Plantlore_Role_User;
+ GRANT DELETE, INSERT, SELECT, UPDATE, REFERENCES ON TPUBLICATIONS TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON THISTORYCOLUMN TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TUSER TO Plantlore_Role_User;
++GRANT SELECT, REFERENCES ON TRIGHT TO Plantlore_Role_User;
+ 
+ /* Grant permissions for this database - www user */
+ GRANT SELECT ON vhabitats TO Plantlore_Role_www;
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-28 10:14:20 UTC (rev 584)
+@@ -537,9 +537,9 @@
+ 			wrappedDBLayer.createUser(name, password, isAdmin);
+ 		}
+ 
+-		synchronized public void alterUser(String name, String password, boolean isAdmin) throws DBLayerException, RemoteException {
++		synchronized public void alterUser(String name, String password, boolean isAdmin, boolean changeRight) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+-			wrappedDBLayer.alterUser(name, password, isAdmin);
++			wrappedDBLayer.alterUser(name, password, isAdmin, changeRight);
+ 			
+ 		}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-28 10:14:20 UTC (rev 584)
+@@ -141,6 +141,7 @@
+     public static final String INFORMATION_SEARCH = L10n.getString(&quot;Information.SearchUser&quot;);    
+     public static final String INFORMATION_DELETE_TITLE = L10n.getString(&quot;Information.UserDeleteTitle&quot;);
+     public static final String INFORMATION_DELETE = L10n.getString(&quot;Information.UserDelete&quot;);    
++    public static final String INFORMATION_DELETE_HIMSELF = L10n.getString(&quot;Information.UserDeleteHimself&quot;);    
+     public static final String INFORMATION_EDIT_TITLE = L10n.getString(&quot;Information.UserCannotEditTitle&quot;);
+     public static final String INFORMATION_EDIT = L10n.getString(&quot;Information.UserCannotEdit&quot;);    
+    
+@@ -320,8 +321,7 @@
+                 // Cast the results to the User objects
+                 for (int i=0; i&lt;countResult; i++ ) {                    							
+                 	Object[] objHis = (Object[])objectUser[i];
+-                    this.userList.add((User)objHis[0]);
+-                    logger.debug(&quot;Proccess: &quot;+ i + &quot;: &quot; + (User)objHis[0]);
++                    this.userList.add((User)objHis[0]);                    
+                 }               
+                 // Update current first displayed row                
+                 logger.info(&quot;Results successfuly retrieved&quot;);                   
+@@ -407,10 +407,12 @@
+ 		        }		      
+     			try {
+     				boolean isAdmin = false;
++                                boolean changeRight = false;
+     				if (userRecord.getRight().getAdministrator() == 1) isAdmin = true;
++                                if (userRecord.getRight().getAdministrator() != oldSetAdmin) changeRight = true;
+     				//Edit database user
+-                                if (!getPassword().equals(&quot;&quot;) || (userRecord.getRight().getAdministrator() != oldSetAdmin)) {                                    
+-                                    database.alterUser(userRecord.getLogin(), getPassword(), isAdmin);                                    
++                                if (!getPassword().equals(&quot;&quot;) || changeRight) {                                    
++                                    database.alterUser(userRecord.getLogin(), getPassword(), isAdmin, changeRight);                                    
+                                 }                                
+     				//Edit information about user in database                                
+     				database.executeUpdateInTransaction(userRecord.getRight());                                
+@@ -562,6 +564,21 @@
+ 		}
+     }
+     
++    /**
++     * Check if user can delete himself
++     * @return true if user can delete himself
++     */
++    public boolean deleteHimself() {
++        try {            
++            if ((database.getUser().getLogin()).equals(userRecord.getLogin())) {                
++                return true;
++            }
++        } catch (Exception e) {
++           // Never mind.           
++        }
++        return false;
++    }
++    
+     //****************************//
+     //****Get and set metods*****//
+     //**************************//
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-28 10:14:20 UTC (rev 584)
+@@ -373,12 +373,17 @@
+                //Set information about selected row
+                int resultNumber = view.tableUserList.getSelectedRow() + model.getCurrentFirstRow()-1; 
+                model.setUserRecord(resultNumber);
+-               //Test if record was been deleted
++               //Test if record has been deleted
+                if (model.getUserRecord().getDropWhen() != null) {
+             	   view.showInfoMessage(UserManager.INFORMATION_DELETE_TITLE, UserManager.INFORMATION_DELETE);
+             	   return;
+                }
+-        	   int okCancle = view.showQuestionMessage(UserManager.QUESTION_DELETE_TITLE, UserManager.QUESTION_DELETE);               
++               //Test if user delete himself 
++               if (model.deleteHimself()) {
++                   view.showInfoMessage(UserManager.INFORMATION_DELETE_TITLE, UserManager.INFORMATION_DELETE_HIMSELF);
++            	   return;
++               }
++               int okCancle = view.showQuestionMessage(UserManager.QUESTION_DELETE_TITLE, UserManager.QUESTION_DELETE);               
+                if (okCancle == 0){
+             	   //Button OK was press
+             	   logger.debug(&quot;Button OK was press.&quot;);
+@@ -388,9 +393,9 @@
+ 	               new DefaultProgressBar(task, view, true) {		   								  		   									
+ 					   @Override
+ 	            	   public void afterStopping() {
+-						   if (! model.isFinishedTask()) return;
+-						   model.setInfoFinishedTask(false);
+-	                       // load User
++                                   if (! model.isFinishedTask()) return;
++                                        model.setInfoFinishedTask(false);
++                                       // load User
+ 		   	               model.searchUser(false); 
+ 		   	               if (model.isError()) {
+ 		    	        	   displayError();
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-28 10:14:20 UTC (rev 584)
+@@ -627,13 +627,16 @@
+ Information.SearchUserTitle = Search user
+ Information.NoUserInResult = No users with the given attributes were found. Please modify search criteria.
+ Information.NoUserInResultTitle = No search results 
++Information.UserCannotEditTitle 
++Information.UserCannotEdit
++Information.UserDeleteHimself
++Information.UserDelete
++Information.UserDeleteTitle
+ 
+ Information.SearchMetadata = No search field has been filled in. All metadata will display.
+ Information.SearchMetadataTitle = Search metadata
+ Information.NoMetadataInResult = No metadata with the given attributes were found. Please modify search criteria.
+ Information.NoMetadataInResultTitle = No search results 
+-Information.UserCannotEditTitle 
+-Information.UserCannotEdit
+ 
+ #=============================================================
+ # ERRORS
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-28 10:14:20 UTC (rev 584)
+@@ -1533,3 +1533,9 @@
+ Search.Extended=&amp;Roz\u0161\u00ED\u0159en\u00E9
+ 
+ Information.UserCannotEdit=U\u017Eivatel byl ji\u017E zru\u0161en, proto v\u00E1m nem\u016F\u017Ee b\u00FDt povolena jeho editace. 
++
++Information.UserDeleteHimself=Pokou\u0161\u00EDte si odstranit u\u017Eivatele pod kter\u00FDm jste pr\u00E1v\u011B p\u0159ihl\u00E1seni.\nTato operace nen\u00ED povolena. 
++
++Information.UserDelete=Pokou\u0161\u00EDte se odstranit u\u017Eivaele, kter\u00FD byl ji\u017E zru\u0161en.\nTato operace nen\u00ED povolena.
++
++Information.UserDeleteTitle=Odstran\u011Bn\u00ED u\u017Eivatele
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-28 10:14:20 UTC (rev 584)
+@@ -312,11 +312,12 @@
+      *  @param password New password for the user. Leave blank or null if not modified.
+      *  @param isAdmin  Flag whether the user should or should not be an administrator (admin can 
+      *                  create other users)
++     *  @parem changeRight Flag whether the right of user has been changed      
+      *  @throws DBLayerException In case we do not have sufficient rights, are not connected to the 
+      *                           DB or the execution of ALTER USER statement failed
+      *  @throws RemoteException In case connection to the server was lost
+      */    
+-    public void alterUser(String name, String password, boolean isAdmin) throws DBLayerException, RemoteException;
++    public void alterUser(String name, String password, boolean isAdmin, boolean changeRight) throws DBLayerException, RemoteException;
+     
+     /**
+      *  Method for deleting database user using DROP USER statement. This method can only 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-28 00:06:50 UTC (rev 583)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-28 10:14:20 UTC (rev 584)
+@@ -2032,13 +2032,17 @@
+         // TODO: This is PostgreSQL specific. Think of a way how to provide different statements for
+         //       different databases
+         String admin = &quot;&quot;;
++        String role = &quot;Plantlore_Role_User&quot;;
+         if (isAdmin) {
+             admin = &quot; CREATEUSER&quot;;
++            role = &quot;Plantlore_Role_Admin&quot;;
+         }        
+         try {
+             Connection conn = txSession.connection();                    
+             PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; +HibernateDBLayer.USER_PREFIX + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
+             pstmt.execute();
++            PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++            pstmtGrant.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+             DBLayerException ex = new DBLayerException(&quot;Exception.CreateUser&quot;);
+@@ -2061,11 +2065,12 @@
+      *  @param password New password for the user. Leave blank or null if not modified.
+      *  @param isAdmin  Flag whether the user should or should not be an administrator (admin can 
+      *                  create other users)
++     *  @parem changeRight Flag whether the right of user has been changed 
+      *  @throws DBLayerException In case we do not have sufficient rights, are not connected to the 
+      *                           DB or the execution of ALTER USER statement failed
+      *  @throws RemoteException In case connection to the server was lost
+      */    
+-    public void alterUser(String name, String password, boolean isAdmin) throws DBLayerException, RemoteException {
++    public void alterUser(String name, String password, boolean isAdmin, boolean changeRight ) throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+         if (sessionFactory == null) {
+             logger.error(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+@@ -2086,18 +2091,35 @@
+             Connection conn = txSession.connection();            
+             // Now set CREATEUSER/NOCREATUSER flag
+             String admin;
++            String role;
++            String roleOld;
+             if (isAdmin) {
+                 admin = &quot;CREATEUSER&quot;;
++                role = &quot;Plantlore_Role_Admin&quot;;
++                roleOld = &quot;Plantlore_Role_User&quot;;
+             } else {
+                 admin = &quot;NOCREATEUSER&quot;;
++                role = &quot;Plantlore_Role_User&quot;;
++                roleOld = &quot;Plantlore_Role_Admin&quot;;
+             }            
+             // In case password has changed, execute statement to change the password
++            // In case admin right has changed, execute statement to change the access permission
+             if ((password != null) &amp;&amp; (!password.equals(&quot;&quot;))) {                                    
+                 PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot; +admin);                
+                 pstmt.execute();
++                if (changeRight) {
++                    PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+HibernateDBLayer.USER_PREFIX +name);                
++                    pstmtRevoke.execute();
++                    PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++                    pstmtGrant.execute();
++                }
+             } else {                
+                 PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; &quot; +admin);                
+-                pstmt.execute();            
++                pstmt.execute();  
++                PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+HibernateDBLayer.USER_PREFIX +name);                
++                pstmtRevoke.execute();
++                PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++                pstmtGrant.execute();
+             }            
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000805.html">[Plantlore-dev] r583 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000807.html">[Plantlore-dev] [Bug #8587] Define access privileges for user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#806">[ date ]</a>
+              <a href="thread.html#806">[ thread ]</a>
+              <a href="subject.html#806">[ subject ]</a>
+              <a href="author.html#806">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

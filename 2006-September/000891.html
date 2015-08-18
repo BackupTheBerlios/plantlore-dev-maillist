@@ -1,0 +1,1326 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r635 - in trunk/src/net/sf/plantlore: client	client/occurrenceimport common middleware server	server/manager server/tools
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r635%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/occurrenceimport%20common%20middleware%20server%0A%09server/manager%20server/tools&In-Reply-To=%3C200609022030.k82KUtnA004850%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000890.html">
+   <LINK REL="Next"  HREF="000892.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r635 - in trunk/src/net/sf/plantlore: client	client/occurrenceimport common middleware server	server/manager server/tools</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r635%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/occurrenceimport%20common%20middleware%20server%0A%09server/manager%20server/tools&In-Reply-To=%3C200609022030.k82KUtnA004850%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r635 - in trunk/src/net/sf/plantlore: client	client/occurrenceimport common middleware server	server/manager server/tools">krater at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  2 22:30:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000890.html">[Plantlore-dev] How to: run (selected) file v Netbeansech i ve	freeform projektu	(tj. s vlastnim build.xml)
+</A></li>
+        <LI>Next message: <A HREF="000892.html">[Plantlore-dev] r636 - trunk
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#891">[ date ]</a>
+              <a href="thread.html#891">[ thread ]</a>
+              <a href="subject.html#891">[ subject ]</a>
+              <a href="author.html#891">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-02 22:30:53 +0200 (Sat, 02 Sep 2006)
+New Revision: 635
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+   trunk/src/net/sf/plantlore/common/Utils.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/CertificationException.java
+   trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+   trunk/src/net/sf/plantlore/server/DatabaseSettings.java
+   trunk/src/net/sf/plantlore/server/Guard.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/RMIServerControl.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+   trunk/src/net/sf/plantlore/server/Server.java
+   trunk/src/net/sf/plantlore/server/ServerSettings.java
+   trunk/src/net/sf/plantlore/server/Undertaker.java
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+   trunk/src/net/sf/plantlore/server/tools/RMI.java
+Log:
+Added more JavaDoc, code verification, some minor changes (RMIDBLayerFactory has been made a singleton).
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -1520,7 +1520,7 @@
+ 			// needed.
+ 			if (loginModel == null) {
+ 				loginModel = new Login(
+-						new RMIDBLayerFactory( model.getMainConfig().getCodebase() ), 
++						RMIDBLayerFactory.getDBLayerFactory(), 
+ 						model.getMainConfig());
+ 				loginModel.addObserver(new DatabaseChange()); // Callback ~ redistribution of DBLayer.
+ 				loginView = new LoginView(view, loginModel);
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -19,12 +19,15 @@
+ /**
+  * The Occurrence Import task instructs the Parser to start parsing the file
+  * and every time a record is reconstructed, it is processed here (via a callback).
++ * The record is processed using the &lt;code&gt;DBLayerUtils.processRecord()&lt;/code&gt;.
+  * &lt;br/&gt;
+  * The task can be cancelled.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-08-14
+  * @version 1.0
++ * 
++ *  @see net.sf.plantlore.common.DBLayerUtils#processRecord(Occurrence, AuthorOccurrence[])
+  */
+ public class OccurrenceImportTask extends Task implements RecordProcessor {
+ 	
+@@ -101,6 +104,10 @@
+ 	 * Some erros may be ignored (such as insufficient access rights)
+ 	 * i.e. the whole import procedure will not fail, just the problematic 
+ 	 * record will be rejected. 
++	 * &lt;br/&gt;
++	 * The record is processed using the &lt;code&gt;DBLayerUtils.processRecord()&lt;/code&gt;.
++	 * 
++	 * @see net.sf.plantlore.common.DBLayerUtils#processRecord(Occurrence, AuthorOccurrence[])
+ 	 */
+ 	public void processRecord(AuthorOccurrence... aos) 
+ 	throws DBLayerException, RemoteException {
+
+Modified: trunk/src/net/sf/plantlore/common/Utils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Utils.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/common/Utils.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -72,27 +72,18 @@
+         }
+ 
+         //clear off the file name
+-        
+-        // The following code should not be necessary as the dir = url.getPath(), 
+-        // ie. from the &quot;jar:file:/home/fraktalek/cvs/plantlore/dist/plantlore-client.jar!/net/sf/plantlore/common/Utils.class&quot;
+-        // just the &quot;/home/fraktalek/cvs/plantlore/dist/plantlore-client.jar!/net/sf/plantlore/common/Utils.class&quot;
+-        // will remain.
+-        
+-//        //dir = dir.substring(0,dir.lastIndexOf(&quot;/&quot;));
+-//        if (url.getProtocol().equals(&quot;jar&quot;)) {
+-//            //remove path to the package and the trailing &quot;!/&quot;
+-//            dir = dir.substring(0, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;,&quot;/&quot;))-2);
+-//            if (System.getProperty(&quot;os.name&quot;).toLowerCase().startsWith(&quot;win&quot;)) //on windows there's one more slash after file:
+-//                dir = dir.substring(dir.indexOf(&quot;file:&quot;)+6);//if the url contains path to a jar it begins with &quot;jar:file:/&quot; and getPath() then begins with &quot;file:/&quot;
+-//            else
+-//                dir = dir.substring(dir.indexOf(&quot;file:&quot;)+5);//if the url contains path to a jar it begins with &quot;jar:file:/&quot; and getPath() then begins with &quot;file:/&quot;            
+-//        } else {
++        if (url.getProtocol().equals(&quot;jar&quot;)) {
++        	dir = dir.substring(0, dir.lastIndexOf(&quot;/&quot;));
++            //remove path to the package and the trailing &quot;!/&quot;
++            dir = dir.substring(0, dir.indexOf(Utils.class.getPackage().getName().replaceAll(&quot;\\.&quot;,&quot;/&quot;))-2);
++            dir = dir.substring(dir.indexOf(&quot;file:&quot;)+5);//if the url contains path to a jar it begins with &quot;jar:file:/&quot; and getPath() then begins with &quot;file:/&quot;            
++        } else {
+             // Just remove the path to the package
+         	if (System.getProperty(&quot;os.name&quot;).toLowerCase().startsWith(&quot;win&quot;))
+         		dir = dir.substring(1, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;, &quot;/&quot;)));
+         	else
+         		dir = dir.substring(0, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;,&quot;/&quot;)));            
+-//        }
++        }
+         
+         return dir;
+     }
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -16,11 +16,10 @@
+ import net.sf.plantlore.common.exception.DBLayerException;
+ 
+ /**
+- * Interface for database access.
++ * The interface for a database layer wrapper.
+  * 
+- * TODO: Zdokumentovat metody interface!
+- *
+- * @author Tom&#225;&#353; Kova&#345;&#237;k, Erik Kratochv&#237;l
++ * @author Tom&#225;&#353; Kova&#345;&#237;k
++ * @author Erik Kratochv&#237;l
+  */
+ public interface DBLayer extends Remote, Serializable {
+ 	
+@@ -356,11 +355,9 @@
+     /**
+      * This method is intended for final cleanup. &lt;b&gt;Do not call this method
+      * yourself! The proper way for you to get rid of a DBLayer is to call
+-     * DBLayer.destroy() method!&lt;/b&gt; &lt;br/&gt; Terminate all processes running in
+-     * this DBLayer, disconnect from the database and destroy all objects
+-     * created by this DBLayer. &lt;br/&gt; &lt;b&gt;After this the DBLayer will not be
+-     * capable of carrying out its duties.&lt;/b&gt; &lt;br/&gt; This method is supposed to
+-     * be used by the DBLayerFactory exclusively.
++     * DBLayerFactory.destroy() method!&lt;/b&gt; &lt;br/&gt; Terminates all processes running in
++     * this DBLayer, disconnects from the database and destroys all objects
++     * created by this DBLayer. &lt;br/&gt; 
+      */
+     public void shutdown() throws RemoteException;
+            
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -7,32 +7,35 @@
+ import net.sf.plantlore.common.exception.DBLayerException;
+ 
+ /** 
+- * Interface for obtaining the (possibly remote) DBLayer object.
++ * The interface for the Database Layer Factory.
++ * The creation of the Database Layer is very complex
++ * and it is not possible to achieve the desired complexity
++ * by a simple &lt;i&gt;new DBLayer&lt;/i&gt;.
++ * &lt;br/&gt; 
++ * The Database Layer Factory is capable of both creating a new
++ * database layer and its proper destruction.
+  * 
+- * @author Erik Kratocvh&#237;l
+- * @version 1.0 final
+- * @since The beginning of time.
++ * @author Erik Kratochv&#237;l
++ * @version 1.0
++ * @since 2006-03-01
+  */
+ public interface DBLayerFactory {
+ 	
+ 
+ 	/** 
+-	 * Create a new instance of the DBLayer that will manage the connection to the remote database.
++	 * Create a new instance of the Database Layer 
++	 * that will manage the connection to the (possibly remote) database.
++	 *
++	 *  @param settings	The information that are necessary for the Database Layer creation.
+ 	 *  
+-	 * @param host	Hostname of the server.
+-	 * @param port	Port where the server is listening.
+-	 * @return	Remote reference of the DBLayer.
+-	 * @throws RemoteException		If the RMI encounters a problem.
+-	 * @throws NotBoundException	If the server is not running on the specified port.
++	 *  @see net.sf.plantlore.client.login.DBInfo
+ 	 */
+ 	DBLayer create(DBInfo settings) throws RemoteException, NotBoundException, DBLayerException;
+ 	
+ 	/** 
+-	 * Destroy the DBLayer. This is a special measure, 
+-	 * so that the db connection can be closed and the object disconnected (unexported).
++	 * Destroy the Database Layer properly. After this call the Database Layer should not be used anymore.
+ 	 * 
+ 	 * @param db		The DBLayer to be destroyed.
+-	 * @throws RemoteException		If the RMI encounters a problem.
+ 	 */
+ 	void destroy(DBLayer db) throws RemoteException;
+ 
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -11,6 +11,7 @@
+ import net.sf.plantlore.server.ConnectionInfo;
+ import net.sf.plantlore.server.DatabaseSettings;
+ import net.sf.plantlore.client.login.DBInfo;
++import net.sf.plantlore.common.Utils;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.server.tools.RMI;
+@@ -19,12 +20,11 @@
+ 
+ 
+ /**
+- * The RMIDBLayerFactory can create and destroy DBLayers - either local or remote. 
++ * The RMIDBLayerFactory can create and destroy Database Layers (DBLayers in short) 
++ * - either local or remote. 
+  * The client should ask the factory to create the DBLayer and the factory will shield him from
+  * all the details how the DBLayer is created or where those objects really live.
+  * &lt;br/&gt;
+- * RMIDBLayer factory lives in the client's JVM.   
+- * &lt;br/&gt;
+  * The RMIDBLayerFactory keeps track of all database layers it has created and where they
+  * actually live.
+  * &lt;table&gt;
+@@ -35,50 +35,65 @@
+  * &lt;br/&gt;
+  * The DBLayer factory is responsible for creating and destroying DBLayers.
+  * It has no responsibility for initialization of those DBLayers.
++ * &lt;br/&gt;
++ * The RMIDBLayerFactory is a singleton.
+  * 
+  *  
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-11
+- * @version 1.0 final
++ * @version 1.0
+   */
+ public class RMIDBLayerFactory implements DBLayerFactory {
+ 	
+-	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName()); 
++	private static Logger logger = Logger.getLogger(RMIDBLayerFactory.class.getPackage().getName()); 
+ 	
++	private static RMIDBLayerFactory databaseLayerFactory;
+ 	
++	
+ 	/** Keep information about connections to databases. */
+ 	private Hashtable&lt;DBLayer, ConnectionInfo&gt; client = new Hashtable&lt;DBLayer, ConnectionInfo&gt;(4);
+ 	
+ 	
+-	/** Create a new instance of DBLayerFactory. */
+-	public RMIDBLayerFactory(String codebase) {
+-		if(codebase == null)
+-			logger.warn(&quot;The codebase may not have been set! This may cause serious problems when trying to connect to a remote database! It is imperative you make sure the codebase is set properly!!&quot;);
+-		net.sf.plantlore.server.tools.RMI.addToCodebase( codebase );
++	/** 
++	 * Create a new instance of DBLayerFactory.
++	 * The RMIDBLayerFactory is a singleton and can be obtained via getDBLayerFactory() only. 
++	 */
++	private RMIDBLayerFactory() {}
++	
++	/**
++	 * Construct a new Database Layer factory. 
++	 * 
++	 * @return	The new Database Layer factory.
++	 */
++	public static DBLayerFactory getDBLayerFactory() {
++		if(databaseLayerFactory == null) {
++			String codebase = Utils.getCodeBasePath();
++			if(codebase == null)
++				logger.warn(&quot;The codebase may not have been set! This may cause serious problems when trying to connect to a remote database! It is imperative you make sure the codebase is set properly!!&quot;);
++			else
++				net.sf.plantlore.server.tools.RMI.addToCodebase( codebase );
++			
++			databaseLayerFactory = new RMIDBLayerFactory();
++		}
++		return databaseLayerFactory;
+ 	}
+ 	
+ 	
+ 	/**
+ 	 * Create a new DBLayer.
+ 	 * &lt;br/&gt;
+-	 * This method is meant for connections to remote databases. 
+-	 * The DBLayerFactory asks the server's RemoteDBLayerFactory to
+-	 * create a new DBLayer object there. The RemoteDBLayerFactory
+-	 * returns a stub of that object, which is what the caller will obtain.
++	 * The Database Layer may be either local or remote, 
++	 * but the caller should spot no difference. 
+ 	 * 
+-	 * @param host	Hostname of the computer where server runs.
+-	 * @param port	Port where the server listens.
+-	 * 
+-	 * @return A stub of the remote object that lives on the server and mediates the connection
+-	 * with the remote database.
++	 * @param settings	The information that are necessary for the Database Layer creation.
++	 * @return The newly constructed Database Layer.
+ 	 */
+ 	public synchronized DBLayer create(DBInfo settings) 
+ 	throws RemoteException, NotBoundException, DBLayerException {
+-		// Some exceptional cases are handled specially.
+ 		String host = settings.getHost();
+ 		
+ 		// ~~~ LOCAL CONNECTION ~~~
+-		if(host == null || host.equals(&quot;&quot;) /*|| host.equalsIgnoreCase(&quot;localhost&quot;)*/) {
++		if( host == null || host.equals(&quot;&quot;) ) {
+ 			
+ 			DatabaseSettings dbSettings = new DatabaseSettings(
+ 					settings.getDatabaseType(),
+@@ -132,7 +147,7 @@
+ 	}
+ 
+ 	/**
+-	 * Destroy a DBLayer instance. This is necessary for remote DBLayers, 
++	 * Destroy a Database Layer. This is necessary especially with remote DBLayers, 
+ 	 * because the server keeps track of all connected clients
+ 	 * and has a certain limit of how many clients can be connected simultaneously.
+ 	 * Therefore we should tell the server we want to disconnect from it so as not to
+
+Modified: trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/middleware/RemoteDBLayerFactory.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -9,19 +9,19 @@
+  * Interface for obtaining remote references of the DBLayer objects running on some remote server.
+  * 
+  * @author Erik Kratochv&#237;l
+- * @version 1.0 final
++ * @version 1.0
+  * @since	2006-03-13	
+  */
+ public interface RemoteDBLayerFactory extends Remote {
+ 	
+-	/** The name the Remote Factory will be bound to. */
++	/** The name the Remote Factory will use in the RMIRegistry. */
+ 	static final String ID = &quot;PlantloreRemoteDBLayerFactoryID&quot;;
+ 	
+ 	/** 
+ 	 * Create a new DBLayer on the server and return a remote reference of that object. 
+ 	 * The object is &quot;private&quot; = unique for every client.
+ 	 * 
+-	 * The number of connections from one host is limited as well as the total number of
++	 * The number of connections from one host may be limited as well as the total number of
+ 	 * all clients connected to the server.
+ 	 * 
+ 	 * @see RMIRemoteDBLayerFactory
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -15,7 +15,7 @@
+  *
+  * FIXME Tie metody by asi mali hadzat DBLayerException a prekladat vyhadzovane HibernateExceptions
+  *
+- * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>), Tom&#225;&#353; Kova&#345;&#237;k (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">kovo at matfyz.cz</A>)
++ * @author Tom&#225;&#353; Kova&#345;&#237;k (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">kovo at matfyz.cz</A>)
+  * @since 2006-03-26
+  */
+ public interface SelectQuery extends Serializable, Remote {
+
+Modified: trunk/src/net/sf/plantlore/server/CertificationException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/CertificationException.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/CertificationException.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -1,6 +1,13 @@
+ package net.sf.plantlore.server;
+ 
+-
++/**
++ * The Certification exception states that the access to the Administration
++ * of the Server was denied, usually due to the incorrect authorization key.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-05-30
++ *
++ */
+ public class CertificationException extends Exception {
+ 	
+ 	private static final long serialVersionUID = 2006060411064L;
+
+Modified: trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -6,17 +6,17 @@
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ /**
+- *  Information the particular connection:
++ *  Information about the connection:
+  *  &lt;ul&gt;
+- *  &lt;li&gt;&lt;code&gt;database&lt;/code&gt; = the DBLayer object that mediates the connection to the database&lt;/li&gt;
+- *   &lt;li&gt;&lt;code&gt;stub&lt;/code&gt; = the stub of the DBLayer object that mediates the connection to the database&lt;/li&gt;
+- *  &lt;li&gt;&lt;code&gt;remote factory&lt;/code&gt; = null if the object is created locally or reference of the factory that created the &lt;code&gt;database&lt;/code&gt;&lt;/li&gt;
+- *  &lt;li&gt;&lt;code&gt;client host&lt;/code&gt; = identification of the computer for which the &lt;code&gt;database&lt;/code&gt; was created&lt;/li&gt;
++ * &lt;li&gt;remoteFactory	The RemoteDBLayerFactory that created the remote object.&lt;/li&gt;
++ * &lt;li&gt;db	 The remote object.&lt;/li&gt;
++ * &lt;li&gt;stub The remote reference (stub) of that object.&lt;/li&gt;
++ * &lt;li&gt;description		The description of the connection.&lt;/li&gt;
+  *  &lt;/ul&gt;
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+- * @version 1.0 final
++ * @version 1.0
+  */
+ public class ConnectionInfo implements Serializable {
+ 	
+@@ -26,7 +26,7 @@
+ 	private RemoteDBLayerFactory remoteFactory = null;
+ 	private DBLayer database = null;
+ 	private DBLayer stub = null;
+-	private String clientHost = null;
++	private String description = null;
+ 	
+ 	/**
+ 	 * Create a new record holding the information about the client's connection.
+@@ -34,28 +34,47 @@
+ 	 * @param remoteFactory	The RemoteDBLayerFactory that created the remote object.
+ 	 * @param db	 The remote object.
+ 	 * @param stub The remote reference (stub) of that object.
+-	 * @param client		Host name of the computer where client dwells.
++	 * @param description		The description of the connection.
+ 	 */
+-	public ConnectionInfo(RemoteDBLayerFactory remoteFactory, DBLayer db, DBLayer stub, String client) {
+-		this.remoteFactory = remoteFactory; this.database = db; this.stub = stub; this.clientHost = client;
++	public ConnectionInfo(RemoteDBLayerFactory remoteFactory, DBLayer db, DBLayer stub, String description) {
++		this.remoteFactory = remoteFactory; this.database = db; this.stub = stub; this.description = description;
+ 	}
+ 
+-	/** The name of the host where the client is hiding. */
+-	public String getClientHost() { return clientHost; }
+-	
+-	/** The remote object or remote reference (stub) that allows the client to work with the database. */
+-	public DBLayer getDatabase() { return database; }
+-	
+-	/** The remote factory that created the remote object and returned the stub of it. 
+-	 * If it is null, the object is local. */
+-	public RemoteDBLayerFactory getRemoteFactory() { return remoteFactory; }
+-	
+-	/** Stub. */
+-	public DBLayer getStub() { return stub; }
+-	
++	/** 
++	 * 
++	 * @return	The description of the connection.
++	 */
++	public String getDescription() {
++		return description;
++	}
++
++	/**
++	 * 
++	 * @return The remote object or remote reference (stub) that allows the client to
++	 * work with the database.
++	 */
++	public DBLayer getDatabase() {
++		return database;
++	}
++
++	/**
++	 * @return The remote factory that created the remote object, or null, if the object is local.
++	 */
++	public RemoteDBLayerFactory getRemoteFactory() {
++		return remoteFactory;
++	}
++
++	/** 
++	 * 
++	 * @return	The stub.
++	 */
++	public DBLayer getStub() {
++		return stub;
++	}
++
+ 	@Override
+ 	public String toString() {
+-		return database + &quot; @ &quot; + clientHost;
++		return database + &quot; @ &quot; + description;
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/DatabaseSettings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/DatabaseSettings.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/DatabaseSettings.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -1,5 +1,13 @@
+ package net.sf.plantlore.server;
+ 
++/**
++ * The holder object containing the settings that are needed 
++ * to connect to the database on the server side.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-08-01
++ * @version 1.0
++ */
+ public class DatabaseSettings {
+ 	
+ 	private static final long serialVersionUID = 2006081333004L;
+@@ -9,7 +17,13 @@
+ 	private int port;
+ 	private String database;
+ 	
+-	
++	/**
++	 * Create new Database settings.
++	 * 
++	 * @param database	The database engine.
++	 * @param port	The port where the database listens.
++	 * @param suffix	Additional information that may be required for the connection.
++	 */
+ 	public DatabaseSettings(String database, int port, String suffix) {
+ 		this.connectionStringSuffix = suffix;
+ 		this.database = database;
+@@ -19,16 +33,34 @@
+ 			((port &gt; 0) ? &quot;:&quot;+(Integer.toString(port))+&quot;/&quot; : &quot;/&quot;);
+ 	}
+ 	
+-	
++	/**
++	 * 
++	 * @return The additional information that may be required for the connection
++	 */
+ 	public String getConnectionStringSuffix() {
+ 		return connectionStringSuffix;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The first part of the JDBC connection string created from the supplied data.
++	 */
+ 	public String getConnectionStringPrefix() {
+ 		return connectionStringPrefix;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The database engine.
++	 */
+ 	public String getDatabase() {
+ 		return database;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The port where the database listens.
++	 */
+ 	public int getPort() {
+ 		return port;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/server/Guard.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Guard.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/Guard.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -3,10 +3,31 @@
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
+ 
++/**
++ * An interface that guards the access to the Server
++ * for administration purposes.
++ * &lt;br/&gt;
++ * In order to manage the Server (terminate the Server, view
++ * the list of connected clients, disconnecting the clients, etc.)
++ * the User must pass the authorization procedure and
++ * supply valid authorization key (password).
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-05-30
++ */
+ public interface Guard extends Remote {
+ 	
+ 	final static String ID = &quot;PlantloreRMIServerGuard&quot;;
+ 
++	/**
++	 * In order to connect to the server to administrate it,
++	 * you must pass this certification test. If the authorization information
++	 * fits, the Server will be returned.
++	 * 
++	 * @param authorizationInfo	The password protecting the Server.
++	 * @return	The server if the authorization was correct.
++	 * 
++	 */
+ 	Server certify(String authorizationInfo) throws RemoteException, CertificationException;
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -17,17 +17,21 @@
+ 
+ 
+ /**
+- * Temporary solution.
++ * The entry point when starting the Server. 
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+- * @since 30.3.2006
+- * @version beta not tested
++ * @since 2006-03-30
++ * @version 1.0
+  */
+ public class Plantlore {
+ 	
+ 	private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
+ 	
+-	
++	/**
++	 * Configure the basic components the Server will use, 
++	 * create the GUI and display it.
++	 *
++	 */
+ 	public void run() {
+ 		// Load log4j settings
+ 		try {
+@@ -54,11 +58,7 @@
+ 	}
+ 	
+ 
+-	/**
+-	 * 
+-	 * @param args Controlling the server from the command line:
+-	 * 		start|stop|who|kick=id [host] [port]
+-	 */
++	
+ 	public static void main(String[] args) {
+ 		
+ 		// Set beautiful system look &amp; feel.
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -6,32 +6,37 @@
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
+ import java.util.Hashtable;
+-import net.sf.plantlore.common.exception.DBLayerException;
+ 
+ import org.apache.log4j.Logger;
+ 
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ /**
+- * RMIRemoteDBLayerFactory is responsible for creating and exporting instances of DBLayer.
+- * Remote references to these objects are returned to the caller. All methods are synchronized. 
++ * RMIRemoteDBLayerFactory is responsible for management of Database Layers
++ * on the remote machine. It can create and destroy them, it stores the list of
++ * all created Database Layers (i.e. list of connected clients) and can disconnect the
++ * selected client.
+  * &lt;br/&gt;
+- * The proper way to disconnect all remote clients from the server has these steps:
++ * It is a remote object so clients can connect to this factory and ask it to create 
++ * a Database Layer for them.
++ * &lt;br/&gt;
++ * To stop the RMIRemoteDBLayerFactory properly, one must do the following steps:
+  * &lt;ol&gt;
+- * &lt;li&gt;removing the RemoteDBLayerFactory from the rmiregistry, so that no more clients can obtain a reference
++ * &lt;li&gt;Remove the RemoteDBLayerFactory from the rmiregistry, so that no more clients can obtain a reference
+  * of the factory and ask it for creating a new dblayer&lt;/li&gt;
+- * &lt;li&gt;unexporting the RemoteDBLayerFactory, so that it cannot accept remote calls, so that all clients that
++ * &lt;li&gt;Unexport the RemoteDBLayerFactory, so that it cannot accept remote calls, so that all clients that
+  * have a remote reference of this factory cannot ask it for another dblayer&lt;/li&gt;
+- * &lt;li&gt;&quot;kicking&quot; all currently connected users by unexporting their dblayer remote objects, which will terminate their
+- * connections effectively&lt;/li&gt;
++ * &lt;li&gt;&quot;Kick&quot; all currently connected users by unexporting their dblayer remote objects, 
++ * which will terminate their connections for good.&lt;/li&gt;
+  * &lt;/ol&gt;
+  * 
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+- * @version 1.0  final
++ * @version 1.0
+  */
+ public class RMIRemoteDBLayerFactory extends UnicastRemoteObject
+ 	implements RemoteDBLayerFactory {
+@@ -50,9 +55,11 @@
+ 	
+ 	/** 
+ 	 * Create a new RMIDBLayerFactory.
+-	 * @throws RemoteException If the RMI encounters an error.
++	 * 
++	 * @param settings The settings of the server. 
+ 	 */
+-	public RMIRemoteDBLayerFactory(ServerSettings settings) throws RemoteException {
++	public RMIRemoteDBLayerFactory(ServerSettings settings) 
++	throws RemoteException {
+ 		this.settings = settings;
+ 		clients = new Hashtable&lt;DBLayer, ConnectionInfo&gt;( settings.getConnectionsTotal() );
+ 		undertaker = new RMIUndertaker();
+@@ -62,9 +69,10 @@
+ 	/** 
+ 	 * Return information about connected clients.
+ 	 * 
+-	 *  @return Collection holding information about currently connected clients.
++	 *  @return The list of currently connected clients.
+ 	 */
+-	protected synchronized ConnectionInfo[] getClients() {
++	protected synchronized ConnectionInfo[] getClients() 
++	throws RemoteException {
+ 		Collection&lt;ConnectionInfo&gt; currentlyConnectedClients = clients.values();
+ 		if(currentlyConnectedClients != null) 
+ 			return currentlyConnectedClients.toArray(new ConnectionInfo[0]);
+@@ -84,21 +92,21 @@
+ 		
+ 		int c = 0;
+ 		for(ConnectionInfo info : clients.values())
+-			if(info.getClientHost().equalsIgnoreCase(host)) 
++			if(info.getDescription().equalsIgnoreCase(host)) 
+ 				c++; // HA! C++ in Java! Strange!
+ 		return (c &lt; settings.getConnectionsPerIP());
+ 	}
+ 	
+ 	/**
+ 	 * Create a new remote object, export it so that the object can accept remote calls, and return the
+-	 * stub of this object. The creation of new connection must adhere to the connection policy.
++	 * stub of this object. The creation of new connection must abide by the connection policy.
+ 	 * 
+ 	 * @return Remote reference (stub) of the remote DBLayer object or 
+ 	 * &lt;b&gt;null&lt;/b&gt; if the server doesn't approve of creating the DBLayer
+ 	 * (too many connections from this IP or too many clients connected). 
+-	 * @throws RemoteException If the RMI encounters an error.
+ 	 */
+-	public synchronized DBLayer create() throws RemoteException, DBLayerException {
++	public synchronized DBLayer create()
++	throws RemoteException {
+ 		// Apply the connection policy ~ see AllowConnection(host)
+ 		String clientHost = &quot;unknown&quot;;
+ 		try { clientHost = RemoteServer.getClientHost(); } 
+@@ -108,22 +116,21 @@
+ 		// Connection policy
+ 		if( !allowConnection(clientHost) ) {
+ 			logger.warn(&quot;Too many connections from &quot; + clientHost + &quot; (or the server is full)!&quot;);
+-			throw new DBLayerException(&quot;There are either too many connections or the server is already full!&quot;);
++			throw new RemoteException(L10n.getString(&quot;Error.TooManyConnections&quot;));
+ 		}
+ 		
+ 		// Create a new DBLayer, export it, and keep the stub. Also set the Undertaker of this object.
+ 		logger.debug(&quot;Creating a new HibernateDBLayer ...&quot;);
+ 		DBLayer database = new HibernateDBLayer( undertaker, settings.getDatabaseSettings() );
+-		logger.debug(&quot;[Success] DBLayer created.&quot;);
+ 		
+ 		
+ 		DBLayer stub = null;
+ 		try {
+ 			logger.debug(&quot;Exporting the database layer...&quot;);
+ 			stub = (DBLayer) UnicastRemoteObject.exportObject(database);
+-			logger.debug(&quot;[Success] DBLayer exported.&quot;);
++			logger.debug(&quot;DBLayer exported.&quot;);
+ 		} catch(RemoteException e) {
+-			logger.error(&quot;[Failure] Unable to export the DBLayer. Is the `codebase` set properly? Are stubs generated properly? &quot; + e.getMessage());
++			logger.error(&quot;Unable to export the DBLayer. Is the `codebase` set properly? Are stubs generated properly? &quot; + e.getMessage());
+ 			throw e;
+ 		}
+ 		
+@@ -142,10 +149,11 @@
+ 	 * Make sure the DBLayer performs some cleanup.  
+ 	 * 
+ 	 * @param db	The DBLayer object (not stub!) that should be disconnected.
+-	 * @throws RemoteException If the RMI encounters an error.
+ 	 */	
+-	void disconnect(DBLayer db)  throws RemoteException {
+-		assert(db != null);
++	void disconnect(DBLayer db)  
++	throws RemoteException {
++		if(db == null)
++			return;
+ 		
+ 		// Let the database layer perform some cleanup.
+ 		db.shutdown();
+@@ -161,9 +169,9 @@
+ 	 * (and remove it from the list of connected clients).
+ 	 * 
+ 	 * @param stub The remote reference to the remote object that is to be destroyed.
+-	 * @throws RemoteException If the RMI encounters an error.
+ 	 */	
+-	public synchronized void destroy(DBLayer stub) throws RemoteException {
++	public synchronized void destroy(DBLayer stub) 
++	throws RemoteException {
+ 		if(stub == null) return;
+ 		ConnectionInfo info = clients.remove(stub);
+ 		if(info != null) 
+@@ -186,7 +194,7 @@
+ 	
+ 	/** 
+ 	 * Take care of DBLayer whose client has &quot;crashed&quot;.
+-	 * Ensure this database layer is properly disconnected.
++	 * Ensure this database layer is properly destroyed.
+ 	 * 
+ 	 * @see destroy 
+ 	 */
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -15,22 +15,24 @@
+ import net.sf.plantlore.server.tools.*;
+ 
+ /**
++ *
++ *  The RMIServer starts and terminates the server, 
++ *  that is: it creates and exports/unexports the RemoteDBLayerFactory.  
+  *  
+- * &lt;br/&gt;
+- *  The server is terminated
+- *  &lt;=&gt; 
+- *  All remote objects that have been exported are unexported.
+- *  
+- * @see RemoteDBLayerFactory, RMIDBLayerFactory
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-11
+  * @version 1.0
++ * 
++ * @see net.sf.plantlore.middleware.RemoteDBLayerFactory
+  */
+ public class RMIServer extends UnicastRemoteObject implements Server {
+ 	
+ 	private static final long serialVersionUID = 2006060433819775L;
+ 	
+-	/** The default port where the rmiregistry listens. To that rmiregistry the RemoteDBLayerFactory will be bound to. */
++	/** 
++	 * The default port where the rmiregistry listens. 
++	 * To that rmiregistry the RemoteDBLayerFactory will be bound. 
++	 */
+ 	public static final int DEFAULT_PORT = Registry.REGISTRY_PORT;
+ 	
+ 	
+@@ -43,7 +45,12 @@
+ 
+ 
+ 	
+-	/** Create a new instance of RMIServer running on the specified port. */
++	/** 
++	 * Create a new instance of the server based on the supplied settings.
++	 * 
++	 * @param settings		The settings of the server.
++	 * @param password	The password protecting the access to the server.
++	 */
+ 	public RMIServer(ServerSettings settings, String password) 
+ 	throws RemoteException, AlreadyBoundException {
+ 		logger = Logger.getLogger(this.getClass().getPackage().getName());
+@@ -54,11 +61,20 @@
+ 		RMI.bind(settings.getPort(), guard, Guard.ID);
+ 	}
+ 	
+-	/** Get the information about the connected clients. */
+-	public synchronized ConnectionInfo[] getClients() {
++	/** 
++	 * Get the list of currently connected clients. 
++	 */
++	public synchronized ConnectionInfo[] getClients() 
++	throws RemoteException {
+ 		if(remoteFactory == null) 
+ 			return null;
+-		return remoteFactory.getClients(); 
++		try {
++			return remoteFactory.getClients();
++		}
++		catch(RemoteException e) {
++			logger.error(&quot;Unable to obtain the list of connected clients. &quot; + e.getMessage());
++			throw e;
++		}
+ 	}
+ 
+ 	/**
+@@ -66,22 +82,24 @@
+ 	 * 
+ 	 * @param client The client to be kicked.
+ 	 */
+-	public synchronized void disconnect(ConnectionInfo client) {
++	public synchronized void disconnect(ConnectionInfo client) 
++	throws RemoteException {
+ 		try { 
+-			remoteFactory.destroy(client.getStub()); 
++			remoteFactory.destroy( client.getStub() );  
+ 		} catch(RemoteException e) { 
+ 			logger.error(&quot;Unable to disconnect the client. &quot; + e.getMessage());
+-			e.printStackTrace();
++			throw e;
+ 		}
+ 	}
+ 	
+ 	/** 
+ 	 * Bind a new RemoteDBLayerFactory to the rmiregistry on the specified &lt;code&gt;port&lt;/code&gt;. 
+-	 * If the rmiregistry is not currently running on that port, it will be created. 
++	 * If the rmiregistry is not currently running on that port, it will be started. 
+ 	 * 
+ 	 * @throws AlreadyBoundException If another RemoteDBLayerFactory is already bound to the rmiregistry. 
+ 	 */
+-	public synchronized void start() throws AlreadyBoundException {
++	public synchronized void start() 
++	throws AlreadyBoundException, RemoteException {
+ 		try {
+ 			
+ 			int timeout = Math.min(Math.max(1, settings.getTimeout()), 30) * 60000;
+@@ -89,32 +107,32 @@
+ 
+ 			// Locate (or start) the rmiregistry on the specified port
+ 			Registry registry;
+-			try {	registry = LocateRegistry.createRegistry(settings.getPort()); }
+-			catch(Exception e) { registry = LocateRegistry.getRegistry(settings.getPort()); }
++			try {	
++				registry = LocateRegistry.createRegistry(settings.getPort()); 
++			}
++			catch(Exception e) { 
++				registry = LocateRegistry.getRegistry(settings.getPort()); 
++			}
+ 			// Create a new factory or reuse an existing one.
+-			if(remoteFactory == null) remoteFactory = new RMIRemoteDBLayerFactory( settings );
++			if(remoteFactory == null) 
++				remoteFactory = new RMIRemoteDBLayerFactory( settings );
+ 			// Bind the factory to the rmiregistry. 
+ 			registry.bind(RemoteDBLayerFactory.ID, remoteFactory);
+ 
+-			
+-			// Nemel by server exportnout i sebe??
+-
+-			
+ 			logger.info(&quot;The RemoteDBLayerFactory has been bound to the rmiregistry.&quot;);
+ 		}
+ 		catch(RemoteException e) { 
+ 			logger.error(&quot;Unable to start the server. &quot; + e.getMessage());
+-			e.printStackTrace();
++			throw e;
+ 		}
+ 	}
+ 	
+ 	/** 
+ 	 * Unbind the RemoteDBLayerFactory from the rmiregistry on the specified &lt;code&gt;port&lt;/code&gt;. 
+-	 * The rmiregistry on the specified port is &lt;b&gt;not&lt;/b&gt; stopped, because some other programs may be still
+-	 * using it!&lt;br/&gt;
+-	 * This will terminate the server completely.
++	 * This will terminate the server completely (all clients will be disconnected immediately).
+ 	 */
+-	public synchronized void stop() {
++	public synchronized void stop() 
++	throws RemoteException {
+ 		if(remoteFactory == null) return;
+ 		try {
+ 			// 1. Unbind the RemoteDBLayerFactory from the rmiregistry 
+@@ -143,18 +161,7 @@
+ 		}
+ 		catch(Exception e) { 
+ 			logger.error(&quot;Unable to stop the server. &quot; + e.getMessage());
+-			e.printStackTrace();
+ 		}
+ 	}
+ 
+-	
+-	
+-	
+-	
+-	/** Static initialization. */
+-	static {
+-		//RMI.addToCodebase( System.getProperty(&quot;user.dir&quot;) + &quot;/&quot; );
+-	}
+-	
+-
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServerControl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -3,6 +3,20 @@
+ import java.rmi.RemoteException;
+ import java.rmi.server.UnicastRemoteObject;
+ 
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ * The Server Control guards the access to the Server 
++ * and prevents unauthorized Users from shutting it down.
++ * In order to manage the Server (terminate the Server, view
++ * the list of connected clients, disconnecting the clients)
++ * the User must pass the authorization procedure and
++ * supply valid authorization key (password).
++ * 
++ * @author Erik Kratochv&#237;l
++ * @since 2006-05-30
++ * @version 1.0
++ */
+ public class RMIServerControl extends UnicastRemoteObject implements Guard {
+ 	
+ 	private static final long serialVersionUID = 2006060433140537L;
+@@ -10,15 +24,28 @@
+ 	private Server server;
+ 	private String password;
+ 
++	/**
++	 * Create a new Guard of the Server.
++	 * 
++	 * @param server	The Server that shall be protected.
++	 * @param password	The authorization key protecting the access to the Server.
++	 */
+ 	public RMIServerControl(Server server, String password) throws RemoteException {
+ 		this.server = server;
+ 		this.password = password;
+ 	}
+ 	
++	/**
++	 * The certification procedure. If the supplied authorization information
++	 * matches the password protecting the Server, the Server is returned
++	 * (Server is the interface for managing the Plantlore Server).
++	 * 
++	 * @return The Server if the 
++	 */
+ 	public Server certify(String authorizationInfo) throws RemoteException, CertificationException {
+ 		if(authorizationInfo.equals(password)) 
+ 			return server;
+-		throw new CertificationException(&quot;Wrong password.&quot;);
++		throw new CertificationException(L10n.getString(&quot;Error.WrongAuthorizationKey&quot;));
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -41,7 +41,7 @@
+  *  
+  *  TODO: Nezapominat generovat stub! (rmic net.sf.plantlore.server.SelectQueryImplementation)
+  *
+- * @author Tom&#225;&#353; Kova&#345;&#237;k, Erik Kratochv&#237;l
++ * @author Tom&#225;&#353; Kova&#345;&#237;k
+  */
+ public class SelectQueryImplementation implements SelectQuery {
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/Server.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Server.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/Server.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -6,19 +6,18 @@
+ import java.rmi.RemoteException;
+ 
+ /**
+- * Server management.
++ * An interface for the server management.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-03-29
+- * @version 1.0 final
++ * @version 1.0
+  */
+ public interface Server extends Remote, Serializable {
+ 	
+ 	/**
+-	 * Return a collection of currently connected clients.
++	 * Return a list of currently connected clients.
+ 	 * 
+ 	 * @return Currently connected clients.
+-	 * @throws RemoteException	if the RMI encounters an error (network/server).
+ 	 */
+ 	ConnectionInfo[]	getClients() throws RemoteException;
+ 	
+@@ -26,22 +25,18 @@
+ 	 * &quot;Kick&quot; the specified client. The client is disconnected immediately.
+ 	 * 
+ 	 * @param client The client to be kicked from the server.
+-	 * @throws RemoteException if the RMI encounters an error (network/server).
+ 	 */
+ 	void disconnect(ConnectionInfo client) throws RemoteException;
+ 	
+ 	/**
+-	 * Run the server on the specified port.
++	 * Start the server.
+ 	 * 
+-	 * @throws RemoteException if the RMI encounters an error (network/server).
+-	 * @throws AlreadyBoundException if another server is already running on the specified port.
+ 	 */
+ 	void start() throws RemoteException, AlreadyBoundException;
+ 	
+ 	/**
+ 	 * Terminate the server. 
+ 	 * 
+-	 * @throws RemoteException if the RMI encounters an error (network/server).
+ 	 */
+ 	void stop() throws RemoteException;
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/ServerSettings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -1,5 +1,13 @@
+ package net.sf.plantlore.server;
+ 
++/**
++ * The holder object containing the settings  
++ * needed to start a new server.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-08-01
++ * @version 1.0
++ */
+ public class ServerSettings {
+ 
+ 	private int port;
+@@ -8,7 +16,17 @@
+ 	private int connectionsPerIP;
+ 	private DatabaseSettings databaseSettings;
+ 	
+-	
++	/**
++	 * Create new Server Settings.
++	 * 
++	 * @param port	The port number where the listens.
++	 * @param timeout	The ammount of time after which the crashed client's database layer
++	 * is automatically destroyed. 
++	 * @param connectionsTotal	The maximum number of clients connected to the server simultaneously.
++	 * @param connectionsPerIP	The maximum number of clients connected to the server 
++	 * simultaneously from the same IP address.
++	 * @param databaseSettings		The settings describing the connection to the database.
++	 */
+ 	public ServerSettings(int port, int timeout, int connectionsTotal, int connectionsPerIP, DatabaseSettings databaseSettings) {
+ 		this.port = port;
+ 		this.timeout = timeout;
+@@ -17,18 +35,44 @@
+ 		this.databaseSettings = databaseSettings;
+ 	}
+ 
++	/**
++	 * 
++	 * @return	The maximum number of clients connected to the server 
++	 * simultaneously from the same IP address.
++	 */
+ 	public int getConnectionsPerIP() {
+ 		return connectionsPerIP;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The maximum number of clients connected to the server simultaneously.
++	 */
+ 	public int getConnectionsTotal() {
+ 		return connectionsTotal;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The settings describing the connection to the database.
++	 */
+ 	public DatabaseSettings getDatabaseSettings() {
+ 		return databaseSettings;
+ 	}
++	
++	/**
++	 * 
++	 * @return		The port number where the listens.
++	 */
+ 	public int getPort() {
+ 		return port;
+ 	}
++	
++	/**
++	 * 
++	 * @return	The ammount of time after which the crashed client's database layer
++	 * is automatically destroyed. 
++	 */
+ 	public int getTimeout() {
+ 		return timeout;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/server/Undertaker.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Undertaker.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/Undertaker.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -3,11 +3,13 @@
+ import net.sf.plantlore.middleware.DBLayer;
+ 
+ /**
+- * The Undertaker can properly bury DBLayers, that were not properly destroyed. 
++ * The Undertaker can destroy stranded DBLayers properly.
++ * A Database Layer is considered stranded if the client, for whom it was created,
++ * crashes or the network connection is lost. 
+  *   
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-03-26
+- * @version 1.0 final
++ * @version 1.0 
+   */
+ public interface Undertaker {
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -2,9 +2,11 @@
+ 
+ import java.awt.event.ActionEvent;
+ 
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.common.Task;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.server.DatabaseSettings;
+ import net.sf.plantlore.server.RMIServer;
+ import net.sf.plantlore.server.ServerSettings;
+@@ -61,7 +63,13 @@
+ 					
+ 					// Create and run a new server.
+ 					Task createServer = model.createNewServerTask( serverPassword );
+-					new DefaultProgressBar(createServer, view, true);
++					new DefaultProgressBar(createServer, view, true) {
++						@Override
++						public void exceptionHandler(Exception ex) {
++							getTask().stop();
++							DefaultExceptionHandler.handle(parent, ex, L10n.getString(&quot;Error.CannotStartServer&quot;), true);
++						}
++					};
+ 					createServer.start();
+ 					
+ 					break;
+@@ -79,7 +87,13 @@
+ 					
+ 					Task connectToServer = model.createConnectToRunningServerTask(
+ 							view.remoteHost.getText(), port, password );
+-					new DefaultProgressBar(connectToServer, view, true);
++					new DefaultProgressBar(connectToServer, view, true) {
++						@Override
++						public void exceptionHandler(Exception ex) {
++							getTask().stop();
++							DefaultExceptionHandler.handle(parent, ex, L10n.getString(&quot;Error.CannotConnectToTheServer&quot;), true);
++						}
++					};
+ 					connectToServer.start();
+ 					
+ 					break;
+
+Modified: trunk/src/net/sf/plantlore/server/tools/RMI.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-09-02 17:28:37 UTC (rev 634)
++++ trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-09-02 20:30:53 UTC (rev 635)
+@@ -13,7 +13,7 @@
+ 	public static final String PROPERTY_CODEBASE = &quot;java.rmi.server.codebase&quot;;
+ 	public static final String PROPERTY_LEASEVALUE = &quot;java.rmi.dgc.leaseValue&quot;;
+ 	
+-	
++
+ 	public static void bind(Remote object, String name) 
+ 	throws RemoteException, AccessException, AlreadyBoundException {
+ 		
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000890.html">[Plantlore-dev] How to: run (selected) file v Netbeansech i ve	freeform projektu	(tj. s vlastnim build.xml)
+</A></li>
+	<LI>Next message: <A HREF="000892.html">[Plantlore-dev] r636 - trunk
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#891">[ date ]</a>
+              <a href="thread.html#891">[ thread ]</a>
+              <a href="subject.html#891">[ subject ]</a>
+              <a href="author.html#891">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

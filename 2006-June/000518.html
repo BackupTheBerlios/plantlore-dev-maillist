@@ -1,0 +1,691 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r422 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r422%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606012003.k51K32RR022828%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000517.html">
+   <LINK REL="Next"  HREF="000519.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r422 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r422%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606012003.k51K32RR022828%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r422 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 22:03:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000517.html">[Plantlore-dev] r421 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000519.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#518">[ date ]</a>
+              <a href="thread.html#518">[ thread ]</a>
+              <a href="subject.html#518">[ subject ]</a>
+              <a href="author.html#518">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-01 22:03:00 +0200 (Thu, 01 Jun 2006)
+New Revision: 422
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented [ Bug #7708 ] Easier adding of many occurrences for the same authors.
+In the process fixed AddEdit so that it is again possible not to enter not required items.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-01 20:03:00 UTC (rev 422)
+@@ -106,6 +106,7 @@
+     //helper variable to avoid recursion potentially caused by phytCode and phytName updates
+     private Boolean skipUpdate = false;
+     private Boolean editMode = false;
++    private Boolean preloadAuthors = false;
+     
+     
+     /** Creates a new instance of AddEdit */
+@@ -1215,7 +1216,8 @@
+     //the not null values are forced by calling checkData before store()
+     public void clear() {
+         logger.debug(&quot;Clearing add model&quot;);
+-        clearAuthors();
++        if (! preloadAuthors)
++            clearAuthors();
+         habitatDescription = null;
+         year = Calendar.getInstance().get(Calendar.YEAR);
+         habitatNote = null;
+@@ -1235,7 +1237,10 @@
+         setChanged();
+         notifyObservers(&quot;CLEAR&quot;);
+     }
+-    
++ 
++    public void setPreloadAuthorsEnabled(boolean preloadAuthors) {
++        this.preloadAuthors = preloadAuthors;
++    }
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-06-01 20:03:00 UTC (rev 422)
+@@ -31,6 +31,7 @@
+ import javax.swing.AbstractAction;
+ import javax.swing.DefaultCellEditor;
+ import javax.swing.JButton;
++import javax.swing.JCheckBox;
+ import javax.swing.JComboBox;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
+@@ -116,6 +117,8 @@
+         view.cancelButton.addMouseListener(new CancelButtonListener());
+         view.helpButton.addMouseListener(new HelpButtonListener());
+         view.checklistButton.setAction(new ChecklistAction());
++        
++        view.preloadAuthorsCheckBox.addActionListener(new PreloadCheckBox());
+     }
+     
+     
+@@ -509,5 +512,11 @@
+         }
+     }//HelpButtonListener
+     
++    class PreloadCheckBox implements ActionListener {
++        public void actionPerformed(ActionEvent e) {
++            JCheckBox cb = (JCheckBox) e.getSource();
++            model.setPreloadAuthorsEnabled(cb.isSelected());
++        }        
++    }
+ }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-06-01 20:03:00 UTC (rev 422)
+@@ -278,10 +278,10 @@
+           &lt;/Border&gt;
+         &lt;/Property&gt;
+         &lt;Property name=&quot;minimumSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-          &lt;Dimension value=&quot;[800, 490]&quot;/&gt;
++          &lt;Dimension value=&quot;[800, 510]&quot;/&gt;
+         &lt;/Property&gt;
+         &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-          &lt;Dimension value=&quot;[800, 490]&quot;/&gt;
++          &lt;Dimension value=&quot;[800, 510]&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;Constraints&gt;
+@@ -293,31 +293,31 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jPanel10&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;102&quot; attributes=&quot;1&quot;&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;/Group&gt;
+-                              &lt;Component id=&quot;jPanel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;jPanel5&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;Component id=&quot;jPanel7&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -325,26 +325,23 @@
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jPanel5&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel7&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;jPanel1&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jPanel1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Component id=&quot;jPanel9&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;/Group&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;288&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;274&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jPanel4&quot; min=&quot;0&quot; pref=&quot;168&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel10&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
++                  &lt;EmptySpace pref=&quot;283&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -382,8 +379,8 @@
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;dayLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;dayChooser&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dayChooser&quot; pref=&quot;140&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -810,7 +807,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;190&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;200&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1062,7 +1059,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;190&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;200&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1098,11 +1095,70 @@
+             &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;requiredInfoLabel&quot;&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel10&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;requiredInfoLabel&quot;/&gt;
++            &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++              &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++                &lt;TitledBorder title=&quot;Info&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.InfoPanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/TitledBorder&gt;
++              &lt;/Border&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+-        &lt;/Component&gt;
++
++          &lt;Layout&gt;
++            &lt;DimensionLayout dim=&quot;0&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;314&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace pref=&quot;241&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;preloadAuthorsCheckBox&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++            &lt;DimensionLayout dim=&quot;1&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;90&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;preloadAuthorsCheckBox&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++          &lt;/Layout&gt;
++          &lt;SubComponents&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;requiredInfoLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;requiredInfoLabel&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JCheckBox&quot; name=&quot;preloadAuthorsCheckBox&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.PreloadAuthors&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
++                &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++                  &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
++                    &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
++                  &lt;/Border&gt;
++                &lt;/Property&gt;
++                &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
++                  &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel8&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-06-01 20:03:00 UTC (rev 422)
+@@ -44,7 +44,7 @@
+     private Logger logger;
+     private static final int DIALOG_WIDTH = 890;
+     private static final String REQUIRED_STRING  = &quot;(*)&quot;;
+-    private boolean visible=false;
++    private boolean visible=true;
+     private AddEdit model;
+     private boolean inEditMode = false;
+     private boolean inAddMode = true;
+@@ -69,6 +69,12 @@
+         //if (inEditMode)
+         //    loadComponentData();
+         
++        if (inEditMode)
++            preloadAuthorsCheckBox.setVisible(false);
++        else
++            preloadAuthorsCheckBox.setVisible(true);
++        
++        extendedButton.setVisible(false); //the button is of no use... the analysis didn't count on NotNull items in the extended part...
+         jPanel3.setVisible(visible);
+         jPanel2.setPreferredSize(new Dimension(DIALOG_WIDTH,190));
+         jPanel8.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+@@ -145,7 +151,9 @@
+         jPanel9 = new javax.swing.JPanel();
+         jScrollPane5 = new javax.swing.JScrollPane();
+         occurrenceNoteArea = new javax.swing.JTextArea();
++        jPanel10 = new javax.swing.JPanel();
+         requiredInfoLabel = new javax.swing.JLabel();
++        preloadAuthorsCheckBox = new javax.swing.JCheckBox();
+         jPanel8 = new javax.swing.JPanel();
+         cancelButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+@@ -269,8 +277,8 @@
+         getContentPane().add(jPanel2, java.awt.BorderLayout.NORTH);
+ 
+         jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.ExtendedData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+-        jPanel3.setMinimumSize(new java.awt.Dimension(800, 490));
+-        jPanel3.setPreferredSize(new java.awt.Dimension(800, 490));
++        jPanel3.setMinimumSize(new java.awt.Dimension(800, 510));
++        jPanel3.setPreferredSize(new java.awt.Dimension(800, 510));
+         jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.TimePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         monthLabel.setText(&quot;Month:&quot;);
+ 
+@@ -303,8 +311,8 @@
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(dayLabel)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(dayChooser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .add(dayChooser, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 140, Short.MAX_VALUE)
++                .addContainerGap())
+         );
+         jPanel4Layout.setVerticalGroup(
+             jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -478,7 +486,7 @@
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 190, Short.MAX_VALUE)
++                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel7Layout.setVerticalGroup(
+@@ -587,7 +595,7 @@
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 190, Short.MAX_VALUE)
++                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel9Layout.setVerticalGroup(
+@@ -597,51 +605,77 @@
+                 .addContainerGap())
+         );
+ 
++        jPanel10.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;AddEdit.InfoPanel&quot;)));
+         requiredInfoLabel.setText(&quot;requiredInfoLabel&quot;);
+ 
++        preloadAuthorsCheckBox.setText(L10n.getString(&quot;AddEdit.PreloadAuthors&quot;));
++        preloadAuthorsCheckBox.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        preloadAuthorsCheckBox.setMargin(new java.awt.Insets(0, 0, 0, 0));
++
++        org.jdesktop.layout.GroupLayout jPanel10Layout = new org.jdesktop.layout.GroupLayout(jPanel10);
++        jPanel10.setLayout(jPanel10Layout);
++        jPanel10Layout.setHorizontalGroup(
++            jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel10Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(requiredInfoLabel)
++                .addContainerGap(314, Short.MAX_VALUE))
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel10Layout.createSequentialGroup()
++                .addContainerGap(241, Short.MAX_VALUE)
++                .add(preloadAuthorsCheckBox)
++                .addContainerGap())
++        );
++        jPanel10Layout.setVerticalGroup(
++            jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel10Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(requiredInfoLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 90, Short.MAX_VALUE)
++                .add(preloadAuthorsCheckBox)
++                .addContainerGap())
++        );
++
+         org.jdesktop.layout.GroupLayout jPanel3Layout = new org.jdesktop.layout.GroupLayout(jPanel3);
+         jPanel3.setLayout(jPanel3Layout);
+         jPanel3Layout.setHorizontalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(jPanel3Layout.createSequentialGroup()
+-                .add(12, 12, 12)
+-                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel3Layout.createSequentialGroup()
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel3Layout.createSequentialGroup()
+                         .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(requiredInfoLabel))
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
+-                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                        .add(jPanel10, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(jPanel3Layout.createSequentialGroup()
++                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel3Layout.createSequentialGroup()
+                                 .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                                 .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+-                            .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                            .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                             .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                            .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+-                .addContainerGap())
++                            .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
++                .add(2, 2, 2))
+         );
+         jPanel3Layout.setVerticalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                    .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                        .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                        .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(jPanel3Layout.createSequentialGroup()
+-                        .add(requiredInfoLabel)
+-                        .add(288, 288, 288))
+-                    .add(jPanel3Layout.createSequentialGroup()
+-                        .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .add(274, 274, 274))))
++                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(jPanel4, 0, 168, Short.MAX_VALUE)
++                    .add(jPanel10, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap(283, Short.MAX_VALUE))
+         );
+         getContentPane().add(jPanel3, java.awt.BorderLayout.CENTER);
+ 
+@@ -808,7 +842,10 @@
+     }
+     
+     public void clearComponentData() {
+-        resetAuthorModel(); initAuthorTable();
++        if ( ! preloadAuthorsCheckBox.isSelected() ) {
++            resetAuthorModel(); initAuthorTable();
++        }
++        
+         townComboBox.setSelectedIndex(-1);
+         taxonTextArea.setText(&quot;&quot;);
+         descriptionArea.setText(&quot;&quot;);
+@@ -973,7 +1010,7 @@
+                 if (model.getVillages() == null)
+                     townComboBox.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    townComboBox.setModel(new DefaultComboBoxModel(model.getVillages()));;                
++                    townComboBox.setModel(new DefaultComboBoxModel(model.getVillages()));          
+             }
+             
+             if (s.equals(&quot;TERRITORIES_CHANGED&quot;)) {
+@@ -981,7 +1018,7 @@
+                 if (model.getTerritories() == null)
+                     territoryNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    territoryNameCombo.setModel(new DefaultComboBoxModel(model.getTerritories()));;                                
++                    territoryNameCombo.setModel(new DefaultComboBoxModel(model.getTerritories()));                            
+             }
+ 
+             if (s.equals(&quot;PHYTNAMES_CHANGED&quot;)) {
+@@ -989,7 +1026,7 @@
+                 if (model.getPhytNames() == null)
+                     phytNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    phytNameCombo.setModel(new DefaultComboBoxModel(model.getPhytNames()));;                                
++                    phytNameCombo.setModel(new DefaultComboBoxModel(model.getPhytNames()));                         
+             }
+ 
+             if (s.equals(&quot;PHYTCODES_CHANGED&quot;)) {
+@@ -997,7 +1034,7 @@
+                 if (model.getPhytCodes() == null)
+                     phytCodeCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    phytCodeCombo.setModel(new DefaultComboBoxModel(model.getPhytCodes()));;                                
++                    phytCodeCombo.setModel(new DefaultComboBoxModel(model.getPhytCodes()));                          
+             }
+ 
+             if (s.equals(&quot;COUNTRIES_CHANGED&quot;)) {
+@@ -1005,7 +1042,8 @@
+                 if (model.getCountries() == null)
+                     phytCountryCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    phytCountryCombo.setModel(new DefaultComboBoxModel(model.getCountries()));;                                
++                    phytCountryCombo.setModel(new DefaultComboBoxModel(model.getCountries()));       
++                phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);
+             }
+             
+             if (s.equals(&quot;SOURCES_CHANGED&quot;)) {
+@@ -1013,7 +1051,8 @@
+                 if (model.getSources() == null)
+                     sourceCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    sourceCombo.setModel(new DefaultComboBoxModel(model.getSources()));;                                
++                    sourceCombo.setModel(new DefaultComboBoxModel(model.getSources()));
++                sourceCombo.insertItemAt(model.EMPTY_STRING,0);
+             }
+             
+             if (s.equals(&quot;PUBLICATIONS_CHANGED&quot;)) {
+@@ -1021,7 +1060,8 @@
+                 if (model.getPublications() == null)
+                     publicationCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    publicationCombo.setModel(new DefaultComboBoxModel(model.getPublications()));;                                
++                    publicationCombo.setModel(new DefaultComboBoxModel(model.getPublications()));
++                publicationCombo.insertItemAt(model.EMPTY_PAIR,0);
+             }
+ 
+             if (s.equals(&quot;PROJECTS_CHANGED&quot;)) {
+@@ -1029,7 +1069,7 @@
+                 if (model.getProjects() == null)
+                     projectCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
+                 else
+-                    projectCombo.setModel(new DefaultComboBoxModel(model.getProjects()));;                                
++                    projectCombo.setModel(new DefaultComboBoxModel(model.getProjects()));                              
+             }
+             
+         }
+@@ -1055,6 +1095,7 @@
+     protected javax.swing.JLabel herbariumLabel;
+     protected javax.swing.JTextField herbariumTextField;
+     protected javax.swing.JPanel jPanel1;
++    private javax.swing.JPanel jPanel10;
+     protected javax.swing.JPanel jPanel2;
+     private javax.swing.JPanel jPanel3;
+     protected javax.swing.JPanel jPanel4;
+@@ -1083,6 +1124,7 @@
+     protected javax.swing.JComboBox phytNameCombo;
+     protected javax.swing.JLabel phytNameLabel;
+     protected javax.swing.JLabel placeDescriptionLabel;
++    protected javax.swing.JCheckBox preloadAuthorsCheckBox;
+     protected javax.swing.JComboBox projectCombo;
+     protected javax.swing.JLabel projectLabel;
+     protected javax.swing.JComboBox publicationCombo;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-01 20:03:00 UTC (rev 422)
+@@ -394,7 +394,9 @@
+     }
+     
+     public String[] loadAuthorRoles() throws DBLayerException, RemoteException {
+-        SelectQuery sq;
++        authorRoles = new String[] {&quot;collected&quot;,&quot;revised&quot;,&quot;other&quot;};
++        return authorRoles;
++        /*SelectQuery sq;
+         int resultid;
+         int resultsCount;
+         Object[] records;
+@@ -416,7 +418,7 @@
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; author roles.&quot;);
+         setChanged(); notifyObservers(&quot;LOADED&quot;);
+-        return authorRoles;
++        return authorRoles;*/
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] loadVillages() throws DBLayerException, RemoteException {
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-01 20:03:00 UTC (rev 422)
+@@ -1133,3 +1133,7 @@
+ 
+ Message.FillingDialogs=Storing data into dialogs
+ Overview.MenuOccurrences=Occurrences
++
++AddEdit.PreloadAuthors=remember entered authors
++
++AddEdit.InfoPanel=Info
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-01 20:03:00 UTC (rev 422)
+@@ -767,3 +767,7 @@
+ Message.FillingDialogs=Ukl\u00E1d\u00E1m data do dialog\u016F
+ 
+ Overview.MenuOccurrences=&amp;N\u00E1lezy
++
++AddEdit.PreloadAuthors=zapamatuj si zadan\u00E9 autory
++
++AddEdit.InfoPanel=Info
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-01 19:28:13 UTC (rev 421)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-01 20:03:00 UTC (rev 422)
+@@ -835,3 +835,7 @@
+ Message.FillingDialogs=Constructing dialogs
+ 
+ Overview.MenuOccurrences=Occurrences
++
++AddEdit.PreloadAuthors=remember entered authors
++
++AddEdit.InfoPanel=Info
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000517.html">[Plantlore-dev] r421 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000519.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#518">[ date ]</a>
+              <a href="thread.html#518">[ thread ]</a>
+              <a href="subject.html#518">[ subject ]</a>
+              <a href="author.html#518">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

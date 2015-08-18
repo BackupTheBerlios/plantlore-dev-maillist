@@ -1,0 +1,482 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r571 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/detail common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r571%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/detail%20common%20l10n&In-Reply-To=%3C200608261111.k7QBB2Xu007872%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000778.html">
+   <LINK REL="Next"  HREF="000780.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r571 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/detail common l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r571%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/detail%20common%20l10n&In-Reply-To=%3C200608261111.k7QBB2Xu007872%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r571 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/detail common l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 26 13:11:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000778.html">[Plantlore-dev] [Bug #8582] Create, alter and drop database user
+</A></li>
+        <LI>Next message: <A HREF="000780.html">[Plantlore-dev] r572 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#779">[ date ]</a>
+              <a href="thread.html#779">[ thread ]</a>
+              <a href="subject.html#779">[ subject ]</a>
+              <a href="author.html#779">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-26 13:10:56 +0200 (Sat, 26 Aug 2006)
+New Revision: 571
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/overview/detail/Detail.java
+   trunk/src/net/sf/plantlore/client/overview/detail/DetailView.form
+   trunk/src/net/sf/plantlore/client/overview/detail/DetailView.java
+   trunk/src/net/sf/plantlore/common/Task.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Logout and reconnect. I've tested only logout.
+Task now prints stackt trace each time it catches an exception. To be fixed later.
+Closing queries in overview detail.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -710,6 +710,12 @@
+         tableSorter.setDatabase(database);
+     }
+ 
++    public void logout() {
++        database = null;
++        tableSorter.setDatabase(null);
++        loggedIn = false;
++    }
++    
+     public boolean loggedIn() {
+         return loggedIn;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -296,7 +296,7 @@
+ 
+ 	ReconnectAction reconnectAction = new ReconnectAction();
+ 	
+-	ExitListener silentFinalAction = new ExitListener();
++	ActionListener silentFinalAction = new ExitListener();
+ 
+ 	/** Creates a new instance of AppCoreCtrl */
+ 	public AppCoreCtrl(AppCore model, AppCoreView view) {
+@@ -307,7 +307,7 @@
+ 		this.view = view;
+ 		view.setSettingsAction(settingsAction);
+ 		view.setPrintAction(printAction);
+-		view.addExitListener(silentFinalAction);
++		view.addExitAction(silentFinalAction);
+ 		view.setHelpContentsAction(helpContentsAction);
+ 		view.setHelpAboutAction(helpAboutAction);
+ 		view.setExportAction(exportAction);
+@@ -345,11 +345,12 @@
+ 				.addComponentListener(new OverviewResizeListener());
+ 
+ 		view.addWindowListener(new AppWindowListener());
+-		view
+-				.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
++		view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+ 
+ 		view.setLoginAction(loginAction);
+-
++                view.fileLogout.setAction(logoutAction);
++                view.fileReconnect.setAction(reconnectAction);
++                
+ 		constructDialogs();
+ 
+ 		setDatabaseDependentCommandsEnabled(false);
+@@ -423,6 +424,10 @@
+ 		view.recordsPerPage.setEnabled(enabled);
+ 		refreshAction.setEnabled(enabled);
+ 
++                logoutAction.setEnabled(enabled);
++                reconnectAction.setEnabled(enabled);
++                loginAction.setEnabled(!enabled);
++                
+ 		if (model.getAccessRights() != null)
+ 			if (model.getAccessRights().getAdministrator() != 1) {
+ 				dataMetadataAction.setEnabled(false);
+@@ -522,11 +527,14 @@
+ 			try {
+ 				model.savePreferences();
+ 			} catch (IOException ex) {
+-//				JOptionPane.showMessageDialog(view,
+-//						&quot;Problem while saving configuration: &quot;
+-//								+ ex.getMessage());
++                            //FIXME - aspon lokalizovat
++				JOptionPane.showMessageDialog(view,
++						&quot;Problem while saving configuration: &quot;
++								+ ex.getMessage());
+ 			}
+ 
++                        model.logout();
++                                
+ 			// The database layer created by a DBLayerFactory MUST be
+ 			// destroyed by that factory. There is a method which will do the
+ 			// trick.
+@@ -911,8 +919,7 @@
+ 	class SearchBridge implements Observer {
+ 		public void update(Observable o, Object arg) {
+ 			if (arg != null &amp;&amp; arg instanceof Integer) {
+-				logger
+-						.debug(&quot;Fetching new result id from Search model. Storing it to AppCore model.&quot;);
++				logger.debug(&quot;Fetching new result id from Search model. Storing it to AppCore model.&quot;);
+ 				try {
+ 					model.setResultId(searchModel.getNewResultId(), searchModel
+ 							.getNewSelectQuery());
+@@ -1499,6 +1506,8 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent arg0) {
++                        model.logout();
++                    
+ 			if (loginModel != null)
+ 				loginModel.logout();
+ 
+@@ -1633,8 +1642,7 @@
+ 				view.getSBM().display(L10n.getString(&quot;Message.FillingDialogs&quot;));
+ 				fillDialogModels();
+ 
+-				view.getSBM().display(
+-						L10n.getString(&quot;Message.LoadingOverviewData&quot;));
++				view.getSBM().display(L10n.getString(&quot;Message.LoadingOverviewData&quot;));
+ 				searchModel.clear();
+ 				searchModel.constructQuery();
+ 				view.getSBM().displayDefaultText();
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-08-26 11:10:56 UTC (rev 571)
+@@ -22,6 +22,22 @@
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
+               &lt;/Properties&gt;
+             &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;fileLogout&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;fileReconnect&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/MenuItem&gt;
+             &lt;MenuItem class=&quot;javax.swing.JSeparator&quot; name=&quot;jSeparator2&quot;&gt;
+             &lt;/MenuItem&gt;
+             &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;dataImport&quot;&gt;
+@@ -496,7 +512,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;208&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;172&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -44,6 +44,10 @@
+ 
+         initOverview();
+         
++        fileExit.setText(L10n.getString(&quot;Overview.MenuFileExit&quot;));
++        fileExit.setToolTipText(L10n.getString(&quot;Overview.MenuFileExitTT&quot;));
++        fileExit.setMnemonic(L10n.getMnemonic(&quot;Overview.MenuFileExit&quot;));
++        
+         setLocationRelativeTo(null);
+         model.addObserver(this); 
+         model.addObserver(sbm);
+@@ -86,6 +90,8 @@
+         jMenuBar1 = new javax.swing.JMenuBar();
+         fileMenu = new javax.swing.JMenu();
+         fileLogin = new javax.swing.JMenuItem();
++        fileLogout = new javax.swing.JMenuItem();
++        fileReconnect = new javax.swing.JMenuItem();
+         jSeparator2 = new javax.swing.JSeparator();
+         dataImport = new javax.swing.JMenuItem();
+         dataImportTable = new javax.swing.JMenuItem();
+@@ -232,7 +238,7 @@
+         );
+         overviewPanelLayout.setVerticalGroup(
+             overviewPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 244, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 172, Short.MAX_VALUE)
+         );
+ 
+         recordsCount.setText(&quot;-&quot;);
+@@ -275,6 +281,12 @@
+         fileLogin.setText(&quot;Item&quot;);
+         fileMenu.add(fileLogin);
+ 
++        fileLogout.setText(&quot;Item&quot;);
++        fileMenu.add(fileLogout);
++
++        fileReconnect.setText(&quot;Item&quot;);
++        fileMenu.add(fileReconnect);
++
+         fileMenu.add(jSeparator2);
+ 
+         dataImport.setText(&quot;Item&quot;);
+@@ -509,7 +521,7 @@
+     /** Adds listener to the exit menu item.
+      *
+      */
+-    public void addExitListener(ActionListener al) {
++    public void addExitAction(ActionListener al) {
+         fileExit.addActionListener(al);
+     }
+     /** Adds listener to the HelpContents menu item.
+@@ -705,8 +717,10 @@
+     protected javax.swing.JButton editButton;
+     private javax.swing.JMenuItem fileExit;
+     private javax.swing.JMenuItem fileLogin;
++    protected javax.swing.JMenuItem fileLogout;
+     protected javax.swing.JMenu fileMenu;
+     private javax.swing.JMenuItem filePrint;
++    protected javax.swing.JMenuItem fileReconnect;
+     private javax.swing.JMenuItem fileSettings;
+     protected javax.swing.JButton habitatTreeButton;
+     protected javax.swing.JMenuItem helpAbout;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -357,7 +357,15 @@
+     
+     public void setDatabase(DBLayer database) {
+         this.db = database;
+-        logger.debug(&quot;Database set.&quot;);
++        if (database == null) {//the user logged out
++            data = null;
++            resultsCount = 0;
++            oldSelectQuery = null; //otherwise after login we would try to close the query in setResultId() which would cause an exception
++            fireTableDataChanged();
++            logger.debug(&quot;OverviewTableModel: database set to null.&quot;);
++        } else {
++            logger.debug(&quot;OverviewTableModel: database set.&quot;);
++        }
+     }
+ 
+     public int getSelectionColumnIndex() {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/detail/Detail.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/detail/Detail.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/overview/detail/Detail.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -129,6 +129,7 @@
+         assert resultsCount == 1;
+         
+         Object[] records = database.more(resultId, 0, resultsCount - 1);
++        database.closeQuery(sq);
+         Object[] pa = (Object[]) records[0];
+         source = (String)pa[0];
+         herbarium = (String)pa[1];
+@@ -208,6 +209,7 @@
+             assert resultsCount &gt; 0;
+             data = new Object[resultsCount][];
+             Object[] records = database.more(resultId, 0, resultsCount - 1);
++            database.closeQuery(sq);
+             for (int i=0; i &lt; resultsCount ; i++) {
+                 Object[] pa = (Object[]) records[i];
+                 String[] row = new String[3];
+
+Modified: trunk/src/net/sf/plantlore/client/overview/detail/DetailView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/detail/DetailView.form	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/overview/detail/DetailView.form	2006-08-26 11:10:56 UTC (rev 571)
+@@ -9,6 +9,7 @@
+   &lt;/SyntheticProperties&gt;
+   &lt;AuxValues&gt;
+     &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_layoutCodeTarget&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/detail/DetailView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/detail/DetailView.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/client/overview/detail/DetailView.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -12,6 +12,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ import net.sf.plantlore.client.*;
++import net.sf.plantlore.common.DefaultEscapeKeyPressed;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+@@ -30,6 +31,8 @@
+         this.model = model;
+         model.addObserver(this);
+         initComponents();
++        
++        new DefaultEscapeKeyPressed(this);
+     }
+     
+     /** This method is called from within the constructor to
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-08-26 11:10:56 UTC (rev 571)
+@@ -186,6 +186,8 @@
+                     setChanged();
+                     notifyObservers(new Pair&lt;Message,Object&gt;(Message.STOPPING,null));
+                 } catch (Exception ex) {
++                    //FIXME:
++                    ex.printStackTrace();
+                     setChanged();
+                     notifyObservers(ex);
+                 }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-26 11:10:56 UTC (rev 571)
+@@ -5,7 +5,7 @@
+ Overview.MenuSettingsTT = Invokes the setting dialog
+ Overview.MenuPrint = &amp;Print
+ Overview.MenuPrintTT = Prints selected records
+-Overview.MenuExit = &amp;Exit
++Overview.MenuFileExit=&amp;Exit
+ Overview.MenuLogin = Logi&amp;n
+ Overview.MenuHelp = &amp;Help
+ Overview.MenuHelpContents = &amp;Help contents
+@@ -1341,3 +1341,13 @@
+ AddEdit.Settings.Disabled=Disabled
+ 
+ AddEdit.Settings.Enabled=Enabled
++
++Overview.MenuFileLogout=Logout
++
++Overview.MenuFileReconnect=Reconnect
++
++Overview.MenuFileLogoutTT=Logs out current session
++
++Overview.MenuFileReconnectTT=Tries to renew lost connection
++
++Overview.MenuFileExitTT=Exits the application
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-26 11:10:56 UTC (rev 571)
+@@ -4,8 +4,8 @@
+ Overview.MenuSettingsTT = Nastaven\u00ed aplikace
+ Overview.MenuPrint = &amp;Tisk
+ Overview.MenuPrintTT = Vytiskne ozna\u010den\u00e9 z\u00e1znamy
+-Overview.MenuExit = &amp;Konec
+-Overview.MenuLogin = Logi&amp;n
++Overview.MenuFileExit=&amp;Konec
++Overview.MenuLogin = &amp;P\u0159ihl\u00E1\u0161en\u00ED
+ Overview.MenuHelp = &amp;Pomoc
+ Overview.MenuHelpContents = &amp;Obsah
+ Overview.MenuHelpAbout = O &amp;aplikaci
+@@ -1519,3 +1519,13 @@
+ AddEdit.Settings.Disabled=Zak\u00E1zan\u00E9
+ 
+ AddEdit.Settings.Enabled=Povolen\u00E9
++
++Overview.MenuFileLogout=Odhl\u00E1\u0161en\u00ED
++
++Overview.MenuFileReconnect=Znovu p\u0159ipojit
++
++Overview.MenuFileLogoutTT=Odhl\u00E1\u0161en\u00ED od datab\u00E1ze
++
++Overview.MenuFileReconnectTT=Pokus\u00ED se obnovit ztracen\u00E9 spojen\u00ED
++
++Overview.MenuFileExitTT=Ukon\u010D\u00ED aplikaci
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-25 23:33:28 UTC (rev 570)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-26 11:10:56 UTC (rev 571)
+@@ -5,7 +5,7 @@
+ Overview.MenuSettingsTT = Invokes the setting dialog
+ Overview.MenuPrint = &amp;Print
+ Overview.MenuPrintTT = Prints selected records
+-Overview.MenuExit = &amp;Exit
++Overview.MenuFileExit=&amp;Exit
+ Overview.MenuLogin = Logi&amp;n
+ Overview.MenuHelp = &amp;Help
+ Overview.MenuHelpContents = &amp;Help contents
+@@ -1057,3 +1057,13 @@
+ AddEdit.Settings.Disabled=Disabled
+ 
+ AddEdit.Settings.Enabled=Enabled
++
++Overview.MenuFileLogout=Logout
++
++Overview.MenuFileReconnect=Reconnect
++
++Overview.MenuFileLogoutTT=Logs out current session
++
++Overview.MenuFileReconnectTT=Tries to renew lost connection
++
++Overview.MenuFileExitTT=Exits the application
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000778.html">[Plantlore-dev] [Bug #8582] Create, alter and drop database user
+</A></li>
+	<LI>Next message: <A HREF="000780.html">[Plantlore-dev] r572 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#779">[ date ]</a>
+              <a href="thread.html#779">[ thread ]</a>
+              <a href="subject.html#779">[ subject ]</a>
+              <a href="author.html#779">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

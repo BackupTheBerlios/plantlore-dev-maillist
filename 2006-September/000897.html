@@ -1,0 +1,671 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r641 - in trunk: analysis/database	src/net/sf/plantlore/client/history	src/net/sf/plantlore/client/metadata	src/net/sf/plantlore/client/user src/net/sf/plantlore/common/record	src/net/sf/plantlore/config/hibernate src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r641%20-%20in%20trunk%3A%20analysis/database%0A%09src/net/sf/plantlore/client/history%0A%09src/net/sf/plantlore/client/metadata%0A%09src/net/sf/plantlore/client/user%20src/net/sf/plantlore/common/record%0A%09src/net/sf/plantlore/config/hibernate%20src/net/sf/plantlore/server&In-Reply-To=%3C200609030119.k831J6ZF024317%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000896.html">
+   <LINK REL="Next"  HREF="000898.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r641 - in trunk: analysis/database	src/net/sf/plantlore/client/history	src/net/sf/plantlore/client/metadata	src/net/sf/plantlore/client/user src/net/sf/plantlore/common/record	src/net/sf/plantlore/config/hibernate src/net/sf/plantlore/server</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r641%20-%20in%20trunk%3A%20analysis/database%0A%09src/net/sf/plantlore/client/history%0A%09src/net/sf/plantlore/client/metadata%0A%09src/net/sf/plantlore/client/user%20src/net/sf/plantlore/common/record%0A%09src/net/sf/plantlore/config/hibernate%20src/net/sf/plantlore/server&In-Reply-To=%3C200609030119.k831J6ZF024317%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r641 - in trunk: analysis/database	src/net/sf/plantlore/client/history	src/net/sf/plantlore/client/metadata	src/net/sf/plantlore/client/user src/net/sf/plantlore/common/record	src/net/sf/plantlore/config/hibernate src/net/sf/plantlore/server">lada at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep  3 03:19:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000896.html">[Plantlore-dev] r640 - trunk/src/net/sf/plantlore/help/cs/html
+</A></li>
+        <LI>Next message: <A HREF="000898.html">[Plantlore-dev] Zmeny v databazi - co je potreba udelat
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#897">[ date ]</a>
+              <a href="thread.html#897">[ thread ]</a>
+              <a href="subject.html#897">[ subject ]</a>
+              <a href="author.html#897">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-09-03 03:18:42 +0200 (Sun, 03 Sep 2006)
+New Revision: 641
+
+Modified:
+   trunk/analysis/database/DBModel_postgres.sql
+   trunk/analysis/database/DBmodel.sql
+   trunk/analysis/database/DBmodel_MySQL.sql
+   trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Prefix of user account is name of database now. You have to download actual database and create new account in database (I am writing mail about it).
+
+Some changes in table tOccurrences 
+- cUnitIdDB is varchar(40) now
+- cUnitValue is integer now
+
+History, User manager and metadata manager:
+Fix bug in whole history - close details of record is working now.
+Use function database.getNumRows is better.
+
+Modified: trunk/analysis/database/DBModel_postgres.sql
+===================================================================
+--- trunk/analysis/database/DBModel_postgres.sql	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/analysis/database/DBModel_postgres.sql	2006-09-03 01:18:42 UTC (rev 641)
+@@ -117,8 +117,8 @@
+ /* Table: TOCCURRENCES */
+ CREATE TABLE TOCCURRENCES (
+     CID                SERIAL NOT NULL,
+-    CUNITIDDB          VARCHAR(30) NOT NULL,
+-    CUNITVALUE         VARCHAR(30) NOT NULL,
++    CUNITIDDB          VARCHAR(40) NOT NULL,
++    CUNITVALUE         INTEGER NOT NULL,
+     CHABITATID         INTEGER NOT NULL,
+     CPLANTID           INTEGER NOT NULL,
+     CYEARCOLLECTED     SMALLINT DEFAULT 0 NOT NULL,
+@@ -334,19 +334,19 @@
+ CREATE OR REPLACE VIEW vauthorscollected
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'collected' AND ao.cdelete = 0
++WHERE ao.crole = 'collected' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSREVISED */
+ CREATE OR REPLACE VIEW vauthorsrevised
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'revised' AND ao.cdelete = 0
++WHERE ao.crole = 'revised' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSIDENTIFIED */
+ CREATE OR REPLACE VIEW vauthorsidentified
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'identified' AND ao.cdelete = 0
++WHERE ao.crole = 'identified' AND ao.cdelete = 0;
+ 
+ INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (1, 'AUTHOROCCURRENCE', NULL);
+ INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (2, 'OCCURRENCE', NULL);
+
+Modified: trunk/analysis/database/DBmodel.sql
+===================================================================
+--- trunk/analysis/database/DBmodel.sql	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/analysis/database/DBmodel.sql	2006-09-03 01:18:42 UTC (rev 641)
+@@ -125,8 +125,8 @@
+ /* Table: TOCCURRENCES*/
+ CREATE TABLE TOCCURRENCES (
+     CID                INTEGER NOT NULL,
+-    CUNITIDDB          VARCHAR(30) NOT NULL,
+-    CUNITVALUE         VARCHAR(30) NOT NULL,
++    CUNITIDDB          VARCHAR(40) NOT NULL,
++    CUNITVALUE         INTEGER NOT NULL,
+     CHABITATID         INTEGER NOT NULL,
+     CPLANTID           INTEGER NOT NULL,
+     CYEARCOLLECTED     SMALLINT DEFAULT 0 NOT NULL,
+@@ -337,19 +337,19 @@
+ CREATE OR REPLACE VIEW vauthorscollected
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'collected' AND ao.cdelete = 0
++WHERE ao.crole = 'collected' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSREVISED */
+ CREATE OR REPLACE VIEW vauthorsrevised
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'revised' AND ao.cdelete = 0
++WHERE ao.crole = 'revised' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSIDENTIFIED */
+ CREATE OR REPLACE VIEW vauthorsidentified
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'identified' AND ao.cdelete = 0
++WHERE ao.crole = 'identified' AND ao.cdelete = 0;
+ 
+ 
+ INSERT INTO thistorycolumn (cid, ctablename, ccolumnname) VALUES (1, 'AUTHOROCCURRENCE', NULL);
+
+Modified: trunk/analysis/database/DBmodel_MySQL.sql
+===================================================================
+--- trunk/analysis/database/DBmodel_MySQL.sql	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/analysis/database/DBmodel_MySQL.sql	2006-09-03 01:18:42 UTC (rev 641)
+@@ -142,8 +142,8 @@
+ 
+ CREATE TABLE TOCCURRENCES (
+     CID                INTEGER NOT NULL auto_increment,
+-    CUNITIDDB          VARCHAR(30) CHARACTER SET UTF8 NOT NULL,
+-    CUNITVALUE         VARCHAR(30) CHARACTER SET UTF8 NOT NULL,
++    CUNITIDDB          VARCHAR(40) CHARACTER SET UTF8 NOT NULL,
++    CUNITVALUE         INTEGER NOT NULL,
+     CHABITATID         INTEGER NOT NULL,
+     CPLANTID           INTEGER NOT NULL,
+     CYEARCOLLECTED     SMALLINT DEFAULT 0 NOT NULL,
+@@ -358,16 +358,16 @@
+ CREATE OR REPLACE VIEW vauthorscollected
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'collected' AND ao.cdelete = 0
++WHERE ao.crole = 'collected' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSREVISED */
+ CREATE OR REPLACE VIEW vauthorsrevised
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'revised' AND ao.cdelete = 0
++WHERE ao.crole = 'revised' AND ao.cdelete = 0;
+ 
+ /* View: VAUTHORSIDENTIFIED */
+ CREATE OR REPLACE VIEW vauthorsidentified
+ AS SELECT ao.cid, ao.coccurrenceid, ao.cnote, a.cwholename, a.corganization, a.ctelephonenumber, a.crole, a.cemail, a.caddress, a.curl
+ FROM  tauthors a JOIN tauthorsoccurrences ao on a.cid = ao.cauthorid
+-WHERE ao.crole = 'identified' AND ao.cdelete = 0
++WHERE ao.crole = 'identified' AND ao.cdelete = 0;
+
+Modified: trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -31,7 +31,7 @@
+     public DetailsHistoryView(javax.swing.JDialog parent, boolean modal) {
+         super(parent, modal);
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);        
+-        initComponents(); 
++        initComponents();                
+         //Init Help
+         PlantloreHelp.addKeyHelp(PlantloreHelp.HISTORY_DATA, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.HISTORY_DATA, this.helpButton);        
+@@ -49,14 +49,7 @@
+     public void setDetailsMessage(String detailsMessage) {
+         this.detailsTextArea.setText(detailsMessage);
+     }
+-    
+-    /**
+-     * Close this dialog.    
+-     */
+-    public void close() {
+-        dispose();
+-    }
+-    
++       
+     /** This method is called from within the constructor to
+      * initialize the form.
+      * WARNING: Do NOT modify this code. The content of this method is
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -73,6 +73,8 @@
+     private String displayRow;              
+     /** Result of the search query */
+     private int resultId = 0;
++    /** Number of results for the current SelectQuery */
++    private int resultRows = 0;
+     /** List of data (results of a search query) displayed in the view dialog */
+     private ArrayList&lt;HistoryRecord&gt; historyDataList = new ArrayList&lt;HistoryRecord&gt;();     
+     /** List of editing object */
+@@ -262,7 +264,7 @@
+         	   throw dbex; 		            
+      	   }   
+      	   if (isError()) {    
+-          Exception ex = getException(); 		  
++                  Exception ex = getException(); 		  
+      		  setError(null);
+      		  setException(null);
+      		  throw ex;
+@@ -356,8 +358,15 @@
+      */
+     public void processResult(int from, int count) throws Exception{
+         
+-        if (this.resultId != 0) {
+-            int currentRow = getResultRows();
++         int currentRow = 0;
++    	 if (this.resultId != 0) {  
++            try { 
++               currentRow = database.getNumRows(resultId);
++               setResultRows(currentRow);
++            } catch (Exception ex){
++                logger.error(&quot;Get number of results failed. Exception caught in History. Details: &quot;+ex.getMessage());  
++                throw ex;
++            }
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));            
+            
+@@ -1428,13 +1437,15 @@
+         } catch(Exception ex) {
+         	logger.error(&quot;Search authors failed. DBLayer exception caught in History. Details: &quot;+ex.getMessage());       	                                                   
+                 setError(ERROR_SEARCH_AUTHOR);
+-                setException(ex);       	    
++                setException(ex);  
++                return null;
+         }  
+           
+         if (objects == null) {
+         	logger.error(&quot;tAuthors doesn't contain required data&quot;);  
+- 		    setError(ERROR_SEARCH_AUTHOR);
+-                    setException(new DBLayerException(ERROR_SEARCH_AUTHOR));
++                setError(ERROR_SEARCH_AUTHOR);
++                setException(new DBLayerException(ERROR_SEARCH_AUTHOR));
++                return null;
+         }
+         
+        return objects;
+@@ -1448,6 +1459,7 @@
+     public String getAllNameOfAuthors(Object[] objects) {
+         if (objects == null || isError()) {
+         	setError(null);
++                setException(null);
+         	return &quot;&quot;;	
+         }            
+         String allAuthor = &quot;&quot;;
+@@ -2226,20 +2238,21 @@
+         return this.resultId;
+     }
+     
+-    /**
+-     * Get the number of results for the current SelectQuery
++     /**
++     * Get the number of results for the current SelectQuery. 
+      * @return number of results for the current SelectQuery
+      */
+     public int getResultRows() {
+-        int resultCount = 0;
+-        if (resultId != 0) try {
+-             resultCount = database.getNumRows(resultId);        	
+-        } catch(RemoteException e) {
+-        	logger.error(&quot;Get number of results failed.Remote exception caught in History. Details: &quot;+e.getMessage());  
+-        	setError(ERROR_NUMBER_ROWS);
+-        }
+-        return resultCount;
++       return this.resultRows;
+     }
++    
++    /**
++     * Set the number of results for the current SelectQuery. 
++     * @param resultCount number of results for the current SelectQuery
++     */
++    public void setResultRows(int resultCount) {
++        this.resultRows = resultCount;
++    }
+         
+      /**
+      *  Get index of the first row currently displayed in the list of record changes. This is an index in the results returned by a search query.
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -293,7 +293,7 @@
+                detailsView.setDetailsMessage(detailsMessage);
+                detailsView.setVisible(true);               
+            } 
+-           if (!model.isError()) {
++           if (model.isError()) {
+ 	           Exception ex = model.getException();
+                    ex.printStackTrace();
+                    DefaultExceptionHandler.handle(view, ex);  
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -157,6 +157,7 @@
+                           logger.error(&quot;Searching metada failed. Exception caught in Metadata. Details: &quot;+e.getMessage());
+                            setError(ERROR_SEARCH);
+                            setException(e);
++                           return null;
+                     }
+                     return null;
+     	}
+@@ -243,16 +244,16 @@
+      */
+     public void processResult(int from, int count) throws Exception{
+         
+-    	if (this.resultId != 0) {    		
+-             int currentRow = getResultCount();
+-            setResultRows(currentRow);
+-            if (isError()) {
+-                Exception ex = getException();
+-                setError(null);
+-                setException(null);
++        int currentRow = 0;
++    	if (this.resultId != 0) {  
++            try { 
++               currentRow = database.getNumRows(resultId);
++               setResultRows(currentRow);
++            } catch (Exception ex){
++                logger.debug(&quot;Catch Exception in History. GetNumRows called in function processResult failed. Details: &quot;+ex.getMessage());
+                 throw ex;
+             }
+-            logger.debug(&quot;Rows in the result: &quot;+currentRow);
++            logger.debug(&quot;Rows in the result: &quot;+ currentRow);
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));            
+            
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+@@ -563,28 +564,13 @@
+     }
+     
+     /**
+-     * Set the number of results for the current SelectQuery.     
++     * Set the number of results for the current SelectQuery. 
++     * @param resultCount number of results for the current SelectQuery
+      */
+     public void setResultRows(int resultCount) {
+         this.resultRows = resultCount;
+     }
+     
+-  
+-    /**
+-     * Get the number of results for the current SelectQuery
+-     * @return number of results for the current SelectQuery
+-     */
+-    public int getResultCount() {
+-        int resultCount = 0;
+-        if (resultId != 0) try {
+-                resultCount = database.getNumRows(resultId);        	
+-        } catch(Exception e) {
+-        	logger.error(&quot;Get number of results failed. Exception caught in MetadataManager. Details: &quot;+e.getMessage());  
+-        	setError(ERROR_NUMBER_ROWS);
+-                setException(e);
+-        }
+-        return resultCount;
+-    }
+ 
+     /**
+ 	  * Get results of a search query for dislpaying in metadata dialog
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -192,7 +192,8 @@
+                     } catch (Exception e) {
+                             logger.error(&quot;Searching user failed. Exception caught in User. Details: &quot;+e.getMessage());
+                             setError(ERROR_SEARCH);
+-                            setException(e);               
++                            setException(e);       
++                            return null;
+                     }
+                     return null;
+     	}
+@@ -272,15 +273,16 @@
+      */
+     public void processResult(int from, int count) throws Exception {
+         
+-        if (this.resultId != 0) {
+-            int currentRow = getResultCount();
+-            setResultRows(currentRow);
+-            if (isError()) {
+-                Exception ex = getException();
+-                setError(null);
+-                setException(null);
++         int currentRow = 0;
++    	if (this.resultId != 0) {  
++            try { 
++               currentRow = database.getNumRows(resultId);
++               setResultRows(currentRow);
++            } catch (Exception ex){
++                logger.error(&quot;Get number of results failed. Exception caught in UserManager. Details: &quot;+ex.getMessage());  
+                 throw ex;
+             }
++                        
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));
+            
+@@ -720,23 +722,7 @@
+      */
+     public void setResultRows(int resultCount) {
+         this.resultRows = resultCount;
+-    }
+-    
+-    /**
+-     * Get the number of results for the current SelectQuery
+-     * @return number of results for the current SelectQuery
+-     */
+-    public int getResultCount() {
+-        int resultCount = 0;
+-        if (resultId != 0) try {
+-                resultCount = database.getNumRows(resultId);        	
+-        } catch(RemoteException e) {
+-                logger.error(&quot;Get number of results failed.Remote exception caught in UserManager. Details: &quot;+e.getMessage());  
+-            	setError(ERROR_REMOTE_EXCEPTION);
+-                setException(e);
+-        }
+-        return resultCount;
+-    }
++    }   
+ 
+     /**
+ 	  * Get results of a search query for dislpaying in userManager dialog
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -31,7 +31,7 @@
+     /** Parameters of the occurrence. For detailed explanation see data model documentation. */
+     private Integer id;
+     private String unitIdDb;
+-    private String unitValue;
++    private Integer unitValue;
+     private Habitat habitat;
+     private Plant plant;
+     private Integer yearCollected;
+@@ -130,7 +130,7 @@
+ 				setId((Integer)value);
+ 		}
+ 		else if(column.equalsIgnoreCase(UNITIDDB)) setUnitIdDb((String)value);
+-		else if(column.equalsIgnoreCase(UNITVALUE)) setUnitValue((String)value);
++		else if(column.equalsIgnoreCase(UNITVALUE)) setUnitValue((Integer)value);
+ 		else if(column.equalsIgnoreCase(HABITAT)) setHabitat((Habitat)value);
+ 		else if(column.equalsIgnoreCase(PLANT)) setPlant((Plant)value);
+ 		else if(column.equalsIgnoreCase(YEARCOLLECTED)) {
+@@ -234,7 +234,7 @@
+      *   @return unique record value
+      *   @see setUnitValue
+      */
+-    public String getUnitValue() {
++    public Integer getUnitValue() {
+         //obligatory
+         return this.unitValue;
+     }
+@@ -244,7 +244,7 @@
+      *   @param unitValue unique record value
+      *   @see getUnitValue
+      */
+-    public void setUnitValue(String unitValue) {
++    public void setUnitValue(Integer unitValue) {
+         this.unitValue = unitValue;
+     }
+ 
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-09-03 01:18:42 UTC (rev 641)
+@@ -10,15 +10,14 @@
+       &lt;/id&gt;
+       &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CUNITIDDB&quot;
+-                length=&quot;30&quot;
++                length=&quot;40&quot;
+                 name=&quot;unitIdDb&quot;
+                 not-null=&quot;true&quot;
+                 type=&quot;java.lang.String&quot;/&gt;
+-      &lt;property column=&quot;CUNITVALUE&quot;
+-                length=&quot;30&quot;
++      &lt;property column=&quot;CUNITVALUE&quot;                
+                 name=&quot;unitValue&quot;
+                 not-null=&quot;true&quot;
+-                type=&quot;java.lang.String&quot;/&gt;
++                type=&quot;java.lang.Integer&quot;/&gt;
+       &lt;many-to-one name=&quot;habitat&quot; 
+                    class=&quot;net.sf.plantlore.common.record.Habitat&quot; 
+                    column=&quot;CHABITATID&quot;
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-03 00:10:41 UTC (rev 640)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-09-03 01:18:42 UTC (rev 641)
+@@ -98,6 +98,8 @@
+     private Right rights;    
+     /** Unique identifier of the database we are connected to */
+     private String databaseID;
++     /** Plantlore prefix of user name */
++    private String userPrefix = &quot;plantlore_&quot;;
+     
+     private Session txSession;
+     private Transaction longTx;            
+@@ -108,10 +110,7 @@
+     private static final int DELETE = 3;
+     
+     private DatabaseSettings settings;
+-    private String currentlyConnectedUser = &quot;&quot;;
+-    
+-    /** Plantlore prefix of user name */
+-    private static final String USER_PREFIX = &quot;plantlore_&quot;;
++    private String currentlyConnectedUser = &quot;&quot;;         
+         
+     public HibernateDBLayer(DatabaseSettings settings) {
+     	this(null, settings);
+@@ -128,6 +127,7 @@
+         logger.debug(&quot;Constructing a new HibernateDBLayer.&quot;);
+         
+         this.settings = settings;
++           
+         
+         // Initialize pool of result sets, initial capacity = INITIAL POOL SIZE
+         results = new Hashtable&lt;Integer, ScrollableResults&gt;(INITIAL_POOL_SIZE); 
+@@ -174,7 +174,8 @@
+     public User initialize(String dbID, String user, String password) 
+     throws DBLayerException, RemoteException {
+         Configuration cfg;
+-        currentlyConnectedUser = user;
++        currentlyConnectedUser = user;        
++        userPrefix = dbID.toLowerCase() + &quot;_&quot;;
+         
+         // Load Hibernate configuration
+         try {
+@@ -190,13 +191,13 @@
+         	cfg.setProperty(&quot;hibernate.connection.url&quot;, settings.getConnectionStringPrefix() + dbID 
+         			+ &quot;?&quot; + settings.getConnectionStringSuffix());
+         // Set username and password to access database
+-        cfg.setProperty(&quot;hibernate.connection.username&quot;, HibernateDBLayer.USER_PREFIX + user);
++        cfg.setProperty(&quot;hibernate.connection.username&quot;, this.userPrefix + user);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, password);
+         
+         // Build session factory &amp; create a new session.
+         Session sess = null;
+         // Authenticate user
+-        logger.debug(&quot;DBLayer Initialization - about to authenticate the user.&quot;);
++        logger.debug(&quot;DBLayer Initialization - about to authenticate the user. user&quot; + this.userPrefix + user);
+         try {
+         	logger.debug(&quot;DBLayer Initialization - building session factory.&quot;);
+         	sessionFactory = cfg.buildSessionFactory();
+@@ -226,7 +227,7 @@
+             	throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), DBLayerException.ERROR_CONNECT);
+             }
+             Object[] unitiddatabase = sr.get();
+-            this.databaseID = ((UnitIdDatabase)unitiddatabase[0]).getUnitIdDb();
++            this.databaseID = ((UnitIdDatabase)unitiddatabase[0]).getUnitIdDb();            
+             logger.debug(&quot;DBLayer Initialization - finished!&quot;);
+         } 
+         catch (JDBCException e) {
+@@ -273,7 +274,8 @@
+             occ.setCreatedWho(this.plantloreUser);
+             // Set UniqueID for the record and database
+             occ.setUnitIdDb(this.databaseID);
+-            occ.setUnitValue(&quot;TODO&quot;);
++            //TODO zjiskat unikatni identifikator zaznamu !!!
++            occ.setUnitValue(1);
+         } else if(record instanceof Habitat) {
+             ((Habitat)record).setCreatedWho(this.plantloreUser);
+         } else if(record instanceof Publication) {
+@@ -2089,9 +2091,9 @@
+         }        
+         try {
+             Connection conn = txSession.connection();                    
+-            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; +HibernateDBLayer.USER_PREFIX + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
++            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; + this.userPrefix + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
+             pstmt.execute();
+-            PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++            PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; + this.userPrefix + name);   
+             pstmtGrant.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+@@ -2155,20 +2157,20 @@
+             // In case password has changed, execute statement to change the password
+             // In case admin right has changed, execute statement to change the access permission
+             if ((password != null) &amp;&amp; (!password.equals(&quot;&quot;))) {                                    
+-                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot; +admin);                
++                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; + this.userPrefix +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot; +admin);                
+                 pstmt.execute();
+                 if (changeRight) {
+-                    PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+HibernateDBLayer.USER_PREFIX +name);                
++                    PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+ this.userPrefix +name);                
+                     pstmtRevoke.execute();
+-                    PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++                    PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; + this.userPrefix + name);   
+                     pstmtGrant.execute();
+                 }
+             } else {                
+-                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; &quot; +admin);                
++                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; + this.userPrefix +name+ &quot; &quot; +admin);                
+                 pstmt.execute();  
+-                PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+HibernateDBLayer.USER_PREFIX +name);                
++                PreparedStatement pstmtRevoke = conn.prepareStatement(&quot;REVOKE &quot;+roleOld+&quot; FROM &quot;+ this.userPrefix +name);                
+                 pstmtRevoke.execute();
+-                PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; +HibernateDBLayer.USER_PREFIX + name);   
++                PreparedStatement pstmtGrant = conn.prepareStatement(&quot;GRANT &quot;+role+&quot; TO  &quot; + this.userPrefix + name);   
+                 pstmtGrant.execute();
+             }            
+         } catch (HibernateException e) {
+@@ -2212,7 +2214,7 @@
+         }
+         try {
+             Connection conn = txSession.connection();        
+-            PreparedStatement pstmt = conn.prepareStatement(&quot;DROP USER &quot; +HibernateDBLayer.USER_PREFIX + name);            
++            PreparedStatement pstmt = conn.prepareStatement(&quot;DROP USER &quot; + this.userPrefix + name);            
+             pstmt.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000896.html">[Plantlore-dev] r640 - trunk/src/net/sf/plantlore/help/cs/html
+</A></li>
+	<LI>Next message: <A HREF="000898.html">[Plantlore-dev] Zmeny v databazi - co je potreba udelat
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#897">[ date ]</a>
+              <a href="thread.html#897">[ thread ]</a>
+              <a href="subject.html#897">[ subject ]</a>
+              <a href="author.html#897">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,1950 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r432 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r432%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606032233.k53MXl7t011644%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000538.html">
+   <LINK REL="Next"  HREF="000540.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r432 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r432%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606032233.k53MXl7t011644%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r432 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun Jun  4 00:33:47 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000538.html">[Plantlore-dev] r431 - in trunk/src/net/sf/plantlore: client client/login middleware server/manager
+</A></li>
+        <LI>Next message: <A HREF="000540.html">[Plantlore-dev] r433 - in trunk/src/net/sf/plantlore: client/resources common/exception common/record middleware server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#539">[ date ]</a>
+              <a href="thread.html#539">[ thread ]</a>
+              <a href="subject.html#539">[ subject ]</a>
+              <a href="author.html#539">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-04 00:33:40 +0200 (Sun, 04 Jun 2006)
+New Revision: 432
+
+Added:
+   trunk/src/net/sf/plantlore/client/Detail.java
+   trunk/src/net/sf/plantlore/client/DetailCtrl.java
+   trunk/src/net/sf/plantlore/client/DetailView.form
+   trunk/src/net/sf/plantlore/client/DetailView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/TableSorter.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented detail in overview. Has a bug - if you press enter on the last result to show the detail it skips back one page and displays detail of the last result on that page. I do not intend to correct that now.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -214,33 +214,19 @@
+         }
+     }
+ 
+-    public void nextPage() {
++    public void nextPage() throws DBLayerException, RemoteException {
+         if (tableSorter != null)
+         {
+-            //FIXME:
+-            try {
+-                tableSorter.nextPage();
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }
++            tableSorter.nextPage();
+             setChanged();
+             notifyObservers(&quot;PAGE_CHANGED&quot;);        
+         }
+     }
+     
+-    public void prevPage() {
++    public void prevPage() throws DBLayerException, RemoteException {
+         if (tableSorter != null)
+         {
+-            //FIXME:
+-            try {
+-                tableSorter.prevPage();
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }
++            tableSorter.prevPage();
+             setChanged();
+             notifyObservers(&quot;PAGE_CHANGED&quot;);
+         }
+@@ -286,6 +272,23 @@
+         logger.debug(&quot;Selected row #&quot;+i);
+     }
+     
++    public void selectAndShow(int resultNumber) throws DBLayerException, RemoteException {
++        System.out.println(&quot;selectAndShow resultNumber = &quot;+resultNumber);
++        if (resultNumber &lt; 0 || resultNumber &gt; getResultsCount()) {
++            throw new IllegalArgumentException(&quot;Result number &quot;+resultNumber+&quot; doesn't exist.&quot;);
++        }
++        if (resultNumber &gt;= getRecordsPerPage()*getCurrentPage()) { //resultNumber is greater than the last resultNumber on current page
++            nextPage();
++        } 
++        if (resultNumber &lt; (getRecordsPerPage()*(getCurrentPage()-1))){ //resultNumber is less than the first resultNumber on current page
++            prevPage();
++        }
++        
++        selectedRow = resultNumber % getRecordsPerPage();
++        setChanged();
++        notifyObservers(&quot;SELECTION_CHANGED&quot;);
++    }
++    
+     public int getSelectedRowNumber()
+     {
+         return selectedRow;
+@@ -302,6 +305,17 @@
+         return tableSorter.getOccurrenceId(selectedRow);
+     }
+     
++    public Integer getSelectedResultNumber() {
++        return tableSorter.getResultNumber(selectedRow);
++    }
++    
++    public Integer getOccurrence(int i) throws DBLayerException, RemoteException {
++        if (i &lt; 0 || i &gt; getResultsCount())
++            throw new IllegalArgumentException(&quot;&quot;+i);
++        
++        return tableSorter.getOccurrence(i);
++    }
++    
+     public void savePreferences() throws IOException {
+         logger.info(&quot;Saving main window preferences.&quot;);
+         prefs.putInt(&quot;recordsPerPage&quot;, recordsPerPage);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -190,6 +190,11 @@
+     // Immutable Table Import
+     TableImportMng tableImportModel;
+     TableImportMngCtrl tableImportCtrl;
++    
++    //Detail
++    Detail detailModel;
++    DetailView detailView;
++    DetailCtrl detailCtrl;
+ 
+     //Bridges
+     ManagerBridge managerBridge = new ManagerBridge();
+@@ -302,6 +307,11 @@
+         searchView.setTitle(L10n.getString(&quot;Search.DialogTitle&quot;));
+         searchCtrl = new SearchCtrl(searchModel, searchView);
+         searchModel.addObserver(new SearchBridge());
++        
++        //--- Detail ---
++        detailModel = new Detail(model);
++        detailView = new DetailView(detailModel, view, true);
++        detailCtrl = new DetailCtrl(detailModel, detailView);        
+     }
+     
+     private void setDatabaseDependentCommandsEnabled(boolean enabled) {
+@@ -828,7 +838,15 @@
+         } 
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+-            model.prevPage();
++            try {
++                model.prevPage();
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++            }
+         }
+     }
+     
+@@ -840,7 +858,15 @@
+         } 
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+-            model.nextPage();
++            try {
++                model.nextPage();
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++            }
+         }
+     }
+ 
+@@ -1037,8 +1063,19 @@
+             if (e.getKeyText(e.getKeyChar()).equals(&quot;Space&quot;))
+                 model.invertSelectedOnCurrentRow();
+             if (e.getKeyText(e.getKeyChar()).equals(&quot;Enter&quot;)) {
+-                JOptionPane.showMessageDialog(view,&quot;Detail of #&quot;+model.getSelectedRowNumber());
+-                e.consume();
++                try {
++                    int resultNumber = model.getSelectedResultNumber();
++                    if (resultNumber != model.getResultsCount())
++                        model.selectAndShow(resultNumber - 1);//After Enter the hyperactive JTable moves selection to next row, so we need to correct that
++                    detailModel.load(model.getSelectedResultNumber());
++                    detailView.setVisible(true);
++                } catch (RemoteException ex) {  
++                    JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++                    ex.printStackTrace();
++                } catch (DBLayerException ex) {
++                    JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++                    ex.printStackTrace();
++                }
+             }
+         }
+ 
+@@ -1138,6 +1175,7 @@
+                         addModel.setDatabase(dblayer);
+                         editModel.setDatabase(dblayer);
+                         searchModel.setDatabase(dblayer);
++                        detailModel.setDatabase(dblayer);
+     			
+                         model.setAccessRights( loginModel.getAccessRights() );
+                         model.login();
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-06-03 22:33:40 UTC (rev 432)
+@@ -474,7 +474,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;424&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;388&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -14,6 +14,7 @@
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+ import javax.swing.Action;
++import javax.swing.ListSelectionModel;
+ import javax.swing.event.ListSelectionListener;
+ import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.StatusBarManager;
+@@ -430,6 +431,9 @@
+                 overview.setVisible(false);
+                 overview.setEnabled(false);
+             }
++            if (arg.equals(&quot;SELECTION_CHANGED&quot;)) {
++                overview.getSelectionModel().setSelectionInterval(model.getSelectedRowNumber(),model.getSelectedRowNumber());
++            }
+         }        
+     }
+ 
+@@ -451,6 +455,7 @@
+         //FIXME: what if otm == null ????????????
+         overview.setModel(tableSorter);
+         tableSorter.setTableHeader(overview.getTableHeader());
++        overview.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+         
+         // Comment to established db connection automatically without the login procedure        
+         //overviewScrollPane.setPreferredSize(new Dimension(800, (otm.getRowCount()+1)*19));
+
+Added: trunk/src/net/sf/plantlore/client/Detail.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Detail.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/Detail.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -0,0 +1,248 @@
++/*
++ * Detail.java
++ *
++ * Created on 2. &#269;erven 2006, 12:54
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.rmi.RemoteException;
++import java.util.Date;
++import java.util.Observable;
++import javax.swing.table.AbstractTableModel;
++import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.AuthorOccurrence;
++import net.sf.plantlore.common.record.Habitat;
++import net.sf.plantlore.common.record.Metadata;
++import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Phytochorion;
++import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.common.record.Publication;
++import net.sf.plantlore.common.record.Territory;
++import net.sf.plantlore.common.record.User;
++import net.sf.plantlore.common.record.Village;
++import net.sf.plantlore.l10n.L10n;
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
++import org.apache.log4j.Logger;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class Detail extends Observable {
++    private Logger logger =  Logger.getLogger(Detail.class.getPackage().getName());
++    private AppCore appCore;
++    private DBLayer database;
++    private int currentResult;
++    String taxon;
++    Integer year;
++    Integer day;
++    Integer month;
++    Date time;
++    String project;
++    String placeDescription;
++    String occNote;
++    String habNote;
++    String territory;
++    String phytName;
++    String phytCode;
++    String village;
++    String country;
++    String quadrant;
++    Double altitude;
++    Double latitude;
++    Double longitude;
++    String herbarium;
++    String source;
++    String createdWho;
++    Date createdWhen;
++    String updatedWho;
++    Date updatedWhen;
++    String publication;
++    DetailTableModel detailTableModel;
++    
++    
++    /** Creates a new instance of Detail */
++    public Detail(AppCore appCore) {
++        this.appCore = appCore;
++    }
++    
++    
++    public void load(int result) throws DBLayerException, RemoteException {
++        this.currentResult = result;
++        Integer occurrenceId = appCore.getOccurrence(result);
++        logger.debug(&quot;Detail model: loading data for occurrence id &quot;+occurrenceId);
++        SelectQuery sq = null;
++        
++        sq = database.createQuery(Occurrence.class);
++        sq.createAlias(Occurrence.HABITAT,&quot;habitat&quot;);
++        sq.createAlias(Occurrence.PLANT,&quot;plant&quot;);
++        // Add publications using LEFT OUTER JOIN - so that occurrences without a publication are displayed as well
++        sq.createAlias(Occurrence.PUBLICATION,&quot;publication&quot;, PlantloreConstants.LEFT_OUTER_JOIN);
++        sq.createAlias(Occurrence.METADATA,&quot;metadata&quot;);
++        sq.createAlias(&quot;habitat.&quot;+Habitat.PHYTOCHORION,&quot;phyt&quot;);
++        sq.createAlias(&quot;habitat.&quot;+Habitat.NEARESTVILLAGE,&quot;vill&quot;);
++        sq.createAlias(&quot;habitat.&quot;+Habitat.TERRITORY,&quot;territory&quot;);
++        // Add subquery to the query. Compare authoroccurrence.authorid with the result of a subquery (LEALL: &lt;= all(...))
++        sq.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, occurrenceId, null);
++        
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.DATASOURCE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.HERBARIUM);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.TIMECOLLECTED);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.DAYCOLLECTED);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.MONTHCOLLECTED);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.YEARCOLLECTED);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.NOTE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.CREATEDWHO);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.CREATEDWHEN);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.UPDATEDWHO);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.UPDATEDWHEN);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.ALTITUDE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.LATITUDE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.LONGITUDE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.COUNTRY);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.DESCRIPTION);                    
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.NOTE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;habitat.&quot;+Habitat.QUADRANT);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;vill.&quot;+Village.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;metadata.&quot;+Metadata.DATASETTITLE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;phyt.&quot;+Phytochorion.CODE);                    
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;phyt.&quot;+Phytochorion.NAME);                    
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;plant.&quot;+Plant.TAXON);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;publication.&quot;+Publication.REFERENCECITATION);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;territory.&quot;+Territory.NAME);
++        
++        int resultId = database.executeQuery(sq);
++        int resultsCount = database.getNumRows(resultId);
++        if (resultsCount == 0) {
++            logger.error(&quot;Detail: occurrence &quot;+occurrenceId+&quot; has no record in the database.&quot;);
++            throw new DBLayerException(&quot;The occurrence you selected is no longer in the database.&quot;);
++        }
++        assert resultsCount == 1;
++        
++        Object[] records = database.more(resultId, 0, resultsCount - 1);
++        Object[] pa = (Object[]) records[0];
++        source = (String)pa[0];
++        herbarium = (String)pa[1];
++        time = (Date)pa[2];
++        day = (Integer)pa[3];
++        month = (Integer)pa[4];
++        year = (Integer)pa[5];
++        occNote = (String)pa[6];
++        createdWho = ((User)pa[7]).getWholeName();
++        createdWhen= (Date)pa[8];
++        updatedWho = ((User)pa[9]).getWholeName();
++        updatedWhen = (Date)pa[10];
++        altitude= (Double)pa[11];
++        latitude = (Double)pa[12];
++        longitude = (Double)pa[13];
++        country = (String)pa[14];
++        placeDescription = (String)pa[15];
++        quadrant = (String)pa[16];
++        habNote = (String)pa[17];
++        village = (String)pa[18];
++        project = (String)pa[19];
++        phytCode = (String)pa[20];
++        phytName = (String)pa[21];
++        taxon = (String)pa[22];
++        publication = (String)pa[23];
++        territory = (String)pa[24];
++        
++        detailTableModel = new DetailTableModel(occurrenceId);
++        setChanged();
++        notifyObservers(&quot;NEW_DETAIL_LOADED&quot;);
++    }
++        
++    
++    public void setDatabase(DBLayer db) {
++        this.database = db;
++        logger.debug(&quot;Detail model - database set.&quot;);
++    }
++    
++    public void next() throws DBLayerException, RemoteException {
++        if (appCore.getResultsCount() &lt;= currentResult+1)
++            return;
++        currentResult++;
++        load(currentResult);
++        appCore.selectAndShow(currentResult);
++    }
++    
++    public void prev() throws DBLayerException, RemoteException {
++        if (currentResult &lt;=0)
++            return;
++        currentResult--;
++        load(currentResult);
++        appCore.selectAndShow(currentResult);
++    }
++    
++    class DetailTableModel extends AbstractTableModel {
++        Object[][] data;
++        
++        public DetailTableModel(int occurrenceId) throws DBLayerException, RemoteException {
++            SelectQuery sq;
++            //-- LOAD AUTHORS of the occurrence
++            sq = database.createQuery(AuthorOccurrence.class);
++            sq.createAlias(AuthorOccurrence.AUTHOR,&quot;author&quot;);
++            sq.createAlias(AuthorOccurrence.OCCURRENCE,&quot;occ&quot;);
++    //        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;occ.&quot;+Occurrence.ID);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;occ.&quot;+Occurrence.ID,null,occurrenceId,null);
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.DELETED,null,0,null);//only live authors
++            sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;author.&quot;+Author.WHOLENAME);
++            sq.addProjection(PlantloreConstants.PROJ_PROPERTY,AuthorOccurrence.ROLE);
++            sq.addProjection(PlantloreConstants.PROJ_PROPERTY,AuthorOccurrence.NOTE);
++
++            int resultId = database.executeQuery(sq);
++            int resultsCount = database.getNumRows(resultId);
++            if (resultsCount == 0) {
++                logger.error(&quot;Detail: occurrence &quot;+occurrenceId+&quot; has no live authors in the database.&quot;);
++                throw new DBLayerException(&quot;The occurrence has no authors in the database.&quot;);
++            }        
++            assert resultsCount &gt; 0;
++            data = new Object[resultsCount][];
++            Object[] records = database.more(resultId, 0, resultsCount - 1);
++            for (int i=0; i &lt; resultsCount ; i++) {
++                Object[] pa = (Object[]) records[i];
++                String[] row = new String[3];
++                row[0] = (String) pa[0];
++                row[1] = (String) pa[1];
++                row[2] = (String) pa[2];
++                data[i] = row;
++            }                        
++        }
++        public int getRowCount() {
++            if (data != null)
++                return data.length;
++            else
++                return 0;
++        }
++
++        public int getColumnCount() {
++            return 3;
++        }
++
++        public Object getValueAt(int row, int col) {
++            return data[row][col];
++        }        
++        public String getColumnName(int col) {
++            switch (col) {
++                case 0:
++                    return L10n.getString(&quot;AddEdit.NameColumn&quot;);
++                case 1:
++                    return L10n.getString(&quot;AddEdit.RoleColumn&quot;);
++                case 2:
++                    return &quot;&quot;;
++                case 3:
++                    return L10n.getString(&quot;AddEdit.RevisionColumn&quot;);
++                default:
++                    return &quot;&quot;;
++            }
++        }        
++    }
++}
++
+
+Added: trunk/src/net/sf/plantlore/client/DetailCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/DetailCtrl.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/DetailCtrl.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -0,0 +1,77 @@
++/*
++ * DetailCtrl.java
++ *
++ * Created on 2. &#269;erven 2006, 12:54
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.awt.event.ActionEvent;
++import java.rmi.RemoteException;
++import javax.swing.AbstractAction;
++import javax.swing.JOptionPane;
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class DetailCtrl {
++    private Logger logger = Logger.getLogger(DetailCtrl.class.getPackage().getName());
++    Detail model;
++    DetailView view;
++            
++    /** Creates a new instance of DetailCtrl */
++    public DetailCtrl(Detail model, DetailView view) {
++        this.model = model;
++        this.view = view;
++                
++        view.prevButton.setAction(new PrevAction());
++        view.nextButton.setAction(new NextAction());
++    }
++    
++    class NextAction extends AbstractAction {
++        public NextAction() {
++            putValue(AbstractAction.NAME,L10n.getString(&quot;Common.Next&quot;));
++            putValue(AbstractAction.SHORT_DESCRIPTION,L10n.getString(&quot;Detail.NextTT&quot;));
++        }
++        public void actionPerformed(ActionEvent e) {
++            logger.debug(&quot;Next detail.&quot;);
++            try {
++                model.next();
++            } catch (DBLayerException ex) {
++                JOptionPane.showMessageDialog(view,&quot;Database problem: &quot;+ex);
++                ex.printStackTrace();
++            } catch (RemoteException ex) {
++                JOptionPane.showMessageDialog(view,&quot;Remote connection problem: &quot;+ex);
++                ex.printStackTrace();
++            }
++        }
++        
++    }
++    
++    class PrevAction extends AbstractAction {
++        public PrevAction() {
++            putValue(AbstractAction.NAME,L10n.getString(&quot;Common.Prev&quot;));
++            putValue(AbstractAction.SHORT_DESCRIPTION,L10n.getString(&quot;Detail.PrevTT&quot;));
++        }
++        public void actionPerformed(ActionEvent e) {
++            logger.debug(&quot;Prev detail.&quot;);
++            try {
++                model.prev();
++            } catch (DBLayerException ex) {
++                JOptionPane.showMessageDialog(view,&quot;Database problem: &quot;+ex);
++                ex.printStackTrace();
++            } catch (RemoteException ex) {
++                JOptionPane.showMessageDialog(view,&quot;Remote connection problem: &quot;+ex);
++                ex.printStackTrace();
++            }
++        }
++        
++    }
++}
+
+Added: trunk/src/net/sf/plantlore/client/DetailView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/DetailView.form	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/DetailView.form	2006-06-03 22:33:40 UTC (rev 432)
+@@ -0,0 +1,498 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;1&quot; pref=&quot;667&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;taxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;577&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;projectLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;sourceLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;577&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;herbariumLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;jPanel4&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;prevButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel3&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;jPanel2&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;taxonLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;projectLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;herbariumLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;sourceLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;14&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; pref=&quot;85&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jPanel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jPanel3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;prevButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel1&quot;&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;0&quot; pref=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;0&quot; pref=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++    &lt;/Container&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JTable&quot; name=&quot;authorTable&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.table.TableModel&quot; editor=&quot;org.netbeans.modules.form.editors2.TableModelEditor&quot;&gt;
++              &lt;Table columnCount=&quot;3&quot; rowCount=&quot;1&quot;&gt;
++                &lt;Column editable=&quot;true&quot; title=&quot;Title 1&quot; type=&quot;java.lang.Object&quot;/&gt;
++                &lt;Column editable=&quot;true&quot; title=&quot;Title 2&quot; type=&quot;java.lang.Object&quot;/&gt;
++                &lt;Column editable=&quot;true&quot; title=&quot;Title 3&quot; type=&quot;java.lang.Object&quot;/&gt;
++              &lt;/Table&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;taxonLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;projectLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel2&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++            &lt;TitledBorder/&gt;
++          &lt;/Border&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;jPanel5&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;jPanel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jPanel5&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel6&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++      &lt;SubComponents&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel5&quot;&gt;
++
++          &lt;Layout&gt;
++            &lt;DimensionLayout dim=&quot;0&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;dateLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;territoryLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;quadrantLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;phytLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;villageLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace pref=&quot;323&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++            &lt;DimensionLayout dim=&quot;1&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;territoryLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;quadrantLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;phytLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;villageLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;countryLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;latitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;longitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;120&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dateLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++          &lt;/Layout&gt;
++          &lt;SubComponents&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;territoryLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;quadrantLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;phytLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;villageLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;countryLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;altitudeLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;latitudeLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;longitudeLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel2&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;dateLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel6&quot;&gt;
++
++          &lt;Layout&gt;
++            &lt;DimensionLayout dim=&quot;0&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;habAreaLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;descAreaLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;occAreaLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane3&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++            &lt;DimensionLayout dim=&quot;1&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;descAreaLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;occAreaLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;habAreaLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++          &lt;/Layout&gt;
++          &lt;SubComponents&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;habAreaLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Detail.HabNoteTitle&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane4&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++              &lt;/AuxValues&gt;
++
++              &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;habNoteArea&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++                    &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++                    &lt;Property name=&quot;lineWrap&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                    &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                    &lt;Property name=&quot;wrapStyleWord&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                  &lt;/Properties&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;descAreaLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Detail.PlaceDescriptionTitle&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane2&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++              &lt;/AuxValues&gt;
++
++              &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;placeDescArea&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++                    &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++                    &lt;Property name=&quot;lineWrap&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                    &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                    &lt;Property name=&quot;wrapStyleWord&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                  &lt;/Properties&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;occAreaLabel&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Detail.OccNoteTitle&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++            &lt;/Component&gt;
++            &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane3&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++              &lt;/AuxValues&gt;
++
++              &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;occNoteArea&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++                    &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++                    &lt;Property name=&quot;lineWrap&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                    &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                    &lt;Property name=&quot;wrapStyleWord&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++                  &lt;/Properties&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;herbariumLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;sourceLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel3&quot;&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace pref=&quot;485&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;nextButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Component id=&quot;nextButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;nextButton&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jButton2&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel4&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++            &lt;TitledBorder/&gt;
++          &lt;/Border&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;createdWhoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;543&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;createdWhenLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;updatedWhoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;543&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;updatedWhenLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;createdWhoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;createdWhenLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;updatedWhoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;updatedWhenLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;createdWhoLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;createdWhenLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;updatedWhoLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;updatedWhenLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;prevButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jButton1&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/client/DetailView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/DetailView.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/DetailView.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -0,0 +1,484 @@
++/*
++ * DetailView.java
++ *
++ * Created on 2. &#269;erven 2006, 12:25
++ */
++
++package net.sf.plantlore.client;
++
++import java.text.DateFormat;
++import java.util.Calendar;
++import java.util.Date;
++import java.util.Observable;
++import java.util.Observer;
++import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
++
++/**
++ *
++ * @author  fraktalek
++ */
++public class DetailView extends javax.swing.JDialog implements Observer {
++    private Logger logger = Logger.getLogger(DetailView.class.getPackage().getName());
++    private Detail model;
++    private final static String EMPTY = &quot;-&quot;;
++    
++    /** Creates new form DetailView */
++    public DetailView(Detail model, java.awt.Frame parent, boolean modal) {
++        super(parent, modal);
++        this.model = model;
++        model.addObserver(this);
++        initComponents();
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jPanel1 = new javax.swing.JPanel();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        authorTable = new javax.swing.JTable();
++        taxonLabel = new javax.swing.JLabel();
++        projectLabel = new javax.swing.JLabel();
++        jPanel2 = new javax.swing.JPanel();
++        jPanel5 = new javax.swing.JPanel();
++        territoryLabel = new javax.swing.JLabel();
++        quadrantLabel = new javax.swing.JLabel();
++        phytLabel = new javax.swing.JLabel();
++        villageLabel = new javax.swing.JLabel();
++        countryLabel = new javax.swing.JLabel();
++        altitudeLabel = new javax.swing.JLabel();
++        latitudeLabel = new javax.swing.JLabel();
++        longitudeLabel = new javax.swing.JLabel();
++        dateLabel = new javax.swing.JLabel();
++        jPanel6 = new javax.swing.JPanel();
++        habAreaLabel = new javax.swing.JLabel();
++        jScrollPane4 = new javax.swing.JScrollPane();
++        habNoteArea = new javax.swing.JTextArea();
++        descAreaLabel = new javax.swing.JLabel();
++        jScrollPane2 = new javax.swing.JScrollPane();
++        placeDescArea = new javax.swing.JTextArea();
++        occAreaLabel = new javax.swing.JLabel();
++        jScrollPane3 = new javax.swing.JScrollPane();
++        occNoteArea = new javax.swing.JTextArea();
++        herbariumLabel = new javax.swing.JLabel();
++        sourceLabel = new javax.swing.JLabel();
++        jPanel3 = new javax.swing.JPanel();
++        nextButton = new javax.swing.JButton();
++        jPanel4 = new javax.swing.JPanel();
++        createdWhoLabel = new javax.swing.JLabel();
++        createdWhenLabel = new javax.swing.JLabel();
++        updatedWhoLabel = new javax.swing.JLabel();
++        updatedWhenLabel = new javax.swing.JLabel();
++        prevButton = new javax.swing.JButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
++        org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
++        jPanel1.setLayout(jPanel1Layout);
++        jPanel1Layout.setHorizontalGroup(
++            jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(0, 0, Short.MAX_VALUE)
++        );
++        jPanel1Layout.setVerticalGroup(
++            jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(0, 0, Short.MAX_VALUE)
++        );
++
++        authorTable.setModel(new javax.swing.table.DefaultTableModel(
++            new Object [][] {
++                {null, null, null}
++            },
++            new String [] {
++                &quot;Title 1&quot;, &quot;Title 2&quot;, &quot;Title 3&quot;
++            }
++        ));
++        jScrollPane1.setViewportView(authorTable);
++
++        taxonLabel.setText(&quot;jLabel1&quot;);
++
++        projectLabel.setText(&quot;jLabel1&quot;);
++
++        jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(&quot;&quot;));
++        territoryLabel.setText(&quot;jLabel1&quot;);
++
++        quadrantLabel.setText(&quot;jLabel1&quot;);
++
++        phytLabel.setText(&quot;jLabel1&quot;);
++
++        villageLabel.setText(&quot;jLabel1&quot;);
++
++        countryLabel.setText(&quot;jLabel1&quot;);
++
++        altitudeLabel.setText(&quot;jLabel1&quot;);
++
++        latitudeLabel.setText(&quot;jLabel1&quot;);
++
++        longitudeLabel.setText(&quot;jLabel2&quot;);
++
++        dateLabel.setText(&quot;jLabel1&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
++        jPanel5.setLayout(jPanel5Layout);
++        jPanel5Layout.setHorizontalGroup(
++            jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel5Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(dateLabel)
++                    .add(altitudeLabel)
++                    .add(latitudeLabel)
++                    .add(longitudeLabel)
++                    .add(countryLabel)
++                    .add(territoryLabel)
++                    .add(quadrantLabel)
++                    .add(phytLabel)
++                    .add(villageLabel))
++                .addContainerGap(323, Short.MAX_VALUE))
++        );
++        jPanel5Layout.setVerticalGroup(
++            jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel5Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(territoryLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(quadrantLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(phytLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(villageLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(countryLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(altitudeLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(latitudeLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(longitudeLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 120, Short.MAX_VALUE)
++                .add(dateLabel)
++                .addContainerGap())
++        );
++
++        habAreaLabel.setText(L10n.getString(&quot;Detail.HabNoteTitle&quot;));
++
++        habNoteArea.setColumns(20);
++        habNoteArea.setEditable(false);
++        habNoteArea.setLineWrap(true);
++        habNoteArea.setRows(5);
++        habNoteArea.setWrapStyleWord(true);
++        jScrollPane4.setViewportView(habNoteArea);
++
++        descAreaLabel.setText(L10n.getString(&quot;Detail.PlaceDescriptionTitle&quot;));
++
++        placeDescArea.setColumns(20);
++        placeDescArea.setEditable(false);
++        placeDescArea.setLineWrap(true);
++        placeDescArea.setRows(5);
++        placeDescArea.setWrapStyleWord(true);
++        jScrollPane2.setViewportView(placeDescArea);
++
++        occAreaLabel.setText(L10n.getString(&quot;Detail.OccNoteTitle&quot;));
++
++        occNoteArea.setColumns(20);
++        occNoteArea.setEditable(false);
++        occNoteArea.setLineWrap(true);
++        occNoteArea.setRows(5);
++        occNoteArea.setWrapStyleWord(true);
++        jScrollPane3.setViewportView(occNoteArea);
++
++        org.jdesktop.layout.GroupLayout jPanel6Layout = new org.jdesktop.layout.GroupLayout(jPanel6);
++        jPanel6.setLayout(jPanel6Layout);
++        jPanel6Layout.setHorizontalGroup(
++            jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6Layout.createSequentialGroup()
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(habAreaLabel)
++                        .add(jScrollPane4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(descAreaLabel)
++                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(occAreaLabel)
++                        .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                .addContainerGap())
++        );
++        jPanel6Layout.setVerticalGroup(
++            jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6Layout.createSequentialGroup()
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .add(descAreaLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(occAreaLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(habAreaLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++        );
++
++        org.jdesktop.layout.GroupLayout jPanel2Layout = new org.jdesktop.layout.GroupLayout(jPanel2);
++        jPanel2.setLayout(jPanel2Layout);
++        jPanel2Layout.setHorizontalGroup(
++            jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap())
++        );
++        jPanel2Layout.setVerticalGroup(
++            jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel2Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap())
++        );
++
++        herbariumLabel.setText(&quot;jLabel1&quot;);
++
++        sourceLabel.setText(&quot;jLabel1&quot;);
++
++        nextButton.setText(&quot;jButton2&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel3Layout = new org.jdesktop.layout.GroupLayout(jPanel3);
++        jPanel3.setLayout(jPanel3Layout);
++        jPanel3Layout.setHorizontalGroup(
++            jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
++                .addContainerGap(485, Short.MAX_VALUE)
++                .add(nextButton))
++        );
++        jPanel3Layout.setVerticalGroup(
++            jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(nextButton)
++        );
++
++        jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(&quot;&quot;));
++        createdWhoLabel.setText(&quot;jLabel1&quot;);
++
++        createdWhenLabel.setText(&quot;jLabel1&quot;);
++
++        updatedWhoLabel.setText(&quot;jLabel1&quot;);
++
++        updatedWhenLabel.setText(&quot;jLabel1&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel4Layout = new org.jdesktop.layout.GroupLayout(jPanel4);
++        jPanel4.setLayout(jPanel4Layout);
++        jPanel4Layout.setHorizontalGroup(
++            jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel4Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel4Layout.createSequentialGroup()
++                        .add(createdWhoLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 543, Short.MAX_VALUE)
++                        .add(createdWhenLabel))
++                    .add(jPanel4Layout.createSequentialGroup()
++                        .add(updatedWhoLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 543, Short.MAX_VALUE)
++                        .add(updatedWhenLabel)))
++                .addContainerGap())
++        );
++        jPanel4Layout.setVerticalGroup(
++            jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel4Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(createdWhoLabel)
++                    .add(createdWhenLabel))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(updatedWhoLabel)
++                    .add(updatedWhenLabel))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++
++        prevButton.setText(&quot;jButton1&quot;);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 667, Short.MAX_VALUE)
++                    .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(layout.createSequentialGroup()
++                        .add(taxonLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 577, Short.MAX_VALUE)
++                        .add(projectLabel))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                        .add(sourceLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 577, Short.MAX_VALUE)
++                        .add(herbariumLabel))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(layout.createSequentialGroup()
++                        .add(prevButton)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(jPanel2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                        .add(taxonLabel)
++                        .add(projectLabel)))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(herbariumLabel)
++                    .add(sourceLabel))
++                .add(14, 14, 14)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 85, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(prevButton))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    /**
++     * @param args the command line arguments
++     */
++    public static void main(String args[]) {
++        java.awt.EventQueue.invokeLater(new Runnable() {
++            public void run() {
++//                new DetailView(new javax.swing.JFrame(), true).setVisible(true);
++            }
++        });
++    }
++    
++    public void update(Observable o, Object arg) {
++        if (arg instanceof String) {
++            String msg = (String)arg;
++            if (msg.equals(&quot;NEW_DETAIL_LOADED&quot;)) {
++                if (model.source != null)
++                    sourceLabel.setText(L10n.getFormattedString(&quot;Detail.Source&quot;,model.source));
++                else
++                    sourceLabel.setText(L10n.getFormattedString(&quot;Detail.Source&quot;,EMPTY));
++                if (model.herbarium != null)
++                    herbariumLabel.setText(L10n.getFormattedString(&quot;Detail.Herbarium&quot;,model.herbarium));
++                else 
++                    herbariumLabel.setText(L10n.getFormattedString(&quot;Detail.Herbarium&quot;,EMPTY));
++                Calendar c = Calendar.getInstance(L10n.getCurrentLocale());
++                c.set(Calendar.DAY_OF_MONTH,model.day);
++                if (model.month != null)
++                    c.set(Calendar.MONTH,model.month);
++                c.set(Calendar.YEAR,model.year);
++                Date d = c.getTime();
++                DateFormat df = DateFormat.getDateInstance(DateFormat.LONG,L10n.getCurrentLocale());
++                dateLabel.setText(L10n.getFormattedString(&quot;Detail.Date&quot;,df.format(d)));
++                occNoteArea.setText(model.occNote);
++                habNoteArea.setText(model.habNote);
++                placeDescArea.setText(model.placeDescription);
++                DateFormat df2 = DateFormat.getDateInstance(DateFormat.LONG,L10n.getCurrentLocale());
++                createdWhoLabel.setText(L10n.getFormattedString(&quot;Detail.CreatedWho&quot;,model.createdWho));
++                createdWhenLabel.setText(L10n.getFormattedString(&quot;Detail.CreatedWhen&quot;,df2.format(model.createdWhen)));
++                if (model.updatedWho != null) {
++                    updatedWhoLabel.setText(L10n.getFormattedString(&quot;Detail.UpdatedWho&quot;,model.updatedWho));
++                    updatedWhenLabel.setText(L10n.getFormattedString(&quot;Detail.UpdatedWhen&quot;,df2.format(model.updatedWhen)));
++                } else  {
++                    updatedWhoLabel.setText(L10n.getFormattedString(&quot;Detail.UpdatedWho&quot;,EMPTY));
++                    updatedWhenLabel.setText(L10n.getFormattedString(&quot;Detail.UpdatedWhen&quot;,EMPTY));
++                }
++                if (model.altitude != null)
++                    altitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Altitude&quot;,model.altitude));
++                else
++                    altitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Altitude&quot;,EMPTY));
++                if (model.latitude != null)
++                    latitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Latitude&quot;,model.latitude));
++                else
++                    latitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Latitude&quot;,EMPTY));
++                if (model.longitude != null)
++                    longitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Longitude&quot;,model.longitude));
++                else
++                    longitudeLabel.setText(L10n.getFormattedString(&quot;Detail.Longitude&quot;,EMPTY));
++                if (model.country != null)
++                    countryLabel.setText(L10n.getFormattedString(&quot;Detail.Country&quot;,model.country));
++                else
++                    countryLabel.setText(L10n.getFormattedString(&quot;Detail.Country&quot;,EMPTY));
++                if (model.quadrant != null)
++                    quadrantLabel.setText(L10n.getFormattedString(&quot;Detail.Quadrant&quot;,model.quadrant));
++                else
++                    quadrantLabel.setText(L10n.getFormattedString(&quot;Detail.Quadrant&quot;,EMPTY));
++                villageLabel.setText(L10n.getFormattedString(&quot;Detail.Village&quot;,model.village));
++                projectLabel.setText(L10n.getFormattedString(&quot;Detail.Project&quot;,model.project));
++                phytLabel.setText(L10n.getFormattedString(&quot;Detail.Phytochorion&quot;,model.phytName,model.phytCode));
++//                phytCodeLabel.setText(L10n.getFormattedString(&quot;Detail.PhytCode&quot;,model.phytCode));
++//                phytNameLabel.setText(L10n.getFormattedString(&quot;Detail.PhytName&quot;,model.phytName));
++                taxonLabel.setText(L10n.getFormattedString(&quot;Detail.Taxon&quot;,model.taxon));
++                territoryLabel.setText(L10n.getFormattedString(&quot;Detail.Territory&quot;,model.territory));
++                //publication
++                
++                if (model.detailTableModel != null)
++                    authorTable.setModel(model.detailTableModel);
++                else {
++                    logger.error(&quot;Detail: author table model is null.&quot;);
++                }
++            }
++        }
++    }
++
++
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    private javax.swing.JLabel altitudeLabel;
++    private javax.swing.JTable authorTable;
++    private javax.swing.JLabel countryLabel;
++    private javax.swing.JLabel createdWhenLabel;
++    private javax.swing.JLabel createdWhoLabel;
++    private javax.swing.JLabel dateLabel;
++    private javax.swing.JLabel descAreaLabel;
++    private javax.swing.JLabel habAreaLabel;
++    private javax.swing.JTextArea habNoteArea;
++    private javax.swing.JLabel herbariumLabel;
++    private javax.swing.JPanel jPanel1;
++    private javax.swing.JPanel jPanel2;
++    private javax.swing.JPanel jPanel3;
++    private javax.swing.JPanel jPanel4;
++    private javax.swing.JPanel jPanel5;
++    private javax.swing.JPanel jPanel6;
++    private javax.swing.JScrollPane jScrollPane1;
++    private javax.swing.JScrollPane jScrollPane2;
++    private javax.swing.JScrollPane jScrollPane3;
++    private javax.swing.JScrollPane jScrollPane4;
++    private javax.swing.JLabel latitudeLabel;
++    private javax.swing.JLabel longitudeLabel;
++    protected javax.swing.JButton nextButton;
++    private javax.swing.JLabel occAreaLabel;
++    private javax.swing.JTextArea occNoteArea;
++    private javax.swing.JLabel phytLabel;
++    private javax.swing.JTextArea placeDescArea;
++    protected javax.swing.JButton prevButton;
++    private javax.swing.JLabel projectLabel;
++    private javax.swing.JLabel quadrantLabel;
++    private javax.swing.JLabel sourceLabel;
++    private javax.swing.JLabel taxonLabel;
++    private javax.swing.JLabel territoryLabel;
++    private javax.swing.JLabel updatedWhenLabel;
++    private javax.swing.JLabel updatedWhoLabel;
++    private javax.swing.JLabel villageLabel;
++    // End of variables declaration//GEN-END:variables
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -7,6 +7,7 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.io.UnsupportedEncodingException;
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+@@ -43,6 +44,7 @@
+     private int pageSize = 30;
+     private int currentPage = 1;
+     private int selectionColumnIndex = -1;
++    private int numberColumnIndex = -1;
+     
+     private ArrayList&lt;Column&gt; columns;
+     private Selection selection = new Selection();    
+@@ -103,9 +105,9 @@
+                     if (columns.get(j).type.equals((Column.Type.NUMBER))) {
+                         row[j] = from + i + 1;
+                     } else {
++                        if (columns.get(j).type.equals(Column.Type.OCCURRENCE_ID))
++                            row[row.length-1] = value;    
+                         value = projArray[proj] == null ? columns.get(j).getDefaultNullValue() : projArray[proj];
+-                        if (columns.get(j).type.equals(Column.Type.OCCURRENCE_ID))
+-                            row[row.length-1] = value;                        
+                         row[j] = value;
+                         proj++;
+                     }
+@@ -118,6 +120,12 @@
+         
+     }
+             
++    public Integer getOccurrence(int i) throws DBLayerException, RemoteException {
++        Object[] obj = db.more(getResultId(), i, i);
++        Object[] pa = (Object[]) obj[0];
++        return (Integer) pa[0];
++    }
++    
+     public Object[] getRow(int i) {
+         if (data != null)
+             return data[i];
+@@ -315,6 +323,8 @@
+         logger.debug(&quot;Setting new overview columns.&quot;);
+         selectionColumnIndex = columns.indexOf(new Column(Column.Type.SELECTION)) - 1; // we don't display the first column which is always Occurrence.ID
+                                                                                        // so the index as JTable sees it is -1
++        
++        numberColumnIndex = columns.indexOf(new Column(Column.Type.NUMBER));
+         this.columns = columns;
+     }
+     
+@@ -329,6 +339,13 @@
+             return -1;
+     }
+     
++    public Integer getResultNumber(int row) {
++        if (data != null)
++            return ((Integer)data[row][numberColumnIndex])-1; //displayed numbers are indexed from 1
++        else
++            return -1;        
++    }
++    
+     public void setDatabase(DBLayer database) {
+         this.db = database;
+         logger.debug(&quot;Database set.&quot;);
+
+Modified: trunk/src/net/sf/plantlore/client/TableSorter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/TableSorter.java	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/client/TableSorter.java	2006-06-03 22:33:40 UTC (rev 432)
+@@ -543,6 +543,10 @@
+         return tableModel.getOccurrenceId(modelIndex(row));
+     }
+     
++    public Integer getResultNumber(int row) {
++        return tableModel.getResultNumber(modelIndex(row));
++    }
++    
+     public void setResultId(int resultId, SelectQuery sq) throws RemoteException, DBLayerException {
+         tableModel.setResultId(resultId, sq);
+     }
+@@ -555,6 +559,10 @@
+         tableModel.setColumns(columns);
+         fireTableStructureChanged();
+     }
++    
++    public Integer getOccurrence(int i) throws DBLayerException, RemoteException {
++        return tableModel.getOccurrence(i);
++    }
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-03 22:33:40 UTC (rev 432)
+@@ -1156,6 +1156,65 @@
+ 
+ 
+ 
++AddEdit.InfoPanel=Info
++
++Detail.Source=Source\: {0}
++
++Detail.Herbarium=Herbarium\: {0}
++
++Detail.Date=Date\: {0}
++
++Detail.OccNote=Occurrence note
++
++Detail.HabNote=Habitat note
++
++Detail.PlaceDescription=Place description
++
++Detail.CreatedWho=Created by user {0}
++
++Detail.CreatedWhen=on {0}
++
++Detail.UpdatedWho=Updated by user {0}
++
++Detail.UpdatedWhen=on {0}
++
++Detail.Altitude=Altitude\: {0}
++
++Detail.Latitude=Latitude\: {0}
++
++Detail.Longitude=Longitude\: {0}
++
++Detail.Country=Country\: {0}
++
++Detail.Quadrant=Quadrant\: {0}
++
++Detail.Village=Village\: {0}
++
++Detail.Project=Project\: {0}
++
++Detail.PhytCode=Phytochoria code\: {0}
++
++Detail.PhytName=Phytochoria name\: {0}
++
++Detail.Taxon=Taxon\: {0}
++
++Detail.Publication=Publication\: {0}
++
++Common.Next=Next
++
++Common.Prev=Prev
++
++Detail.Territory=Territory\: {0}
++
++Detail.Phytochorion=Phytochorion\: {0} ({1})
++
++Detail.OccNoteTitle=Occurrence note
++
++Detail.HabNoteTitle=Habitat note
++
++Detail.PlaceDescriptionTitle=Place description
++
++
+ #=============================================================
+ # SERVER
+ #	net.sf.plantlore.server.manager
+@@ -1213,3 +1272,4 @@
+ Server.Info.ClientKicked = The client {0} was kicked.
+ Server.Info.Terminated = Server terminated (clients disconnected).
+ 
++
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-03 22:33:40 UTC (rev 432)
+@@ -668,7 +668,7 @@
+ 
+ Overview.History=Historie
+ 
+-Overview.HistoryTT=Historie onza\u010den\u00e9ho z\u00e1znamu
++Overview.HistoryTT=Historie onzan\u010Den\u00E9ho z\u00E1znamu
+ 
+ Overview.Scheda=Scheda
+ 
+@@ -771,3 +771,59 @@
+ AddEdit.PreloadAuthors=zapamatuj si zadan\u00E9 autory
+ 
+ AddEdit.InfoPanel=Info
++
++Detail.Source=Source\: {0}
++
++Detail.Herbarium=Herbarium\: {0}
++
++Detail.Date=Date\: {0}
++
++Detail.OccNote=Occurrence note\: {0}
++
++Detail.HabNote=Habitat note
++
++Detail.PlaceDescription=Place description
++
++Detail.CreatedWho=Created by user {0}
++
++Detail.CreatedWhen=on {0}
++
++Detail.UpdatedWho=Updated by user {0}
++
++Detail.UpdatedWhen=on {0}
++
++Detail.Altitude=Altitude\: {0}
++
++Detail.Latitude=Latitude\: {0}
++
++Detail.Longitude=Longitude\: {0}
++
++Detail.Country=Country\: {0}
++
++Detail.Quadrant=Quadrant\: {0}
++
++Detail.Village=Village\: {0}
++
++Detail.Project=Project\: {0}
++
++Detail.PhytCode=Phytochoria code\: {0}
++
++Detail.PhytName=Phytochoria name\: {0}
++
++Detail.Taxon=Taxon\: {0}
++
++Detail.Publication=Publication\: {0}
++
++Common.Next=Next
++
++Common.Prev=Prev
++
++Detail.Territory=Territory\: {0}
++
++Detail.Phytochorion=Phytochorion\: {0} ({1})
++
++Detail.OccNoteTitle=Occurrence note
++
++Detail.HabNoteTitle=Habitat note
++
++Detail.PlaceDescriptionTitle=Place description
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-03 18:49:12 UTC (rev 431)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-03 22:33:40 UTC (rev 432)
+@@ -839,3 +839,59 @@
+ AddEdit.PreloadAuthors=remember entered authors
+ 
+ AddEdit.InfoPanel=Info
++
++Detail.Source=Source\: {0}
++
++Detail.Herbarium=Herbarium\: {0}
++
++Detail.Date=Date\: {0}
++
++Detail.OccNote=Occurrence note\: {0}
++
++Detail.HabNote=Habitat note
++
++Detail.PlaceDescription=Place description
++
++Detail.CreatedWho=Created by user {0}
++
++Detail.CreatedWhen=on {0}
++
++Detail.UpdatedWho=Updated by user {0}
++
++Detail.UpdatedWhen=on {0}
++
++Detail.Altitude=Altitude\: {0}
++
++Detail.Latitude=Latitude\: {0}
++
++Detail.Longitude=Longitude\: {0}
++
++Detail.Country=Country\: {0}
++
++Detail.Quadrant=Quadrant\: {0}
++
++Detail.Village=Village\: {0}
++
++Detail.Project=Project\: {0}
++
++Detail.PhytCode=Phytochoria code\: {0}
++
++Detail.PhytName=Phytochoria name\: {0}
++
++Detail.Taxon=Taxon\: {0}
++
++Detail.Publication=Publication\: {0}
++
++Common.Next=Next
++
++Common.Prev=Prev
++
++Detail.Territory=Territory\: {0}
++
++Detail.Phytochorion=Phytochorion\: {0} ({1})
++
++Detail.OccNoteTitle=Occurrence note
++
++Detail.HabNoteTitle=Habitat note
++
++Detail.PlaceDescriptionTitle=Place description
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000538.html">[Plantlore-dev] r431 - in trunk/src/net/sf/plantlore: client client/login middleware server/manager
+</A></li>
+	<LI>Next message: <A HREF="000540.html">[Plantlore-dev] r433 - in trunk/src/net/sf/plantlore: client/resources common/exception common/record middleware server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#539">[ date ]</a>
+              <a href="thread.html#539">[ thread ]</a>
+              <a href="subject.html#539">[ subject ]</a>
+              <a href="author.html#539">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

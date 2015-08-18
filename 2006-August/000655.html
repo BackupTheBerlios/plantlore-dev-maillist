@@ -1,0 +1,515 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r486 - in trunk/src/net/sf/plantlore: client	client/export client/login common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r486%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/export%20client/login%20common&In-Reply-To=%3C200608060825.k768PkID008023%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000654.html">
+   <LINK REL="Next"  HREF="000656.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r486 - in trunk/src/net/sf/plantlore: client	client/export client/login common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r486%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/export%20client/login%20common&In-Reply-To=%3C200608060825.k768PkID008023%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r486 - in trunk/src/net/sf/plantlore: client	client/export client/login common">krater at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug  6 10:25:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000654.html">[Plantlore-dev] link - Tasky
+</A></li>
+        <LI>Next message: <A HREF="000656.html">[Plantlore-dev] Server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#655">[ date ]</a>
+              <a href="thread.html#655">[ thread ]</a>
+              <a href="subject.html#655">[ subject ]</a>
+              <a href="author.html#655">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-06 10:25:45 +0200 (Sun, 06 Aug 2006)
+New Revision: 486
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+   trunk/src/net/sf/plantlore/client/export/ExportTask2.java
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+   trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+   trunk/src/net/sf/plantlore/common/Task.java
+Log:
+Minor changes in the ExportMng2 &amp; AuthCtrl (several unused parts omitted).
+
+ExportTask2 fixed - the progress of the task is now announced properly.
+
+MInor chanegs in the Login.
+
+DefaultProgressBar(Ex) stops the task before the error is announced (the reason: if a reconnect-allowing exception occurred and reconnect was indeed selected, there were two progress bars which looked confusing).
+
+DefaultReconnectDialog strings fixed (Common.OK ~&gt; Common.Ok).
+
+ProgressBar informs (logger.debug) which task is in the STOPPING or STOPPED mode.
+
+Task allows repeated start of the task (repeated call of the Task.start() method).
+
+AppCoreCtrl.ReconnectAction fixed. It no longer displays the error message twice when reconnect fails. [The problem was caused by a repeated use of the same login task - its original ProgressBar linked via the Observable-Observer mechanism sprang into life with the task restarted. In fact, in that unfixed version, every time the ReconnectAction was called it created another ProgressBar; this might have lead to a situation where three or more ProgressBars were displayed at the same time - as would be the error message.]
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -1501,6 +1501,8 @@
+ 
+ 	}
+ 
++	
++	
+ 	public class ReconnectAction extends AbstractAction {
+ 
+ 		private Component parent = view;
+@@ -1521,18 +1523,21 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent arg0) {
+-			if (loginModel == null)
+-				return;
+-			Task t = loginModel.getLastConnectionTask();
+-			if (t == null)
+-				return;
+-			if (parent instanceof JFrame)
+-				new DefaultProgressBarEx(t, (JFrame) parent, true);
+-			else if (parent instanceof JDialog)
+-				new DefaultProgressBarEx(t, (JDialog) parent, true);
+-			t.start();
++			if (loginModel != null) {
++				Task t = loginModel.getLastConnectionTask();
++				if(t != null) {
++					// 1. Log out ( ~ dispose of the current DBLayer)
++					loginModel.logout();
++					// 2. Log in again ( ~ create a new DBLayer)
++					// Note that the ProgressBar is no longer needed - 
++					// the last task surely had one and it will become
++					// active once we start the task again.
++					t.start(); 
++				}
++			}
+ 		}
+ 	}
++	
+ 
+ 	// Update all information about the database layer and inform everyone who
+ 	// has to be informed
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -6,10 +6,6 @@
+ import java.io.OutputStreamWriter;
+ import java.io.Writer;
+ import java.rmi.RemoteException;
+-import java.util.HashSet;
+-import java.util.Observable;
+-import java.util.Observer;
+-import java.util.Set;
+ 
+ import net.sf.plantlore.client.export.builders.*;
+ import net.sf.plantlore.client.export.component.FileFormat;
+@@ -51,7 +47,7 @@
+  * @version 2.0
+  * @see net.sf.plantlore.client.export.Builder
+  */
+-public class ExportMng2 implements Observer {
++public class ExportMng2 {
+ 	
+ 	
+ 	public static final String ENCODING = &quot;UTF-8&quot;;
+@@ -241,9 +237,6 @@
+ 	
+ 	
+ 	
+-	private Set&lt;ExportTask2&gt; exportTasks = new HashSet&lt;ExportTask2&gt;(8);
+-	
+-	
+ 	/**
+ 	 * Start the export procedure. The export will run in its own thread.
+ 	 * 
+@@ -252,8 +245,6 @@
+ 	 */
+ 	synchronized public ExportTask2 createExportTask() 
+ 	throws ExportException, IOException, DBLayerException {
+-		if( exportTasks.size() &gt; 4 )
+-			throw new ExportException(L10n.getString(&quot;Error.TooManyTasks&quot;));
+ 		// Check if all necessary components are valid.
+ 		if( db == null )
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidDBLayer&quot;));
+@@ -314,8 +305,6 @@
+ 		// Start a new task.
+ 		ExportTask2 t = new ExportTask2(db, query, writer, builder, selection);
+ 		t.ignoreDead( filter.ignoreDead() );
+-		/*exportTasks.add(t);
+-		t.addObserver(this);*/
+ 		
+ 		// Reset variables.
+ 		query = null;
+@@ -332,22 +321,6 @@
+ 	
+ 		
+ 	/**
+-	 * Abort every running Export. 
+-	 */
+-	synchronized public void abortAllTasks() {
+-		for(ExportTask2 task : exportTasks) {
+-			task.kill();
+-			task.deleteObserver(this);
+-		}
+-		exportTasks.clear();
+-	}
+-	
+-	
+-	synchronized public boolean isAnExportInProgress() {
+-		return exportTasks.size() != 0;
+-	}
+-	
+-	/**
+ 	 * @return The list of filters describing formats this Export Manager can handle.
+ 	 */
+ 	public FileFormat[] getFileFormats() {
+@@ -355,11 +328,4 @@
+ 	}
+ 
+ 
+-	synchronized public void update(Observable source, Object arg) {
+-//		if( !((ExportTask)source).isExportInProgress() ) {
+-//			exportTasks.remove( source );
+-//			source.deleteObserver(this);
+-//		}
+-	}
+-	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportTask2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportTask2.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/client/export/ExportTask2.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -114,7 +114,7 @@
+ 				logger.debug(&quot;The record is in the selection. It will be exported.&quot;);
+ 				count++;
+ 				setStatusMessage(count + &quot; &quot; + L10n.getString(&quot;Export.RecordsExported&quot;));
+-				setLength(count);
++				setPosition(count);
+ 				
+ 				build.startRecord();
+ 				
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -1,12 +1,11 @@
+ package net.sf.plantlore.client.login;
+ 
+-import java.awt.Cursor;
+ import java.awt.event.ActionEvent;
+ 
+ import javax.swing.AbstractAction;
++import javax.swing.JOptionPane;
+ 
+ import net.sf.plantlore.common.DefaultCancelAction;
+-import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultProgressBarEx;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.l10n.L10n;
+@@ -23,56 +22,33 @@
+ 		view.discard.setAction( new DefaultCancelAction(view) );
+ 	}
+ 
+-	@Deprecated
+-	class NextAction extends AbstractAction {
+-		public NextAction() {
+-			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Login.AuthorizeTT&quot;));
+-			putValue(NAME, L10n.getString(&quot;Login.Authorize&quot;));
+-		}
+-		public void actionPerformed(ActionEvent arg0) {
+-			view.next.setEnabled(false);
+-			view.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+-			view.discard.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+-			String user = (view.user.getSelectedItem() != null) ? view.user.getSelectedItem().toString() : null;
+-
+-			model.connectToSelected(user, new String(view.password.getPassword()));
+-		}
+-	}
+ 	
+-	
+ 	class NextAction2 extends AbstractAction {
+ 		public NextAction2() {
+ 			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Login.AuthorizeTT&quot;));
+ 			putValue(NAME, L10n.getString(&quot;Login.Authorize&quot;));
+ 		}
+ 		public void actionPerformed(ActionEvent arg0) {
+-			//view.next.setEnabled(false);
+-			//view.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+-			//view.discard.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+ 			String user = ((javax.swing.JTextField)view.user.getEditor().getEditorComponent()).getText();
+ 
+ 			Task connect = model.createConnectionTask(user, new String(view.password.getPassword()));
+-			/*DefaultProgressBar bar = */new DefaultProgressBarEx(connect, view, true);
+-			//bar.unlockComponents(view.next);
++			
++			// My own ProgressBar - 
++			// it is not clever to offer reconnection after the login failed...
++			new DefaultProgressBarEx(connect, view, true) {
++				@Override
++				public void exceptionHandler(Exception ex) {
++					getTask().stop();
++					JOptionPane.showMessageDialog( 
++							parent, 
++							ex.getMessage(), 
++							L10n.getString(&quot;Error.General&quot;), 
++							JOptionPane.ERROR_MESSAGE );
++				}
++			};
+ 			connect.start();
+ 		}
+ 	}
+ 	
+-	@Deprecated
+-	class CancelAction extends AbstractAction {
+-		public CancelAction() {
+-			//putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Login.DiscardTT&quot;));
+-			putValue(NAME, L10n.getString(&quot;Login.Discard&quot;));
+-		}
+-		public void actionPerformed(ActionEvent arg0) {
+-			if( !view.next.isEnabled() ) {
+-				view.next.setEnabled(true);
+-				view.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+-				model.interrupt();
+-			}
+-			else
+-				view.setVisible(false);
+-		}
+-	}
+-
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -55,8 +55,9 @@
+ 	private Right accessRights;
+ 	private User plantloreUser;
+ 	
+-	private Task lastConnectionTask; 
++	private Task lastConnectionTask;
+ 	
++
+ 	/**
+ 	 * Create a new login model. The DBLayer factory will be used to produce 
+ 	 * new DBLayers.
+@@ -278,7 +279,7 @@
+ 							// Nothing we can do; the server is probably in trouble, or the network connection failed. 
+ 						}
+ 					setChanged();
+-					notifyObservers( e );
++					 notifyObservers( e );
+ 					return null;
+ 				}
+ 				
+@@ -349,10 +350,14 @@
+ 			this.password = password;
+ 		}
+ 		
++				
+ 		@Override
+ 		public Object task() throws Exception {
+ 			
+-			try {				
++			try {
++				if(isCanceled())
++					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
++				
+ 				// Create a new database layer.
+ 				logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + dbinfo.host + &quot;:&quot; + dbinfo.port);
+ 				setStatusMessage( L10n.getString(&quot;Login.Connecting&quot;) );
+@@ -380,7 +385,7 @@
+ 				if(dblayer != null)
+ 					try {
+ 						factory.destroy(dblayer);
+-					} catch(RemoteException re) {
++					} catch(Exception re) {
+ 						// Nothing we can do; the server is probably in trouble, or the network connection failed. 
+ 					}
+ 				// Re-throw the exception so that the view is updated as well.
+@@ -395,8 +400,10 @@
+ 			// Everything went fine - 
+ 			// there is a new DBLayer which is to be announced to the observers of Login.
+ 			announceConnection();
++
+ 			return null;
+ 		}
++		
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -32,6 +32,8 @@
+ 	@Override
+ 	public void exceptionHandler(Exception ex) {
+ 		
++		getTask().stop();
++		
+ 		if( ex instanceof RemoteException || ex instanceof DBLayerException )
+ 			DefaultReconnectDialog.show(parent, ex);
+ 		
+@@ -42,8 +44,6 @@
+ 					L10n.getString(&quot;Error.General&quot;), 
+ 					JOptionPane.ERROR_MESSAGE );
+ 		
+-		getTask().stop();
+-		
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -6,6 +6,7 @@
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ 
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+@@ -33,7 +34,9 @@
+ 	@Override
+ 	public void exceptionHandler(Exception ex) {
+ 		
+-		if( ex instanceof RemoteException )
++		getTask().stop();
++		
++		if( ex instanceof RemoteException || ex instanceof DBLayerException )
+ 			DefaultReconnectDialog.show(parent, ex);
+ 		
+ 		else
+@@ -43,8 +46,6 @@
+ 					L10n.getString(&quot;Error.General&quot;), 
+ 					JOptionPane.ERROR_MESSAGE );
+ 		
+-		getTask().stop();
+-		
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -8,7 +8,7 @@
+ 
+ public class DefaultReconnectDialog {
+ 	
+-	private static String[] options = new String[] { L10n.getString(&quot;Overview.MenuFileReconnect&quot;), L10n.getString(&quot;Common.OK&quot;) };
++	private static String[] options = new String[] { L10n.getString(&quot;Overview.MenuFileReconnect&quot;), L10n.getString(&quot;Common.Ok&quot;) };
+ 	private static AppCoreCtrl.ReconnectAction defaultReconnectAction;
+ 
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -220,9 +220,11 @@
+                         setVisible(false);
+                         dispose();                    
+                         parent.setCursor(Cursor.getDefaultCursor());
++                        logger.debug( &quot;ProgressBar:Stopping &quot; + task );
+                         afterStopping();
+                         break;
+                     case STOPPED:
++                    	logger.debug( &quot;ProgressBar:Stopped &quot; + task );
+                         afterStopped(value);
+                         break;                    
+                 }//switch
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-08-04 11:35:26 UTC (rev 485)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-08-06 08:25:45 UTC (rev 486)
+@@ -10,7 +10,6 @@
+ package net.sf.plantlore.common;
+ 
+ import java.util.Observable;
+-import javax.swing.SwingUtilities;
+ 
+ /** A convenience class for long task implementation.
+  *
+@@ -21,7 +20,7 @@
+  */
+ public abstract class Task extends Observable {
+     private SwingWorker worker;    
+-    private Object value;
++    //private Object value;
+     public static enum Message {POSITION_CHANGED, MESSAGE_CHANGED, STOPPING, STOPPED, STARTING, STARTED, PROCEEDING, LENGTH_CHANGED};
+     private int length = 0;
+     private int position = 0;
+@@ -159,6 +158,10 @@
+      *
+      */
+     public void start() {
++    	
++    	// In case the task is to be started again. 
++    	done = canceled = false;
++    	
+         worker = new SwingWorker() {
+             public Object construct() {
+                 Object value = null;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000654.html">[Plantlore-dev] link - Tasky
+</A></li>
+	<LI>Next message: <A HREF="000656.html">[Plantlore-dev] Server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#655">[ date ]</a>
+              <a href="thread.html#655">[ thread ]</a>
+              <a href="subject.html#655">[ subject ]</a>
+              <a href="author.html#655">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

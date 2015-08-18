@@ -1,0 +1,1152 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r387%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20config%20l10n&In-Reply-To=%3C200605292155.k4TLts27023009%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000443.html">
+   <LINK REL="Next"  HREF="000445.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r387%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20config%20l10n&In-Reply-To=%3C200605292155.k4TLts27023009%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon May 29 23:55:54 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000443.html">[Plantlore-dev] r386 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000445.html">[Plantlore-dev] r388 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#444">[ date ]</a>
+              <a href="thread.html#444">[ thread ]</a>
+              <a href="subject.html#444">[ subject ]</a>
+              <a href="author.html#444">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-29 23:55:51 +0200 (Mon, 29 May 2006)
+New Revision: 387
+
+Added:
+   trunk/src/net/sf/plantlore/client/OverviewStatusBarManager.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/JasperDataSource.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+   trunk/src/net/sf/plantlore/common/Selection.java
+   trunk/src/net/sf/plantlore/common/StatusBarManager.java
+   trunk/src/net/sf/plantlore/common/Task.java
+   trunk/src/net/sf/plantlore/config/log4j.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Log4j now logs the name of the current thread.
+
+DeleteHabitat method moved from AddEdit to DBLayerUtils. It is leveraged by Delete.
+
+A few fixes to ProgressBar and Task so that the modal state works at least a little, doesn't freeze initially and doesn't freeze randomly after several invocations. Updates to the ProgressBar GUI are made in the Event Dispatch Thread now. The thread usage is however not entirely correct yet unfortunately. You have to be careful when using it.
+
+Clear method added to Selection (we need to clear the selection after delete).
+
+Made StatusBarManager abstract and subclassed it by OverviewStatusManager so that others can make some use of the StatusBarManager too. StatusBarManager is an Observer btw.
+
+Hopefully fixed the occasional NullPointerException during occurrence data fetching from the database.
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -51,8 +51,8 @@
+     public static final String EMPTY_STRING = L10n.getString(&quot;Common.ComboboxNothingSelected&quot;);
+     public static final Pair&lt;String,Integer&gt; EMPTY_PAIR = new Pair&lt;String,Integer&gt;(EMPTY_STRING,-1);
+     
+-    private Logger logger;
+-    private DBLayer database;      
++    private static Logger logger;
++    private static DBLayer database;      
+     
+     private int coordinateSystem;
+     private Occurrence o; //original occurrence
+@@ -119,7 +119,7 @@
+      *
+      * @param ao Assumes it is from database and therefore assumes WGS84 coordinate system.
+      */
+-    public void setRecord(Integer occurrenceId) {
++    public void setRecord(Integer occurrenceId) throws DBLayerException, RemoteException {
+         logger.debug(&quot;Loading AddEdit data for occurrence id &quot;+occurrenceId);
+         
+         DBLayerUtils dlu = new DBLayerUtils(database);
+@@ -484,7 +484,7 @@
+      * @return true the object has to be updated
+      * @return false the object has to be created
+      */
+-    private Occurrence prepareNewOccurrence(String taxon, Habitat h) {
++    private Occurrence prepareNewOccurrence(String taxon, Habitat h) throws DBLayerException, RemoteException {
+         DBLayerUtils dlu = new DBLayerUtils(database);
+         Occurrence occ;
+         Author a;
+@@ -683,34 +683,7 @@
+                 
+         return occTmp;
+     }
+-    
+-    /** Deletes Habitat for given Occurrence if needed.
+-     *
+-     * Will delete Habitat if no live Occurrence point at it.
+-     *
+-     */
+-    private void deleteHabitat(Habitat h) {
+-        try {
+-            SelectQuery sq = database.createQuery(Occurrence.class);        
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
+-            sq.addRestriction(PlantloreConstants.RESTR_NE,Occurrence.DELETED, null, 1, null);
+-            int resultid = database.executeQuery(sq);
+-            int resultCount = database.getNumRows(resultid);
+-            if (resultCount == 0) {
+-                logger.info(&quot;Deleting habitat id=&quot;+h.getId()+&quot; with nearest village &quot;+h.getNearestVillage().getName());
+-                h.setDeleted(1);
+-                database.executeUpdate(h);
+-            } else {
+-                logger.debug(&quot;Leaving habitat id=&quot;+h.getId()+&quot; live. Live Occurrence records point at it.&quot;);
+-            }
+-        } catch (RemoteException e) {
+-            e.printStackTrace();
+-        } catch (DBLayerException e) {
+-            e.printStackTrace();
+-        }
+         
+-    }
+-    
+     public void storeRecord(boolean updateAllPlants) {
+         DBLayerUtils dlu = new DBLayerUtils(database);
+ 
+@@ -738,7 +711,7 @@
+                         logger.info(&quot;Deleting original occurrence and associated author occurrences&quot;);
+                         o.setDeleted(1);
+                         database.executeUpdate(o);
+-                        deleteHabitat(o.getHabitat());
++                        dlu.deleteHabitat(o.getHabitat());
+                         logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
+                         Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
+                         Iterator it = aoSet.iterator();
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -10,13 +10,16 @@
+ import java.io.IOException;
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
++import java.util.Collection;
+ import java.util.Hashtable;
+ import java.util.Observable;
+ import java.util.prefs.Preferences;
+ import javax.swing.table.TableModel;
+ import net.sf.plantlore.client.login.DBInfo;
++import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+@@ -28,6 +31,7 @@
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.Village;
++import net.sf.plantlore.l10n.L10n;
+ 
+ // Imports for temporary db access
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -305,6 +309,8 @@
+     }
+     
+     public void setResultId(int resultId) {
++        setChanged();
++        notifyObservers(&quot;LOADING_NEW_DATA&quot;);
+         tableSorter.setResultId(resultId);
+         setChanged();
+         notifyObservers(&quot;NEW_QUERY&quot;);
+@@ -698,5 +704,46 @@
+     public void setProjects(Pair&lt;String, Integer&gt;[] projects) {
+         this.projects = projects;
+     }
+-    
++ 
++    public Task deleteSelected() {
++        final Task task = new Task() {
++            int deleted = 0;
++            
++            public Object task() throws DBLayerException, RemoteException {
++                DBLayerUtils dlu = new DBLayerUtils(database);
++
++                Collection&lt;Integer&gt; toBeDeleted = getTableModel().getSelection().values();
++                setLength(toBeDeleted.size()*2); //inform about approx. length of this task
++                setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
++                for (Integer i : toBeDeleted) {
++                    Occurrence occ = (Occurrence) dlu.getObjectFor(i.intValue(), Occurrence.class);
++                    AuthorOccurrence[] aos = dlu.getAuthorsOf(occ);
++
++                    logger.debug(&quot;Deleting occurrence id &quot;+i);
++                    occ.setDeleted(1);
++                    database.executeUpdate(occ);
++                    dlu.deleteHabitat(occ.getHabitat());
++                    logger.debug(&quot;Occurrence id &quot;+occ.getId()+&quot; &quot;+occ.getPlant().getTaxon()+&quot; deleted.&quot;);
++                    setPosition(getPosition()+1);
++                    
++                    for (AuthorOccurrence authorOcc : aos) {
++                        authorOcc.setDeleted(1);
++                        database.executeUpdate(authorOcc);
++                        logger.debug(&quot;AuthorOccurrence id &quot;+authorOcc.getId()+&quot; &quot;+authorOcc.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                    }
++                    deleted++;
++                    setPosition(getPosition()+1);
++                    setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
++                }
++
++                getTableModel().clearSelection();
++                fireStopped();
++                return null;
++            }
++        };//task
++        
++        return task;
++    }
+ }
++
++
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.Component;
++import java.awt.Frame;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusListener;
+@@ -61,8 +62,11 @@
+ import net.sf.plantlore.client.user.UserManager;
+ import net.sf.plantlore.client.user.UserManagerCtrl;
+ import net.sf.plantlore.client.user.UserManagerView;
++import net.sf.plantlore.common.ProgressBar;
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.StatusBarManager;
++import net.sf.plantlore.common.SwingWorker;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+@@ -547,8 +551,16 @@
+                 editModel.setProjects(model.getProjects());
+                 editModel.setTerritories(model.getTerritories());
+                 
+-                Object[] row = model.getSelectedRow();             
+-                editModel.setRecord((Integer) row[row.length-1]);
++                Object[] row = model.getSelectedRow();
++                try {
++                    editModel.setRecord((Integer) row[row.length-1]);
++                } catch (DBLayerException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
++                } catch (RemoteException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex);
++                }
+                 editView = new AddEditView(view, true, editModel, true);
+                 editView.setTitle(L10n.getString(&quot;AddEdit.EditDialogTitle&quot;));
+                 editCtrl = new AddEditCtrl(editModel, editView, true);
+@@ -557,7 +569,15 @@
+                 return;
+             } else {
+                 Object[] row = model.getSelectedRow();
+-                editModel.setRecord((Integer) row[row.length-1]);
++                try {
++                    editModel.setRecord((Integer) row[row.length-1]);
++                } catch (DBLayerException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
++                } catch (RemoteException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex);
++                }
+                 editView.loadComponentData();
+                 editView.setVisible(true);
+             }
+@@ -574,7 +594,49 @@
+         } 
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+-            System.out.println(&quot;Delete pressed&quot;);
++            Selection selection = model.getTableModel().getSelection();
++            Object[] arg = { selection.values().size() };
++            
++            int choice = JOptionPane.showConfirmDialog(view, 
++                    L10n.getFormattedString(&quot;Message.DeleteRecords&quot;,arg),
++                    L10n.getString(&quot;Message.DeleteRecordsTitle&quot;),
++                    JOptionPane.OK_CANCEL_OPTION,
++                    JOptionPane.WARNING_MESSAGE);
++
++            switch (choice) {
++                case JOptionPane.CANCEL_OPTION:
++                    return;
++                case JOptionPane.OK_OPTION:
++                    logger.info(&quot;Deleting &quot;+arg[0]+&quot; records.&quot;);
++
++                    Task task = model.deleteSelected();
++                    
++                    ProgressBar progressBar = new ProgressBar(task,view,true) {
++                        public void exceptionHandler(Exception ex) {
++                            if (ex instanceof DBLayerException) {
++                                DBLayerException e = (DBLayerException)ex;
++                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                                logger.error(e+&quot;: &quot;+e.getErrorInfo());
++                                return;
++                            }
++                            if (ex instanceof RemoteException) {
++                                RemoteException e = (RemoteException)ex;
++                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                                logger.error(e);
++                                return;
++                            }
++                            JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                            logger.error(ex);                            
++                        }              
++                        
++                        public void afterStopped() {
++                            refreshOverview(false); //false -&gt; do not create task, refresh the overview directly in this thread
++                        }
++                    };
++                    
++                    task.start();
++                    break;
++            }//switch
+         }
+     }
+ 
+@@ -684,7 +746,7 @@
+                     
+                 
+                 ClassLoader cl = this.getClass().getClassLoader();
+-                InputStream is = cl.getResourceAsStream(&quot;net/sf/plantlore/client/Scheda.jrxml&quot;);
++                InputStream is = cl.getResourceAsStream(&quot;net/sf/plantlore/client/resourcesSchedaA6.jasper&quot;);
+ 
+     //          JasperReport jasperReport = JasperCompileManager.compileReport(
+     //              &quot;Scheda.jrxml&quot;);
+@@ -991,6 +1053,27 @@
+     	}
+     }
+     
++    private Task refreshOverview(boolean createTask) {
++        if (createTask) {
++            Task task = new Task() {
++                public Object task() {
++                    searchModel.clear();
++                    searchModel.constructQuery();
++                    logger.debug(&quot;before fireStopped&quot;);
++                    fireStopped();
++                    logger.debug(&quot;after fireStopped&quot;);
++                    return null;
++                }
++            };
++
++            return task;
++        } else {
++            searchModel.clear();
++            searchModel.constructQuery();
++            return null;
++        }
++    }
++    
+     class RefreshAction extends AbstractAction {
+         public RefreshAction() {
+             if (showButtonText)
+@@ -1001,9 +1084,16 @@
+         }
+ 
+         public void actionPerformed(ActionEvent e) {
+-            searchModel.clear();
+-            searchModel.constructQuery();
+-            model.setResultId(searchModel.getNewResultId());
++            // e can be null !!! - we call actionPerformed(null) in DeleteAction
++            Task task = refreshOverview(true);
++            ProgressBar progressBar = new ProgressBar(task, view, true) {
++                public void exceptionHandler(Exception ex) {   
++                    //FIXME
++                    ex.printStackTrace();
++                }                    
++            };
++
++            task.start(); 
+         }
+         
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -37,7 +37,7 @@
+         prefs = Preferences.userNodeForPackage(this.getClass());        
+         logger = Logger.getLogger(this.getClass().getPackage().getName());                
+         initComponents();
+-        sbm = new StatusBarManager(statusLabel);    
++        sbm = new OverviewStatusBarManager(statusLabel);    
+         sbm.setDefaultText(L10n.getString(&quot;Overview.StatusReady&quot;));
+ 
+         initOverview();
+@@ -354,11 +354,26 @@
+                 return;
+             }
+             if (arg.equals(&quot;NEW_QUERY&quot;)) {
+-                setPreferredColumnSizes();
++                //setPreferredColumnSizes();
++                overview.setEnabled(true);
++                overview.setVisible(true);
+                 recordsCount.setText(&quot;&quot;+model.getResultsCount());
+                 pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount()); 
++                overview.getSelectionModel().setSelectionInterval(0,0);
+                 return;
+             }
++            if (arg.equals(&quot;LOADING_NEW_DATA&quot;)) {
++                //TableSorter and OverviewTable model threw exceptions while loading data
++                //because they were trying to display data in possibly inconsistent state
++                //I hope that I've fixed it at least in OverviewTableModel where data are now
++                //loaded into a new variable and then put in place of the working data at one point
++                //
++                //However now I noticed a NullPointerException from TableSorter, which is not my work
++                //and I don't want to study it now, so we'll try to ensure that overview doesn't ask
++                //for any data during the loading:
++                overview.setVisible(false);
++                overview.setEnabled(false);
++            }
+         }        
+     }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/JasperDataSource.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/JasperDataSource.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/JasperDataSource.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -9,6 +9,7 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Iterator;
+@@ -19,6 +20,7 @@
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.Selection;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.HistoryChange;
+@@ -65,7 +67,13 @@
+     public boolean next() throws JRException {
+         index++;
+         if (it.hasNext()) {
+-            occurrence = (Occurrence) dlu.getObjectFor(it.next(), Occurrence.class);
++            try {
++                occurrence = (Occurrence) dlu.getObjectFor(it.next(), Occurrence.class);
++            } catch (RemoteException ex) {
++                throw new JRException(ex);
++            } catch (DBLayerException ex) {
++                throw new JRException(ex);
++            }
+             return true;
+         } else
+             return false;
+@@ -108,7 +116,13 @@
+             }
+             
+             if (aos == null || aosForIndex != index) {
+-                aos = dlu.getAuthorsOf(occurrence);
++                try {
++                    aos = dlu.getAuthorsOf(occurrence);
++                } catch (RemoteException ex) {
++                    throw new JRException(ex);
++                } catch (DBLayerException ex) {
++                    throw new JRException(ex);
++                }
+             }
+             if (aos.length &lt; 1) {
+                 logger.error(&quot;Given occurrence doesn't have any live authors in the database. Is it a try to work with a deleted occurrence?&quot;);
+
+Added: trunk/src/net/sf/plantlore/client/OverviewStatusBarManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewStatusBarManager.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/OverviewStatusBarManager.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -0,0 +1,78 @@
++/*
++ * OverviewStatusBarManager.java
++ *
++ * Created on 28. kv&#283;ten 2006, 23:05
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.util.Observable;
++import javax.swing.JLabel;
++import net.sf.plantlore.common.StatusBarManager;
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class OverviewStatusBarManager extends StatusBarManager {
++    
++    /** Creates a new instance of OverviewStatusBarManager */
++    public OverviewStatusBarManager(JLabel statusLabel) {
++        super(statusLabel);
++    }
++
++    public void update(Observable o, Object arg)  {
++        if (arg instanceof String) {
++            String msg = (String)arg;
++            
++            if (msg.equals(&quot;LOADING_PLANTS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPlants&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_AUTHORS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingAuthors&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_AUTHOR_ROLES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingAuthorRoles&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_VILLAGES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingVillages&quot;));
++            }
++
++            if (msg.equals(&quot;LOADING_TERRITORIES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingTerritories&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PHYTOCHORIA&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPhytochoria&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_SOURCES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingSources&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PUBLICATIONS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPublications&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PROJECTS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingProjects&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_OVERVIEW_DATA&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingOverviewData&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADED&quot;)) {
++                displayDefaultText();
++            }
++        }
++    }
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -69,15 +69,19 @@
+         
+     private void loadData() throws DBLayerException, RemoteException {
+         resultsCount = db.getNumRows(getResultId());
+-        System.out.println(&quot;resultsCount=&quot;+resultsCount);
++        logger.debug(&quot;resultsCount=&quot;+resultsCount);
+         Object[] records;
+         Object[] projArray;
+         Object[] row;
+         if (resultsCount &gt; 0) {
+-            logger.debug(&quot;resultsCount = &quot;+resultsCount);
+             to = Math.min(resultsCount-1, from + pageSize - 1);
+             logger.debug(&quot;to = &quot;+to+&quot; from=&quot;+from+&quot; currentPage=&quot;+currentPage);
+-            data = new Object[to - from + 1][];
++            
++            // !!! It is essential to create a local data array, because
++            // while we are fetching data from the database someone can still
++            // ask the table for it's value at some cell, etc...
++            ///!!!
++            Object[][] data = new Object[to - from + 1][];
+             logger.debug(&quot;data.length = &quot;+data.length);
+             records = db.more(getResultId(), from, to);
+             logger.debug(&quot;records.length = &quot; + records.length);
+@@ -105,13 +109,17 @@
+                 }// for j                
+                 data[i] = row;
+             }//for i
++            this.data = data;
+         } else
+-            data = null;
++            this.data = null;
+         
+     }
+             
+     public Object[] getRow(int i) {
+-        return data[i];
++        if (data != null)
++            return data[i];
++        else
++            return null;
+     }
+     
+     public int getRowCount() {
+@@ -126,7 +134,10 @@
+     }
+     
+     public Object getValueAt(int row, int col) {
+-        return data[row][col+1]; //col+1 because we need to skip the occurrence.id
++        if (data != null)
++            return data[row][col+1]; //col+1 because we need to skip the occurrence.id
++        else
++            return null;
+     }
+     
+     public Class getColumnClass(int c) {
+@@ -275,8 +286,8 @@
+         //FIXME
+         try {
+             loadData();
+-            //fireTableDataChanged(); //let the table compoment know it should redraw itself
+-            fireTableStructureChanged();
++            fireTableDataChanged(); //let the table compoment know it should redraw itself
++            //fireTableStructureChanged();
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         } catch (RemoteException ex) {
+@@ -314,7 +325,10 @@
+     }
+     
+     public Integer getOccurrenceId(int row) {
+-        return (Integer)data[row][data[row].length-1];
++        if (data != null)
++            return (Integer)data[row][data[row].length-1];
++        else
++            return -1;
+     }
+     
+     public void setDatabase(DBLayer database) {
+@@ -325,5 +339,14 @@
+     public int getSelectionColumnIndex() {
+         return selectionColumnIndex;
+     }
++
++    void clearSelection() {
++        selection.clear();
++    }
++    
++    public void clear() {
++        data = null;
++        fireTableDataChanged();
++    }
+ }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -72,8 +72,7 @@
+         try { 
+             UIManager.setLookAndFeel(new PlasticXPLookAndFeel()); 
+         } catch (Exception e) { e.printStackTrace(); JFrame.setDefaultLookAndFeelDecorated(true); }
+-        
+-        
++                
+         //BasicConfigurator.configure();
+         Plantlore plantlore = new Plantlore();
+         try {
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -12,6 +12,7 @@
+ import java.rmi.RemoteException;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
++import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -42,53 +43,57 @@
+      * @return Record Object of type c with id id.
+      * @return null in case an exception is thrown or no row with that id exists
+      */
+-    public Record getObjectFor(int id, Class c) {
++    public Record getObjectFor(int id, Class c) throws DBLayerException, RemoteException {
+         logger.debug(&quot;Looking up &quot;+c.getName()+&quot; object in the database for id &quot;+id);
+-        //FIXME:
+-        try {
+-            SelectQuery sq = db.createQuery(c);
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;id&quot;,null,id,null);
+-            int resultid = db.executeQuery(sq);
+-            int resultCount = db.getNumRows(resultid);
+-            if (resultCount == 0)
+-                return null;
+-            Object[] results = db.more(resultid, 0, 0);
+-            Object[] tmp = (Object[]) results[0];
+-            return (Record)tmp[0];
+-            
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
+-        return null;
++        SelectQuery sq = db.createQuery(c);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;id&quot;,null,id,null);
++        int resultid = db.executeQuery(sq);
++        int resultCount = db.getNumRows(resultid);
++        if (resultCount == 0)
++            return null;
++        Object[] results = db.more(resultid, 0, 0);
++        Object[] tmp = (Object[]) results[0];
++        return (Record)tmp[0];
+     }
+ 
+-    public AuthorOccurrence[] getAuthorsOf(Occurrence o) {
++    public AuthorOccurrence[] getAuthorsOf(Occurrence o) throws DBLayerException, RemoteException {
+         AuthorOccurrence[] authorResults = null;
+-        //FIXME:
+-        try {
+-            SelectQuery sq = db.createQuery(AuthorOccurrence.class);        
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
+-            sq.addRestriction(PlantloreConstants.RESTR_NE,AuthorOccurrence.DELETED,null,1,null);
+-            int resultid = db.executeQuery(sq);
+-            int resultCount = db.getNumRows(resultid);
+-            authorResults = new AuthorOccurrence[resultCount];
+-            Object[] results = db.more(resultid, 0, resultCount-1);
+-            Object[] tmp;
+-            AuthorOccurrence ao;
+-            for (int i = 0; i &lt; resultCount; i++) {
+-                tmp = (Object[]) results[i];
+-                ao = (AuthorOccurrence)tmp[0];
+-                authorResults[i] = ao;
+-            }
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
++        SelectQuery sq = db.createQuery(AuthorOccurrence.class);        
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++        sq.addRestriction(PlantloreConstants.RESTR_NE,AuthorOccurrence.DELETED,null,1,null);
++        int resultid = db.executeQuery(sq);
++        int resultCount = db.getNumRows(resultid);
++        authorResults = new AuthorOccurrence[resultCount];
++        Object[] results = db.more(resultid, 0, resultCount-1);
++        Object[] tmp;
++        AuthorOccurrence ao;
++        for (int i = 0; i &lt; resultCount; i++) {
++            tmp = (Object[]) results[i];
++            ao = (AuthorOccurrence)tmp[0];
++            authorResults[i] = ao;
+         }
+         return authorResults;
+     }
++
++    /** Deletes Habitat for given Occurrence if needed.
++     *
++     * Will delete Habitat if no live Occurrence point at it.
++     *
++     */
++    public void deleteHabitat(Habitat h) throws DBLayerException, RemoteException {
++        SelectQuery sq = db.createQuery(Occurrence.class);        
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
++        sq.addRestriction(PlantloreConstants.RESTR_NE,Occurrence.DELETED, null, 1, null);
++        int resultid = db.executeQuery(sq);
++        int resultCount = db.getNumRows(resultid);
++        if (resultCount == 0) {
++            logger.info(&quot;Deleting habitat id=&quot;+h.getId()+&quot; with nearest village &quot;+h.getNearestVillage().getName());
++            h.setDeleted(1);
++            db.executeUpdate(h);
++        } else {
++            logger.debug(&quot;Leaving habitat id=&quot;+h.getId()+&quot; live. Live Occurrence records point at it.&quot;);
++        }
++    }
+     
+     public static void main(String[] args) throws DBLayerException, RemoteException {
+         DBLayer db = new HibernateDBLayer();
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -7,8 +7,12 @@
+ package net.sf.plantlore.common;
+ 
+ import java.awt.Color;
++import java.awt.Window;
+ import java.util.Observable;
+ import java.util.Observer;
++import java.awt.Frame;
++import javax.swing.SwingUtilities;
++import org.apache.log4j.Logger;
+ 
+ /** ProgressBar dialog that works as an observer of a given Task.
+  *
+@@ -24,9 +28,11 @@
+  * @author  fraktalek
+  */
+ public abstract class ProgressBar extends javax.swing.JDialog implements Observer {
++    private Logger logger;
+     private Task task;
+     private int statusFieldWidth;
+     private double charSizeApprox = 180/27; //in 180 pixel wide JTextField first 27 characters are visible in Matisse
++    private Frame parent;
+     
+     /** Creates a new progress bar, initially invisible. It becomes visible after it receives
+      * a STARTING Message from the Task.
+@@ -38,8 +44,10 @@
+      */
+     public ProgressBar(Task task, java.awt.Frame parent, boolean modal) {
+         super(parent, modal);
++        
++        this.parent = parent;
+         this.task = task;
+-        
++        logger = Logger.getLogger(this.getClass().getPackage().getName());
+         initComponents();
+         
+         if (task.isDeterminate()) {
+@@ -137,42 +145,50 @@
+      * Invokes exceptionHanlder on received exceptions.
+      */
+     public void update(Observable o, Object arg) {
++        final ProgressBar pb = this;
+         if (arg instanceof Task.Message) {
+             Task.Message msg = (Task.Message)arg;
++            logger.debug(&quot;Received message: &quot;+msg);
+             switch (msg) {
+                 case STARTING:
+-                    if (isModal()) {
+-                        //we are in modal state so we have to show ourselves in a new thread
+-                        //so that we don't block the task's thread from continuing it's computation
+-                        Thread t = new Thread(new Runnable(){
+-                                                    public void run() { setVisible(true); }
+-                                              });
+-                        // Start the thread so that the dialog will show.
+-                        t.start(); 
+-                    } else {
+-                        setVisible(true);
+-                    }
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            setLocationRelativeTo(parent);
++                            setVisible(true);
++                            logger.debug(&quot;Progress bar visible&quot;);
++                        }
++                    });
+                     break;
+                 case POSITION_CHANGED:
+-                    progressBar.setValue(task.getPosition());
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            progressBar.setValue(task.getPosition());
++                        }
++                    });
+                     break;
+                 case MESSAGE_CHANGED:
+-                    String text = task.getStatusMessage();
+-                    statusField.setText(text);
+-                    progressBar.setString(text);
+-                    int curWidth = statusField.getWidth();
+-                    if (text.length() &gt; (curWidth/charSizeApprox)) {
+-                        int newWidth = new Double(text.length()*charSizeApprox).intValue();
+-                        //statusField.setSize(newWidth,statusField.getHeight());
+-                        this.setSize(this.getWidth()+(newWidth-curWidth),this.getHeight());
+-                        System.out.println(&quot;changed field width by &quot;+(newWidth-curWidth));
+-                    }
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            String text = task.getStatusMessage();
++                            statusField.setText(text);
++                            progressBar.setString(text);
++                            int curWidth = statusField.getWidth();
++                            if (text.length() &gt; (curWidth/charSizeApprox)) {
++                                int newWidth = new Double(text.length()*charSizeApprox).intValue();
++                                pb.setSize(pb.getWidth()+(newWidth-curWidth),pb.getHeight());
++                            }
++                        }
++                    });
+                     break;
+                 case LENGTH_CHANGED:
+                     if (progressBar.isIndeterminate()) {
+                         progressBar.setIndeterminate(false);
+                     }
+-                    progressBar.setMaximum(task.getLength());
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            progressBar.setMaximum(task.getLength());
++                        }
++                    });
+                     break;
+                 case STOPPED:
+                     afterStopped();
+
+Modified: trunk/src/net/sf/plantlore/common/Selection.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Selection.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/common/Selection.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -113,4 +113,9 @@
+         public Collection&lt;Integer&gt; values() {
+             return selected;
+         }
++        
++        public void clear() {
++            selected.clear();
++            inverted = false;
++        }
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/StatusBarManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/StatusBarManager.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/common/StatusBarManager.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -29,7 +29,7 @@
+  *
+  * @author Jakub
+  */
+-public class StatusBarManager implements MouseListener, Observer
++public abstract class StatusBarManager implements MouseListener, Observer
+ {
+     private JLabel statusLabel;
+     private Map&lt;Component, String&gt; map;
+@@ -111,54 +111,6 @@
+     /** Processes messages from observables to that this is registered and updates status bar accordingly.
+      *
+      */
+-    public void update(Observable o, Object arg) {
+-        if (arg instanceof String) {
+-            String msg = (String)arg;
+-            
+-            if (msg.equals(&quot;LOADING_PLANTS&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingPlants&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_AUTHORS&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingAuthors&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_AUTHOR_ROLES&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingAuthorRoles&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_VILLAGES&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingVillages&quot;));
+-            }
+-
+-            if (msg.equals(&quot;LOADING_TERRITORIES&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingTerritories&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_PHYTOCHORIA&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingPhytochoria&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_SOURCES&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingSources&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_PUBLICATIONS&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingPublications&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_PROJECTS&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingProjects&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADING_OVERVIEW_DATA&quot;)) {
+-                display(L10n.getString(&quot;Message.LoadingOverviewData&quot;));
+-            }
+-            
+-            if (msg.equals(&quot;LOADED&quot;)) {
+-                display(defaultText);
+-            }
+-        }
+-    }
++    public abstract void update(Observable o, Object arg); 
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-05-29 21:55:51 UTC (rev 387)
+@@ -10,6 +10,7 @@
+ package net.sf.plantlore.common;
+ 
+ import java.util.Observable;
++import javax.swing.SwingUtilities;
+ 
+ /** A convenience class for long task implementation.
+  *
+@@ -231,6 +232,7 @@
+         setChanged();
+         notifyObservers(Message.STOPPING);
+     }
++    
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/config/log4j.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/config/log4j.properties	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/config/log4j.properties	2006-05-29 21:55:51 UTC (rev 387)
+@@ -5,7 +5,7 @@
+ log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+ log4j.appender.stdout.Target=System.out
+ log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+-log4j.appender.stdout.layout.ConversionPattern=%d{ABSOLUTE} %5p %c{1}:%L - %m%n
++log4j.appender.stdout.layout.ConversionPattern=%d{ABSOLUTE} %5p %t %c{1}:%L - %m%n
+ 
+ ### direct messages to file hibernate.log ###
+ #log4j.appender.file=org.apache.log4j.FileAppender
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 21:55:51 UTC (rev 387)
+@@ -1033,3 +1033,21 @@
+ Overview.SelectAll=All
+ 
+ Message.LoadingOverviewData=Loading occurrence records
++
++Message.DeleteRecords={0} records will be deleted.
++
++Message.DeleteRecordsTT=Warning
++
++Error.DBLayerException=Connection to the database failed\:
++
++Error.DBLayerExceptionTitle=Database connection problem
++
++Error.RemoteException=Please make sure the network connection is working.
++
++Error.RemoteExceptionTitle=Network problem
++
++Delete.Message.UnknownException=Some problem occurred during deletion\:
++
++Delete.Message.ProgressInfo={0} records out of {1} deleted.
++
++Message.DeleteRecordsTitle=Warning
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-29 21:55:51 UTC (rev 387)
+@@ -470,3 +470,21 @@
+ Overview.NextPageTT=Posun na dal\u0161\u00ED stranu
+ 
+ Message.LoadingOverviewData=Nahr\u00E1v\u00E1m n\u00E1lezov\u00E1 data
++
++Message.DeleteRecords=Bude smaz\u00E1no {0} z\u00E1znam\u016F.
++
++Message.DeleteRecordsTT=Upozorn\u011Bn\u00ED
++
++Error.DBLayerException=Selhalo p\u0159ipojen\u00ED k datab\u00E1zi\:
++
++Error.DBLayerExceptionTitle=Probl\u00E9m s p\u0159ipojen\u00EDm k datab\u00E1zi
++
++Error.RemoteException=Pravd\u011Bpodobn\u011B selhalo s\u00ED\u0165ov\u00E9 p\u0159ipojen\u00ED.
++
++Error.RemoteExceptionTitle=Probl\u00E9m se s\u00EDt\u00ED
++
++Delete.Message.UnknownException=B\u011Bhem maz\u00E1n\u00ED z\u00E1znam\u016F do\u0161lo k probl\u00E9mu\:
++
++Delete.Message.ProgressInfo=Smaz\u00E1no {0} z\u00E1znam\u016F z {1}.
++
++Message.DeleteRecordsTitle=Upozorn\u011Bn\u00ED
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-29 18:49:30 UTC (rev 386)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-29 21:55:51 UTC (rev 387)
+@@ -769,3 +769,21 @@
+ Overview.SelectAll=All
+ 
+ Message.LoadingOverviewData=Loading occurrence records
++
++Message.DeleteRecords={0} records will be deleted.
++
++Message.DeleteRecordsTT=Warning
++
++Error.DBLayerException=Connection to the database failed\:
++
++Error.DBLayerExceptionTitle=Database connection problem
++
++Error.RemoteException=Please make sure the network connection is working.
++
++Error.RemoteExceptionTitle=Network problem
++
++Delete.Message.UnknownException=Some problem occurred during deletion\:
++
++Delete.Message.ProgressInfo={0} records out of {1} deleted.
++
++Message.DeleteRecordsTitle=Warning
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000443.html">[Plantlore-dev] r386 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000445.html">[Plantlore-dev] r388 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#444">[ date ]</a>
+              <a href="thread.html#444">[ thread ]</a>
+              <a href="subject.html#444">[ subject ]</a>
+              <a href="author.html#444">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

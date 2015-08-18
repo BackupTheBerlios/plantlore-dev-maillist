@@ -1,0 +1,1417 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r129 - in trunk/src/net/sf/plantlore/client: . login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r129%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200604121101.k3CB1O77027555%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000132.html">
+   <LINK REL="Next"  HREF="000134.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r129 - in trunk/src/net/sf/plantlore/client: . login</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r129%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200604121101.k3CB1O77027555%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r129 - in trunk/src/net/sf/plantlore/client: . login">krater at berlios.de
+       </A><BR>
+    <I>Wed Apr 12 13:01:24 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000132.html">[Plantlore-dev] Fwd: Re:plantlore
+</A></li>
+        <LI>Next message: <A HREF="000134.html">[Plantlore-dev] r130 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#133">[ date ]</a>
+              <a href="thread.html#133">[ thread ]</a>
+              <a href="subject.html#133">[ subject ]</a>
+              <a href="author.html#133">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-12 13:01:19 +0200 (Wed, 12 Apr 2006)
+New Revision: 129
+
+Added:
+   trunk/src/net/sf/plantlore/client/login/AuthView.form
+   trunk/src/net/sf/plantlore/client/login/ItemView.form
+   trunk/src/net/sf/plantlore/client/login/LoginView.form
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+   trunk/src/net/sf/plantlore/client/login/ItemView.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+Log:
+Appcore is now properly informed that the DBLayer has changed.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -16,6 +16,8 @@
+ import java.beans.PropertyChangeListener;
+ import java.lang.Integer;
+ import java.rmi.RemoteException;
++import java.util.Observable;
++import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+ import javax.swing.JFormattedTextField;
+@@ -52,8 +54,11 @@
+ public class AppCoreCtrl
+ {
+     Logger logger;
++    //--------------SUPPLIED MODELS AND VIEWS-----------------
+     AppCore model;
+     AppCoreView view;
++    
++    //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+     Settings settingsModel;
+     SettingsView settingsView;
+     SettingsCtrl settingsCtrl;
+@@ -429,17 +434,34 @@
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Login&quot;));                        
+         }
+         public void actionPerformed(ActionEvent arg0) {
+-                view.initOverview();
+                 // Reuse the existing dialogs, hide'em when they're no longer needed.
+-                if(loginModel == null) loginModel = new Login(new RMIDBLayerFactory());
++                if(loginModel == null) {
++                	loginModel = new Login(new RMIDBLayerFactory());
++                	loginModel.addObserver(new DatabaseChange());
++                }
+                 if(loginView == null) loginView = new LoginView(loginModel);
+                 if(loginCtrl == null) loginCtrl = new LoginCtrl(loginModel, loginView);
+                 loginView.setVisible(true);
+-                
+-                // Update the database layer reference in the AppCore
+-                model.setDatabase(loginModel.getDBLayer());
+-                
+-                // Now, who else would like to know, that the new DBLayer has been set?
++                /*-------------------------------------------------------------------------------------
++                 * The problem here is that the dialog is opened - but another thread
++                 * takes care of its execution. That's why the code below will be executed
++                 * immediately after the dialog becomes visible. Clearly, the database layer
++                 * is not created at this time!
++                 *-------------------------------------------------------------------------------------*/
+         }
+     }
++    
++    // Update all information about the database layer and inform everyone who has to be informed 
++    class DatabaseChange implements Observer {
++    	public void update(Observable targer, Object parameter) {
++    		if(parameter != null &amp;&amp; parameter instanceof DBLayer) {
++    			System.out.println(&quot;[!] DBLayer retrieval.&quot;);
++    			DBLayer dblayer = loginModel.getDBLayer();
++    			model.setDatabase(dblayer);
++    			view.initOverview();
++    		}
++    	}
++    }
++    
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -11,19 +11,17 @@
+ 	
+ 	public AuthCtrl(Login login, AuthView authview) {
+ 		this.model = login; this.view = authview;
+-		
+-		view.nextAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				System.out.println(&quot;hiding&quot;);
+-				try {
+-					model.connectToSelected(view.getUserName(), view.getPassword());
+-				} catch(Exception e) {
+-					System.err.println(&quot;The connection to the database couldn't be established!\n&quot; + e);
+-				}
+-				
+-				view.setVisible(false);
+-			}
+-		});
++		view.next.addActionListener(new Next());
+ 	}
++	
++	class Next extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			try {
++				model.connectToSelected(view.user.getSelectedItem().toString(), new String(view.password.getPassword()));
++			} catch(Exception e) { System.err.println(&quot;The connection to the database couldn't be established!\n&quot; + e); }
++			finally { view.password.setText(&quot;&quot;); }
++			view.setVisible(false);
++		}
++	}
+ 
+ }
+
+Added: trunk/src/net/sf/plantlore/client/login/AuthView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.form	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.form	2006-04-12 11:01:19 UTC (rev 129)
+@@ -0,0 +1,89 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jLabel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;password&quot; alignment=&quot;0&quot; pref=&quot;222&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;user&quot; alignment=&quot;0&quot; pref=&quot;222&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace pref=&quot;199&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jButton1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;user&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;password&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jButton1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Username:&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Password:&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JComboBox&quot; name=&quot;user&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ComboBoxModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ComboBoxModelEditor&quot;&gt;
++          &lt;StringArray count=&quot;0&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JPasswordField&quot; name=&quot;password&quot;&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;jButton1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Authorize&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -1,96 +1,112 @@
++/*
++ * AuthView2.java
++ *
++ * Created on 9. duben 2006, 18:04
++ */
++
+ package net.sf.plantlore.client.login;
+ 
+-import java.awt.*;
+-import java.awt.event.ActionListener;
++import java.util.Observable;
++import java.util.Observer;
+ 
+-import javax.swing.*;
++import javax.swing.JDialog;
+ 
+-
+-public class AuthView extends JDialog {
++/**
++ *
++ * @author  yaa
++ */
++public class AuthView extends javax.swing.JFrame implements Observer {
+ 	
+ 	private Login model;
+-	
+-	public AuthView(Login model) {
+-		this.model = model;
+-		setTitle(&quot;Authorization&quot;);
+-		setSize(300, 200);
+-		setModal(true);
+-		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+-		initComponents();
+-		setLocationRelativeTo(null); // center of the screen
+-	}
+-	
+-	
+-	protected void initComponents() {
+-		setTitle(&quot;Authentification&quot;);
+-		setModal(true);
++    
++    /** Creates new form AuthView2 */
++    public AuthView(Login model) {
++    	this.model = model;
++    	model.addObserver(this);
++        initComponents();
++        setLocationRelativeTo(null); // center of the screen
++        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jLabel1 = new javax.swing.JLabel();
++        jLabel2 = new javax.swing.JLabel();
++        user = new javax.swing.JComboBox();
++        password = new javax.swing.JPasswordField();
++        next = new javax.swing.JButton();
+ 
+-		next = new JButton(&quot;next&quot;);
+-		user = new JComboBox(); user.setEditable(true); 
+-		user.setPreferredSize(new Dimension(50, 23));
+-		password = new JPasswordField(32); password.setPreferredSize(new Dimension(50, 23));
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        jLabel1.setText(&quot;Username:&quot;);
+ 
+-		
+-		JPanel p1 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+-		p1.add(next);
+-		add(p1, BorderLayout.SOUTH);
+-		
+-		JLabel l1 = new JLabel(&quot;Username&quot;), l2 = new JLabel(&quot;Password&quot;);
+-		l1.setLabelFor(user); l2.setLabelFor(password);
+-		JPanel p2 = new JPanel(new GridBagLayout());
+-		GridBagConstraints c = new GridBagConstraints();
+-		
+-		// CHANGE HERE
+-		c.gridx = 0; c.gridy = 0; c.fill =  GridBagConstraints.NONE; 
+-		c.insets = new Insets(2, 4, 0, 0);
+-		p2.add(l1, c);
+-		
+-		c.gridy = 1; c.insets = new Insets(1, 4, 0, 0);
+-		p2.add(l2, c); 
+-		
+-		c.gridx = 1 ; c.gridy = 0; c.fill = GridBagConstraints.HORIZONTAL;
+-		c.insets = new Insets(2, 3, 0, 4);
+-		p2.add(user, c); 
+-	
+-		c.gridy = 1; c.insets = new Insets(2, 3, 0, 4);
+-		p2.add(password, c);
+-		
+-		
+-		add(p2, BorderLayout.CENTER);
+-		
+-		pack();
+-		
+-		setResizable(false);
++        jLabel2.setText(&quot;Password:&quot;);
++
++        next.setText(&quot;Authorize&quot;);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(layout.createSequentialGroup()
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jLabel1)
++                            .add(jLabel2))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(password, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 222, Short.MAX_VALUE)
++                            .add(user, 0, 222, Short.MAX_VALUE)))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 199, Short.MAX_VALUE)
++                        .add(next)))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel1)
++                    .add(user, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel2)
++                    .add(password, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .add(next)
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    public void update(Observable arg0, Object arg1) {
++		DBInfo selected = model.getSelected();
++		if(selected == null) return;
++		user.removeAllItems();
++		String[] u = model.getSelected().users;
++		int i = 0;
++		for (; i &lt; u.length &amp;&amp; u[i] != null; i++)	user.addItem(u[i]);
++		if (i &gt; 0)	user.setSelectedIndex(0);
+ 	}
+-	
+-	@Override
+-	public void setVisible(boolean visible) {
+-		if(visible) {
+-			user.removeAllItems();
+-			String[] u = model.getSelected().users;
+-			int i = 0;
+-			for(; i &lt; u.length &amp;&amp; u[i] != null; i++) user.addItem(u[i]);
+-			if(i &gt; 0) user.setSelectedIndex(0);
+-		}
+-		super.setVisible(visible);
+-	}
+-	
+-	protected String getUserName() {
+-		return (String) user.getSelectedItem();
+-	}
+-	
+-	protected String getPassword() {
+-		return new String( password.getPassword() );
+-	}
+-	
+-	public void nextAddActionListener(ActionListener a) {
+-		next.addActionListener(a);
+-	}
+-	
+-	
+-	protected JButton next;
+-	protected JComboBox user;
+-	protected JPasswordField password;
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton next;
++    protected javax.swing.JLabel jLabel1;
++    protected javax.swing.JLabel jLabel2;
++    protected javax.swing.JPasswordField password;
++    protected javax.swing.JComboBox user;
++    // End of variables declaration//GEN-END:variables
+ 
+ 	
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -14,25 +14,45 @@
+ 	private Mode mode = Mode.ADD;
+ 	
+ 	
+-	public void setMode(Mode m) { this.mode = m; }
++	// Switch between the ADD/EDIT behaviour
++	public void setMode(Mode m) { 
++		this.mode = m;
++		switch(m) {
++		case ADD:
++			view.setTitle(&quot;ADD&quot;);
++			view.alias.setText(&quot;&quot;); 
++			view.host.setText(&quot;&quot;);
++			view.db.setText(&quot;&quot;);
++			break;
++		case EDIT:
++			view.setTitle(&quot;EDIT&quot;);
++			break;
++		}
++	}
+ 	
+ 	
+ 	public ItemCtrl(Login login, ItemView itemview) {
+ 		this.model = login; this.view = itemview;
+-		
+-		view.nextAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				int t = view.getHost().indexOf(':');
+-				if(mode == Mode.ADD)
+-					if(t &lt; 0) model.createRecord(view.getAlias(), view.getHost(), 1099, view.getDB());
+-					else model.createRecord(view.getAlias(), view.getHost().substring(0, t - 1), Integer.parseInt(view.getHost().substring(t)), view.getDB());
+-				else if(mode == Mode.EDIT)
+-					if(t &lt; 0) model.updateSelectedRecord(view.getAlias(), view.getHost(), 1099, view.getDB());
+-					else model.updateSelectedRecord(view.getAlias(), view.getHost().substring(0, t - 1), Integer.parseInt(view.getHost().substring(t)), view.getDB());
+-				view.setVisible(false);
++		view.next.addActionListener(new Next());
++	}
++	
++	class Next extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			int t = view.host.getText().indexOf(':');
++			int port = (t &lt; 0) ? 1099 : Integer.parseInt(view.host.getText().substring(t));
++			String host = (t &lt; 0) ? view.host.getText() : view.host.getText().substring(0, t - 1);
++			String alias = view.alias.getText(), db = view.db.getText();
++			
++			switch(mode) {
++			case ADD:
++				model.createRecord(alias, host, port, db);
++				break;
++			case EDIT:
++				model.updateSelectedRecord(alias, host, port, db);
++				break;
+ 			}
+-		});
+-		
++			view.setVisible(false);
++		}
+ 	}
+ 
+ }
+
+Added: trunk/src/net/sf/plantlore/client/login/ItemView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.form	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.form	2006-04-12 11:01:19 UTC (rev 129)
+@@ -0,0 +1,95 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jLabel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel3&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;db&quot; alignment=&quot;0&quot; pref=&quot;229&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;host&quot; alignment=&quot;0&quot; pref=&quot;229&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;alias&quot; alignment=&quot;0&quot; pref=&quot;229&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;jButton1&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;alias&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;host&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel3&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;db&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jButton1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Alias:&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Hostname:&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel3&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Database:&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;alias&quot;&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;host&quot;&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;db&quot;&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;jButton1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Change&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -1,98 +1,118 @@
++/*
++ * ItemView2.java
++ *
++ * Created on 9. duben 2006, 17:55
++ */
++
+ package net.sf.plantlore.client.login;
+ 
+-import java.awt.BorderLayout;
+-import java.awt.FlowLayout;
+-import java.awt.GridBagConstraints;
+-import java.awt.GridBagLayout;
+-import java.awt.Insets;
+-import java.awt.event.ActionListener;
++import java.util.Observable;
++import java.util.Observer;
+ 
+-import javax.swing.JButton;
+ import javax.swing.JDialog;
+-import javax.swing.JLabel;
+-import javax.swing.JPanel;
+ 
+-import javax.swing.JTextField;
+-
+-public class ItemView extends JDialog {
+-		
++/**
++ *
++ * @author  yaa
++ */
++public class ItemView extends javax.swing.JFrame implements Observer {
++	
+ 	private Login model;
+-	
+-
+-	public ItemView(Login model) {
++    
++    /** Creates new form ItemView2 */
++    public ItemView(Login model) {
+ 		this.model = model;
+-		setTitle(&quot;ItemEditor&quot;);
+-		setModal(true);
+-		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++		model.addObserver(this);
+ 		initComponents();
+ 		setResizable(false);
+ 		setLocationRelativeTo(null);
+-	}
+-	
+-	
+-	public void fillWithSelected() {
++		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jLabel1 = new javax.swing.JLabel();
++        jLabel2 = new javax.swing.JLabel();
++        jLabel3 = new javax.swing.JLabel();
++        alias = new javax.swing.JTextField();
++        host = new javax.swing.JTextField();
++        db = new javax.swing.JTextField();
++        next = new javax.swing.JButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        jLabel1.setText(&quot;Alias:&quot;);
++
++        jLabel2.setText(&quot;Hostname:&quot;);
++
++        jLabel3.setText(&quot;Database:&quot;);
++
++        next.setText(&quot;Change&quot;);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(layout.createSequentialGroup()
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jLabel1)
++                            .add(jLabel2)
++                            .add(jLabel3))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(db, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 229, Short.MAX_VALUE)
++                            .add(host, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 229, Short.MAX_VALUE)
++                            .add(alias, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 229, Short.MAX_VALUE)))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, next))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel1)
++                    .add(alias, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel2)
++                    .add(host, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel3)
++                    .add(db, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .add(next)
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    public void update(Observable arg0, Object arg1) {
+ 		DBInfo info = model.getSelected();
+ 		if(info == null) return;
+-		alias.setText(info.alias); host.setText(info.host + ((info.port != 1099) ? &quot; : &quot; + info.port : &quot;&quot;));
++		alias.setText(info.alias); 
++		host.setText(info.host + ((info.port != 1099) ? &quot; : &quot; + info.port : &quot;&quot;));
+ 		db.setText(info.db);
+ 	}
+-	
+-	
+-	protected void initComponents() {
+-		next = new JButton(&quot;change/add&quot;);
+-		alias = new JTextField(20); 
+-		host = new JTextField(20);
+-		db = new JTextField(20);
+-		 
+-		
+-		JPanel p1 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+-		p1.add(next);
+-		add(p1, BorderLayout.SOUTH);
+-		
+-		JLabel l1 = new JLabel(&quot;Alias&quot;), l2 = new JLabel(&quot;Hostname&quot;), l3 = new JLabel(&quot;DB ID&quot;);
+-		l1.setLabelFor(alias); l2.setLabelFor(host); l3.setLabelFor(db);
+-		JPanel p2 = new JPanel(new GridBagLayout());
+-		GridBagConstraints c = new GridBagConstraints();
+-		
+-		// CHANGE HERE
+-		c.gridx = 0; c.gridy = 0; c.fill =  GridBagConstraints.NONE; 
+-		c.insets = new Insets(2, 4, 0, 0);
+-		p2.add(l1, c);
+-		
+-		c.gridy = 1; c.insets = new Insets(1, 4, 0, 0);
+-		p2.add(l2, c); 
+-		
+-		c.gridy = 2; c.insets = new Insets(1, 4, 0, 0);
+-		p2.add(l3, c);
+-		
+-		c.gridx = 1 ; c.gridy = 0; c.fill = GridBagConstraints.HORIZONTAL;
+-		c.insets = new Insets(2, 3, 0, 4);
+-		p2.add(alias, c); 
+-	
+-		c.gridy = 1; c.insets = new Insets(2, 3, 0, 4);
+-		p2.add(host, c);
+-		
+-		c.gridy = 2; c.insets = new Insets(2, 3, 0, 4);
+-		p2.add(db, c);
+-		
+-		
+-		add(p2, BorderLayout.CENTER);
+-		
+-		pack();
+-	}
+-	
+-	
+-	public void nextAddActionListener(ActionListener a) {
+-		next.addActionListener(a);
+-	}
+-	
+-	
+-	public String getAlias() { return alias.getText(); }
+-	public String getHost() { return host.getText(); }
+-	public String getDB() { return db.getText(); }
+-	
+-	
+-	protected JButton next;
+-	protected JTextField alias, host, db;
+-
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JTextField alias;
++    protected javax.swing.JTextField db;
++    protected javax.swing.JTextField host;
++    protected javax.swing.JButton next;
++    protected javax.swing.JLabel jLabel1;
++    protected javax.swing.JLabel jLabel2;
++    protected javax.swing.JLabel jLabel3;
++    // End of variables declaration//GEN-END:variables
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -33,12 +33,21 @@
+ 	private DBLayerFactory factory = null;
+ 	private DBLayer dblayer;
+ 	
++	/**
++	 * Create a new login model. The DBLayer factory will be used to produce 
++	 * new DBLayers.
++	 *  
++	 * @param factory The factory that will be used to create a new DBLayer. 
++	 */
+ 	public Login(DBLayerFactory factory) {
+ 		this.factory = factory;
+ 	}
+ 	
+ 	
+-	
++	/**
++	 * Load saved information about the database connections.
++	 *
++	 */
+ 	protected void load() {
+ 		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
+ 		
+@@ -49,21 +58,41 @@
+ 		// TODO: JAKUB: ulozit kolekci dbinfo zpatky do XML souboru se jmenem `file`.
+ 	}
+ 	
+-	
++
++	/**
++	 * Create a new record, add it to the list of connections and save that information for
++	 * future use.
++	 * 
++	 * @param alias	Alias of the database.
++	 * @param host	Hostname of the computer where the server dwells.
++	 * @param port	Port where the server listens.
++	 * @param db		Identifier of the database to which the User wants to connect.
++	 */
+ 	public void createRecord(String alias, String host, int port, String db) {
+-		System.out.println(&quot;Creating record &quot; + alias);
+ 		DBInfo r = new DBInfo(alias, host, port, db, new String[5]);
+ 		dbinfo.add(r);
+ 		save();
+ 		setChanged(); notifyObservers();
+ 	}
+ 	
+-	public void deleteSelected() {
++	/**
++	 * Delete the selected record.
++	 *
++	 */
++	public void deleteSelectedRecord() {
+ 		dbinfo.remove(selected);
+ 		save();
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
++	/**
++	 * Update the selected record.
++	 * 
++	 * @param alias	Alias of the database.
++	 * @param host	Hostname of the computer where the server dwells.
++	 * @param port	Port where the server listens.
++	 * @param db		Identifier of the database to which the User wants to connect.
++	 */
+ 	public void updateSelectedRecord(String alias, String host, int port, String db) {
+ 		selected.alias = alias;
+ 		selected.host = host;
+@@ -72,33 +101,48 @@
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
++	/**
++	 * 
++	 * @return
++	 */
+ 	public DBInfo[] getRecords() {
+ 		// Well, this sucks! The ugliest way to do things... is to have a Cloneable interface and don't use it.
+ 		// Seeing is believing: <A HREF="http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[">http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[</A>])
+ 		return dbinfo.toArray(new DBInfo[0]);
+ 	}
+ 	
++	/**
++	 * Set the selected record.
++	 * 
++	 * @param index	The index of the selected record. Zero means first. Negative means nothing gets selected.
++	 */
+ 	public void setSelected(int index) {
+ 		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;		
+ 	}
+ 	
++	/**
++	 * @return	The selected record.
++	 */
+ 	public DBInfo getSelected() {
+ 		return selected;
+ 	}
+ 	
++	
+ 	public DBLayer connectToSelected(String name, String password) throws NotBoundException, RemoteException, DBLayerException {
+ 		if(selected == null) return null;
+ 		dblayer = factory.create(selected.host, selected.port);
+ 		dblayer.initialize(name, password, selected.db);
+ 		selected.promoteUser(name);
++		save();
++		// Everything went fine.
++		this.setChanged(); this.notifyObservers(dblayer);
+ 		return dblayer;
+ 	}
+ 	
+-	public DBLayer getDBLayer() { return dblayer; }
+-	
+-	
+-	
+-	
+-
+-
++	/**
++	 * @return The last DBLayer that was created.  
++	 */	
++	public DBLayer getDBLayer() { 
++		return dblayer; 
++	}
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -12,54 +12,61 @@
+ 	private Login model;
+ 	private LoginView view;
+ 	
++	private ItemView itemView;
++	private ItemCtrl itemCtrl;
++	private AuthView authView;
+ 	
++	
++	
+ 	public LoginCtrl(Login login, LoginView loginview) {
+ 		this.view = loginview; this.model = login;
++		// Create Item Add/Edit dialog.
++		itemView = new ItemView(model);
++		itemCtrl = new ItemCtrl(model, itemView);
++		// Create Authorization dialog.
++		authView = new AuthView(model);
++		new AuthCtrl(model, authView);
+ 		
+-		view.listAddListSelectionListener(new ListSelectionListener() {
+-			public void valueChanged(ListSelectionEvent e) {
+-				model.setSelected(e.getFirstIndex());
+-			}
+-		});
+ 		
+-		view.addAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				ItemView i = new ItemView(model);
+-				i.setTitle(&quot;Add&quot;);
+-				ItemCtrl c = new ItemCtrl(model, i);
+-				c.setMode(ItemCtrl.Mode.ADD);
+-				i.setVisible(true);
+-				System.out.println(&quot;Adding dialog opened.&quot;);
+-			}
+-		});
+-		
+-		view.editAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				if(model.getSelected() == null) return;
+-				ItemView i = new ItemView(model);
+-				i.setTitle(&quot;Edit&quot;);
+-				i.fillWithSelected();
+-				ItemCtrl c = new ItemCtrl(model, i);
+-				c.setMode(ItemCtrl.Mode.EDIT);
+-				i.setVisible(true);
+-			}
+-		});
+-				
+-		view.removeAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				model.deleteSelected();				
+-			}
+-		});
+-		
+-		view.nextAddActionListener(new AbstractAction() {
+-			public void actionPerformed(ActionEvent arg0) {
+-				if(model.getSelected() == null) return; // Must select somethin'								
+-				AuthView a = new AuthView(model);
+-				AuthCtrl c = new AuthCtrl(model, a);
+-				a.setVisible(true);
+-			}
+-		});
+-		
++		view.choice.addListSelectionListener(new ChoiceChanged());
++		view.add.addActionListener(new AddRecord());
++		view.edit.addActionListener(new EditRecord());
++		view.remove.addActionListener(new RemoveRecord());
++		view.next.addActionListener(new Next());
+ 	}
++	
++	class ChoiceChanged implements ListSelectionListener {
++		public void valueChanged(ListSelectionEvent e) {
++			model.setSelected(e.getFirstIndex());
++		}	
++	}
++	
++	class AddRecord extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			itemCtrl.setMode(ItemCtrl.Mode.ADD);
++			itemView.setVisible(true);
++		}
++	}
++	
++	class  RemoveRecord extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			model.deleteSelectedRecord();
++		}
++	}
++	
++	class EditRecord extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			if(model.getSelected() == null) return;
++			itemCtrl.setMode(ItemCtrl.Mode.EDIT);
++			itemView.setVisible(true);
++		}
++	}
++	
++	class Next extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			if(model.getSelected() != null)
++				authView.setVisible(true);
++		}
++	}
+ 
+ }
+
+Added: trunk/src/net/sf/plantlore/client/login/LoginView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.form	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.form	2006-04-12 11:01:19 UTC (rev 129)
+@@ -0,0 +1,114 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;NonVisualComponents&gt;
++    &lt;Menu class=&quot;javax.swing.JPopupMenu&quot; name=&quot;popup&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;name&quot; type=&quot;java.lang.String&quot; value=&quot;popup&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;SubComponents&gt;
++        &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;add&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Add&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/MenuItem&gt;
++        &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;edit&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Edit&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/MenuItem&gt;
++        &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;remove&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Remove&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/MenuItem&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Menu&gt;
++  &lt;/NonVisualComponents&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;1&quot; pref=&quot;343&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;remember&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;157&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;next&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;214&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;next&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;remember&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;next&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Continue&quot;/&gt;
++        &lt;Property name=&quot;name&quot; type=&quot;java.lang.String&quot; value=&quot;next&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JList&quot; name=&quot;choice&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;componentPopupMenu&quot; type=&quot;javax.swing.JPopupMenu&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;popup&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ListModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ListModelEditor&quot;&gt;
++              &lt;StringArray count=&quot;0&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;selectionMode&quot; type=&quot;int&quot; value=&quot;0&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JCheckBox&quot; name=&quot;remember&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;select automatically&quot;/&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
++            &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
++          &lt;/Border&gt;
++        &lt;/Property&gt;
++        &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
++          &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-11 15:41:14 UTC (rev 128)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-12 11:01:19 UTC (rev 129)
+@@ -1,99 +1,115 @@
++/*
++ * LoginView2.java
++ *
++ * Created on 9. duben 2006, 16:35
++ */
++
+ package net.sf.plantlore.client.login;
+ 
+-import java.awt.*;
+-import java.awt.event.ActionListener;
+-import java.awt.event.MouseAdapter;
+-import java.awt.event.MouseEvent;
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+-import javax.swing.*;
+-import javax.swing.event.ListSelectionListener;
++import javax.swing.JDialog;
+ 
+-public class LoginView extends JDialog implements Observer {
++/**
++ *
++ * @author  yaa
++ */
++public class LoginView extends javax.swing.JFrame implements Observer {
+ 	
+ 	private Login model;
+-	
+-	
+-	public LoginView(Login model) {
++    
++    /** Creates new form LoginView2 */
++    public LoginView(Login model) {
+ 		this.model = model;
+ 		model.addObserver(this);
+-		setTitle(&quot;Login&quot;);
+-		setSize(300,200);
+-		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+-		initComponents();
+-		setLocationRelativeTo(null); // center of the screen
+-	}
+-	
+-	
+-	
+-	protected void initComponents() {
+-		
+-		choice = new JList();
+-		choice.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+-		
+-		next = new JButton(&quot;next&quot;);
+-		
+-		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+-        panel.add(next);
+-        
+-		add(choice, BorderLayout.CENTER);
+-		add(panel, BorderLayout.SOUTH);
+-		
+-		popup = new JPopupMenu();
+-		add = new JMenuItem(&quot;Add a new item.&quot;);
+-		edit = new JMenuItem(&quot;Edit this item.&quot;);
+-		remove = new JMenuItem(&quot;Remove this item.&quot;);
+-		popup.add(add);
+-		popup.add(edit);
+-		popup.add(remove);
+-		
+-		choice.addMouseListener(
+-				new MouseAdapter() {
+-					@Override
+-					public void mouseReleased(MouseEvent e) {
+-						if(e.isPopupTrigger()) popup.show(e.getComponent(), e.getX(), e.getY());						
+-					}
+-				});
+-	}
+-	
+-	
+-	
+-	
++        initComponents();
++        setLocationRelativeTo(null); // center of the screen
++        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        popup = new javax.swing.JPopupMenu();
++        add = new javax.swing.JMenuItem();
++        edit = new javax.swing.JMenuItem();
++        remove = new javax.swing.JMenuItem();
++        next = new javax.swing.JButton();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        choice = new javax.swing.JList();
++        remember = new javax.swing.JCheckBox();
+ 
++        popup.setName(&quot;popup&quot;);
++        add.setText(&quot;Add&quot;);
++        popup.add(add);
+ 
++        edit.setText(&quot;Edit&quot;);
++        popup.add(edit);
+ 
++        remove.setText(&quot;Remove&quot;);
++        popup.add(remove);
+ 
+-	public void update(Observable arg0, Object arg1) {
+-		System.out.println(&quot;Updating&quot;);
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        next.setText(&quot;Continue&quot;);
++        next.setName(&quot;next&quot;);
++
++        choice.setComponentPopupMenu(popup);
++        choice.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
++        jScrollPane1.setViewportView(choice);
++
++        remember.setText(&quot;select automatically&quot;);
++        remember.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        remember.setMargin(new java.awt.Insets(0, 0, 0, 0));
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 343, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                        .add(remember)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 157, Short.MAX_VALUE)
++                        .add(next)))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 214, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(next)
++                    .add(remember))
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    public void update(Observable arg0, Object arg1) {
+ 		choice.setListData(model.getRecords());		
+ 	}
+-	
+-	
+-	public void nextAddActionListener(ActionListener a) {
+-		next.addActionListener(a);
+-	}
+-	
+-	public void addAddActionListener(ActionListener a) {
+-		add.addActionListener(a);
+-	}
+-	
+-	public void editAddActionListener(ActionListener a) {
+-		edit.addActionListener(a);
+-	}
+-	
+-	public void removeAddActionListener(ActionListener a) {
+-		remove.addActionListener(a);
+-	}
+-	
+-	public void listAddListSelectionListener(ListSelectionListener a) {
+-		choice.addListSelectionListener(a);
+-	}
+-	
+-	
+-	protected JList choice;
+-	protected JButton next;
+-	protected JMenuItem add, edit, remove;
+-	protected JPopupMenu popup;
+-
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JMenuItem add;
++    protected javax.swing.JList choice;
++    protected javax.swing.JMenuItem edit;
++    protected javax.swing.JScrollPane jScrollPane1;
++    protected javax.swing.JButton next;
++    protected javax.swing.JPopupMenu popup;
++    protected javax.swing.JCheckBox remember;
++    protected javax.swing.JMenuItem remove;
++    // End of variables declaration//GEN-END:variables
++    
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000132.html">[Plantlore-dev] Fwd: Re:plantlore
+</A></li>
+	<LI>Next message: <A HREF="000134.html">[Plantlore-dev] r130 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#133">[ date ]</a>
+              <a href="thread.html#133">[ thread ]</a>
+              <a href="subject.html#133">[ subject ]</a>
+              <a href="author.html#133">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

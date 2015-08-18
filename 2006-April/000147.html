@@ -1,0 +1,134 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r143 - trunk/src/net/sf/plantlore/client/login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r143%20-%20trunk/src/net/sf/plantlore/client/login&In-Reply-To=%3C200604122159.k3CLxdJb013703%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000146.html">
+   <LINK REL="Next"  HREF="000148.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r143 - trunk/src/net/sf/plantlore/client/login</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r143%20-%20trunk/src/net/sf/plantlore/client/login&In-Reply-To=%3C200604122159.k3CLxdJb013703%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r143 - trunk/src/net/sf/plantlore/client/login">krater at berlios.de
+       </A><BR>
+    <I>Wed Apr 12 23:59:39 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000146.html">[Plantlore-dev] r142 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+        <LI>Next message: <A HREF="000148.html">[Plantlore-dev] r144 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#147">[ date ]</a>
+              <a href="thread.html#147">[ thread ]</a>
+              <a href="subject.html#147">[ subject ]</a>
+              <a href="author.html#147">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-12 23:59:38 +0200 (Wed, 12 Apr 2006)
+New Revision: 143
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+Log:
+Explanatory comments added to classes that cope with some weird and hyperactive behaviour of Swing components.
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 18:51:58 UTC (rev 142)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 21:59:38 UTC (rev 143)
+@@ -135,6 +135,18 @@
+ 		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;
+ 		logger.debug(&quot;Selected database is &quot; + selected);
+ 		this.setChanged(); 
++		/*------------------------------------------------------------
++		 * This here is a particularly mystique code.
++		 * The reason why a parameter is used here is simple:
++		 * 1. you select something in the choice list in the LoginView -&gt;
++		 * 2. ListSelectionEvent is fired -&gt;
++		 * 3. model.setSelected(..) is called in the handler -&gt;
++		 * 4. notifyObservers(..) is called here -&gt;
++		 * 5. loginView.update() gets involved -&gt;
++		 * 6. without proper recognition of events setList(data)
++		 *    would be called which will in turn trigger 
++		 *    ListSelectionEvent -&gt; 2.
++		 *------------------------------------------------------------*/
+ 		this.notifyObservers(&quot;[!] recursion won't be tolerated&quot;);
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-12 18:51:58 UTC (rev 142)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-12 21:59:38 UTC (rev 143)
+@@ -37,6 +37,12 @@
+ 	
+ 	class ChoiceChanged implements ListSelectionListener {
+ 		public void valueChanged(ListSelectionEvent e) {
++			/*----------------------------------------------------------
++			 *  Well here is some nasty behaviour of the Swing
++			 *  framework: for some unknown reason 
++			 *  the ListSelectionEvent is sent twice every time 
++			 *  you select something in the list. Why?
++			 *----------------------------------------------------------*/
+ 			model.setSelected( view.choice.getSelectedIndex() );
+ 		}	
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-12 18:51:58 UTC (rev 142)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-12 21:59:38 UTC (rev 143)
+@@ -101,9 +101,12 @@
+     
+     
+     public void update(Observable source, Object parameter) {
++    	// Ignore setSelected() event
+     	if(parameter == null) {
+-    		// Every item of the list will - after being added to the list - cause an valueChange event,
+-    		// because every time an item is inserted to the list, it is also selected!
++    		// Every item of the list will - after being added to the list - 
++    		// cause a ListSelectionEvent (valueChange) event!
++    		// This is probably because every time an item is inserted 
++    		// into the list, it is also selected!
+     		choice.setListData(model.getRecords());
+     		
+     	}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000146.html">[Plantlore-dev] r142 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+	<LI>Next message: <A HREF="000148.html">[Plantlore-dev] r144 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#147">[ date ]</a>
+              <a href="thread.html#147">[ thread ]</a>
+              <a href="subject.html#147">[ subject ]</a>
+              <a href="author.html#147">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

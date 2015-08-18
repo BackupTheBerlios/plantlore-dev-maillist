@@ -1,0 +1,468 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r369 - trunk/src/net/sf/plantlore/client/imports
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r369%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605270405.k4R45hR6027035%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000421.html">
+   <LINK REL="Next"  HREF="000423.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r369 - trunk/src/net/sf/plantlore/client/imports</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r369%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605270405.k4R45hR6027035%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r369 - trunk/src/net/sf/plantlore/client/imports">krater at berlios.de
+       </A><BR>
+    <I>Sat May 27 06:05:43 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000421.html">[Plantlore-dev] r368 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record
+</A></li>
+        <LI>Next message: <A HREF="000423.html">[Plantlore-dev] r370 - in trunk: lib src/net/sf/plantlore/client src/net/sf/plantlore/common src/net/sf/plantlore/middleware src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#422">[ date ]</a>
+              <a href="thread.html#422">[ thread ]</a>
+              <a href="subject.html#422">[ subject ]</a>
+              <a href="author.html#422">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-27 06:05:42 +0200 (Sat, 27 May 2006)
+New Revision: 369
+
+Removed:
+   trunk/src/net/sf/plantlore/client/imports/XMLParser.java
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+Log:
+The old XMLParser (in client.imports) replaced with newer XMLParser (in client.imports.parsers).
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-27 04:01:41 UTC (rev 368)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-27 04:05:42 UTC (rev 369)
+@@ -15,6 +15,7 @@
+ 
+ import net.sf.plantlore.client.export.component.XFilter;
+ import net.sf.plantlore.client.imports.Parser.Action;
++import net.sf.plantlore.client.imports.parsers.*;
+ import net.sf.plantlore.common.exception.ImportException;
+ import net.sf.plantlore.common.exception.ParserException;
+ import net.sf.plantlore.common.record.Record;
+@@ -209,9 +210,9 @@
+ 			throw new ImportException(L10n.getString(&quot;Error.InvalidFileFormat&quot;));
+ 		}
+ 		else if( format.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)) )
+-			parser = new XMLParser(filename);
++			parser = new XMLParser(reader);
+ 		else if( format.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)) )
+-			parser = new XMLParser(filename);
++			parser = new XMLParser(reader);
+ 			
+ 		try {
+ 			parser.initialize();
+
+Deleted: trunk/src/net/sf/plantlore/client/imports/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/XMLParser.java	2006-05-27 04:01:41 UTC (rev 368)
++++ trunk/src/net/sf/plantlore/client/imports/XMLParser.java	2006-05-27 04:05:42 UTC (rev 369)
+@@ -1,365 +0,0 @@
+-/*
+- * XMLParser.java
+- *
+- * Created on 24. kv&#283;ten 2006, 12:48
+- *
+- * To change this template, choose Tools | Template Manager
+- * and open the template in the editor.
+- */
+-
+-package net.sf.plantlore.client.imports;
+-
+-import java.io.File;
+-import java.util.List;
+-import net.sf.plantlore.common.exception.ParserException;
+-import net.sf.plantlore.common.record.Author;
+-import net.sf.plantlore.common.record.AuthorOccurrence;
+-import net.sf.plantlore.common.record.Habitat;
+-import net.sf.plantlore.common.record.Metadata;
+-import net.sf.plantlore.common.record.Occurrence;
+-import net.sf.plantlore.common.record.Phytochorion;
+-import net.sf.plantlore.common.record.Plant;
+-import net.sf.plantlore.common.record.Publication;
+-import net.sf.plantlore.common.record.Record;
+-import net.sf.plantlore.common.record.Territory;
+-import net.sf.plantlore.common.record.Village;
+-import net.sf.plantlore.l10n.L10n;
+-import org.apache.log4j.Logger;
+-import org.dom4j.Document;
+-import org.dom4j.DocumentException;
+-import org.dom4j.Node;
+-import org.dom4j.io.SAXReader;
+-
+-/**
+- *
+- * @author Lada Oberreiterova
+- */
+-public class XMLParser implements Parser {
+-
+-    private Logger logger;
+-    private Document document;
+-    private String file;
+-    private Integer currentNumberOcc = 0;
+-    private Integer currentNumberAuthor = 0;
+-    private List occurrenceList;
+-    private List authorsList;
+-    
+-    private Node occNode = null;
+-    private Node authorsNode = null;
+-    private Node autOccNode = null;
+-    private Node autNode = null;
+-    private Node habNode = null; 
+-    private Node metadataNode = null;
+-    private Node planNode = null;
+-    private Node pubNode = null;
+-    private Node terrNode = null;
+-    private Node villNode = null;
+-    private Node phytNode = null;
+-    
+-    private Occurrence occurrence;
+-    private AuthorOccurrence authorOccurrence;
+-    private Author author;
+-    private Metadata metadata;
+-    private Plant plant;
+-    private Publication publication;
+-    private Habitat habitat;
+-    private Village village;
+-    private Territory territory;
+-    private Phytochorion phytochorion;
+-    
+-    /** Creates a new instance of XMLParser */
+-    public XMLParser(String fileName) {
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());                  
+-        this.file = fileName;               
+-    }
+-
+-    public void initialize() throws ParserException {
+-        SAXReader reader = new SAXReader();        
+-        File fXML = new File(file);
+-        try {            
+-            this.document = reader.read(fXML);
+-        } catch (DocumentException ex) {
+-            throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-        }        
+-        occurrenceList = document.selectNodes(&quot;//occurrence&quot;);
+-        setNumberOfOccurrences(occurrenceList.size());        
+-    }
+-
+-    public void cleanup() {
+-    }
+-
+-    public boolean hasNextRecord() {        
+-        return getNumberOfOccurrences() &gt; 0;
+-    }
+-
+-    public Parser.Action fetchNextRecord() {
+-        return Parser.Action.UNKNOWN;
+-    }
+-
+-    public Record getNextPart(Class table) throws ParserException {        
+-        if (table == Occurrence.class) {
+-            //OCC_NODE
+-            setOccurrenceNode(occurrenceList);            
+-            List habList = occNode.selectNodes(&quot;habitat&quot;);
+-            List metadataList = occNode.selectNodes(&quot;metadata&quot;);
+-            List plantList =   occNode.selectNodes(&quot;plant&quot;);
+-            List pubList = occNode.selectNodes(&quot;publication&quot;);  
+-            setHabitatNode(habList);
+-            setMetadataNode(metadataList);
+-            setPlantNode(plantList);
+-            setPubNode(pubList);
+-                       
+-            //HAB_NODE
+-            List terrList =  habNode.selectNodes(&quot;territory&quot;);
+-            List villList = habNode.selectNodes(&quot;village&quot;);
+-            List phyList = habNode.selectNodes(&quot;phytochorion&quot;);
+-            setTerrNode(terrList);
+-            setVillNode(villList);
+-            setPhyNode(phyList);
+-                        
+-            //set list of author`s node
+-            authorsList = occNode.selectNodes(&quot;authors&quot;);
+-            setNumberOfAuthors(authorsList.size());
+-            
+-            //create Records       
+-            occurrence = new Occurrence();            
+-            habitat = new Habitat();
+-            metadata = new Metadata();
+-            publication = new Publication();
+-            plant = new Plant();
+-            village = new Village();
+-            territory = new Territory();
+-            phytochorion = new Phytochorion();
+-            
+-            //set FK of Records
+-            occurrence.setHabitat(habitat);
+-            occurrence.setPlant(plant);
+-            occurrence.setPublication(publication);
+-            occurrence.setMetadata(metadata);
+-            habitat.setTerritory(territory);
+-            habitat.setPhytochorion(phytochorion);
+-            habitat.setNearestVillage(village);            
+-            
+-            //load data to record
+-            part((Record)occurrence, occNode);
+-            part((Record)habitat, habNode);
+-            part((Record)metadata, metadataNode);
+-            part((Record)plant, planNode);
+-            part((Record)publication, pubNode);
+-            part((Record)territory, terrNode);
+-            part((Record)village, villNode);
+-            part((Record)phytochorion, phytNode);                                          
+-            
+-            return occurrence;
+-        } else if (table == AuthorOccurrence.class) {
+-            
+-            //create NODE                    
+-            setAuthorsNode(authorsList);            
+-            //List with author`s node
+-            List autList = authorsNode.selectNodes(&quot;author&quot;);
+-            //Set author node
+-            setAutNode(autList);            
+-            //List with authorOccurrence
+-            List autOccList = autNode.selectNodes(&quot;authorOccurrence&quot;);
+-            //Set authorOccurrence node
+-            setAutOccNode(autOccList);
+-            //create Records
+-            authorOccurrence = new AuthorOccurrence();
+-            author = new Author();
+-            //set FK of Records
+-            authorOccurrence.setAuthor(author);
+-            authorOccurrence.setOccurrence(occurrence);
+-                                  
+-            part((Record)author, autNode);
+-            part((Record)authorOccurrence, autOccNode);
+-            
+-            return authorOccurrence;
+-        }        
+-        return null;
+-    }
+-    
+-     public void part(Record record, Node node){
+-        if(record == null || node == null) return;        
+-        // Build this part of the record.
+-        for( String property : record.getProperties() )                                                 
+-        	record.setValue(property, node.valueOf(property));
+-    }
+-
+-     
+-    public boolean hasNextPart(Class table) {
+-    	if(table == AuthorOccurrence.class) 
+-    		return getNumberOfAuthors() &gt; 0;
+-    	else 
+-    		return false;
+-    }
+-
+-    public Parser.Action intentedFor() {
+-        return Parser.Action.UNKNOWN;
+-    }
+-   
+-    //FOR TESTING
+-   public static void main(String[] args) {
+-       XMLParser xmlParser = new XMLParser(&quot;c:/Documents and Settings/Lada/Dokumenty/test.xml&quot;);       
+-        try {
+-            System.out.println(&quot;test&quot;);
+-            xmlParser.initialize();
+-            while (xmlParser.hasNextRecord()) {
+-                Occurrence occMain = (Occurrence) xmlParser.getNextPart(Occurrence.class);
+-                //Test of output
+-                System.out.println(&quot;1:&quot; + occMain.getHabitat().getCountry());                
+-                while (xmlParser.hasNextPart(AuthorOccurrence.class)) {
+-                    AuthorOccurrence aoMain =  (AuthorOccurrence) xmlParser.getNextPart(AuthorOccurrence.class);
+-                    //Test of output
+-                    System.out.println(&quot;2: &quot;+ aoMain.getAuthor().getWholeName());
+-                }                
+-            }
+-        } catch (ParserException ex) {
+-            ex.printStackTrace();
+-        }       
+-   }
+-
+-    /**
+-     *  Set count of no process occurrence record in file.
+-     *  @param i count of occurrence record for processing
+-     */
+-    private void setNumberOfOccurrences(int i) {
+-        this.currentNumberOcc = i;
+-    }
+-
+-    /**
+-     * Get count of no process occurrence record in file
+-     *
+-     */
+-    private int getNumberOfOccurrences() {
+-        return this.currentNumberOcc;
+-    }
+- 
+-    /**
+-     *  Set count of no process author record in file.
+-     *  @param i count of author record for processing
+-     */
+-     private void setNumberOfAuthors(int i) {
+-        this.currentNumberAuthor = i;
+-    }
+-
+-     /**
+-     * Get count of no process author record in file
+-     *
+-     */
+-    private int getNumberOfAuthors() {
+-        return this.currentNumberAuthor;
+-    }
+-
+-    /**
+-     *  
+-     */
+-    private void setOccurrenceNode(List occurrenceList) {
+-        int num = getNumberOfOccurrences();
+-        setNumberOfOccurrences(num - 1);   
+-        this.occNode = (Node)occurrenceList.get(occurrenceList.size()- num); 
+-    }
+-
+-    private void setHabitatNode(List habList) 
+-    throws ParserException {
+-       if (habList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element HABITAT doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-           
+-       } else     
+-            habNode = (Node) habList.get(0);               
+-    }
+-
+-    private void setMetadataNode(List metadataList) 
+-     throws ParserException {
+-       if (metadataList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element METADATA doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-           metadataNode = (Node) metadataList.get(0);
+-    }
+-
+-    private void setPlantNode(List plantList) 
+-     throws ParserException {
+-       if (plantList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element PLANT doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            planNode = (Node) plantList.get(0);
+-    }
+-
+-    private void setPubNode(List pubList)  
+-    throws ParserException {
+-       if (pubList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element PUBLICATION doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-          throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            pubNode = (Node) pubList.get(0);
+-    }      
+-
+-    private void setTerrNode(List terrList) 
+-     throws ParserException {
+-       if (terrList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element TERRITORY doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            terrNode = (Node) terrList.get(0);
+-    }
+-
+-    private void setVillNode(List villList) 
+-     throws ParserException {
+-       if (villList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element VILLAGE doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            villNode = (Node) villList.get(0);
+-    }
+-
+-    private void setPhyNode(List phyList) 
+-     throws ParserException {
+-       if (phyList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element PHYTOCHORION doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            phytNode = (Node) phyList.get(0);        
+-    }
+-
+-    private void setAuthorsNode(List authorsList) 
+-    throws ParserException {
+-       if (authorsList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element AUTHORS doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else {
+-         int num = getNumberOfAuthors();
+-         setNumberOfAuthors(num - 1);
+-         Node node =(Node) authorsList.get(authorsList.size() - num);
+-         this.authorsNode = node;        
+-       }
+-    }
+-
+-    private void setAutNode(List autList) 
+-    throws ParserException {
+-       if (autList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element AUTHOR doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            autNode = (Node) autList.get(0);        
+-    }         
+-
+-    private void setAutOccNode(List autOccList) 
+-    throws ParserException {
+-       if (autOccList.size() &lt;= 0) {
+-           logger.error(&quot;Bad XML file - element AUTHOROCCURRENCE doesn`t exist. Elements for all NOT NULL column must exist.&quot;);
+-           throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+-            
+-       } else
+-            autOccNode = (Node) autOccList.get(0);        
+-    }
+-}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000421.html">[Plantlore-dev] r368 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record
+</A></li>
+	<LI>Next message: <A HREF="000423.html">[Plantlore-dev] r370 - in trunk: lib src/net/sf/plantlore/client src/net/sf/plantlore/common src/net/sf/plantlore/middleware src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#422">[ date ]</a>
+              <a href="thread.html#422">[ thread ]</a>
+              <a href="subject.html#422">[ subject ]</a>
+              <a href="author.html#422">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

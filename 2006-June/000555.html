@@ -1,0 +1,139 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r440 - in trunk/src/net/sf/plantlore/client: . user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r440%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20user&In-Reply-To=%3C200606041600.k54G0XaC017417%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000554.html">
+   <LINK REL="Next"  HREF="000556.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r440 - in trunk/src/net/sf/plantlore/client: . user</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r440%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20user&In-Reply-To=%3C200606041600.k54G0XaC017417%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r440 - in trunk/src/net/sf/plantlore/client: . user">kovo at berlios.de
+       </A><BR>
+    <I>Sun Jun  4 18:00:33 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000554.html">[Plantlore-dev] r439 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+        <LI>Next message: <A HREF="000556.html">[Plantlore-dev] r441 - in trunk/src/net/sf/plantlore: client client/checklist client/export client/export/builders client/export/component client/imports client/imports/parsers client/imports/table client/login server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#555">[ date ]</a>
+              <a href="thread.html#555">[ thread ]</a>
+              <a href="subject.html#555">[ subject ]</a>
+              <a href="author.html#555">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-06-04 18:00:33 +0200 (Sun, 04 Jun 2006)
+New Revision: 440
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+Log:
+Fix executeInsert() calls for Rights, Habitats and AuthorsOccurrences so that it works properly with the RMI. For details see Krater's post in the plantlore-dev.
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-04 15:42:24 UTC (rev 439)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-04 16:00:33 UTC (rev 440)
+@@ -601,7 +601,8 @@
+         } else {
+             //we've already created and set up a new Habitat now we have to store it into the database
+             h.setDeleted(0);
+-            database.executeInsert(h);
++            int habId = database.executeInsert(h);
++            h.setId(habId);
+         }
+         
+         m = o.getMetadata();
+@@ -670,7 +671,8 @@
+         hTmp.setTerritory(o.getHabitat().getTerritory());
+         hTmp.setDeleted(0);
+         
+-        database.executeInsert(hTmp);
++        int habId = database.executeInsert(hTmp);
++        hTmp.setId(habId);
+         
+         occTmp.setDataSource(o.getDataSource());
+         occTmp.setDayCollected(o.getDayCollected());
+@@ -792,7 +794,8 @@
+                         logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
+                         Occurrence occTmp = cloneOccurrence();
+                         occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
+-                        database.executeInsert(occTmp);
++                        int occId = database.executeInsert(occTmp);
++                        occTmp.setId(occId);
+                         logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
+                         Integer id = lookupPlant(taxonList.get(j));
+                         if (!id.equals(-1)) {
+@@ -859,13 +862,15 @@
+                     h.setTerritory(t);
+                     h.setDeleted(0);
+                     logger.info(&quot;Creating a shared habitat&quot;);
+-                    database.executeInsert(h);//insert the shared habitat
++                    int habId = database.executeInsert(h);//insert the shared habitat
++                    h.setId(habId);
+                     logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
+                         
+                     for (int j = 0; j &lt; taxonList.size(); j++) {
+                         logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
+                         Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
+-                        database.executeInsert(occ);
++                        int occId = database.executeInsert(occ);
++                        occ.setId(occId);
+                         logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
+                         
+                         for (int k = 0; k &lt; authorList.size(); k++) {
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-06-04 15:42:24 UTC (rev 439)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-06-04 16:00:33 UTC (rev 440)
+@@ -224,7 +224,8 @@
+     
+     public void addUserRecord (User user, Right right) {
+         try {
+-            database.executeInsert(right);
++            int rightId = database.executeInsert(right);
++            right.setId(rightId);
+             database.executeInsert(user);
+         } catch (RemoteException ex) {
+             ex.printStackTrace();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000554.html">[Plantlore-dev] r439 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+	<LI>Next message: <A HREF="000556.html">[Plantlore-dev] r441 - in trunk/src/net/sf/plantlore: client client/checklist client/export client/export/builders client/export/component client/imports client/imports/parsers client/imports/table client/login server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#555">[ date ]</a>
+              <a href="thread.html#555">[ thread ]</a>
+              <a href="subject.html#555">[ subject ]</a>
+              <a href="author.html#555">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

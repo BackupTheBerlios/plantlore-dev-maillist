@@ -1,0 +1,226 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r84 - in trunk/src/net/sf/plantlore: middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r84%20-%20in%20trunk/src/net/sf/plantlore%3A%20middleware%20server&In-Reply-To=%3C200603292327.k2TNR6Jv014943%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000082.html">
+   <LINK REL="Next"  HREF="000084.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r84 - in trunk/src/net/sf/plantlore: middleware server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r84%20-%20in%20trunk/src/net/sf/plantlore%3A%20middleware%20server&In-Reply-To=%3C200603292327.k2TNR6Jv014943%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r84 - in trunk/src/net/sf/plantlore: middleware server">kovo at berlios.de
+       </A><BR>
+    <I>Thu Mar 30 01:27:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000082.html">[Plantlore-dev] r83 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000084.html">[Plantlore-dev] r85 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#83">[ date ]</a>
+              <a href="thread.html#83">[ thread ]</a>
+              <a href="subject.html#83">[ subject ]</a>
+              <a href="author.html#83">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-03-30 01:26:14 +0200 (Thu, 30 Mar 2006)
+New Revision: 84
+
+Modified:
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+SelectQuery updated to allow adding restrictions on joined tables.
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-03-29 22:48:11 UTC (rev 83)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-03-29 23:26:14 UTC (rev 84)
+@@ -7,57 +7,71 @@
+ import net.sf.plantlore.common.PlantloreConstants;
+ 
+ /**
+- * Select query constructor.
+- * 
+- * FIXME Dopsat sem popis! Kowo - co to dela, jak to pouzivat apod...
+- * 
+- * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>), Tom&#225;&#353; Kova&#345;&#237;k
++ * Interface for building SELECT queries. Different parts of the query can be built using methods
++ * of this interface. Main parts include list of the selected columns (projection), WHERE condition
++ * (restrictions) and ORDER BY clauses. Also allows joining of tables using aliases. For detailed
++ * explanation refer to Plantlore dosumnetation.
++ *
++ * FIXME Tie metody by asi mali hadzat DBLayerException a prekladat vyhadzovane HibernateExceptions
++ * FIXME Chyba tu zoskupovanie podmienok vo WHERE klauzuli pomocou AND a OR
++ *
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>), Tom&#225;&#353; Kova&#345;&#237;k (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">kovo at matfyz.cz</A>)
+  * @since 2006-03-26
+  */
+ public interface SelectQuery extends Serializable, Remote {
+-	
+-	/**
++
++    /** 
++     *  Create alias for joining tables. Alias can be defined for a foreign key parameter and can be
++     *  used to add restrictions on the table referenced by the foreign key. For thorough explanation
++     *  see documentation.
++     *
++     *  @param propertyName name of the column for which we want to create an alias (foreign key column)
++     *  @param aliasName name of the new alias
++     */    
++    void createAlias(String propertyName, String aliasName);
++    
++    /**
+      *  Add restriction to the constructed criteria. Restrictions are parts of the where condition.
+-     *  
++     *
+      *  @param type type of the restriction (see constants defined in PlantloreConstants)
+      *  @param firstPropertyName argument of restrictions working with one property (table column)
+      *  @param secondPropertyName argument of restrictions wirking with two properties
+      *  @param value value for restrictions containg values
+      *  @param values collection of values for restrictions working with more values (RESTR_IN)
+      */
+-	void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values);
+-	
++    void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values);
++    
+     /**
+      *  Add projection to constructed criteria. Projections are columns we want to select
+-     *  
++     *
+      *  @param type type of projection (not only columns, but also aggregate and other functions)
+      *  @param propertyName name of the column for the projection
+      *  @see PlantloreConstants
+      */
+-	void addProjection(int type, String propertyName);
+-	
+-	/**
++    void addProjection(int type, String propertyName);
++    
++    /**
+      *  Set method of fetching the results.
+-     *  
++     *
+      *  @param associationPath
+-     *  @param mode 
++     *  @param mode
+      */
+-	void setFetchMode(String associationPath, int mode);
+-	
+-	 /**
++    void setFetchMode(String associationPath, int mode);
++    
++    /**
+      *  Add orderby clause to the constructed criteria.
+      *
+      *  @param direction direction of ordering (ASC or DESC)
+      *  @param propertyName property we want to use for ordering the results
+      */
+-	void addOrder(int direction, String propertyName);
+-	
+-	 /**
+-     *  Add association to the criteria. Association means that given associated record (from a 
++    void addOrder(int direction, String propertyName);
++    
++    /**
++     *  Add association to the criteria. Association means that given associated record (from a
+      *  different table) should be loaded as well.
+      *
+      *  @param associationPath path of associated entities
+      */
+-	void addAssociation(String associationPath);
+-
++    void addAssociation(String associationPath);
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-03-29 22:48:11 UTC (rev 83)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-03-29 23:26:14 UTC (rev 84)
+@@ -19,22 +19,45 @@
+ import org.hibernate.criterion.Restrictions;
+ 
+ /**
++ * Implemetation of SelectQuery using Hibernate OR Mapping for database querying. Creates Hibernate
++ * &quot;criteria query&quot; and sets projections, restrictions and order by clause. Also allows selecting
++ * data from joined tables. For detailed explanation refer to Plantlore documentation and Hibernate 
++ * reference manual.
+  *
++ *  FIXME: Malo by to hadzat DBLayerException...
++ *
+  * @author Tom&#225;&#353; Kova&#345;&#237;k, Erik Kratochv&#237;l
+  */
+ public class SelectQueryImplementation implements SelectQuery {
+-	
++    // Hibernate criteria used in criteria query
+     private Criteria criteria;
+     
+-    /** Creates a new instance of Selectcriteria */
++    /** Creates a new instance of SelectQueryImplementation */
+     public SelectQueryImplementation(Criteria criteria) {
+         this.criteria = criteria;
+     }
+     
++    /**
++     *  Return instance of Hibernate criteria object representing this query
++     *
++     *  @return insatnce of Hibernate criteria object representing this query
++     */
+     Criteria getCriteria() {
+         return this.criteria;
+     }
+     
++    /** 
++     *  Create alias for joining tables. Alias can be defined for a foreign key parameter and can be
++     *  used to add restrictions on the table referenced by the foreign key. For thorough explanation
++     *  see documentation.
++     *
++     *  @param propertyName name of the column for which we want to create an alias (foreign key column)
++     *  @param aliasName name of the new alias
++     */
++    public void createAlias(String propertyName, String aliasName) {
++        criteria.createAlias(propertyName, aliasName);
++    }
++    
+     /**
+      *  Add restriction to the constructed criteria. Restrictions are parts of the where condition.
+      *  
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000082.html">[Plantlore-dev] r83 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000084.html">[Plantlore-dev] r85 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#83">[ date ]</a>
+              <a href="thread.html#83">[ thread ]</a>
+              <a href="subject.html#83">[ subject ]</a>
+              <a href="author.html#83">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

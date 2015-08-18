@@ -1,0 +1,205 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r561%20-%20in%20trunk/src/net/sf/plantlore%3A%20l10n%0A%09middleware%20server&In-Reply-To=%3C200608241001.k7OA1L4j011717%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000764.html">
+   <LINK REL="Next"  HREF="000766.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r561%20-%20in%20trunk/src/net/sf/plantlore%3A%20l10n%0A%09middleware%20server&In-Reply-To=%3C200608241001.k7OA1L4j011717%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r561 - in trunk/src/net/sf/plantlore: l10n	middleware server">krater at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 24 12:01:21 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000764.html">[Plantlore-dev] r560 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000766.html">[Plantlore-dev] r562 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#765">[ date ]</a>
+              <a href="thread.html#765">[ thread ]</a>
+              <a href="subject.html#765">[ subject ]</a>
+              <a href="author.html#765">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-24 12:01:20 +0200 (Thu, 24 Aug 2006)
+New Revision: 561
+
+Modified:
+   trunk/src/net/sf/plantlore/l10n/L10n.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Implementation of language propagation to the server. The database layer created by the server will use the same language mutation as the client.
+
+Modified: trunk/src/net/sf/plantlore/l10n/L10n.java
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/L10n.java	2006-08-24 09:02:00 UTC (rev 560)
++++ trunk/src/net/sf/plantlore/l10n/L10n.java	2006-08-24 10:01:20 UTC (rev 561)
+@@ -32,6 +32,7 @@
+     private static Preferences prefs;
+     private static Logger logger = Logger.getLogger(L10n.class.getPackage().getName());
+     private static Locale currentLocale;
++    private static String languageLocale;
+     
+     /** Creates a new instance of L10n */
+     public L10n()
+@@ -47,8 +48,11 @@
+      */
+     public static void load() throws IOException {
+         prefs = Preferences.userNodeForPackage(L10n.class);
+-        String locale = prefs.get(&quot;locale&quot;,&quot;DUMMY_DEFAULT&quot;);
+-        
++        languageLocale = prefs.get(&quot;locale&quot;,&quot;DUMMY_DEFAULT&quot;);
++        load(languageLocale);
++    }
++    
++    public static void load(String locale) throws IOException {        
+         Locale loc;
+         if (locale.equals(&quot;DUMMY_DEFAULT&quot;)) {
+             loc = Locale.getDefault();
+@@ -150,4 +154,8 @@
+     public static Locale getCurrentLocale() {
+         return (Locale) currentLocale.clone();
+     }
++    
++    public static String getLanguageLocale() {
++    	return languageLocale;
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-24 09:02:00 UTC (rev 560)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-24 10:01:20 UTC (rev 561)
+@@ -36,6 +36,18 @@
+     public Object[] initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
+ 
+     /**
++     * The database layer performs several kinds of operations each of which may
++     * fail at any time. In order to notify the User and present him with a reasonable
++     * string describing the problem in the language that the User has set
++     * on the (possibly remote) client, database layer must allow the client to set
++     * the language mutation.
++     * 
++     * @param locale	The string describing the language so that it can be used
++     * in L10n.load() method.
++     */
++    public void setLanguage(String locale) throws DBLayerException, RemoteException;
++    
++    /**
+      *  Insert data into the database.
+      *
+      *  @param data data to insert (one of the data holder objects)
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-08-24 09:02:00 UTC (rev 560)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-08-24 10:01:20 UTC (rev 561)
+@@ -14,6 +14,7 @@
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.server.tools.RMI;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ 
+@@ -107,20 +108,24 @@
+ 		// Connect to the remote server and obtain the RemoteDBLayerFactory
+ 		logger.debug(&quot;1. Connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
+ 		Registry registry = LocateRegistry.getRegistry(host, port);
+-		logger.debug(&quot;Connected.&quot;);
+ 		
++		
+ 		logger.debug(&quot;2. Obtaining the remote dblayer factory ...&quot;);
+ 		RemoteDBLayerFactory remoteFactory = (RemoteDBLayerFactory) registry.lookup(RemoteDBLayerFactory.ID);
+-		logger.debug(&quot;Obtained!&quot;);
+ 		
++		
+ 		// Get the stub from the remote factory and save the information about the connection
+ 		logger.debug(&quot;3. Creating a new dblayer...&quot;);
+ 		DBLayer stub = remoteFactory.create(); // DBLayerException can spawn here (too many users!)
+-		logger.debug(&quot;Created! :)&quot;);
+ 		
++		
+ 		ConnectionInfo info = new ConnectionInfo(remoteFactory, null, stub, &quot;localhost -&gt; &quot; + host + &quot;:&quot; + port);
+ 		client.put(stub, info);
+ 		
++		// Set the same language on the server side.
++		logger.debug(&quot;4. Setting the language...&quot;);
++		stub.setLanguage( L10n.getLanguageLocale() );
++		
+ 		logger.info(&quot;New DBLayer created: &quot; + info);
+ 		
+ 		return stub;
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-24 09:02:00 UTC (rev 560)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-24 10:01:20 UTC (rev 561)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.server;
+ 
+ import java.io.File;
++import java.io.IOException;
+ import java.rmi.NoSuchObjectException;
+ import java.rmi.RemoteException;
+ import java.rmi.server.UnicastRemoteObject;
+@@ -133,6 +134,17 @@
+     }
+     
+     /**
++     * Set the language mutation in order to send messages in same the language
++     * the (possibly remote) User is currently using on his machine.
++     */
++    public void setLanguage(String locale) 
++    throws DBLayerException, RemoteException {
++    	try {
++    		L10n.load(locale);
++    	} catch(IOException e) {}
++    }
++    
++    /**
+      *  Initialize database connection. Fire up Hibernate and open a session.
+      *  Authenticate user and Load rights of this user
+      *
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000764.html">[Plantlore-dev] r560 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000766.html">[Plantlore-dev] r562 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#765">[ date ]</a>
+              <a href="thread.html#765">[ thread ]</a>
+              <a href="subject.html#765">[ subject ]</a>
+              <a href="author.html#765">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

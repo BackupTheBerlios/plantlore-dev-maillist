@@ -1,0 +1,329 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r122 - in trunk/src/net/sf/plantlore: client l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r122%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n%20server&In-Reply-To=%3C200604101923.k3AJNBU0019556%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000123.html">
+   <LINK REL="Next"  HREF="000125.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r122 - in trunk/src/net/sf/plantlore: client l10n server</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r122%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n%20server&In-Reply-To=%3C200604101923.k3AJNBU0019556%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r122 - in trunk/src/net/sf/plantlore: client l10n server">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon Apr 10 21:23:11 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000123.html">[Plantlore-dev] r121 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+        <LI>Next message: <A HREF="000125.html">[Plantlore-dev] plantlore
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#124">[ date ]</a>
+              <a href="thread.html#124">[ thread ]</a>
+              <a href="subject.html#124">[ subject ]</a>
+              <a href="author.html#124">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-04-10 21:22:55 +0200 (Mon, 10 Apr 2006)
+New Revision: 122
+
+Modified:
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Removed the look&amp;feel setting - caused problems in Gnome in Fedora Core 5
+Added remembering of selected records between pages in Overview.
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-09 22:10:08 UTC (rev 121)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-10 19:22:55 UTC (rev 122)
+@@ -8,6 +8,8 @@
+ package net.sf.plantlore.client;
+ 
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
++import java.util.HashMap;
+ import javax.swing.table.AbstractTableModel;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+@@ -25,7 +27,7 @@
+  */
+ public class OverviewTableModel extends AbstractTableModel {
+     private Logger logger;
+-    private static final int COLUMN_COUNT = 23;
++    private static final int COLUMN_COUNT = 24;
+     private DBLayer db;
+     private String[] columnNames;
+     private int[] columnSizes;
+@@ -34,7 +36,27 @@
+     private int resultsCount = 0;
+     private int pageSize = 30;
+     private int currentPage = 1;
++    private ArrayList&lt;Record&gt; recordsArray = new ArrayList&lt;Record&gt;();
++    private HashMap&lt;Integer, Record&gt; resultsMap = new HashMap&lt;Integer, Record&gt;();
+     
++    class Record {
++        public Record(int id, boolean selected, int number) {
++            this.id = id;
++            this.selected = selected;
++            this.number = number;
++        }
++        public int id;
++        public boolean selected;
++        public int number;
++        
++        public boolean equals(Object o) {
++            if (!(o instanceof Record))
++                return false;
++            Record r = (Record)o;
++            return r.id == this.id;
++        }
++    }
++    
+     private Object[][] data = {
+         {true, &quot;Pampeliska&quot;, &quot;neznamy&quot;, &quot;Praha&quot;, new Integer(1995), &quot;phy&quot;, &quot;cechy&quot;, new Boolean(false), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;},
+         {false,&quot;Hermanek&quot;, &quot;Jakub&quot;, &quot;Zelezny Brod&quot;, new Integer(1990), &quot;phy&quot;, &quot;cechy&quot;, new Boolean(true), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;}
+@@ -72,50 +94,52 @@
+         columnSizes = new int[COLUMN_COUNT];
+         columnNames[0] = L10n.getString(&quot;overviewColX&quot;);
+         columnSizes[0] = 30;
+-        columnNames[1] = L10n.getString(&quot;overviewColName&quot;);
+-        columnSizes[1] = 100;
+-        columnNames[2] = L10n.getString(&quot;overviewColAuthor&quot;);
++        columnNames[1] = L10n.getString(&quot;overviewColResultNumber&quot;);
++        columnSizes[1] = 50;
++        columnNames[2] = L10n.getString(&quot;overviewColName&quot;);
+         columnSizes[2] = 100;
+-        columnNames[3] = L10n.getString(&quot;overviewColVillage&quot;);
++        columnNames[3] = L10n.getString(&quot;overviewColAuthor&quot;);
+         columnSizes[3] = 100;
+-        columnNames[4] = L10n.getString(&quot;overviewColPlace&quot;);
+-        columnSizes[4] = 150;
+-        columnNames[5] = L10n.getString(&quot;overviewColYear&quot;);
+-        columnSizes[5] = 50;
+-        columnNames[6] = L10n.getString(&quot;overviewColTerritory&quot;);
+-        columnSizes[6] = 100;
+-        columnNames[7] = L10n.getString(&quot;overviewColPhyt&quot;);
++        columnNames[4] = L10n.getString(&quot;overviewColVillage&quot;);
++        columnSizes[4] = 100;
++        columnNames[5] = L10n.getString(&quot;overviewColPlace&quot;);
++        columnSizes[5] = 150;
++        columnNames[6] = L10n.getString(&quot;overviewColYear&quot;);
++        columnSizes[6] = 50;
++        columnNames[7] = L10n.getString(&quot;overviewColTerritory&quot;);
+         columnSizes[7] = 100;
+-        columnNames[8] = L10n.getString(&quot;overviewColPhytCode&quot;);
+-        columnSizes[8] = 50;
+-        columnNames[9] = L10n.getString(&quot;overviewColCountry&quot;);
+-        columnSizes[9] = 100;
+-        columnNames[10] = L10n.getString(&quot;overviewColQuadrant&quot;);
+-        columnSizes[10] = 50;
+-        columnNames[11] = L10n.getString(&quot;overviewColOccNote&quot;);
+-        columnSizes[11] = 150;
+-        columnNames[12] = L10n.getString(&quot;overviewColLocNote&quot;);
++        columnNames[8] = L10n.getString(&quot;overviewColPhyt&quot;);
++        columnSizes[8] = 100;
++        columnNames[9] = L10n.getString(&quot;overviewColPhytCode&quot;);
++        columnSizes[9] = 50;
++        columnNames[10] = L10n.getString(&quot;overviewColCountry&quot;);
++        columnSizes[10] = 100;
++        columnNames[11] = L10n.getString(&quot;overviewColQuadrant&quot;);
++        columnSizes[11] = 50;
++        columnNames[12] = L10n.getString(&quot;overviewColOccNote&quot;);
+         columnSizes[12] = 150;
+-        columnNames[13] = L10n.getString(&quot;overviewColAltitude&quot;);
+-        columnSizes[13] = 50;
+-        columnNames[14] = L10n.getString(&quot;overviewColLongitude&quot;);
++        columnNames[13] = L10n.getString(&quot;overviewColLocNote&quot;);
++        columnSizes[13] = 150;
++        columnNames[14] = L10n.getString(&quot;overviewColAltitude&quot;);
+         columnSizes[14] = 50;
+-        columnNames[15] = L10n.getString(&quot;overviewColLatitude&quot;);
++        columnNames[15] = L10n.getString(&quot;overviewColLongitude&quot;);
+         columnSizes[15] = 50;
+-        columnNames[16] = L10n.getString(&quot;overviewColSource&quot;);
+-        columnSizes[16] = 100;
+-        columnNames[17] = L10n.getString(&quot;overviewColPublication&quot;);
++        columnNames[16] = L10n.getString(&quot;overviewColLatitude&quot;);
++        columnSizes[16] = 50;
++        columnNames[17] = L10n.getString(&quot;overviewColSource&quot;);
+         columnSizes[17] = 100;
+-        columnNames[18] = L10n.getString(&quot;overviewColHerbarium&quot;);
+-        columnSizes[18] = 80;
+-        columnNames[19] = L10n.getString(&quot;overviewColMetadata&quot;);
+-        columnSizes[19] = 100;
+-        columnNames[20] = L10n.getString(&quot;overviewColMonth&quot;);
+-        columnSizes[20] = 50;
+-        columnNames[21] = L10n.getString(&quot;overviewColDay&quot;);
++        columnNames[18] = L10n.getString(&quot;overviewColPublication&quot;);
++        columnSizes[18] = 100;
++        columnNames[19] = L10n.getString(&quot;overviewColHerbarium&quot;);
++        columnSizes[19] = 80;
++        columnNames[20] = L10n.getString(&quot;overviewColMetadata&quot;);
++        columnSizes[20] = 100;
++        columnNames[21] = L10n.getString(&quot;overviewColMonth&quot;);
+         columnSizes[21] = 50;
+-        columnNames[22] = L10n.getString(&quot;overviewColTime&quot;);
+-        columnSizes[22] = 100;
++        columnNames[22] = L10n.getString(&quot;overviewColDay&quot;);
++        columnSizes[22] = 50;
++        columnNames[23] = L10n.getString(&quot;overviewColTime&quot;);
++        columnSizes[23] = 100;
+     }
+     
+     /**
+@@ -139,30 +163,37 @@
+         for (int i = 1; i &lt;= to - from + 1 ; i++) {
+             resultObj = (Object[])records[i-1];
+             result = (AuthorOccurrence)resultObj[0];
++            Record r = new Record(result.getId(), false, from + i - 1);
++            if (!recordsArray.contains(r))
++                recordsArray.add(r);
++            else 
++                r = recordsArray.get(from+i-2);
++                
+             row = new Object[COLUMN_COUNT];
+-            row[0] = false;
+-            row[1] = result.getOccurrence().getPlant().getTaxon();
+-            row[2] = result.getAuthor().getWholeName();
+-            row[3] = result.getOccurrence().getHabitat().getNearestVillage().getName();
+-            row[4] = result.getOccurrence().getHabitat().getDescription();
+-            row[5] = result.getOccurrence().getYearCollected();
+-            row[6] = result.getOccurrence().getHabitat().getTerritory().getName();
+-            row[7] = result.getOccurrence().getHabitat().getPhytochorion().getName();
+-            row[8] = result.getOccurrence().getHabitat().getPhytochorion().getCode();
+-            row[9] = result.getOccurrence().getHabitat().getCountry();
+-            row[10] = result.getOccurrence().getHabitat().getQuadrant();
+-            row[11] = result.getOccurrence().getNote();
+-            row[12] = result.getOccurrence().getHabitat().getNote();
+-            row[13] = result.getOccurrence().getHabitat().getAltitude();
+-            row[14] = result.getOccurrence().getHabitat().getLongitude();
+-            row[15] = result.getOccurrence().getHabitat().getLatitude();
+-            row[16] = result.getOccurrence().getDataSource();
+-            row[17] = result.getOccurrence().getPublication().getCollectionName();
+-            row[18] = result.getOccurrence().getHerbarium();
+-            row[19] = result.getOccurrence().getMetadata().getDataSetTitle();
+-            row[20] = result.getOccurrence().getMonthCollected();
+-            row[21] = result.getOccurrence().getDayCollected();
+-            row[22] = result.getOccurrence().getTimeCollected();
++            row[0] = r.selected;
++            row[1] = r.number;
++            row[2] = result.getOccurrence().getPlant().getTaxon();
++            row[3] = result.getAuthor().getWholeName();
++            row[4] = result.getOccurrence().getHabitat().getNearestVillage().getName();
++            row[5] = result.getOccurrence().getHabitat().getDescription();
++            row[6] = result.getOccurrence().getYearCollected();
++            row[7] = result.getOccurrence().getHabitat().getTerritory().getName();
++            row[8] = result.getOccurrence().getHabitat().getPhytochorion().getName();
++            row[9] = result.getOccurrence().getHabitat().getPhytochorion().getCode();
++            row[10] = result.getOccurrence().getHabitat().getCountry();
++            row[11] = result.getOccurrence().getHabitat().getQuadrant();
++            row[12] = result.getOccurrence().getNote();
++            row[13] = result.getOccurrence().getHabitat().getNote();
++            row[14] = result.getOccurrence().getHabitat().getAltitude();
++            row[15] = result.getOccurrence().getHabitat().getLongitude();
++            row[16] = result.getOccurrence().getHabitat().getLatitude();
++            row[17] = result.getOccurrence().getDataSource();
++            row[18] = result.getOccurrence().getPublication().getCollectionName();
++            row[19] = result.getOccurrence().getHerbarium();
++            row[20] = result.getOccurrence().getMetadata().getDataSetTitle();
++            row[21] = result.getOccurrence().getMonthCollected();
++            row[22] = result.getOccurrence().getDayCollected();
++            row[23] = result.getOccurrence().getTimeCollected();
+             data[i-1] = row;
+         }//i        
+     }
+@@ -205,6 +236,9 @@
+     
+     public void setValueAt(Object value, int row, int column) {
+         data[row][column] = value;
++        if (column == 0)
++            //displayed number of record starts from 1 --&gt; we have to subtract 1 coz ArrayList is indexed from 0
++            recordsArray.get((Integer)data[row][1]-1).selected = (Boolean)value;
+         //repaint view - with new value
+         this.fireTableCellUpdated(row, column);
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-04-09 22:10:08 UTC (rev 121)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-04-10 19:22:55 UTC (rev 122)
+@@ -62,7 +62,7 @@
+     public static void main(String[] args) {
+         
+         // Set beautiful system look &amp; feel.
+-        try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception e) { JFrame.setDefaultLookAndFeelDecorated(true); }
++        //try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception e) { JFrame.setDefaultLookAndFeelDecorated(true); }
+         
+         
+         //BasicConfigurator.configure();
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-09 22:10:08 UTC (rev 121)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-10 19:22:55 UTC (rev 122)
+@@ -49,6 +49,7 @@
+ invertSelectedTT=Inverts the selection
+ 
+ overviewColX = X
++overviewColResultNumber = Result number
+ overviewColName = Name
+ overviewColAuthor = Author
+ overviewColVillage = Nearest village
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-09 22:10:08 UTC (rev 121)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-10 19:22:55 UTC (rev 122)
+@@ -90,7 +90,7 @@
+         //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Temp/plantloreHIBdata.fdb&quot;);
+         //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/DatabaseTest/database/plantlore.fdb&quot;);
+         //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreHIBdata.fdb&quot;);
+-        cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:natalka.kolej.mff.cuni.cz/3050:/mnt/data/temp/plantloreHIBdata.fdb&quot;);
++        cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:/data/plantloreHIBdata.fdb&quot;);
+         //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:<A HREF="postgresql://localhost:5432/plantlore">postgresql://localhost:5432/plantlore</A>&quot;);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, &quot;sysdba&quot;);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, &quot;masterkey&quot;);        
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000123.html">[Plantlore-dev] r121 - trunk/src/net/sf/plantlore/config/hibernate
+</A></li>
+	<LI>Next message: <A HREF="000125.html">[Plantlore-dev] plantlore
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#124">[ date ]</a>
+              <a href="thread.html#124">[ thread ]</a>
+              <a href="subject.html#124">[ subject ]</a>
+              <a href="author.html#124">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

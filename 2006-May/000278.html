@@ -1,0 +1,300 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r245 - in trunk/src/net/sf/plantlore: client/export/component client/history common/record config/hibernate
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r245%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export/component%20client/history%20common/record%20config/hibernate&In-Reply-To=%3C200605082329.k48NTmqc001979%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000284.html">
+   <LINK REL="Next"  HREF="000281.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r245 - in trunk/src/net/sf/plantlore: client/export/component client/history common/record config/hibernate</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r245%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export/component%20client/history%20common/record%20config/hibernate&In-Reply-To=%3C200605082329.k48NTmqc001979%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r245 - in trunk/src/net/sf/plantlore: client/export/component client/history common/record config/hibernate">lada at berlios.de
+       </A><BR>
+    <I>Tue May  9 01:29:48 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000284.html">[Plantlore-dev] r244 - in trunk/analysis/database: . Old DB model
+</A></li>
+        <LI>Next message: <A HREF="000281.html">[Plantlore-dev] r246 - in trunk/src/net/sf/plantlore: common/record config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#278">[ date ]</a>
+              <a href="thread.html#278">[ thread ]</a>
+              <a href="subject.html#278">[ subject ]</a>
+              <a href="author.html#278">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-09 01:29:44 +0200 (Tue, 09 May 2006)
+New Revision: 245
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/component/XTree.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml
+Log:
+Repair mapping for metadata and holder(destory cVersionLastUpdate, add cdelete)
+
+Modified: trunk/src/net/sf/plantlore/client/export/component/XTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/component/XTree.java	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/client/export/component/XTree.java	2006-05-08 23:29:44 UTC (rev 245)
+@@ -158,8 +158,7 @@
+ 				new XNode(Metadata.class, Metadata.DATECREATE, true),
+ 				new XNode(Metadata.class, Metadata.DATEMODIFIED, true),
+ 				new XNode(Metadata.class, Metadata.RECORDBASIS),
+-				new XNode(Metadata.class, Metadata.BIOTOPETEXT),
+-				new XNode(Metadata.class, Metadata.VERSIONPLANTSFILE)
++				new XNode(Metadata.class, Metadata.BIOTOPETEXT),				
+ 			}
+ 		},
+ 		new Object[] { // AUTHOR
+@@ -260,8 +259,7 @@
+ 			new XNode(Metadata.class, Metadata.DATECREATE, true),
+ 			new XNode(Metadata.class, Metadata.DATEMODIFIED, true),
+ 			new XNode(Metadata.class, Metadata.RECORDBASIS),
+-			new XNode(Metadata.class, Metadata.BIOTOPETEXT),
+-			new XNode(Metadata.class, Metadata.VERSIONPLANTSFILE)
++			new XNode(Metadata.class, Metadata.BIOTOPETEXT),			
+ 		},
+ 		new Object[] { // AUTHOR
+ 			new XNode(Author.class, null),
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-08 23:29:44 UTC (rev 245)
+@@ -1388,6 +1388,12 @@
+               detailsMessage = detailsMessage + &quot;Telephone number: &quot; + author.getPhoneNumber() + &quot;\n&quot;;            
+               detailsMessage = detailsMessage + &quot;URL: &quot; + author.getUrl() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + &quot;Note: &quot; + author.getNote() + &quot;\n&quot;;
++        }  else if (tableName.equals(PlantloreConstants.ENTITY_METADATA)) {
++             //Get details for Metadata
++              Object[] object = searchObject(&quot;Metadata&quot;,recordId);   
++              Metadata metadata = (Metadata)object[0];
++              detailsMessage = &quot;Details of Metadata \n\n&quot;;
++        
+         } else if (tableName.equals(PlantloreConstants.ENTITY_PHYTOCHORION)) {
+               //Get details for Phytochorion
+               Object[] object = searchObject(&quot;Phytochorion&quot;,recordId); 
+@@ -1490,8 +1496,7 @@
+         metadataHash.put(Metadata.DATECREATE, 12);
+         metadataHash.put(Metadata.DATEMODIFIED, 13);
+         metadataHash.put(Metadata.RECORDBASIS, 14);
+-        metadataHash.put(Metadata.BIOTOPETEXT, 15);
+-        metadataHash.put(Metadata.VERSIONPLANTSFILE, 16);
++        metadataHash.put(Metadata.BIOTOPETEXT, 15);        
+     }
+     
+     private void initPublicationHash() {
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-08 23:29:44 UTC (rev 245)
+@@ -36,7 +36,7 @@
+     private java.util.Date dateModified;
+     private String recordBasis;
+     private String biotopeText;
+-    private Integer versionPlantsFile;
++    private Integer deleted;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -55,7 +55,7 @@
+     public static final String DATEMODIFIED = &quot;dateModified&quot;;    
+     public static final String RECORDBASIS = &quot;recordBasis&quot;;
+     public static final String BIOTOPETEXT = &quot;biotopeText&quot;;    
+-    public static final String VERSIONPLANTSFILE = &quot;versionPlantsFile&quot;;
++    public static final String DELETE = &quot;delete&quot;;
+     
+     /**
+      *   Default constructor to create new class Metadata
+@@ -67,7 +67,7 @@
+     	return list( TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, TECHNICALCONTACTNAME,
+     			CONTENTCONTACTADDRESS, CONTENTCONTACTEMAIL, CONTENTCONTACTNAME,
+     			DATASETDETAILS, DATASETTITLE, SOURCEID, SOURCEINSTITUTIONID,
+-    			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, VERSIONPLANTSFILE/*,
++    			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, DELETE/*,
+     			DATECREATE,*//* DATEMODIFIED*/ ); // Damn this table!
+     }
+     
+@@ -92,7 +92,7 @@
+ 		else if(column.equals(OWNERORGANIZATIONABBREV)) setOwnerOrganizationAbbrev((String)value);
+ 		else if(column.equals(BIOTOPETEXT)) setBiotopeText((String)value);
+ 		else if(column.equals(RECORDBASIS)) setRecordBasis((String)value);
+-		else if(column.equals(VERSIONPLANTSFILE)) setVersionPlantsFile((Integer)value);
++		else if(column.equals(DELETE)) setDeleted((Integer)value);
+ 		else if(column.equals(DATECREATE)) setDateCreate((java.util.Date)value);
+ 		else if(column.equals(DATEMODIFIED)) setDateModified((java.util.Date)value);
+     }
+@@ -383,23 +383,23 @@
+      */
+     public void setBiotopeText(String biotopeText) {
+         this.biotopeText = biotopeText;
+-    }    
+-
+-    /**
+-     *   Get version of the file with plant names used
+-     *   @return version of the file with plant names used
+-     *   @see setVersionPlantsFile
++    }  
++    
++       /**
++     *   Get flag telling whether the record has been deleted
++     *   @return flag telling whether the record has been deleted. Value 1 means deleted.
++     *   @see setDeleted
+      */
+-    public Integer getVersionPlantsFile() {
+-        return this.versionPlantsFile;
++    public Integer getDeleted() {
++        return this.deleted;
+     }
+     
+     /**
+-     *   Set version of the file with plant names used
+-     *   @param versionPlantsFile version of the file with plant names used
+-     *   @see getVersionPlantsFile
++     *   Set flag telling whether the record has been deleted
++     *   @param deleted flag telling whether the record has been deleted. Value 1 means deleted.
++     *   @see getDeleted
+      */
+-    public void setVersionPlantsFile(Integer versionPlantsFile) {
+-        this.versionPlantsFile = versionPlantsFile;
+-    }    
++    public void setDeleted(Integer deleted) {
++    	this.deleted = deleted;
++    }   
+ }
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -46,7 +46,7 @@
+                 type=&quot;java.lang.String&quot;/&gt; 
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+-                not-null=&quot;false&quot;                
++                not-null=&quot;true&quot;                
+                 type=&quot;java.lang.Integer&quot;/&gt;
+       &lt;many-to-one name=&quot;createdWho&quot; 
+                    class=&quot;net.sf.plantlore.common.record.User&quot; 
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -28,7 +28,7 @@
+                 type=&quot;java.lang.String&quot;/&gt;  
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+-                not-null=&quot;false&quot;                
++                not-null=&quot;true&quot;                
+                 type=&quot;java.lang.Integer&quot;/&gt; 
+    &lt;/class&gt;
+ &lt;/hibernate-mapping&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -55,7 +55,7 @@
+                 type=&quot;java.lang.String&quot;/&gt;                                           
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+-                not-null=&quot;false&quot;
++                not-null=&quot;true&quot;
+                 type=&quot;java.lang.Integer&quot;/&gt;                                                       
+    &lt;/class&gt;
+ &lt;/hibernate-mapping&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -82,9 +82,9 @@
+                 name=&quot;biotopeText&quot;
+                 not-null=&quot;false&quot;                
+                 type=&quot;java.lang.String&quot;/&gt;
+-      &lt;property column=&quot;CVERSIONPLANTSFILE&quot;
+-                name=&quot;versionPlantsFile&quot;
+-                not-null=&quot;false&quot;                
+-                type=&quot;java.lang.Integer&quot;/&gt;                
++      &lt;property column=&quot;CDELETE&quot;
++                name=&quot;deleted&quot;
++                not-null=&quot;true&quot;                
++                type=&quot;java.lang.Integer&quot;/&gt;            
+    &lt;/class&gt;
+ &lt;/hibernate-mapping&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -88,7 +88,7 @@
+                    fetch=&quot;select&quot;/&gt;                      
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+-                not-null=&quot;false&quot;                
++                not-null=&quot;true&quot;                
+                 type=&quot;java.lang.Integer&quot;/&gt;   
+                                    
+    &lt;/class&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml	2006-05-08 22:44:03 UTC (rev 244)
++++ trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml	2006-05-08 23:29:44 UTC (rev 245)
+@@ -45,7 +45,7 @@
+                 type=&quot;java.lang.String&quot;/&gt;   
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+-                not-null=&quot;false&quot;                
++                not-null=&quot;true&quot;                
+                 type=&quot;java.lang.Integer&quot;/&gt;
+       &lt;many-to-one name=&quot;createdWho&quot; 
+                    class=&quot;net.sf.plantlore.common.record.User&quot; 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000284.html">[Plantlore-dev] r244 - in trunk/analysis/database: . Old DB model
+</A></li>
+	<LI>Next message: <A HREF="000281.html">[Plantlore-dev] r246 - in trunk/src/net/sf/plantlore: common/record config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#278">[ date ]</a>
+              <a href="thread.html#278">[ thread ]</a>
+              <a href="subject.html#278">[ subject ]</a>
+              <a href="author.html#278">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

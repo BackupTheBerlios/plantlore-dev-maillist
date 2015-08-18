@@ -1,0 +1,270 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r385 - in trunk/src/net/sf/plantlore: client/imports common/record l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r385%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20common/record%20l10n&In-Reply-To=%3C200605291414.k4TEEW7L028067%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000440.html">
+   <LINK REL="Next"  HREF="000442.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r385 - in trunk/src/net/sf/plantlore: client/imports common/record l10n</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r385%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20common/record%20l10n&In-Reply-To=%3C200605291414.k4TEEW7L028067%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r385 - in trunk/src/net/sf/plantlore: client/imports common/record l10n">krater at berlios.de
+       </A><BR>
+    <I>Mon May 29 16:14:32 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000440.html">[Plantlore-dev] r384 - trunk/src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000442.html">[Plantlore-dev] Plant.scientificNameAuthor
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#441">[ date ]</a>
+              <a href="thread.html#441">[ thread ]</a>
+              <a href="subject.html#441">[ subject ]</a>
+              <a href="author.html#441">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-29 16:14:31 +0200 (Mon, 29 May 2006)
+New Revision: 385
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+Record extended: it can now ignore some columns when comparing two records.
+
+ImportProgressView fixed (HIDE_ON_CLOSE).
+
+DefaultDirector can handle AuthorOccurrences properly in both cases (update/delete) now. However, more thorough testing has to be conducted.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-29 13:18:54 UTC (rev 384)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-29 14:14:31 UTC (rev 385)
+@@ -467,11 +467,16 @@
+ 						System.out.println(&quot;INFI ~ &quot; + ao);
+ 						for( AuthorOccurrence alpha : sharers ) {
+ 							System.out.println(&quot;INDB ~ &quot; + alpha);
+-							if( alpha.equals( ao ) ) {
+-								aoInDB = alpha; break;
++							if( alpha.equalsUpTo( ao, AuthorOccurrence.DELETED ) ) {
++								aoInDB = alpha;
++								break;
+ 							}
+ 						}
+ 						
++						//	The Occurrence `occInDB` is in the database, that is for sure.
++						// The ao.Occurrence, however, is NOT from the database.
++						ao.setOccurrence( occInDB ); // now it's fine
++						
+ 						// The intention with this AuthorOccurrence. 
+ 						intention = parser.intentedFor();
+ 						// If the record is dead, we are supposed to delete it.
+@@ -488,10 +493,6 @@
+ 								case DELETE:
+ 									break;
+ 								default:
+-									// The Occurrence `occInDB` is in the database, that is for sure.
+-									// The ao.Occurrence, however, is NOT from the database.
+-									ao.setOccurrence( occInDB ); // now it's fine
+-									
+ 									Record counterpart = findMatchInDB( ao.getAuthor() );
+ 									Author authorInDB = (counterpart == null) ? null : (Author)counterpart;
+ 
+@@ -513,8 +514,11 @@
+ 							else
+ 								switch(intention) {
+ 								case DELETE:
+-									delete(aoInDB);
+-									numberOfUndeadAuthors--;
++									if( !aoInDB.isDead() ) {
++										aoInDB.setOccurrence( occInDB ); // repair the simplified record!
++										delete(aoInDB);
++										numberOfUndeadAuthors--;
++									}
+ 									break;
+ 								case UNKNOWN:
+ 								case INSERT:
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form	2006-05-29 13:18:54 UTC (rev 384)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form	2006-05-29 14:14:31 UTC (rev 385)
+@@ -2,7 +2,9 @@
+ 
+ &lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
+   &lt;Properties&gt;
+-    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++    &lt;Property name=&quot;title&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++      &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Import.Title&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++    &lt;/Property&gt;
+   &lt;/Properties&gt;
+   &lt;SyntheticProperties&gt;
+     &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
+@@ -79,9 +81,6 @@
+           &lt;Properties&gt;
+             &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
+             &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+-            &lt;Property name=&quot;font&quot; type=&quot;java.awt.Font&quot; editor=&quot;org.netbeans.beaninfo.editors.FontEditor&quot;&gt;
+-              &lt;Font name=&quot;Tahoma&quot; size=&quot;11&quot; style=&quot;0&quot;/&gt;
+-            &lt;/Property&gt;
+             &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
+             &lt;Property name=&quot;tabSize&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
+             &lt;Property name=&quot;opaque&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-29 13:18:54 UTC (rev 384)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-29 14:14:31 UTC (rev 385)
+@@ -34,7 +34,7 @@
+         jScrollPane1 = new javax.swing.JScrollPane();
+         info = new javax.swing.JTextArea();
+ 
+-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        setTitle(L10n.getString(&quot;Import.Title&quot;));
+         status.setText(&quot;You will see the number of imported records here.&quot;);
+         status.setVerticalAlignment(javax.swing.SwingConstants.TOP);
+ 
+@@ -42,7 +42,6 @@
+ 
+         info.setColumns(20);
+         info.setEditable(false);
+-        info.setFont(new java.awt.Font(&quot;Tahoma&quot;, 0, 11));
+         info.setRows(5);
+         info.setTabSize(2);
+         info.setOpaque(false);
+@@ -152,7 +151,7 @@
+ 		String description = getInformation();
+ 		
+ 		if( parameter instanceof String ) {
+-			info.append(parameter + &quot;\n&quot;);			
++			info.append(parameter + &quot;\n&quot;);
+ 		}
+ 		
+ 		if( parameter != null &amp;&amp; parameter instanceof Exception ) {
+@@ -183,7 +182,7 @@
+ 			progress.setValue( processed );
+ 			status.setText( description );
+ 			if(total &lt;= 0)
+-				setTitle(processed + L10n.getString(&quot;Import.RecordsImported&quot;));
++				setTitle(processed + L10n.getString(&quot;Import.RecordsProcessed&quot;));
+ 			else {
+ 				String percent = Integer.toString(100*processed/total) + &quot;%&quot;;
+ 				setTitle(percent + &quot; &quot; + L10n.getString(&quot;Import.Progress&quot;));
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-29 13:18:54 UTC (rev 384)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-29 14:14:31 UTC (rev 385)
+@@ -304,6 +304,31 @@
+ 		return true;
+ 	}
+ 	
++	/**
++	 * Compares this record to the &lt;code&gt;obj&lt;/code&gt;. 
++	 * Both records are equal 
++	 * if and only if values in their columns (up to the list of exceptions) match.
++	 * 
++	 * @param obj	The record to compare this one to.
++	 * @param exceptions	The list of names of columns that shall not be tested.
++	 * @return	True if both records match.
++	 */
++	public boolean equalsUpTo(Object obj, String...exceptions) {
++		if( obj == null || getClass() != obj.getClass() ) return false;
++		Record record = (Record) obj;
++		List&lt;String&gt; columns = getColumns();
++		columns.removeAll( Arrays.asList(exceptions) );
++		for( String column : columns ) {
++			Object 
++			v1 = this.getValue(column),
++			v2 = record.getValue(column);
++			if(v1 == null &amp;&amp; v2 == null) continue;
++			if(v1 == null || v2 == null) return false;
++			if( v1.equals(v2) ) continue;
++			else return false;
++		}
++		return true;
++	}
+ 
+ 	/**
+ 	 * Return the method that corresponds with the getter of &lt;code&gt;table.column&lt;/code&gt;.  
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 13:18:54 UTC (rev 384)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 14:14:31 UTC (rev 385)
+@@ -335,16 +335,8 @@
+ MetadataManager.DataSort = Sort by
+ MetadataManager.SortAscending = Ascending
+ MetadataManager.SortDescending = Descending
+-#=============================================================
+-#
+-#	
+-#=============================================================
+-record.Property = Property
+-record.Value = Value
+-record.ForeignKey = Foreign Key
+-record.InDatabase = Value (In DB)
+-record.FromFile = Value (In File)
+ 
++
+ #=============================================================
+ # LOGIN
+ #	net.sf.plantlore.client.login
+@@ -417,11 +409,11 @@
+ Import.Completed = Import completed.
+ Import.DecisionExpected = Your intervention is required.
+ Import.RememberDecision = Do not ask me again.
+-Import.RecordsInserted = records inserted.
+-Import.RecordsDeleted = records deleted.
+-Import.RecordsUpdated = records updated.
+-Import.RecordsRejected = records rejected.
+-Import.RecordsProcessed = records processed.
++Import.RecordsInserted = inserted.
++Import.RecordsDeleted = deleted.
++Import.RecordsUpdated = updated.
++Import.RecordsRejected = rejected.
++Import.RecordsProcessed = processed.
+ Import.Abort = Abort
+ Import.Hide = Hide
+ Import.Skip = Skip
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000440.html">[Plantlore-dev] r384 - trunk/src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000442.html">[Plantlore-dev] Plant.scientificNameAuthor
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#441">[ date ]</a>
+              <a href="thread.html#441">[ thread ]</a>
+              <a href="subject.html#441">[ subject ]</a>
+              <a href="author.html#441">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,852 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r498 - in trunk/src/net/sf/plantlore/client: .	history metadata user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r498%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09history%20metadata%20user&In-Reply-To=%3C200608102207.k7AM7996021877%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000678.html">
+   <LINK REL="Next"  HREF="000680.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r498 - in trunk/src/net/sf/plantlore/client: .	history metadata user</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r498%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09history%20metadata%20user&In-Reply-To=%3C200608102207.k7AM7996021877%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r498 - in trunk/src/net/sf/plantlore/client: .	history metadata user">lada at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 11 00:07:09 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000678.html">[Plantlore-dev] [Bug #8338] Use hash function for stroing passwords
+</A></li>
+        <LI>Next message: <A HREF="000680.html">[Plantlore-dev] r499 - in trunk/src/net/sf/plantlore/client: .	history metadata user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#679">[ date ]</a>
+              <a href="thread.html#679">[ thread ]</a>
+              <a href="subject.html#679">[ subject ]</a>
+              <a href="author.html#679">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-11 00:07:07 +0200 (Fri, 11 Aug 2006)
+New Revision: 498
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+   trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataView.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+Log:
+Fix bugs in History, UserManager and MetadataManager - exceptions, task.
+
+AppCoreCtrl.java - change class DataWholeHistoryAction, DataHistoryAction, DataMetadataAction and DataUserAction create history dialog only one times, use Task - fix bug: Process afterStopping() only when the MyTask finished successful.
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -1236,11 +1236,22 @@
+ 		public void actionPerformed(ActionEvent actionEvent) {
+ 			System.out.println(&quot;UserManager&quot;);
+ 
+-			userManagerModel = new UserManager(model.getDatabase());
+-			userManagerView = new UserManagerView(userManagerModel, view, true);
+-			userManagerCtrl = new UserManagerCtrl(userManagerModel,
+-					userManagerView);
+-			userManagerView.setVisible(true);
++			if (userManagerModel == null) {
++				userManagerModel = new UserManager(model.getDatabase());
++				userManagerView = new UserManagerView(userManagerModel, view, true);
++				userManagerCtrl = new UserManagerCtrl(userManagerModel,userManagerView);
++			}
++			Task task = userManagerModel.searchUser(true);
++			new DefaultProgressBar(task, view, true) {
++				@Override
++	 	    	public void afterStopping() {
++					if (! userManagerModel.isFinishedTask()) return;
++					userManagerModel.setInfoFinishedTask(false);
++					userManagerCtrl.reloadData(1, UserManager.DEFAULT_DISPLAY_ROWS);
++					userManagerView.setVisible(true);						
++	 	    	}
++			};			
++			task.start();					
+ 		}
+ 	}
+ 
+@@ -1266,11 +1277,13 @@
+ 				historyModel.addObserver(managerBridge);
+ 			}
+ 			Task task = historyModel.initialize(model.getSelectedOccurrence());
+-			new DefaultProgressBar(task, historyView, true) {
++			new DefaultProgressBar(task, view, true) {
+ 				@Override
+ 	 	    	public void afterStopping() {
++					if (! historyModel.isFinishedTask()) return;
++					historyModel.setInfoFinishedTask(false);
+ 					historyView.setVisible(true);						
+-	 	    	}
++	 	    	}				
+ 			};			
+ 			task.start();							
+ 		}
+@@ -1291,19 +1304,18 @@
+ 				wholeHistoryModel.addObserver(managerBridge);
+ 			}
+ 			Task task = wholeHistoryModel.initializeWH();
+-			new DefaultProgressBar(task, wholeHistoryView, true) {
++			new DefaultProgressBar(task, view, true) {
+ 				@Override
+-	 	    	public void afterStopping() {						
++	 	    	public void afterStopping() {	
++					if (! wholeHistoryModel.isFinishedTask()) return;
++					wholeHistoryModel.setInfoFinishedTask(false);
+ 					wholeHistoryView.setVisible(true);
+ 	 	    	}
+ 			};			
+ 			task.start();							
+ 		}
+ 	}
+-
+-	/*
+-	 * 
+-	 */
++	
+ 	class DataMetadataAction extends AbstractAction {
+ 		public DataMetadataAction() {
+ 			putValue(NAME, L10n.getString(&quot;metadataManager&quot;));
+@@ -1315,22 +1327,22 @@
+ 			System.out.println(&quot;Metadata Manager&quot;);
+ 
+ 			if (metadataManagerModel == null) {
+-				metadataManagerModel = new MetadataManager(model.getDatabase());
+-				if (metadataManagerModel.isError()) {
+-					//DefaultReconnectDialog.show(view, metadataManagerModel.getError());
+-					JOptionPane.showMessageDialog(view, metadataManagerModel.getError(), L10n.getString(&quot;Error.MetadataCreateDialog&quot;),
+-							JOptionPane.WARNING_MESSAGE);									
+-				} else {					
+-					metadataManagerView = new MetadataManagerView(metadataManagerModel,
+-							view, true);
+-					metadataManagerCtrl = new MetadataManagerCtrl(metadataManagerModel,
+-							metadataManagerView);
+-					metadataManagerModel.addObserver(managerBridge);
++				metadataManagerModel = new MetadataManager(model.getDatabase());								
++				metadataManagerView = new MetadataManagerView(metadataManagerModel,	view, true);
++				metadataManagerCtrl = new MetadataManagerCtrl(metadataManagerModel,metadataManagerView);
++				metadataManagerModel.addObserver(managerBridge);								
++			}
++			Task task = metadataManagerModel.searchMetadata(true);
++			new DefaultProgressBar(task, view, true) {
++				@Override
++	 	    	public void afterStopping() {	
++					if (! metadataManagerModel.isFinishedTask()) return;
++					metadataManagerModel.setInfoFinishedTask(false);
++					metadataManagerCtrl.reloadData(1, MetadataManager.DEFAULT_DISPLAY_ROWS);
+ 					metadataManagerView.setVisible(true);
+-				}
+-			} else {
+-				metadataManagerView.setVisible(true);
+-			}
++	 	    	}
++			};			
++			task.start();						
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -58,6 +58,8 @@
+     private String error = null;
+     /** Remote exception (network communication failed)*/
+     private RemoteException remoteEx;
++    /** True if MyTask finished successful*/
++    private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+     public static final int DEFAULT_DISPLAY_ROWS = 12;    
+     /** Actual number of rows to display */
+@@ -126,20 +128,21 @@
+     private Hashtable&lt;String, Enum&gt; editTypeHash;
+     
+     /** Constants used for description of errors */
+-    public static final String ERROR_SEARCH_RECORD = L10n.getString(&quot;Error.HistoryRecordSearchFailed&quot;);
+-    public static final String ERROR_SEARCH_DATA = L10n.getString(&quot;Error.HistoryDataSearchFailed&quot;);
+-    public static final String ERROR_SEARCH_OBJECT = L10n.getString(&quot;Error.HistoryObjectSearchFailed&quot;);
+-    public static final String ERROR_SEARCH_AUTHOR = L10n.getString(&quot;Error.HistoryAuthorSearchFailed&quot;);
+-    public static final String ERROR_PROCESS = L10n.getString(&quot;Error.HistoryProcessResultsFailed&quot;);
+-    public static final String ERROR_UPDATE = L10n.getString(&quot;Error.HistoryUpdateResultsFailed&quot;);
+-    public static final String ERROR_DELETE = L10n.getString(&quot;Error.HistoryDeleteResultsFailed&quot;);  
+-    public static final String ERROR_CLEAR_DATABASE = L10n.getString(&quot;Error.HistoryClearDatabase&quot;);
+-    public static final String ERROR_CLEAR_HISTORY = L10n.getString(&quot;Error.HistoryClearHistory&quot;);
+-    public static final String ERROR_PARSE_DATE = L10n.getString(&quot;Error.HistoryParseData&quot;);
+-    public static final String ERROR_NUMBER_ROWS = L10n.getString(&quot;Error.HistoryGetNumberRows&quot;);
+-    public static final String ERROR_NO_RIGHTS = L10n.getString(&quot;Error.HistoryNoRights&quot;); 
+-    public static final String ERROR_TRANSACTION = L10n.getString(&quot;Error.TransactionRaceConditions&quot;);    
+-    public static final String ERROR_REMOTE_EXCEPTION = &quot;REMOTE_EXCEPTION&quot;;   
++    public static final String ERROR_SEARCH_RECORD = &quot;Error.HistoryRecordSearchFailed&quot;;
++    public static final String ERROR_SEARCH_DATA = &quot;Error.HistoryDataSearchFailed&quot;;
++    public static final String ERROR_SEARCH_OBJECT = &quot;Error.HistoryObjectSearchFailed&quot;;
++    public static final String ERROR_SEARCH_AUTHOR = &quot;Error.HistoryAuthorSearchFailed&quot;;
++    public static final String ERROR_PROCESS = &quot;Error.HistoryProcessResultsFailed&quot;;
++    public static final String ERROR_UPDATE = &quot;Error.HistoryUpdateResultsFailed&quot;;
++    public static final String ERROR_DELETE = &quot;Error.HistoryDeleteResultsFailed&quot;;  
++    public static final String ERROR_CLEAR_DATABASE = &quot;Error.HistoryClearDatabase&quot;;
++    public static final String ERROR_CLEAR_HISTORY = &quot;Error.HistoryClearHistory&quot;;
++    public static final String ERROR_PARSE_DATE = &quot;Error.HistoryParseData&quot;;
++    public static final String ERROR_NUMBER_ROWS = &quot;Error.HistoryGetNumberRows&quot;;
++    public static final String ERROR_NO_RIGHTS = &quot;Error.HistoryNoRights&quot;; 
++    public static final String ERROR_TRANSACTION = &quot;Error.TransactionRaceConditions&quot;;    
++    public static final String ERROR_REMOTE_EXCEPTION = &quot;REMOTE_EXCEPTION&quot;;
++    
+     /**
+      * Creates a new instance of History - history of Occurrences, Habitats, Authors, 
+      * Publications, Metadata, Territories, Phytochorions, Villages
+@@ -181,9 +184,10 @@
+ 			       //Process results of a search &quot;edit&quot; query 
+ 			       processResult(1,DEFAULT_DISPLAY_ROWS);			       		      
+     			}catch (Exception e) {
+-    				logger.error(&quot;Initialize of Record History failed. caught in History. Details: &quot;+e.getMessage());
++    				logger.error(&quot;Initialize of Record History failed. Exception caught in History. Details: &quot;+e.getMessage());
+     				throw e;
+-    			}    			
++    			}        	
++    			setInfoFinishedTask(true);
+     			return null;
+     		}
+ 	    };
+@@ -205,8 +209,9 @@
+     		   } catch (Exception e) {
+     			   logger.error(&quot;Initialize of Whole History failed. caught in History. Details: &quot;+e.getMessage());
+    				   throw e;
+-    		   }
+-    			return null;
++    		   }    
++    		   setInfoFinishedTask(true);
++    		   return null;
+     		}
+     	};
+ 	    return task;
+@@ -1522,7 +1527,8 @@
+ 		        } 
+ 		        database.commitTransaction();	    	
+ 		    	//Create array of editing object and call notifyObservers
+-		        informMethod(editType);	    		    	        
++		        informMethod(editType);
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -1832,7 +1838,8 @@
+                     throw e;                     
+ 		       	    
+ 		        } 
+-		        database.commitTransaction(); 
++		        database.commitTransaction();
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+     	};
+@@ -1873,6 +1880,15 @@
+         }   
+         return false;
+     }
++    
++    /**
++	 * Operation load, add, update or delete history data is finished successful. 
++	 * We must inform observers so that they can update their data.
++	 */
++    private void announce(Object event) {
++        this.setChanged();
++        this.notifyObservers( event );
++     }
+             
+      //***************************//
+     //****Init Hashtable*********//
+@@ -2021,7 +2037,23 @@
+         return this.remoteEx;
+     }  
+     
++    /** 
++     *  Set true if operation in separate thread using the Task class was successful
++     *  @param true if operation in separate thread using the Task class was successful, false in other ways
++     */ 
++    public void setInfoFinishedTask(boolean finishedTask) {
++    	this.finishedTask = finishedTask;
++    }
++    
+     /**
++     * Get true if operation in separate thread using the Task class was successful, false in other ways
++     * @return true if operation in separate thread using the Task class was successful, false in other ways
++     */
++    public boolean isFinishedTask() {
++    	return this.finishedTask;
++    }
++    
++    /**
+      * Get information about selecting of all record
+      * @return true if all recorda were selected.
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -213,6 +213,8 @@
+ 							@Override
+ 		   					public void afterStopping() {
+ 								try {
++								   if (! model.isFinishedTask()) return;
++								   model.setInfoFinishedTask(false);	
+ 			   					   model.searchEditHistory(model.getData());
+ 			   					   reloadData(1,model.getDisplayRows());			   	            	          
+ 			   	                   view.setCountResutl(model.getResultRows());
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -361,7 +361,7 @@
+      *  @param message Message we want to display
+      */
+     public void showErrorMessage(String message) {
+-        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
++        JOptionPane.showMessageDialog(this, L10n.getString(message), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+     }  
+    
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -228,6 +228,8 @@
+ 		   					public void afterStopping() {
+ 		   						logger.debug(&quot;Load Data&quot;);	   
+ 		   						try {
++		   						   if (! model.isFinishedTask()) return;
++		   						   model.setInfoFinishedTask(false);	
+ 		   						   model.searchWholeHistoryData();
+ 		   						   reloadData(1,model.getDisplayRows());
+ 		   						   view.setCountResult(model.getResultRows());
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -260,7 +260,7 @@
+      *  @param message Message we want to display
+      */
+     public void showErrorMessage(String message) {
+-        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
++        JOptionPane.showMessageDialog(this, L10n.getString(message), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+     }  
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataView.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataView.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -55,7 +55,23 @@
+      public void setAddForm() {
+          operationButton.setText(L10n.getString(&quot;MetadataManager.ButtonAdd&quot;));         
+          dateCreateText.setVisible(false);
+-         dateModifiedText.setVisible(false);         
++         dateModifiedText.setVisible(false);  
++         technicalContactNameText.setText(&quot;&quot;);
++         technicalContactEmailText.setText(&quot;&quot;);
++         technicalContactAddressText.setText(&quot;&quot;);
++         contentContactNameText.setText(&quot;&quot;);
++         contentContactEmailText.setText(&quot;&quot;);
++         contectContactAddressText.setText(&quot;&quot;);
++         dataSetTitleText.setText(&quot;&quot;);
++         dataSetDetailsText.setText(&quot;&quot;);
++         sourceInstirutionIdText.setText(&quot;&quot;);
++         sourceIdText.setText(&quot;&quot;);
++         abbrevText.setText(&quot;&quot;);
++         dateCreateText.setText(&quot;&quot;);
++         dateModifiedText.setText(&quot;&quot;);
++         recordbasisText.setText(&quot;&quot;);
++         biotopetextText.setText(&quot;&quot;);  
++         createDateChooser.setDate(new Date());
+      }
+      
+      /**
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -39,6 +39,8 @@
+     private String error = null;
+     /** Remote exception (network communication failed)*/
+     private RemoteException remoteEx;
++    /** True if MyTask finished successful*/
++    private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+     public static final int DEFAULT_DISPLAY_ROWS = 14;    
+     /** Actual number of rows to display */
+@@ -115,7 +117,7 @@
+         
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+        this.database = database;             
+-    }
++    }        
+     
+      /**
+      *  Search for metadata in the database. Operation might be executed in a separate thread using the Task class (depends
+@@ -145,6 +147,7 @@
+ 		                dbex.setStackTrace(e.getStackTrace());
+ 		                throw dbex; 		           
+ 			        }			
++			        setInfoFinishedTask(true);
+                     return null;			        
+ 				}
+ 		    };
+@@ -389,7 +392,8 @@
+ 		        } 		       
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+-		        notifyObservers(editTypeArray);			        
++		        notifyObservers(editTypeArray);	
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -424,7 +428,8 @@
+ 		        } 		        
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+-		        notifyObservers(editTypeArray);		    		    		    	       
++		        notifyObservers(editTypeArray);	
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -459,7 +464,8 @@
+ 		        } 			        
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+-		        notifyObservers(editTypeArray);		    		    		    	       
++		        notifyObservers(editTypeArray);		
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -514,7 +520,23 @@
+         return this.remoteEx;
+     }  
+     
++    /** 
++     *  Set true if operation in separate thread using the Task class was successful
++     *  @param true if operation in separate thread using the Task class was successful, false in other ways
++     */ 
++    public void setInfoFinishedTask(boolean finishedTask) {
++    	this.finishedTask = finishedTask;
++    }
++    
+     /**
++     * Get true if operation in separate thread using the Task class was successful, false in other ways
++     * @return true if operation in separate thread using the Task class was successful, false in other ways
++     */
++    public boolean isFinishedTask() {
++    	return this.finishedTask;
++    }
++    
++    /**
+      * Set true if addEdit dialog was closed by CLOSE button
+      * @param usedClose containing information about closing the addEdit dialog
+      */
+@@ -527,11 +549,7 @@
+      * @return true if addEdit dialog was closed by CLOSE button
+      */
+     public boolean usedClose() {
+-    	if (this.usedClose == true) {
+-    		usedClose = false;
+-    		return true;
+-    	}
+-    	return false;
++    	return this.usedClose;
+     }
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -17,6 +17,7 @@
+ 
+ import net.sf.plantlore.client.history.History;
+ import net.sf.plantlore.client.history.HistoryTableModel;
++import net.sf.plantlore.client.user.AddEditUserView;
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
+ import net.sf.plantlore.common.DefaultProgressBar;
+@@ -40,6 +41,12 @@
+     private MetadataManager model;
+     /** View of MetadataManager MVC */
+     private MetadataManagerView view;
++    /** View of add dialog */
++    private AddEditMetadataView addView;
++    /** View of edit dialog */
++    private AddEditMetadataView editView;
++    /** View of details dialog */
++    private AddEditMetadataView detailView;
+     
+     /** Creates a new instance of MetadataManagerCtrl 
+      *  @param model model of the MetadataManager MVC
+@@ -83,19 +90,7 @@
+         view.sourceInstitutionIdText.addKeyListener(escapeKeyPressed);           
+         view.sourceIdText.addKeyListener(escapeKeyPressed);
+         view.dataSetTitleText.addKeyListener(escapeKeyPressed);
+-        view.addKeyListener(escapeKeyPressed);        
+-        
+-        //Search metadata
+-        Task task = model.searchMetadata(true);
+-        
+-        new DefaultProgressBar(task, view, true) {		   							 						
+-        	@Override
+-        	public void afterStopping() {
+-				//Process result and Update view dialog
+-		        reloadData(1, model.getDisplayRows());		        		        
+-           } 		   					
+-		};			                   	                   
+-        task.start();                                       
++        view.addKeyListener(escapeKeyPressed);                   
+     }   
+     
+     /**
+@@ -252,18 +247,23 @@
+            //set information abut selected operation ADD
+            model.setOperation(&quot;ADD&quot;);           
+            //create and open Add dialog
+-           AddEditMetadataView addView = new AddEditMetadataView(model, view,true);
+-           new AddEditMetadataCtrl(addView, model);
++           if ( addView == null ) {
++	           addView = new AddEditMetadataView(model, view,true);
++	           new AddEditMetadataCtrl(addView, model);
++           }
+            addView.setAddForm();
+            addView.setVisible(true); 
+            //User press button close
+            if (model.usedClose()) return;
++           model.setUsedClose(true);        	
+            //save new record Metadata into database
+            Task task = model.addMetedataRecord();
+            
+            new DefaultProgressBar(task, view, true) {		   							 
+    			@Override
+    			public void afterStopping() {
++   				   if (! model.isFinishedTask()) return;
++				   model.setInfoFinishedTask(false);
+     			   //load metadata
+     	           model.searchMetadata(false);
+     	           if (model.isError()) {
+@@ -298,8 +298,10 @@
+                int resultNumber = view.tableMetadataList.getSelectedRow() + model.getCurrentFirstRow()-1;  
+                model.setMetadataRecord(resultNumber);
+                //Create edit dialog
+-               AddEditMetadataView editView = new AddEditMetadataView(model, view,true);
+-               new AddEditMetadataCtrl(editView, model);
++               if (editView == null) {
++	               editView = new AddEditMetadataView(model, view,true);
++	               new AddEditMetadataCtrl(editView, model);
++               }
+                //Load data and setting of edit dialog
+                editView.loadData();                              
+                editView.setEditForm();               
+@@ -312,6 +314,8 @@
+                new DefaultProgressBar(task, view, true) {
+             	   @Override
+           			public void afterStopping() {
++            		   if (! model.isFinishedTask()) return;
++					   model.setInfoFinishedTask(false);
+           			   //load metadata          				
+                         if (model.isError()) return;
+                         view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                         
+@@ -343,12 +347,14 @@
+                int resultNumber = view.tableMetadataList.getSelectedRow() + model.getCurrentFirstRow()-1;  
+                model.setMetadataRecord(resultNumber);
+                //Create detail dialog
+-               AddEditMetadataView detailsView = new AddEditMetadataView(model, view,true);
+-               new AddEditMetadataCtrl(detailsView, model);
++               if (detailView == null ){
++	               detailView = new AddEditMetadataView(model, view,true);
++	               new AddEditMetadataCtrl(detailView, model);
++               }
+                //Load data and setting of detail dialog
+-               detailsView.loadData();               
+-               detailsView.setDetailsForm();
+-               detailsView.setVisible(true); 
++               detailView.loadData();               
++               detailView.setDetailsForm();
++               detailView.setVisible(true); 
+                model.setUsedClose(false);
+            }          
+        }
+@@ -390,6 +396,8 @@
+ 		             new DefaultProgressBar(task, view, true) {		   								  		   				
+ 						@Override						
+                         public void afterStopping() {
++							if (! model.isFinishedTask()) return;
++							model.setInfoFinishedTask(false);
+                            // load metadata
+ 		   	               model.searchMetadata(false);  
+ 		   	               if (model.isError()) {
+@@ -434,6 +442,8 @@
+            new DefaultProgressBar(task, view, true) {		   								  			
+ 			   @Override 
+         	   public void afterStopping() {
++				   if (! model.isFinishedTask()) return;
++				   model.setInfoFinishedTask(false);
+ 					if (model.getDisplayRows() &lt;= 0) {
+ 		               model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
+ 		           }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -12,8 +12,6 @@
+ import javax.swing.DefaultListSelectionModel;
+ import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
+-
+-import net.sf.plantlore.client.history.History;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.TransferFocus;
+ import net.sf.plantlore.l10n.L10n;
+@@ -67,7 +65,7 @@
+     	  model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
+           model.setCurrentFirstRow(1);
+     	  previousButton.setEnabled(false);
+-    	  nextButton.setEnabled(true);
++    	  nextButton.setEnabled(true);    	   	  
+           if (MetadataManager.DEFAULT_DISPLAY_ROWS &gt;= model.getResultRows()) {
+           	nextButton.setEnabled(false);
+           }
+@@ -76,7 +74,7 @@
+           sortButtonGroup.setSelected(sortAscendingRadioButton.getModel(), true);
+           this.tableMetadataList.setRowSelectionAllowed(true);
+           this.tableMetadataList.setSelectionMode(DefaultListSelectionModel.SINGLE_SELECTION);
+-          this.tableMetadataList.setModel(new MetadataManagerTableModel(model));
++          this.tableMetadataList.setModel(new MetadataManagerTableModel(model));          
+           totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());
+           toDisplayValueTextField.setText(((Integer)model.getDisplayRows()).toString());
+           displayedValueLabel.setText(model.getCurrentDisplayRows());
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -41,8 +41,10 @@
+     private String error = null;
+     /** Remote exception (network communication failed)*/
+     private RemoteException remoteEx;
++    /** True if MyTask finished successful*/
++    private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+-    protected static final int DEFAULT_DISPLAY_ROWS = 6;    
++    public static final int DEFAULT_DISPLAY_ROWS = 12;    
+     /** Actual number of rows to display */
+     private int displayRows = DEFAULT_DISPLAY_ROWS;   
+     /** Index of the first record shown in the table */
+@@ -169,7 +171,8 @@
+ 		                DBLayerException dbex = new DBLayerException(ERROR_SEARCH + e.getMessage());
+ 		                dbex.setStackTrace(e.getStackTrace());
+ 		                throw dbex; 		           
+-			        }					       
++			        }		
++			        setInfoFinishedTask(true);
+                     return null;			        
+ 				}
+ 		    };
+@@ -347,7 +350,8 @@
+                     DBLayerException dbex = new DBLayerException(ERROR_ADD + e);
+                     dbex.setStackTrace(e.getStackTrace());
+                     throw dbex; 		            
+-		        } 		       		       					        
++		        } 	
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -391,6 +395,7 @@
+                     throw dbex; 		            
+ 		        } 	
+ 		        database.commitTransaction();
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -424,7 +429,8 @@
+                     DBLayerException dbex = new DBLayerException(ERROR_DELETE + e.getMessage());
+                     dbex.setStackTrace(e.getStackTrace());
+                     throw dbex; 		            
+-		        } 			        		      			        
++		        } 		
++		        setInfoFinishedTask(true);
+ 		        return null;
+     		}
+ 	    };
+@@ -613,7 +619,23 @@
+         return this.remoteEx;
+     }  
+     
++    /** 
++     *  Set true if operation in separate thread using the Task class was successful
++     *  @param true if operation in separate thread using the Task class was successful, false in other ways
++     */ 
++    public void setInfoFinishedTask(boolean finishedTask) {
++    	this.finishedTask = finishedTask;
++    }
++    
+     /**
++     * Get true if operation in separate thread using the Task class was successful, false in other ways
++     * @return true if operation in separate thread using the Task class was successful, false in other ways
++     */
++    public boolean isFinishedTask() {
++    	return this.finishedTask;
++    }
++    
++    /**
+      * Set true if addEdit dialog was closed by CLOSE button
+      * @param usedClose containing information about closing the addEdit dialog
+      */
+@@ -626,11 +648,7 @@
+      * @return true if addEdit dialog was closed by CLOSE button
+      */
+     public boolean usedClose() {
+-    	if (this.usedClose == true) {
+-    		usedClose = false;
+-    		return true;
+-    	}
+-    	return false;
++    	return this.usedClose;
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-09 09:46:17 UTC (rev 497)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-10 22:07:07 UTC (rev 498)
+@@ -96,7 +96,7 @@
+         view.showAllUserRadioBUtton.addKeyListener(escapeKeyPressed);
+         view.showCurrentUserRadioButton.addKeyListener(escapeKeyPressed);
+         view.addKeyListener(escapeKeyPressed);
+-        
++    /*    
+         //Search user and Load data
+         Task task = model.searchUser(true);        
+         
+@@ -107,7 +107,8 @@
+ 		        reloadData(1, model.getDisplayRows());		       
+            } 		   					
+ 		};		                 	                   
+-        task.start();                                       
++        task.start();   
++        */                                    
+     }  
+     
+     /**
+@@ -262,19 +263,24 @@
+            }
+            //set information abut selected operation ADD
+            model.setOperation(&quot;ADD&quot;);           
+-           //create add dialog if dialog not exist and open Add dialog                  	  
+-          AddEditUserView addView = new AddEditUserView(model, view,true);
+-          new AddEditUserCtrl(addView, model);          
++           //create add dialog if dialog not exist and open Add dialog  
++           if (addView == null) {
++        	   addView = new AddEditUserView(model, view,true);
++        	   new AddEditUserCtrl(addView, model);
++           }                    
+           addView.setAddForm();
+           addView.setVisible(true);          
+            //User press button close
+-           if (model.usedClose()) return;           
++           if (model.usedClose()) return;
++           model.setUsedClose(true);
+            //save new record Metadata into database
+            Task task = model.addUserRecord();
+            
+            new DefaultProgressBar(task, view, true) {		   							 
+    			   @Override
+         	   public void afterStopping() {
++   				   if (! model.isFinishedTask()) return;
++				   model.setInfoFinishedTask(false);
+     			   //load data
+     	           model.searchUser(false);  
+     	           if (model.isError()) {
+@@ -324,6 +330,8 @@
+                new DefaultProgressBar(task, view, true) {		   							 
+           		   @Override
+             	   public void afterStopping() {
++          			   if (! model.isFinishedTask()) return;
++					   model.setInfoFinishedTask(false);
+           			   //load User          				
+                         if (model.isError()) return;
+                         view.tableUserList.setModel(new UserManagerTableModel(model));                         
+@@ -399,6 +407,8 @@
+ 	               new DefaultProgressBar(task, view, true) {		   								  		   									
+ 					   @Override
+ 	            	   public void afterStopping() {
++						   if (! model.isFinishedTask()) return;
++						   model.setInfoFinishedTask(false);
+ 	                       // load User
+ 		   	               model.searchUser(false); 
+ 		   	               if (model.isError()) {
+@@ -444,6 +454,8 @@
+            new DefaultProgressBar(task, view, true) {		   								  						    
+         	   @Override
+         	   public void afterStopping() {
++        		   if (! model.isFinishedTask()) return;
++				   model.setInfoFinishedTask(false);
+ 					if (model.getDisplayRows() &lt;= 0) {
+ 		               model.setDisplayRows(UserManager.DEFAULT_DISPLAY_ROWS);
+ 		           }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000678.html">[Plantlore-dev] [Bug #8338] Use hash function for stroing passwords
+</A></li>
+	<LI>Next message: <A HREF="000680.html">[Plantlore-dev] r499 - in trunk/src/net/sf/plantlore/client: .	history metadata user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#679">[ date ]</a>
+              <a href="thread.html#679">[ thread ]</a>
+              <a href="subject.html#679">[ subject ]</a>
+              <a href="author.html#679">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

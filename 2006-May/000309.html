@@ -1,0 +1,918 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r262 - in trunk/src/net/sf/plantlore/client: metadata publication
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r262%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20metadata%20publication&In-Reply-To=%3C200605120952.k4C9q2Ms032757%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000308.html">
+   <LINK REL="Next"  HREF="000310.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r262 - in trunk/src/net/sf/plantlore/client: metadata publication</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r262%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20metadata%20publication&In-Reply-To=%3C200605120952.k4C9q2Ms032757%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r262 - in trunk/src/net/sf/plantlore/client: metadata publication">lada at berlios.de
+       </A><BR>
+    <I>Fri May 12 11:52:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000308.html">[Plantlore-dev] Upravy SelectQuery
+</A></li>
+        <LI>Next message: <A HREF="000310.html">[Plantlore-dev] Re: Re:
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#309">[ date ]</a>
+              <a href="thread.html#309">[ thread ]</a>
+              <a href="subject.html#309">[ subject ]</a>
+              <a href="author.html#309">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-12 11:52:01 +0200 (Fri, 12 May 2006)
+New Revision: 262
+
+Modified:
+   trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+   trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java
+Log:
+Some repair in Manager (function ADD, EDIT, SEARCH).
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -91,6 +91,7 @@
+                     metadata.setDateModified(new Date());                            
+                     metadata.setRecordBasis(view.recordbasisText.getText());
+                     metadata.setBiotopeText(view.biotopetextText.getText());
++                    metadata.setDeleted(0);
+                     //metadata.setVersionPlantsFile(Integer.parseInt(view.versionPlantsFileText.getText())); 
+                     //mela by se tu vypsat nejaka informace pro uzivatele
+                     //pridani metadat
+@@ -117,6 +118,7 @@
+                     //model.getSelectedRecord().setDateModified(view.dateModifiedText.getText());
+                     model.getSelectedRecord().setRecordBasis(view.recordbasisText.getText());
+                     model.getSelectedRecord().setBiotopeText(view.biotopetextText.getText());
++                    model.getSelectedRecord().setDeleted(0);
+                    // model.getSelectedRecord().setVersionPlantsFile(Integer.parseInt(view.versionPlantsFileText.getText()));                
+                    //mela by se tu vypsat nejaka informace pro uzivatele
+                    //editace vybraneho zaznamu
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -11,6 +11,7 @@
+ 
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
++import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+@@ -50,6 +51,17 @@
+     private Metadata selectedRecord;
+     
+     
++    //*********************Search - promenne podle,kterych se vyhledava************//
++    /** Field to be used for sorting search query results */
++    private int sortField = 1;
++    /** Direction of sorting. 0 = ASC, 1 = DESC. Default is ASC */
++    private int sortDirection = 0;
++    
++    //***********Metadata*******************//
++    private String dataSetTitle;    
++    private String sourceInstitutionId;
++    private String sourceId;        
++    
+     /**
+      * Creates a new instance of MetadataManager
+      */
+@@ -66,6 +78,7 @@
+     
+      /**
+      *
++     *
+      */
+     public void searchMetadata() {
+         
+@@ -74,7 +87,53 @@
+ 
+     	//  Select data from tMetadata table
+         try {
+-                query = database.createQuery(Metadata.class);                                
++                query = database.createQuery(Metadata.class);     
++                
++                if (sourceInstitutionId != null &amp;&amp; !sourceInstitutionId.equals(&quot;&quot;)) {
++                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Metadata.SOURCEINSTITUTIONID, null, &quot;%&quot; + sourceInstitutionId + &quot;%&quot;, null);
++                }
++                if (sourceId != null &amp;&amp; !sourceId.equals(&quot;&quot;)) {
++                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Metadata.SOURCEID, null, &quot;%&quot; + sourceId + &quot;%&quot;, null);
++                }
++                if (dataSetTitle != null &amp;&amp; !dataSetTitle.equals(&quot;&quot;)) {
++                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Metadata.DATASETTITLE, null, &quot;%&quot; + dataSetTitle + &quot;%&quot;, null);
++                }
++               
++                
++                String field;
++                switch (sortField) {
++                case 1:
++                        field = Metadata.SOURCEINSTITUTIONID;
++                        break;
++                case 2:
++                        field = Metadata.SOURCEID;
++                        break;
++                case 3:
++                        field = Metadata.DATASETTITLE;
++                        break;
++                case 4:
++                        field = Metadata.TECHNICALCONTACTNAME;
++                        break;                
++                case 5:
++                        field = Metadata.CONTENTCONTACTNAME;
++                        break;
++                case 6:
++                        field = Metadata.DATECREATE;
++                        break;
++                case 7:
++                        field = Metadata.DATEMODIFIED;
++                        break;
++                default:
++                        field = Metadata.SOURCEINSTITUTIONID;
++                }
++
++                if (sortDirection == 0) {
++                        query.addOrder(PlantloreConstants.DIRECT_ASC, field);
++                } else {
++                        query.addOrder(PlantloreConstants.DIRECT_DESC, field);
++                }
++                
++                
+         } catch (RemoteException e) {
+             System.err.println(&quot;RemoteException - searchMetadataData(), createQuery&quot;);
+         } catch (DBLayerException e) {
+@@ -272,4 +331,76 @@
+     public Metadata getSelectedRecord() {
+         return this.selectedRecord;
+     }
++    
++        /**
++     *   Get concise title of the project
++     *   @return concise title of the project
++     *   @see setDataSetTitle
++     */
++    public String getDataSetTitle() {
++        return this.dataSetTitle;
++    }
++    
++    /**
++     *   Set concise title of the project
++     *   @param dataSetTitle string containing concise title of the project
++     *   @see getDataSetTitle
++     */
++    public void setDataSetTitle(String dataSetTitle) {
++        this.dataSetTitle = dataSetTitle;
++    }
++    
++    /**
++     *   Get unique identifier (code or name) of the institution holding the original data source
++     *   @return unique identifier of the institution holding the original data source.
++     *   @see setSourceInstitutionId
++     */
++    public String getSourceInstitutionId() {
++        return this.sourceInstitutionId;
++    }
++    
++    /**
++     *   Set unique identifier (code or name) of the institution holding the original data source
++     *   @param sourceInstitutionId string containing unique identifier of the institution holding the original data source
++     *   @see getSourceInstitutionId
++     */
++    public void setSourceInstitutionId(String sourceInstitutionId) {
++        this.sourceInstitutionId = sourceInstitutionId;
++    }    
++    
++    /**
++     *   Get name or code of the data source
++     *   @return name or code of the data source
++     *   @see setSourceId
++     */
++    public String getSourceId() {
++        return this.sourceId;
++    }
++    
++    /**
++     *   Set name or code of the data source
++     *   @param sourceId string containing name or code of the data source
++     *   @see getTechnicalContactName
++     */
++    public void setSourceId(String sourceId) {
++        this.sourceId = sourceId;
++    }
++    
++          /**
++     *  Set field used for sorting results of the search query.
++     *  @param field numeric identificator of the field used for sorting
++     */
++    public void setSortField(int field) {
++        this.sortField = field;
++    }
++
++    /**
++     *  Set direction of sorting.
++     *  @param direction direction of sorting. 0 for ascending, 1 for descending
++     */
++    public void setSortDirection(int direction) {
++        this.sortDirection = direction;
++    }
++    
+ }
++
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -11,6 +11,8 @@
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.FocusEvent;
++import java.awt.event.FocusListener;
+ import net.sf.plantlore.common.record.Metadata;
+ import org.apache.log4j.Logger;
+ 
+@@ -40,6 +42,9 @@
+         view.addButtons.addActionListener(new addMetadataListener());
+         view.editButtons.addActionListener(new editMetadataListener());
+         view.deleteButton.addActionListener(new deleteMetadataListener());
++        view.searchButton.addActionListener(new searchUserListener());
++        view.sortAscendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
++        view.sortDescendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+     }
+     
+        /**
+@@ -289,4 +294,28 @@
+            }          
+        }
+     }
++    
++        class searchUserListener implements ActionListener {
++       public void actionPerformed(ActionEvent actionEvent)
++       {
++           model.setSourceInstitutionId(view.sourceInstitutionIdText.getText());           
++           model.setSourceId(view.sourceIdText.getText());
++           //FIXME: dopsat
++       }
++    }
++    
++    /**
++     *  Focus listener for the &lt;strong&gt;sort combobox&lt;/strong&gt; at the search panel. After losing focus automaticaly 
++     *  stores value of the field to model.
++     */
++    class SortDirectionRadioFocusListener implements FocusListener {
++        public void focusLost(FocusEvent e) {
++            model.setSortDirection(view.getSortDirection());
++            logger.debug(&quot;Sort asc, dsc: &quot;+ view.getSortDirection());
++        }        
++
++        public void focusGained(FocusEvent e) {
++            // Empty
++        }
++    }    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -51,13 +51,13 @@
+    
+     private void initColumns() {
+         columnNames = new String[7];                  
+-        columnNames[0] = L10n.getString(&quot;sourceInstitutionId&quot;);   
+-        columnNames[1] = L10n.getString(&quot;sourceId&quot;);  
+-        columnNames[2] = L10n.getString(&quot;dataSetTitle&quot;);
+-        columnNames[3] = L10n.getString(&quot;technicalContacName&quot;); 
+-        columnNames[4] = L10n.getString(&quot;contentContactName&quot;);                      
+-        columnNames[5] = L10n.getString(&quot;dateCreate&quot;); 
+-        columnNames[6] = L10n.getString(&quot;dateModified&quot;);          
++        columnNames[0] = L10n.getString(&quot;metadata.sourceInstitutionId&quot;);   
++        columnNames[1] = L10n.getString(&quot;metadata.sourceId&quot;);  
++        columnNames[2] = L10n.getString(&quot;metadata.dataSetTitle&quot;);
++        columnNames[3] = L10n.getString(&quot;metadata.technicalContactName&quot;); 
++        columnNames[4] = L10n.getString(&quot;metadata.contentContactName&quot;);                      
++        columnNames[5] = L10n.getString(&quot;metadata.dateCreate&quot;); 
++        columnNames[6] = L10n.getString(&quot;metadata.dateModified&quot;);          
+     }       
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form	2006-05-12 09:52:01 UTC (rev 262)
+@@ -1,6 +1,10 @@
+ &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
+ 
+ &lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;NonVisualComponents&gt;
++    &lt;Component class=&quot;javax.swing.ButtonGroup&quot; name=&quot;sortButtonGroup&quot;&gt;
++    &lt;/Component&gt;
++  &lt;/NonVisualComponents&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
+   &lt;/Properties&gt;
+@@ -24,7 +28,7 @@
+                   &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;679&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;757&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -64,12 +68,12 @@
+               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;841&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;919&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;previousButton&quot; min=&quot;-2&quot; pref=&quot;107&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace pref=&quot;76&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace pref=&quot;154&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;totalResultLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;totalResultValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -300,17 +304,17 @@
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceInstitutionIdLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jTextField1&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;jTextField2&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;sourceInstitutionIdText&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;sourceIdText&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel3&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;dataSetTitleLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;jLabel4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -319,7 +323,7 @@
+                               &lt;Component id=&quot;jTextField3&quot; alignment=&quot;0&quot; pref=&quot;203&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+-                      &lt;Component id=&quot;jButton1&quot; min=&quot;-2&quot; pref=&quot;118&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;searchButton&quot; min=&quot;-2&quot; pref=&quot;118&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; pref=&quot;60&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;jPanel3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -334,20 +338,20 @@
+                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel3&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceInstitutionIdLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;dataSetTitleLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;jTextField3&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jTextField1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceInstitutionIdText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;jLabel4&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;jTextField4&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jTextField2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;sourceIdText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jButton1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;searchButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;Component id=&quot;jPanel3&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+@@ -357,25 +361,29 @@
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+       &lt;SubComponents&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;sourceInstitutionIdLabel&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;metadata.sourceInstitutionId&quot;)&amp;#xa;       &quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;sourceLabel&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel2&quot;/&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;metadata.sourceId&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;jTextField1&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jTextField1&quot;/&gt;
+-          &lt;/Properties&gt;
++        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;sourceInstitutionIdText&quot;&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;jTextField2&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jTextField2&quot;/&gt;
+-          &lt;/Properties&gt;
++        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;sourceIdText&quot;&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel3&quot;&gt;
+           &lt;Properties&gt;
+@@ -391,11 +399,11 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jLabel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dataSortLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jRadioButton1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jRadioButton2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;sortDescendingRadioButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;sortAscendingRadioButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jComboBox1&quot; alignment=&quot;0&quot; pref=&quot;214&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -406,22 +414,24 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel5&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;dataSortLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jComboBox1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jRadioButton2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;sortAscendingRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jRadioButton1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;sortDescendingRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+           &lt;/Layout&gt;
+           &lt;SubComponents&gt;
+-            &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;jRadioButton1&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;sortDescendingRadioButton&quot;&gt;
+               &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jRadioButton1&quot;/&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;sortDescending&quot;)&quot; type=&quot;code&quot;/&gt;
++                &lt;/Property&gt;
+                 &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+                   &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
+                     &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
+@@ -431,10 +441,15 @@
+                   &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;jRadioButton2&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;sortAscendingRadioButton&quot;&gt;
+               &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jRadioButton2&quot;/&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;sortAscending&quot;)&quot; type=&quot;code&quot;/&gt;
++                &lt;/Property&gt;
+                 &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+                   &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
+                     &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
+@@ -444,50 +459,53 @@
+                   &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel5&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;dataSortLabel&quot;&gt;
+               &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel5&quot;/&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++                  &lt;Connection code=&quot;L10n.getString(&quot;dataSort&quot;)&quot; type=&quot;code&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JComboBox&quot; name=&quot;jComboBox1&quot;&gt;
+               &lt;Properties&gt;
+-                &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ComboBoxModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ComboBoxModelEditor&quot;&gt;
+-                  &lt;StringArray count=&quot;4&quot;&gt;
+-                    &lt;StringItem index=&quot;0&quot; value=&quot;Item 1&quot;/&gt;
+-                    &lt;StringItem index=&quot;1&quot; value=&quot;Item 2&quot;/&gt;
+-                    &lt;StringItem index=&quot;2&quot; value=&quot;Item 3&quot;/&gt;
+-                    &lt;StringItem index=&quot;3&quot; value=&quot;Item 4&quot;/&gt;
+-                  &lt;/StringArray&gt;
++                &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ComboBoxModel&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++                  &lt;Connection code=&quot;new javax.swing.DefaultComboBoxModel(new String[] { L10n.getString(&quot;metadata.sourceInstitutionId&quot;), L10n.getString(&quot;metadata.sourceId&quot;), L10n.getString(&quot;metadata.dataSetTitle&quot;), L10n.getString(&quot;metadata.technicalContactName&quot;),L10n.getString(&quot;metadata.contentContactName&quot;), L10n.getString(&quot;metadata.dateCreate&quot;), L10n.getString(&quot;metadata.dateModified&quot;)})&quot; type=&quot;code&quot;/&gt;
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+             &lt;/Component&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel3&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;dataSetTitleLabel&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel3&quot;/&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;metadata.dataSetTitle&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;jTextField3&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jTextField3&quot;/&gt;
+-          &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel4&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel4&quot;/&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;jTextField4&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jTextField4&quot;/&gt;
+-          &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;jButton1&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;searchButton&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jButton1&quot;/&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getString(&quot;dataSearch&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -28,6 +28,9 @@
+         super(parent, modal);
+         this.model = model;
+         initComponents();
++        sortButtonGroup.add(sortAscendingRadioButton);
++        sortButtonGroup.add(sortDescendingRadioButton);
++        sortButtonGroup.setSelected(sortAscendingRadioButton.getModel(), true);
+         this.tableMetadataList.setRowSelectionAllowed(true);
+         this.tableMetadataList.setSelectionMode(DefaultListSelectionModel.SINGLE_SELECTION);
+         this.tableMetadataList.setModel(new MetadataManagerTableModel(model));  
+@@ -61,6 +64,14 @@
+         this.toDisplayValueTextField.setText(value.toString());
+     }  
+     
++     public int getSortDirection() {
++        if (this.sortButtonGroup.isSelected(this.sortAscendingRadioButton.getModel()) == true) {
++            return 0;
++        } else {
++            return 1;
++        }
++    }
++    
+     public void messageSelection() {
+     	JOptionPane.showMessageDialog(this, &quot;No row was selected.&quot;, &quot;Information about selected row&quot;, JOptionPane.ERROR_MESSAGE);               
+     } 
+@@ -72,6 +83,7 @@
+      */
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+     private void initComponents() {
++        sortButtonGroup = new javax.swing.ButtonGroup();
+         jPanel1 = new javax.swing.JPanel();
+         jScrollPane1 = new javax.swing.JScrollPane();
+         tableMetadataList = new javax.swing.JTable();
+@@ -90,20 +102,20 @@
+         closeButton = new javax.swing.JButton();
+         helpButton = new javax.swing.JButton();
+         jPanel2 = new javax.swing.JPanel();
+-        jLabel1 = new javax.swing.JLabel();
+-        jLabel2 = new javax.swing.JLabel();
+-        jTextField1 = new javax.swing.JTextField();
+-        jTextField2 = new javax.swing.JTextField();
++        sourceInstitutionIdLabel = new javax.swing.JLabel();
++        sourceLabel = new javax.swing.JLabel();
++        sourceInstitutionIdText = new javax.swing.JTextField();
++        sourceIdText = new javax.swing.JTextField();
+         jPanel3 = new javax.swing.JPanel();
+-        jRadioButton1 = new javax.swing.JRadioButton();
+-        jRadioButton2 = new javax.swing.JRadioButton();
+-        jLabel5 = new javax.swing.JLabel();
++        sortDescendingRadioButton = new javax.swing.JRadioButton();
++        sortAscendingRadioButton = new javax.swing.JRadioButton();
++        dataSortLabel = new javax.swing.JLabel();
+         jComboBox1 = new javax.swing.JComboBox();
+-        jLabel3 = new javax.swing.JLabel();
++        dataSetTitleLabel = new javax.swing.JLabel();
+         jTextField3 = new javax.swing.JTextField();
+         jLabel4 = new javax.swing.JLabel();
+         jTextField4 = new javax.swing.JTextField();
+-        jButton1 = new javax.swing.JButton();
++        searchButton = new javax.swing.JButton();
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+         jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(&quot;Metadata list&quot;));
+@@ -151,12 +163,12 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 841, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 919, Short.MAX_VALUE)
+                     .add(jPanel1Layout.createSequentialGroup()
+                         .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                             .add(jPanel1Layout.createSequentialGroup()
+                                 .add(previousButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 107, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 76, Short.MAX_VALUE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 154, Short.MAX_VALUE)
+                                 .add(totalResultLabel)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                                 .add(totalResultValueLabel)
+@@ -210,26 +222,23 @@
+         helpButton.setText(L10n.getString(&quot;Help&quot;));
+ 
+         jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(&quot;Search metadata&quot;));
+-        jLabel1.setText(&quot;jLabel1&quot;);
++        sourceInstitutionIdLabel.setText(L10n.getString(&quot;metadata.sourceInstitutionId&quot;)
++        );
+ 
+-        jLabel2.setText(&quot;jLabel2&quot;);
++        sourceLabel.setText(L10n.getString(&quot;metadata.sourceId&quot;));
+ 
+-        jTextField1.setText(&quot;jTextField1&quot;);
+-
+-        jTextField2.setText(&quot;jTextField2&quot;);
+-
+         jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder(&quot;Sorting&quot;));
+-        jRadioButton1.setText(&quot;jRadioButton1&quot;);
+-        jRadioButton1.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+-        jRadioButton1.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        sortDescendingRadioButton.setText(L10n.getString(&quot;sortDescending&quot;));
++        sortDescendingRadioButton.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        sortDescendingRadioButton.setMargin(new java.awt.Insets(0, 0, 0, 0));
+ 
+-        jRadioButton2.setText(&quot;jRadioButton2&quot;);
+-        jRadioButton2.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+-        jRadioButton2.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        sortAscendingRadioButton.setText(L10n.getString(&quot;sortAscending&quot;));
++        sortAscendingRadioButton.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        sortAscendingRadioButton.setMargin(new java.awt.Insets(0, 0, 0, 0));
+ 
+-        jLabel5.setText(&quot;jLabel5&quot;);
++        dataSortLabel.setText(L10n.getString(&quot;dataSort&quot;));
+ 
+-        jComboBox1.setModel(new javax.swing.DefaultComboBoxModel(new String[] { &quot;Item 1&quot;, &quot;Item 2&quot;, &quot;Item 3&quot;, &quot;Item 4&quot; }));
++        jComboBox1.setModel(new javax.swing.DefaultComboBoxModel(new String[] { L10n.getString(&quot;metadata.sourceInstitutionId&quot;), L10n.getString(&quot;metadata.sourceId&quot;), L10n.getString(&quot;metadata.dataSetTitle&quot;), L10n.getString(&quot;metadata.technicalContactName&quot;),L10n.getString(&quot;metadata.contentContactName&quot;), L10n.getString(&quot;metadata.dateCreate&quot;), L10n.getString(&quot;metadata.dateModified&quot;)}));
+ 
+         org.jdesktop.layout.GroupLayout jPanel3Layout = new org.jdesktop.layout.GroupLayout(jPanel3);
+         jPanel3.setLayout(jPanel3Layout);
+@@ -237,11 +246,11 @@
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jLabel5)
++                .add(dataSortLabel)
+                 .add(19, 19, 19)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jRadioButton1)
+-                    .add(jRadioButton2)
++                    .add(sortDescendingRadioButton)
++                    .add(sortAscendingRadioButton)
+                     .add(jComboBox1, 0, 214, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+@@ -249,25 +258,21 @@
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel5)
++                    .add(dataSortLabel)
+                     .add(jComboBox1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jRadioButton2)
++                .add(sortAscendingRadioButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jRadioButton1)
++                .add(sortDescendingRadioButton)
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+-        jLabel3.setText(&quot;jLabel3&quot;);
++        dataSetTitleLabel.setText(L10n.getString(&quot;metadata.dataSetTitle&quot;));
+ 
+-        jTextField3.setText(&quot;jTextField3&quot;);
++        jLabel4.setText(L10n.getString(&quot;&quot;));
+ 
+-        jLabel4.setText(&quot;jLabel4&quot;);
++        searchButton.setText(L10n.getString(&quot;dataSearch&quot;));
+ 
+-        jTextField4.setText(&quot;jTextField4&quot;);
+-
+-        jButton1.setText(&quot;jButton1&quot;);
+-
+         org.jdesktop.layout.GroupLayout jPanel2Layout = new org.jdesktop.layout.GroupLayout(jPanel2);
+         jPanel2.setLayout(jPanel2Layout);
+         jPanel2Layout.setHorizontalGroup(
+@@ -277,21 +282,21 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel2Layout.createSequentialGroup()
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jLabel1)
+-                            .add(jLabel2))
++                            .add(sourceInstitutionIdLabel)
++                            .add(sourceLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jTextField1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 177, Short.MAX_VALUE)
+-                            .add(jTextField2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 177, Short.MAX_VALUE))
++                            .add(sourceInstitutionIdText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 177, Short.MAX_VALUE)
++                            .add(sourceIdText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 177, Short.MAX_VALUE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jLabel3)
++                            .add(dataSetTitleLabel)
+                             .add(jLabel4))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jTextField4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 203, Short.MAX_VALUE)
+                             .add(jTextField3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 203, Short.MAX_VALUE)))
+-                    .add(jButton1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 118, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(searchButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 118, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .add(60, 60, 60)
+                 .add(jPanel3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                 .add(28, 28, 28))
+@@ -303,18 +308,18 @@
+                     .add(jPanel2Layout.createSequentialGroup()
+                         .addContainerGap()
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(jLabel1)
+-                            .add(jLabel3)
++                            .add(sourceInstitutionIdLabel)
++                            .add(dataSetTitleLabel)
+                             .add(jTextField3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jTextField1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                            .add(sourceInstitutionIdText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(jLabel2)
++                            .add(sourceLabel)
+                             .add(jLabel4)
+                             .add(jTextField4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jTextField2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                            .add(sourceIdText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .add(16, 16, 16)
+-                        .add(jButton1))
++                        .add(searchButton))
+                     .add(jPanel3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+@@ -330,7 +335,7 @@
+                     .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                         .add(helpButton)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 679, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 757, Short.MAX_VALUE)
+                         .add(closeButton)))
+                 .addContainerGap())
+         );
+@@ -363,31 +368,32 @@
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     protected javax.swing.JButton addButtons;
+     protected javax.swing.JButton closeButton;
++    private javax.swing.JLabel dataSetTitleLabel;
++    private javax.swing.JLabel dataSortLabel;
+     protected javax.swing.JButton deleteButton;
+     protected javax.swing.JButton detailsButton;
+     private javax.swing.JLabel displayedLabel;
+     protected javax.swing.JLabel displayedValueLabel;
+     protected javax.swing.JButton editButtons;
+     protected javax.swing.JButton helpButton;
+-    private javax.swing.JButton jButton1;
+     private javax.swing.JComboBox jComboBox1;
+-    private javax.swing.JLabel jLabel1;
+-    private javax.swing.JLabel jLabel2;
+-    private javax.swing.JLabel jLabel3;
+     private javax.swing.JLabel jLabel4;
+-    private javax.swing.JLabel jLabel5;
+     private javax.swing.JPanel jPanel1;
+     private javax.swing.JPanel jPanel2;
+     private javax.swing.JPanel jPanel3;
+-    private javax.swing.JRadioButton jRadioButton1;
+-    private javax.swing.JRadioButton jRadioButton2;
+     private javax.swing.JScrollPane jScrollPane1;
+-    private javax.swing.JTextField jTextField1;
+-    private javax.swing.JTextField jTextField2;
+     private javax.swing.JTextField jTextField3;
+     private javax.swing.JTextField jTextField4;
+     protected javax.swing.JButton nextButton;
+     protected javax.swing.JButton previousButton;
++    protected javax.swing.JButton searchButton;
++    protected javax.swing.JRadioButton sortAscendingRadioButton;
++    private javax.swing.ButtonGroup sortButtonGroup;
++    protected javax.swing.JRadioButton sortDescendingRadioButton;
++    protected javax.swing.JTextField sourceIdText;
++    private javax.swing.JLabel sourceInstitutionIdLabel;
++    protected javax.swing.JTextField sourceInstitutionIdText;
++    private javax.swing.JLabel sourceLabel;
+     protected javax.swing.JTable tableMetadataList;
+     protected javax.swing.JTextField toDisplayValueTextField;
+     private javax.swing.JLabel toDisplayedLabel;
+
+Modified: trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java	2006-05-12 01:45:51 UTC (rev 261)
++++ trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java	2006-05-12 09:52:01 UTC (rev 262)
+@@ -87,6 +87,7 @@
+                     publication.setReferenceDetail(view.referenceDetailText.getText());
+                     publication.setUrl(view.urlText.getText());
+                     publication.setNote(view.noteText.getText());
++                    publication.setDeleted(0);
+                     //mela by se tu vypsat nejaka informace pro uzivatele
+                     //pridani zaznamu do tabulky publication
+                     model.addPublicationRecord(publication);                                                           
+@@ -106,6 +107,7 @@
+                     model.getSelectedRecord().setReferenceDetail(view.referenceDetailText.getText());
+                     model.getSelectedRecord().setUrl(view.urlText.getText());
+                     model.getSelectedRecord().setNote(view.noteText.getText());
++                    model.getSelectedRecord().setDeleted(0);
+                    model.editPublicationRecord(); 
+                    view.close(); 
+                 }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000308.html">[Plantlore-dev] Upravy SelectQuery
+</A></li>
+	<LI>Next message: <A HREF="000310.html">[Plantlore-dev] Re: Re:
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#309">[ date ]</a>
+              <a href="thread.html#309">[ thread ]</a>
+              <a href="subject.html#309">[ subject ]</a>
+              <a href="author.html#309">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

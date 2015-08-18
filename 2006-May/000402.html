@@ -1,0 +1,674 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r352 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r352%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/imports%20common/record&In-Reply-To=%3C200605251856.k4PIun6o012372%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000401.html">
+   <LINK REL="Next"  HREF="000403.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r352 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports common/record</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r352%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/imports%20common/record&In-Reply-To=%3C200605251856.k4PIun6o012372%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r352 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports common/record">lada at berlios.de
+       </A><BR>
+    <I>Thu May 25 20:56:49 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000401.html">[Plantlore-dev] r351 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000403.html">[Plantlore-dev] r353 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#402">[ date ]</a>
+              <a href="thread.html#402">[ thread ]</a>
+              <a href="subject.html#402">[ subject ]</a>
+              <a href="author.html#402">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-25 20:56:45 +0200 (Thu, 25 May 2006)
+New Revision: 352
+
+Added:
+   trunk/src/net/sf/plantlore/client/imports/XMLParser.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+Log:
+Add XMLParser for XML and Native format of Export. XMLParser contains main class for testing. Change method setValue(column, value) for Records - work with data type INTEGER, DATE, DOUBLE was changed.
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -292,7 +292,7 @@
+ 		logger.debug(&quot;filename: &quot;+ filename);
+ 		logger.debug(&quot;filename2: &quot;+ filter.suggestName(filename));
+ 		
+-		// Create a new builder according to the selected format.
++		// Create a new builder according to the selected format. 
+ 		Builder builder;
+ 		if(filter.getDescription().equals(L10n.getString(&quot;Format.CSV&quot;)))
+ 			builder = new CSVBuilder(writer, template);
+@@ -302,6 +302,8 @@
+ 			builder = new ABCDBuilder(filter.suggestName(filename));
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
+ 			builder = new XMLBuilder(template, filter.suggestName(filename));                       
++                else if(filter.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)))                        
++			builder = new XMLBuilder(filter.suggestName(filename));                       
+ 		else {
+ 			builder = new TrainingBuilder(template);
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -52,12 +52,14 @@
+     private Element habitat;
+     private Element authors;
+     private Element author;
++    private Element authorOccurrence;
+     private Element metadata;
+     private Element publication;
+     private Element plant;
+     private Element phytochorion;
+-    private int authorActual;
++    private int authorCurrent;
+     private int authorCount = 0;
++    private boolean isPlantloreNative;
+ 
+     
+     /** Creates a new instance of XMLBuilder */
+@@ -66,8 +68,20 @@
+         document = DocumentHelper.createDocument(); 
+         this.file = fileName;
+         this.template = template;
++        this.isPlantloreNative = false;
+     }
+     
++    /** Creates a new instance of XMLBuilder 
++     *     
++     * @parem fileName
++     */
++    public XMLBuilder(String fileName) {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());          
++        document = DocumentHelper.createDocument(); 
++        this.file = fileName;
++        this.isPlantloreNative = true;
++    }
++    
+     public void header() throws IOException {
+         logger.debug(&quot;XML Builder - header.&quot;);	
+         document.addElement(&quot;occurrences&quot;);
+@@ -91,6 +105,7 @@
+     public void startRecord() throws IOException {        
+         occurrence = document.getRootElement().addElement(&quot;occurrence&quot;);          
+         authors = null;    
++        authorOccurrence = null;
+         author = null;
+         habitat = null;
+         metadata = null;
+@@ -102,12 +117,18 @@
+     public void part(Record record) throws IOException {
+         if(record == null) return;        
+         if (record.getClass().equals(AuthorOccurrence.class))
+-            authorActual = authorCount + 1;
++            authorCurrent = authorCount + 1;
+         // Build this part of the record.
+         Class table = record.getClass();
+         for( String property : record.getProperties() ) 
++            if (isPlantloreNative) {
++                //Format PlantloreNative
++                output( table, property, record.getValue(property) );
++            } else {
++                //Format XML with selected column
+                 if( template.isSet(table, property) )
+                         output( table, property, record.getValue(property) );
++            }
+         // Now look at all children of this record.
+         for(String key : record.getForeignKeys()) {
+                 // And build'em too.
+@@ -132,18 +153,20 @@
+         } else if (table.getSimpleName().equals(Author.class.getSimpleName())) {
+             if (authors == null) 
+                 authors = occurrence.addElement(&quot;authors&quot;);
+-            if (authorActual != authorCount) {
+-                authorCount = authorActual;
++            if (authorCurrent != authorCount) {
++                authorCount = authorCurrent;
+                 author = authors.addElement(&quot;author&quot;);
+-            }
+-            author.addElement(column).setText((String) value);
++            }            
++                authorOccurrence.addElement(column).setText((String) value);
+         } else if (table.getSimpleName().equals(AuthorOccurrence.class.getSimpleName())) {
+             if (authors == null) 
+                 authors = occurrence.addElement(&quot;authors&quot;);
+-            if (authorActual != authorCount) {
+-                authorCount = authorActual;
++            if (authorCurrent != authorCount) {
++                authorCount = authorCurrent;
+                 author = authors.addElement(&quot;author&quot;);
+             }
++            if (authorOccurrence == null) 
++                authorOccurrence = author.addElement(&quot;authorOccurrence&quot;);
+             author.addElement(column).setText((String) value);
+         } else if (table.getSimpleName().equals(Metadata.class.getSimpleName())) {
+             if (metadata == null)
+
+Added: trunk/src/net/sf/plantlore/client/imports/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/XMLParser.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/client/imports/XMLParser.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -0,0 +1,305 @@
++/*
++ * XMLParser.java
++ *
++ * Created on 24. kv&#283;ten 2006, 12:48
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client.imports;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.List;
++import net.sf.plantlore.common.exception.ParserException;
++import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.AuthorOccurrence;
++import net.sf.plantlore.common.record.Habitat;
++import net.sf.plantlore.common.record.Metadata;
++import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Phytochorion;
++import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.common.record.Publication;
++import net.sf.plantlore.common.record.Record;
++import net.sf.plantlore.common.record.Territory;
++import net.sf.plantlore.common.record.Village;
++import org.apache.log4j.Logger;
++import org.dom4j.Document;
++import org.dom4j.DocumentException;
++import org.dom4j.DocumentHelper;
++import org.dom4j.Node;
++import org.dom4j.io.SAXReader;
++import org.xml.sax.SAXException;
++
++/**
++ *
++ * @author Lada
++ */
++public class XMLParser implements Parser {
++
++    private Logger logger;
++    private Document document;
++    private File fXML;
++    private String file;
++    private Integer currentNumberOcc = 0;
++    private Integer currentNumberAuthor = 0;
++    private List occurrenceList;
++    private List authorsList;
++    
++    private Node occNode = null;
++    private Node authorsNode = null;
++    private Node autOccNode = null;
++    private Node autNode = null;
++    private Node habNode = null; 
++    private Node metadataNode = null;
++    private Node planNode = null;
++    private Node pubNode = null;
++    private Node terrNode = null;
++    private Node villNode = null;
++    private Node phytNode = null;
++    
++    private Occurrence occurrence;
++    private AuthorOccurrence authorOccurrence;
++    private Author author;
++    private Metadata metadata;
++    private Plant plant;
++    private Publication publication;
++    private Habitat habitat;
++    private Village village;
++    private Territory territory;
++    private Phytochorion phytochorion;
++    
++    /** Creates a new instance of XMLParser */
++    public XMLParser(String fileName) {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());                  
++        this.file = fileName;               
++    }
++
++    public void initialize() throws ParserException {
++        SAXReader reader = new SAXReader();        
++        File fXML = new File(file);
++        try {
++            //FIXME: pokud bude spatny soubor XML (neuzavrene tagy, nekorektne pouzito &amp;, atd..)
++            //spadne, zde s vyjimkou --&gt; odchytavat
++            Document doc = reader.read(fXML);
++            this.document = doc;
++        } catch (DocumentException ex) {
++            ex.printStackTrace();
++        }        
++        occurrenceList = document.selectNodes(&quot;//occurrence&quot;);
++        setNumberOccurrence(occurrenceList.size());        
++    }
++
++    public void cleanup() {
++    }
++
++    public boolean hasNextRecord() {
++        //vrati true pokud existuje jeste &lt;OCCURRENCE&gt;&lt;/OCCURRENCE&gt;
++        if (getNumberOccurrence() &gt; 0)
++            return true;
++        return false;
++    }
++
++    public Parser.Action fetchNextRecord() {
++        //FIXME        
++        return Parser.Action.UNKNOWN;
++    }
++
++    public Record nextPart(Class table) throws ParserException {        
++        //vrati objekt
++        if (table == Occurrence.class) {
++            int num = getNumberOccurrence();
++            setNumberOccurrence(num - 1);                       
++            occNode = (Node)occurrenceList.get(occurrenceList.size()- num);            
++            //Create lists with node. Each list should has only one node. 
++            //We have to check not null value of list
++            //OCC_NODE
++            List habList = occNode.selectNodes(&quot;habitat&quot;);
++            List metadataList = occNode.selectNodes(&quot;metadata&quot;);
++            List plantList =   occNode.selectNodes(&quot;plant&quot;);
++            List pubList = occNode.selectNodes(&quot;publication&quot;);                                    
++            if (habList.size() &lt;= 0) 
++                System.out.println(&quot;Bad XML file - element HABITAT don`t exist&quot;);
++            else
++                habNode = (Node) habList.get(0);
++            if (metadataList.size() &lt;= 0 ) 
++                System.out.println(&quot;Bad XML file - element METADATA don`t exist&quot;);
++            else
++                metadataNode = (Node) metadataList.get(0);
++            if (plantList.size() &lt;= 0) 
++                System.out.println(&quot;Bad XML file - element PLANT don`t exist&quot;);
++            else
++                planNode = (Node) plantList.get(0);
++            if (pubList.size() &lt;= 0 ) 
++                System.out.println(&quot;Bad XML file - element PUBLICATION don`t exist&quot;);
++            else
++                pubNode = (Node) pubList.get(0);
++            //HAB_NODE
++            List terrList =  habNode.selectNodes(&quot;territory&quot;);
++            List villList = habNode.selectNodes(&quot;village&quot;);
++            List phyList = habNode.selectNodes(&quot;phytochorion&quot;);
++            if (terrList.size() &lt;= 0) 
++                System.out.println(&quot;Bad XML file - element TERRITORY don`t exist&quot;);
++            else                
++                terrNode = (Node) terrList.get(0);
++            if (villList.size() &lt;= 0) 
++                System.out.println(&quot;Bad XML file - element VILLAGE don`t exist&quot;);
++            else
++                villNode = (Node) villList.get(0);
++            if (phyList.size() &lt;= 0) 
++                System.out.println(&quot;Bad XML file - element PHYTOCHORION don`t exist&quot;);
++            else
++                phytNode = (Node) phyList.get(0);
++            
++            //set list of author`s node
++            authorsList = occNode.selectNodes(&quot;authors&quot;);
++            setNumberAuthor(authorsList.size());
++            //create Records       
++            occurrence = new Occurrence();            
++            habitat = new Habitat();
++            metadata = new Metadata();
++            publication = new Publication();
++            plant = new Plant();
++            village = new Village();
++            territory = new Territory();
++            phytochorion = new Phytochorion();
++            
++            try {                
++                part((Record)occurrence, occNode);
++                part((Record)habitat, habNode);
++                part((Record)metadata, metadataNode);
++                part((Record)plant, planNode);
++                part((Record)publication, pubNode);
++                part((Record)territory, terrNode);
++                part((Record)village, villNode);
++                part((Record)phytochorion, phytNode);
++            } catch (IOException ex) {
++                ex.printStackTrace();
++            }       
++            
++            //set FK of Records
++            occurrence.setHabitat(habitat);
++            occurrence.setPlant(plant);
++            occurrence.setPublication(publication);
++            occurrence.setMetadata(metadata);
++            habitat.setTerritory(territory);
++            habitat.setPhytochorion(phytochorion);
++            habitat.setNearestVillage(village);            
++            
++            return occurrence;
++        } else if (table == AuthorOccurrence.class) {
++            //create NODE         
++            int num = getNumberAuthor();
++            setNumberAuthor(num - 1);
++            authorsNode = (Node) authorsList.get(authorsList.size() - num);
++            //List with author node
++            List autList = authorsNode.selectNodes(&quot;author&quot;);
++            //Set author node
++            if (autList.size() &lt;= 0)
++                System.out.println(&quot;Bad XML file - element AUTHOR don`t exist&quot;);
++            else
++                autNode = (Node) autList.get(0);
++            //List with authorOccurrence
++            List autOccList = autNode.selectNodes(&quot;authorOccurrence&quot;);
++            //Set authorOccurrence node
++            if (autOccList.size() &lt;= 0)
++                System.out.println(&quot;Bad XML file - element AUTHOROCCURRENCE don`t exist&quot;);
++            else
++                autOccNode = (Node) autOccList.get(0);            
++            //create Records
++            authorOccurrence = new AuthorOccurrence();
++            author = new Author();
++            //set FK of Records
++            authorOccurrence.setAuthor(author);
++            authorOccurrence.setOccurrence(occurrence);
++                       
++            try {
++                part((Record)author, autNode);
++                part((Record)authorOccurrence, autOccNode);
++            } catch (IOException ex) {
++                ex.printStackTrace();
++            }
++            
++            return authorOccurrence;
++        }        
++        return null;
++    }
++    
++     public void part(Record record, Node node) throws IOException {
++        if(record == null) return;        
++        if(node == null) return;
++
++        // Build this part of the record.
++        Class table = record.getClass();
++        for( String property : record.getProperties() ) {                                                
++                //set data to record
++                record.setValue(property, node.valueOf(property));
++            }      
++    }
++
++     
++    public boolean hasNextPart(Class table) {
++        if (getNumberAuthor() &gt; 0) 
++            return true;      
++        return false;
++    }
++
++    public Parser.Action intentedFor() {
++        //FIXME
++        return Parser.Action.UNKNOWN;
++    }
++   
++    //FOR TESTING
++   public static void main(String[] args) {
++       XMLParser xmlParser = new XMLParser(&quot;c:/Documents and Settings/Lada/Dokumenty/native.xml&quot;);       
++        try {
++            System.out.println(&quot;test&quot;);
++            xmlParser.initialize();
++            while (xmlParser.hasNextRecord()) {
++                Occurrence occMain = (Occurrence) xmlParser.nextPart(Occurrence.class);
++                //Test of output
++                System.out.println(&quot;1:&quot; + occMain.getHabitat().getCountry());
++                System.out.println(&quot;2: &quot; + occMain.getHerbarium());
++                System.out.println(&quot;3: &quot;+ occMain.getPlant().getTaxon());
++                while (xmlParser.hasNextPart(AuthorOccurrence.class)) {
++                    AuthorOccurrence aoMain =  (AuthorOccurrence) xmlParser.nextPart(AuthorOccurrence.class);
++                }                
++            }
++        } catch (ParserException ex) {
++            ex.printStackTrace();
++        }       
++   }
++
++    /**
++     *  Set count of don`t process occurrence record in file.
++     *  @param i count of occurrence record for processing
++     */
++    private void setNumberOccurrence(int i) {
++        this.currentNumberOcc = i;
++    }
++
++    /**
++     * Get count of don`t process occurrence record in file
++     *
++     */
++    private int getNumberOccurrence() {
++        return this.currentNumberOcc;
++    }
++ 
++    /**
++     *  Set count of don`t process author record in file.
++     *  @param i count of author record for processing
++     */
++     private void setNumberAuthor(int i) {
++        this.currentNumberAuthor = i;
++    }
++
++     /**
++     * Get count of don`t process author record in file
++     *
++     */
++    private int getNumberAuthor() {
++        return this.currentNumberAuthor;
++    }
++}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -64,7 +64,9 @@
+     	else if(column.equals(URL)) setUrl((String)value);
+     	else if(column.equals(NOTE)) setNote((String)value);
+         else if(column.equals(CREATEDWHO)) setCreatedWho((User)value);                        
+-    	else if(column.equals(DELETED)) setDeleted((Integer)value);
++    	else if(column.equals(DELETED)) 
++            if (value.getClass() == String.class) setDeleted(Integer.parseInt((String) value));
++            else setDeleted((Integer)value);
+ 	}
+     
+     @Override 
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -53,7 +53,9 @@
+ 		else if(column.equals(OCCURRENCE)) setOccurrence((Occurrence)value);
+ 		else if(column.equals(ROLE)) setRole((String)value);
+ 		else if(column.equals(NOTE)) setNote((String)value);
+-		else if(column.equals(DELETED)) setDeleted((Integer)value);
++		else if(column.equals(DELETED)) 
++                    if (value.getClass() == String.class) setDeleted(Integer.parseInt((String) value));
++                    else setDeleted((Integer)value);
+     }
+     
+     @Override
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -80,10 +80,18 @@
+ 		else if(column.equals(QUADRANT)) setQuadrant((String)value);
+ 		else if(column.equals(DESCRIPTION)) setDescription((String)value);
+ 		else if(column.equals(COUNTRY)) setCountry((String)value);
+-		else if(column.equals(ALTITUDE)) setAltitude((Double)value);
+-		else if(column.equals(LATITUDE)) setLatitude((Double)value);
+-		else if(column.equals(LONGITUDE)) setLongitude((Double)value);
+-		else if(column.equals(DELETED)) setDeleted((Integer)value);
++		else if(column.equals(ALTITUDE)) 
++                    if (value.getClass() == String.class) setAltitude(Double.parseDouble((String) value));
++                    else setAltitude((Double)value);
++		else if(column.equals(LATITUDE)) 
++                    if (value.getClass() == String.class) setLatitude(Double.parseDouble((String) value));
++                    else setLatitude((Double)value);
++		else if(column.equals(LONGITUDE)) 
++                    if (value.getClass() == String.class) setLongitude(Double.parseDouble((String) value));
++                    else setLongitude((Double)value);
++		else if(column.equals(DELETED)) 
++                    if (value.getClass() == String.class) setDeleted(Integer.parseInt((String) value));
++                    else setDeleted((Integer)value);
+ 		else if(column.equals(NOTE)) setNote((String)value);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -96,7 +96,9 @@
+ 		else if(column.equals(OWNERORGANIZATIONABBREV)) setOwnerOrganizationAbbrev((String)value);
+ 		else if(column.equals(BIOTOPETEXT)) setBiotopeText((String)value);
+ 		else if(column.equals(RECORDBASIS)) setRecordBasis((String)value);
+-		else if(column.equals(DELETED)) setDeleted((Integer)value);
++		else if(column.equals(DELETED)) 
++                    if (value.getClass() == String.class) setDeleted(Integer.parseInt((String) value));
++                    else setDeleted((Integer)value);
+ 		else if(column.equals(DATECREATE)) setDateCreate((java.util.Date)value);
+ 		else if(column.equals(DATEMODIFIED)) setDateModified((java.util.Date)value);
+     }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -7,6 +7,9 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.text.DateFormat;
++import java.text.ParseException;
++import java.text.SimpleDateFormat;
+ import java.util.Date;
+ import java.util.List;
+ 
+@@ -99,16 +102,22 @@
+ 		else if(column.equals(UNITVALUE)) setUnitValue((String)value);
+ 		else if(column.equals(HABITAT)) setHabitat((Habitat)value);
+ 		else if(column.equals(PLANT)) setPlant((Plant)value);
+-		else if(column.equals(YEARCOLLECTED)) setYearCollected((Integer)value);
+-		else if(column.equals(MONTHCOLLECTED)) setMonthCollected((Integer)value);
+-		else if(column.equals(DAYCOLLECTED)) setDayCollected((Integer)value);
+-		else if(column.equals(TIMECOLLECTED)) setTimeCollected((java.util.Date)value);
+-		else if(column.equals(ISODATETIMEBEGIN)) setIsoDateTimeBegin((java.util.Date)value);
++		else if(column.equals(YEARCOLLECTED))
++                    if (value.getClass() == String.class)  setYearCollected(Integer.parseInt((String) value));
++                    else setYearCollected((Integer)value);               
++		else if(column.equals(MONTHCOLLECTED))
++                    if (value.getClass() == String.class) setMonthCollected(Integer.parseInt((String) value));
++                    else setMonthCollected((Integer)value);
++		else if(column.equals(DAYCOLLECTED)) 
++                    if (value.getClass() == String.class) setDayCollected(Integer.parseInt((String) value));
++                    else  setDayCollected((Integer)value);
++		else if(column.equals(TIMECOLLECTED)) setTimeCollected(checkDate(value));
++		else if(column.equals(ISODATETIMEBEGIN)) setIsoDateTimeBegin(checkDate(value));
+ 		else if(column.equals(DATASOURCE)) setDataSource((String)value);
+ 		else if(column.equals(PUBLICATION)) setPublication((Publication)value);
+ 		else if(column.equals(HERBARIUM)) setHerbarium((String)value);
+-		else if(column.equals(CREATEDWHEN)) setCreatedWhen((java.util.Date)value);
+-		else if(column.equals(UPDATEDWHEN)) setUpdatedWhen((java.util.Date)value);
++		else if(column.equals(CREATEDWHEN)) setCreatedWhen(checkDate(value));
++		else if(column.equals(UPDATEDWHEN)) setUpdatedWhen(checkDate(value));
+ 		else if(column.equals(METADATA)) setMetadata((Metadata)value);
+ 		else if(column.equals(NOTE)) setNote((String)value);
+ 		else if(column.equals(DELETED)) setDeleted((Integer)value);
+@@ -121,6 +130,17 @@
+     	else return c != 0;
+     }
+     
++    public Date checkDate(Object value) {
++        if (value.getClass() == String.class) {
++             DateFormat myDateFormat = new SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;);                          
++            try {
++                return myDateFormat.parse((String) value);
++            } catch (ParseException ex) {
++                ex.printStackTrace();
++            }                          
++        }
++        return (Date) value;            
++    }
+     
+     /** Creates a new instance of OccurrenceRecord */
+     public Occurrence() {
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-25 12:41:12 UTC (rev 351)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-25 18:56:45 UTC (rev 352)
+@@ -66,13 +66,17 @@
+     public void setValue(String column, Object value) {
+ 		if(column.equals(ID)) setId((Integer)value);
+ 		else if(column.equals(COLLECTIONNAME)) setCollectionName((String)value);
+-		else if(column.equals(COLLECTIONYEARPUBLICATION)) setCollectionYearPublication((Integer)value);
++		else if(column.equals(COLLECTIONYEARPUBLICATION)) 
++                    if (value.getClass() == String.class)setCollectionYearPublication(Integer.parseInt((String) value));
++                    else setCollectionYearPublication((Integer)value);
+ 		else if(column.equals(JOURNALNAME)) setJournalName((String)value);
+ 		else if(column.equals(JOURNALAUTHORNAME)) setJournalAuthorName((String)value);
+ 		else if(column.equals(REFERENCECITATION)) setReferenceCitation((String)value);
+ 		else if(column.equals(REFERENCEDETAIL)) setReferenceDetail((String)value);
+ 		else if(column.equals(URL)) setUrl((String)value);
+-		else if(column.equals(DELETED)) setDeleted((Integer)value);
++		else if(column.equals(DELETED)) 
++                    if (value.getClass() == String.class) setDeleted(Integer.parseInt((String) value));
++                    else setDeleted((Integer)value);
+ 		else if(column.equals(CREATEDWHO)) setCreatedWho((User)value);                
+ 		else if(column.equals(NOTE)) setNote((String)value);
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000401.html">[Plantlore-dev] r351 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000403.html">[Plantlore-dev] r353 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#402">[ date ]</a>
+              <a href="thread.html#402">[ thread ]</a>
+              <a href="subject.html#402">[ subject ]</a>
+              <a href="author.html#402">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

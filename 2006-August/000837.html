@@ -1,0 +1,820 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r600 - trunk/src/net/sf/plantlore/client/overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r600%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200608301644.k7UGin2B022459%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000836.html">
+   <LINK REL="Next"  HREF="000838.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r600 - trunk/src/net/sf/plantlore/client/overview</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r600%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200608301644.k7UGin2B022459%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r600 - trunk/src/net/sf/plantlore/client/overview">lada at mail.berlios.de
+       </A><BR>
+    <I>Wed Aug 30 18:44:49 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000836.html">[Plantlore-dev] r599 - in trunk/src/net/sf/plantlore:	client/createdb client/login common/debug l10n server
+</A></li>
+        <LI>Next message: <A HREF="000838.html">[Plantlore-dev] [Bug #8607] Checklist doesn't reflect a change of	database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#837">[ date ]</a>
+              <a href="thread.html#837">[ thread ]</a>
+              <a href="subject.html#837">[ subject ]</a>
+              <a href="author.html#837">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-30 18:44:43 +0200 (Wed, 30 Aug 2006)
+New Revision: 600
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/Transformation.java
+Log:
+Fixed bug in transformation from S-42 to WGS-84. 
+Fixed using null, NaN value.
+Add transformation to WGS-84 before saving occurrence.
+Add testing of latitude, longitude, altitude value for max and min value (I don`t know right max,min value for CR now).
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-30 12:32:36 UTC (rev 599)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-30 16:44:43 UTC (rev 600)
+@@ -20,6 +20,7 @@
+ import java.util.Map.Entry;
+ import java.util.Observable;
+ import java.util.Set;
++import javax.swing.JOptionPane;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+@@ -50,6 +51,28 @@
+     public static final int WGS84 = 0;
+     public static final int SJTSK = 1;
+     public static final int S42 = 2;
++    //WGS-84 max and min value
++    public static final double WGS84_MAX_LATITUDE = 90;   //Y    //23&#176;
++    public static final double WGS84_MIN_LATITUDE = -90;         //12&#176;
++    public static final double WGS84_MAX_LONGITUDE = 180;  //X  //51&#176;10&#8217;
++    public static final double WGS84_MIN_LONGITUDE = -180;       //47&#176;30&#8217;
++    public static final double WGS84_MAX_ALTITUDE = 8848;  //Z
++    public static final double WGS84_MIN_ALTITUDE = -418;
++    //S-JTSK max and min value
++    public static final double SJTSK_MAX_Y = 10000000;     //-128000 + 1500000 = 1372000;   
++    public static final double SJTSK_MIN_Y = -10000000;   //-930000 + 1500000 = 570000;
++    public static final double SJTSK_MAX_X = 10000000;    //-900000 + 1500000 = 600000;  
++    public static final double SJTSK_MIN_X =-10000000;   //-1300000 + 1500000 = 20000;
++    public static final double SJTSK_MAX_Z = 100000;  
++    public static final double SJTSK_MIN_Z = -1000;
++    //S-42 max and min value
++    public static final double S42_MAX_Y = 10000000;   
++    public static final double S42_MIN_Y = -10000000;
++    public static final double S42_MAX_X = 10000000;  
++    public static final double S42_MIN_X = -10000000;
++    public static final double S42_MAX_Z = 10000;  
++    public static final double S42_MIN_Z = -1000;
++    
+     public static final String EMPTY_STRING = L10n.getString(&quot;Common.ComboboxNothingSelected&quot;);
+     public static final Pair&lt;String,Integer&gt; EMPTY_PAIR = new Pair&lt;String,Integer&gt;(EMPTY_STRING,-1);            
+      
+@@ -638,7 +661,7 @@
+                 logger.debug(&quot;CoordinateSystem set to S42&quot;);
+                 break;
+             case SJTSK:
+-                logger.debug(&quot;CoordinateSystem set to SJSTK&quot;);
++                logger.debug(&quot;CoordinateSystem set to SJTSK&quot;);
+                 break;
+         }
+     }
+@@ -1191,6 +1214,12 @@
+                     return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.EmptyAuthor&quot;));
+             }
+         }
++       
++       if (getCoordinateSystem() != AddEdit.WGS84) {
++           logger.debug(&quot;Transformation coordinate system to WGS84 (for saving into database).&quot;);
++            transformationCoordinateSystem(AddEdit.WGS84);            
++       }
++        
+         if (taxonList == null || taxonList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.AtLeastOneTaxon&quot;));
+         
+@@ -1583,41 +1612,59 @@
+         Double[] newCoordinate = new Double[3];
+         Double[] newCoordinateTmp = new Double[3];
+         //Check null value and set 0.0 if value is null      
+-        if (latitude == null) latitude = 0.0;
+-        if (longitude == null) longitude = 0.0;
+-        if (altitude == null) altitude = 0.0;
+-        //WGS-84 --&gt; S-JSTK
++        double tmpLatitude;
++        double tmpLongitude;
++        double tmpAltitude;
++        if (latitude == null) tmpLatitude = 0.0;
++        else tmpLatitude = latitude;
++        if (longitude == null) tmpLongitude = 0.0;
++        else tmpLongitude = longitude;
++        if (altitude == null) tmpAltitude = 0.0;
++        tmpAltitude = altitude;
++        
++        //WGS-84 --&gt; S-JTSK
+         if (getCoordinateSystem() == AddEdit.WGS84 &amp;&amp; selectedSystem == AddEdit.SJTSK) {
+-            newCoordinate = tr.transform_WGS84_to_SJTSK(latitude, longitude, altitude);
++            newCoordinate = tr.transform_WGS84_to_SJTSK(tmpLatitude, tmpLongitude, tmpAltitude);
+         }
+-        //S-JSTK --&gt; WGS-84
++        //S-JTSK --&gt; WGS-84
+         if (getCoordinateSystem() == AddEdit.SJTSK &amp;&amp; selectedSystem == AddEdit.WGS84) {
+-            newCoordinate = tr.transform_SJTSK_to_WGS84(latitude, longitude, altitude);
++            newCoordinate = tr.transform_SJTSK_to_WGS84(tmpLatitude, tmpLongitude, tmpAltitude);
+         }
+         //WGS-84 --&gt; S-42
+          if (getCoordinateSystem() == AddEdit.WGS84 &amp;&amp; selectedSystem == AddEdit.S42) {
+-            newCoordinate = tr.transform_WGS84_to_S42(latitude, longitude, altitude);
++            newCoordinate = tr.transform_WGS84_to_S42(tmpLatitude, tmpLongitude, tmpAltitude);
+          }
+         //S-42 --&gt; WGA-84
+          if (getCoordinateSystem() == AddEdit.S42 &amp;&amp; selectedSystem == AddEdit.WGS84) {
+-            newCoordinate = tr.transform_S42_to_WGS84(latitude, longitude, altitude);
++            newCoordinate = tr.transform_S42_to_WGS84(tmpLatitude, tmpLongitude, tmpAltitude);
+          }
+-        //S-JSTK --&gt; S-42
++        //S-JTSK --&gt; S-42
+         if (getCoordinateSystem() == AddEdit.SJTSK &amp;&amp; selectedSystem == AddEdit.S42) {
+-            newCoordinateTmp = tr.transform_SJTSK_to_WGS84(latitude, longitude, altitude);
++            newCoordinateTmp = tr.transform_SJTSK_to_WGS84(tmpLatitude, tmpLongitude, tmpAltitude);
+             newCoordinate  = tr.transform_WGS84_to_S42(newCoordinateTmp[0], newCoordinateTmp[1], newCoordinateTmp[2]);
+         }
+-        //S-42 --&gt; S-JSTK
++        //S-42 --&gt; S-JTSK
+         if (getCoordinateSystem() == AddEdit.S42 &amp;&amp; selectedSystem == AddEdit.SJTSK) {
+-            newCoordinateTmp = tr.transform_S42_to_WGS84(latitude, longitude, altitude);
++            newCoordinateTmp = tr.transform_S42_to_WGS84(tmpLatitude, tmpLongitude, tmpAltitude);
+             newCoordinate  = tr.transform_WGS84_to_SJTSK(newCoordinateTmp[0], newCoordinateTmp[1], newCoordinateTmp[2]);
+         }
+-        this.setCoordinateSystem(selectedSystem);
++        this.setCoordinateSystem(selectedSystem);     
++        if (latitude == null) newCoordinate[0] = null;
++        if (longitude == null) newCoordinate[1] = null;
++        if (altitude == null) newCoordinate[2] = null;        
++    /*  if (latitude == 0) newCoordinate[0] = 0.0;
++        if (longitude == 0) newCoordinate[1] = 0.0;
++        if (altitude == 0) newCoordinate[2] = 0.0;
++     */ if (newCoordinate[0].isNaN()) this.setLatitude(null);
++        if (newCoordinate[1].isNaN()) this.setLongitude(null);
++        if (newCoordinate[2].isNaN()) this.setAltitude(null);
+         this.setLatitude(newCoordinate[0]);
+         this.setLongitude(newCoordinate[1]);
+-        this.setAltitude(newCoordinate[2]);
++        this.setAltitude(newCoordinate[2]);       
+     }     
+     
++   
++    
+     public void setIsCancle(boolean isCancle) {
+         this.isCancled = isCancle;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-30 12:32:36 UTC (rev 599)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-30 16:44:43 UTC (rev 600)
+@@ -76,8 +76,8 @@
+     private AddEdit model;
+     private AddEditView view;
+     private TransformationChangeView transformationView;
+-    public final static int MAXIMUM_FRACTION_DIGITS = 8;
+-    public final static int MAXIMUM_INTEGER_DIGITS = 8;
++    public final static int MAXIMUM_FRACTION_DIGITS = 3;
++    public final static int MAXIMUM_INTEGER_DIGITS = 9;
+     private final static Color COLOR_INVALID = Color.RED;
+     
+     //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+@@ -759,13 +759,16 @@
+             transformationView = new TransformationChangeView(view, model, true);
+             new TransformationChangeCtrl(model, transformationView); 
+         }
+-        public void actionPerformed(ActionEvent e) {                       
+-            transformationView.setVisible(true);         
+-            if (model.getIsCancle()) return;
+-            model.setIsCancle(true);
+-            view.loadComponetCoordinate();
++        public void actionPerformed(ActionEvent e) {                        
++            
++            if (view.checkValueCoordinate()) {
++                transformationView.setVisible(true);         
++                if (model.getIsCancle()) return;
++                model.setIsCancle(true);
++                view.loadComponetCoordinate();
++            }
+         }
+-    }
++    }        
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-30 12:32:36 UTC (rev 599)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-30 16:44:43 UTC (rev 600)
+@@ -169,7 +169,7 @@
+                                                       &lt;EmptySpace min=&quot;-2&quot; pref=&quot;434&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;530&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;541&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                               &lt;/Group&gt;
+@@ -386,10 +386,10 @@
+                                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;gpsSymbolLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;gpsSymbolTextField&quot; linkSize=&quot;18&quot; pref=&quot;77&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;gpsSymbolTextField&quot; linkSize=&quot;18&quot; pref=&quot;80&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;39&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;latitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;/Group&gt;
+                                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;gpsTableLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -398,15 +398,15 @@
+                                   &lt;/Group&gt;
+                                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+                                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;latitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;60&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;latitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;longitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;longitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;60&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;longitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;altitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;77&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;altitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                       &lt;/Group&gt;
+                                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+                                           &lt;Component id=&quot;coordinateSystemLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -425,12 +425,12 @@
+                                       &lt;Component id=&quot;gpsLoadButton&quot; linkSize=&quot;17&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;gpsSymbolLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;gpsSymbolTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;longitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-30 12:32:36 UTC (rev 599)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-30 16:44:43 UTC (rev 600)
+@@ -24,6 +24,7 @@
+ import javax.swing.JComboBox;
+ import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
++import javax.swing.JOptionPane;
+ import javax.swing.JPanel;
+ import javax.swing.JTextField;
+ import javax.swing.ListSelectionModel;
+@@ -261,24 +262,24 @@
+                     .add(gpsPanelLayout.createSequentialGroup()
+                         .add(gpsSymbolLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(gpsSymbolTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 77, Short.MAX_VALUE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(gpsSymbolTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 80, Short.MAX_VALUE)
++                        .add(39, 39, 39)
+                         .add(latitudeLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))
++                        .add(4, 4, 4))
+                     .add(gpsPanelLayout.createSequentialGroup()
+                         .add(gpsTableLabel)
+                         .add(155, 155, 155)))
+                 .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+                     .add(gpsPanelLayout.createSequentialGroup()
+-                        .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 60, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(longitudeLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 60, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(altitudeLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 77, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(gpsPanelLayout.createSequentialGroup()
+                         .add(coordinateSystemLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+@@ -297,12 +298,12 @@
+                     .add(gpsLoadButton)
+                     .add(gpsSymbolLabel)
+                     .add(gpsSymbolTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(latitudeLabel)
+                     .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(longitudeLabel)
+                     .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(altitudeLabel)
+-                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(latitudeLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(gpsShowButton)
+@@ -365,7 +366,7 @@
+                                         .add(placeDescriptionLabel)
+                                         .add(434, 434, 434))
+                                     .add(jPanel5Layout.createSequentialGroup()
+-                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 536, Short.MAX_VALUE)
++                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 541, Short.MAX_VALUE)
+                                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                                     .add(locationNoteLabel)
+@@ -557,10 +558,10 @@
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel7Layout.createSequentialGroup()
+                                 .add(checklistButton)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 232, Short.MAX_VALUE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 340, Short.MAX_VALUE)
+                                 .add(clearOccurrenceButton))
+                             .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+-                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE))
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 658, Short.MAX_VALUE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel7Layout.createSequentialGroup()
+@@ -571,11 +572,11 @@
+                             .add(herbariumLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 132, Short.MAX_VALUE)
+-                            .add(publicationCombo, 0, 132, Short.MAX_VALUE)
+-                            .add(projectCombo, 0, 132, Short.MAX_VALUE)
++                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 146, Short.MAX_VALUE)
++                            .add(publicationCombo, 0, 146, Short.MAX_VALUE)
++                            .add(projectCombo, 0, 146, Short.MAX_VALUE)
+                             .add(jPanel7Layout.createSequentialGroup()
+-                                .add(sourceCombo, 0, 132, Short.MAX_VALUE)
++                                .add(sourceCombo, 0, 146, Short.MAX_VALUE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                         .add(19, 19, 19))
+                     .add(jPanel7Layout.createSequentialGroup()
+@@ -679,7 +680,7 @@
+                 .add(settingsButton)
+                 .add(64, 64, 64)
+                 .add(requiredInfoLabel)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 350, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 436, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+@@ -698,7 +699,7 @@
+                     .add(cancelButton)
+                     .add(okButton)
+                     .add(requiredInfoLabel))
+-                .addContainerGap(13, Short.MAX_VALUE))
++                .addContainerGap(16, Short.MAX_VALUE))
+         );
+ 
+         buttonPanelLayout.linkSize(new java.awt.Component[] {cancelButton, helpButton, okButton}, org.jdesktop.layout.GroupLayout.VERTICAL);
+@@ -741,7 +742,7 @@
+             extendedPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(extendedPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 906, Short.MAX_VALUE)
++                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 905, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         extendedPanelLayout.setVerticalGroup(
+@@ -1042,7 +1043,85 @@
+         pd = (PlainDocument) occurrenceNoteArea.getDocument();
+         pd.setDocumentFilter(new DocumentSizeFilter(Occurrence.getColumnSize(Occurrence.NOTE)));
+     }
++    
++    /**
++     *  Check whether setting values of coordinate system are correctly.
++     *  @return true whether setting values of coordinate system are correctly.
++     */
++     public boolean checkValueCoordinate() {    
++         
++         double tmpLatitude;
++         double tmpLongitude;
++         double tmpAltitude;        
+         
++        //check null value
++        if (model.getLatitude() == null &amp;&amp; model.getLongitude() == null &amp;&amp; model.getAltitude() == null) {
++             return true;
++        } else if (model.getLatitude() != null &amp;&amp; model.getLongitude() != null &amp;&amp; model.getAltitude() != null) {
++             tmpLatitude = model.getLatitude();
++             tmpLongitude = model.getLongitude();             
++             tmpAltitude = model.getAltitude();
++        } else {
++             //show information about filling value
++             JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.NullValue&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++             return false;
++        } 
++       
++        if (model.getCoordinateSystem() == AddEdit.WGS84) {
++            //Check setting value for WGS-84
++            if (tmpLatitude &lt; AddEdit.WGS84_MIN_LATITUDE || tmpLatitude &gt; AddEdit.WGS84_MAX_LATITUDE) {
++                //show iformation about latitude  
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.WGS84_latitude&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpLongitude &lt; AddEdit.WGS84_MIN_LONGITUDE || tmpLongitude &gt; AddEdit.WGS84_MAX_LONGITUDE) {
++                //show information about longitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.WGS84_longitude&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpAltitude &lt; AddEdit.WGS84_MIN_ALTITUDE || tmpAltitude &gt;  AddEdit.WGS84_MAX_ALTITUDE) {
++                //show information about altitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.WGS84_altitude&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++        } else if (model.getCoordinateSystem() == AddEdit.SJTSK) {
++            //Check setting value for S-JTSK
++            if (tmpLatitude &lt; AddEdit.SJTSK_MIN_Y || tmpLatitude &gt; AddEdit.SJTSK_MAX_Y) {
++                //show iformation about latitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.SJTSK_Y&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpLongitude &lt; AddEdit.SJTSK_MIN_X || tmpLongitude &gt; AddEdit.SJTSK_MAX_X) {
++                //show information about longitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.SJTSK_X&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpAltitude &lt; AddEdit.SJTSK_MIN_Z || tmpAltitude &gt;  AddEdit.SJTSK_MAX_Z) {
++                //show information about altitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.SJTSK_Z&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++        } else {
++            //Check setting value for S-42
++            if (tmpLatitude &lt; AddEdit.S42_MIN_Y || tmpLatitude &gt; AddEdit.S42_MAX_Y) {
++                //show iformation about latitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.S42_Y&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpLongitude &lt; AddEdit.S42_MIN_X || tmpLongitude &gt; AddEdit.S42_MAX_X) {
++                //show information about longitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.S42_X&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++            if (tmpAltitude &lt; AddEdit.S42_MIN_Z || tmpAltitude &gt;  AddEdit.S42_MAX_Z) {
++                //show information about altitude
++                JOptionPane.showMessageDialog(this, L10n.getString(&quot;Error.Transformation.S42_Z&quot;), L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE); 
++                return false;
++            }
++        }
++        return true;
++    }
++    
+     /**
+      * @param args the command line arguments
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/overview/Transformation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/Transformation.java	2006-08-30 12:32:36 UTC (rev 599)
++++ trunk/src/net/sf/plantlore/client/overview/Transformation.java	2006-08-30 16:44:43 UTC (rev 600)
+@@ -12,18 +12,21 @@
+ import org.apache.log4j.Logger;
+ 
+ /**
++ * Transformation between coordinate systems.
++ * From WGS-84 to S-42. From S-42 to WGS-84.
++ * From WGS-84 to S-JTSK. From S-JTSK to WGS-84.
+  *
+- * Zdroj: 
++ * Source: 
+  * Converting between grid eastings and northings and ellipsoidal latititude and longitude. <A HREF="http://www.gps.gov.uk/guidec.asp.">http://www.gps.gov.uk/guidec.asp.</A>
+  * Hrdina, Z.: P&#345;epo&#269;et z S-JTSK do WGS-84. 2002. <A HREF="http://gpsweb.cz/JTSK-WGS.htm.">http://gpsweb.cz/JTSK-WGS.htm.</A>
+  * Hrdina, Z.: Transformace sou&#345;adnic ze syst&#233;mu WGS-84 do syst&#233;mu S-JTSK. Praha: &#268;VUT, 1997. <A HREF="http://www.geospeleos.com/Mapovani/WGS84toSJTSK/WGS_JTSK.pdf.">http://www.geospeleos.com/Mapovani/WGS84toSJTSK/WGS_JTSK.pdf.</A> 
+  * Transformace souradnic WGS84&lt;--&gt;-JTSK&lt;--&gt;S42 <A HREF="http://astro.mff.cuni.cz/mira/sh/sh.php">http://astro.mff.cuni.cz/mira/sh/sh.php</A>  
+  *
+  * @author Lada Oberreiterova
++ * @version 1.0
+  * 
+- * 
+  * U WGS-84 se bude zadavat a zobrazovat geodeticke souradnice:
+- *    latitude: 50.4576&#176;
++ *        latitude: 50.4576&#176;
+  * 	  longitude: 14.3986&#176;
+  * 	  altitude: 289.15 m
+  *
+@@ -36,8 +39,7 @@
+  */
+ public class Transformation {
+     
+-    private Logger logger;    
+-    
++    private Logger logger;        
+     private Double latitude;
+     private Double longitude;
+     private Double altitude;
+@@ -99,33 +101,33 @@
+         //Transformace elipsoidu WGS84 na Bessel&#367;v elipsoid.
+         //WGS84 - transform latitude and longitude from degree to radiant format
+         Double[] geodeticCoordinateRAD_WGS = degreeToRadiant(latitude, longitude);   
+-        System.out.println(&quot;from &quot; + latitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[0]);
+-        System.out.println(&quot;from &quot; + longitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[1] + &quot;\n&quot;); 
++        logger.debug(&quot;from &quot; + latitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[0]);
++        logger.debug(&quot;from &quot; + longitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[1] ); 
+         //WGS84 - vypocet pravouhlych souradnic z geodetickych souradnic
+         Double[] cartesianCoordinate_WGS = WGS84_BLH_xyz(geodeticCoordinateRAD_WGS[0], geodeticCoordinateRAD_WGS[1], altitude); 
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[0]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[1]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[0]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[1]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[2] );
+         //transformace prostorov&#253;ch pravo&#250;hl&#253;ch sou&#345;adnic do syst&#233;mu S-JTSK
+         Double[] cartesianCoordinate_SJTSK = transformation_WGS84_SJTSK_xyz_xyz(cartesianCoordinate_WGS[0], cartesianCoordinate_WGS[1], cartesianCoordinate_WGS[2]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[0]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[1]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[2] + &quot;\n&quot;);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[0]);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[1]);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate_SJTSK[2] );
+         //S-JTSK - vypocet geodetickych souradnic z pravouhlych souradnic
+         Double[] geodeticCoordinateRAD_SJTSK = bessel_xyz_BLH(cartesianCoordinate_SJTSK[0], cartesianCoordinate_SJTSK[1], cartesianCoordinate_SJTSK[2]);      
+-        System.out.println(&quot;SJTSK - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_SJTSK[0]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_SJTSK[1]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_SJTSK[2] + &quot;\n&quot;);        
++        logger.debug(&quot;SJTSK - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_SJTSK[0]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_SJTSK[1]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_SJTSK[2] );        
+         //S-JTSK - transform latitude and longitude from radiant to degree format
+         Double[] latLong = radiantToDegree(geodeticCoordinateRAD_SJTSK[0], geodeticCoordinateRAD_SJTSK[1]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice: &quot; + latLong[0]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice: &quot; + latLong[1]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_SJTSK[2] + &quot;\n&quot;);        
++        logger.debug(&quot;SJTSK - geodeticke souradnice: &quot; + latLong[0]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice: &quot; + latLong[1]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_SJTSK[2] );        
+          
+         Double[] planarCoordinate = krovak_BLH_xy(latLong[0], latLong[1], geodeticCoordinateRAD_SJTSK[2]);       
+-        System.out.println(&quot;SJTSK - planar souradnice (X): &quot; + planarCoordinate[0]);
+-        System.out.println(&quot;SJTSK - planar souradnice (Y): &quot; + planarCoordinate[1]);
+-        System.out.println(&quot;SJTSK (Z): &quot; + planarCoordinate[2] + &quot;\n&quot;);
++        logger.debug(&quot;SJTSK - planar souradnice (Y): &quot; + planarCoordinate[0]);
++        logger.debug(&quot;SJTSK - planar souradnice (X): &quot; + planarCoordinate[1]);
++        logger.debug(&quot;SJTSK (Z): &quot; + planarCoordinate[2] );
+         
+         return planarCoordinate;
+     }
+@@ -134,24 +136,24 @@
+                  
+         //Prepocet z S-JTSK  ... uz dostanu hodnoty v radianech
+         Double[] geodeticCoordinate = kovak_xy_BLH(x, y, z);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice: &quot; + geodeticCoordinate[0]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice: &quot; + geodeticCoordinate[1]);
+-        System.out.println(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinate[2] + &quot;\n&quot;);                      
++        logger.debug(&quot;SJTSK - geodeticke souradnice: &quot; + geodeticCoordinate[0]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice: &quot; + geodeticCoordinate[1]);
++        logger.debug(&quot;SJTSK - geodeticke souradnice altitude: &quot; + geodeticCoordinate[2] );                      
+         //Vypocet pravouhlych souradnic z geodetickych souradnic pro elipsoid Bessel
+         Double[] cartesianCoordinate = bessel_BLH_xyz(geodeticCoordinate[0], geodeticCoordinate[1], geodeticCoordinate[2]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[0]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[1]);
+-        System.out.println(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[2] + &quot;\n&quot;);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[0]);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[1]);
++        logger.debug(&quot;SJTSK - provouhle souradnice: &quot; + cartesianCoordinate[2] );
+         //Transformace pravouhlych souradnic z S-JTSK do WGS84
+         Double[] cartesianCoordinate_WGS84 = transformation_SJTSK_WGS84_xyz_xyz(cartesianCoordinate[0], cartesianCoordinate[1], cartesianCoordinate[2]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[0]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[1]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[0]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[1]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[2] );
+         //Vypocet geodetickych souradnic z pravouhlych souradnic pro elipsoid WGS84
+         Double[] geodeticCoordinateRAD_WGS84 = WGS84_xyz_BLH(cartesianCoordinate_WGS84[0], cartesianCoordinate_WGS84[1], cartesianCoordinate_WGS84[2]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[0]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[1]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[0]);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[1]);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[2] );
+         //Transformation latitude and longitude from radiant to degree 
+         Double[] latLong = radiantToDegree(geodeticCoordinateRAD_WGS84[0], geodeticCoordinateRAD_WGS84[1]);
+         Double[] geodeticCoordinate_WGS84 = new Double[3];
+@@ -159,9 +161,9 @@
+         geodeticCoordinate_WGS84[1] = latLong[1];
+         geodeticCoordinate_WGS84[2] = geodeticCoordinateRAD_WGS84[2];
+         
+-        System.out.println(&quot;WGS84 latitude: &quot;+ geodeticCoordinate_WGS84[0]);
+-        System.out.println(&quot;WGS84 longitude: &quot; + geodeticCoordinate_WGS84[1]);
+-        System.out.println(&quot;WGS84 altitude: &quot; + geodeticCoordinate_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 latitude: &quot;+ geodeticCoordinate_WGS84[0]);
++        logger.debug(&quot;WGS84 longitude: &quot; + geodeticCoordinate_WGS84[1]);
++        logger.debug(&quot;WGS84 altitude: &quot; + geodeticCoordinate_WGS84[2] );
+         
+         return geodeticCoordinate_WGS84;
+     }      
+@@ -174,33 +176,33 @@
+                 
+         //WGS84 - transform latitude and longitude from degree to radiant format
+         Double[] geodeticCoordinateRAD_WGS = degreeToRadiant(latitude, longitude);   
+-        System.out.println(&quot;from &quot; + latitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[0]);
+-        System.out.println(&quot;from &quot; + longitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[1] + &quot;\n&quot;); 
++        logger.debug(&quot;from &quot; + latitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[0]);
++        logger.debug(&quot;from &quot; + longitude + &quot; toRadian: &quot; + geodeticCoordinateRAD_WGS[1] ); 
+         //WGS84 - vypocet pravouhlych souradnic z geodetickych souradnic
+         Double[] cartesianCoordinate_WGS = WGS84_BLH_xyz(geodeticCoordinateRAD_WGS[0], geodeticCoordinateRAD_WGS[1], altitude); 
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[0]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[1]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[0]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[1]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS[2] );
+         //transformace prostorov&#253;ch pravo&#250;hl&#253;ch sou&#345;adnic do syst&#233;mu S-42
+         Double[] cartesianCoordinate_S42 = this.transformation_WGS84_S42_xyz_xyz(cartesianCoordinate_WGS[0], cartesianCoordinate_WGS[1], cartesianCoordinate_WGS[2]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[0]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[1]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[2] + &quot;\n&quot;);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[0]);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[1]);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate_S42[2] );
+         //S-42 - vypocet geodetickych souradnic z pravouhlych souradnic
+         Double[] geodeticCoordinateRAD_S42 = this.krajovskij_xyz_BLH(cartesianCoordinate_S42[0], cartesianCoordinate_S42[1], cartesianCoordinate_S42[2]);      
+-        System.out.println(&quot;S42 - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_S42[0]);
+-        System.out.println(&quot;S42 - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_S42[1]);
+-        System.out.println(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_S42[2] + &quot;\n&quot;);        
++        logger.debug(&quot;S42 - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_S42[0]);
++        logger.debug(&quot;S42 - geodeticke souradnice RAD: &quot; + geodeticCoordinateRAD_S42[1]);
++        logger.debug(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_S42[2] );        
+         //S-42 - transform latitude and longitude from radiant to degree format
+         Double[] latLong = radiantToDegree(geodeticCoordinateRAD_S42[0], geodeticCoordinateRAD_S42[1]);
+-        System.out.println(&quot;S42 - geodeticke souradnice: &quot; + latLong[0]);
+-        System.out.println(&quot;S42 - geodeticke souradnice: &quot; + latLong[1]);
+-        System.out.println(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_S42[2] + &quot;\n&quot;);        
++        logger.debug(&quot;S42 - geodeticke souradnice: &quot; + latLong[0]);
++        logger.debug(&quot;S42 - geodeticke souradnice: &quot; + latLong[1]);
++        logger.debug(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinateRAD_S42[2] );        
+                  
+         Double[] coordinate = transformatin_S42_BLH_xy(geodeticCoordinateRAD_S42[0], geodeticCoordinateRAD_S42[1]);               
+-        System.out.println(&quot;S42 - planar souradnice (X): &quot; + coordinate[0]);
+-        System.out.println(&quot;S42 - planar souradnice (Y): &quot; + coordinate[1]);
+-        System.out.println(&quot;S42 (Z): &quot; + geodeticCoordinateRAD_S42[2] + &quot;\n&quot;);
++        logger.debug(&quot;S42 - planar souradnice (Y): &quot; + coordinate[0]);
++        logger.debug(&quot;S42 - planar souradnice (X): &quot; + coordinate[1]);
++        logger.debug(&quot;S42 (Z): &quot; + geodeticCoordinateRAD_S42[2] );
+         
+         Double[] planarCoordinate = new Double[3];
+         planarCoordinate[0] = coordinate[0];
+@@ -215,27 +217,27 @@
+          
+          //Prepocet z S-42 do WGS-84 ... uz dostanu hodnoty v radianech
+          //!!!!!FIXME - v teto funkci je chyba
+-        //Double[] geodeticCoordinate = transformation_S42_xy_BLH(x, y, z);
+-    	 Double[] geodeticCoordinate = S42_xy_BLH(x, y, z);
+-        System.out.println(&quot;S42 - geodeticke souradnice: &quot; + geodeticCoordinate[0]);
+-        System.out.println(&quot;S42 - geodeticke souradnice: &quot; + geodeticCoordinate[1]);
+-        System.out.println(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinate[2] + &quot;\n&quot;);                      
++        //Double[] geodeticCoordinate = transformation_S42_xy_BLH(y, x, z);
++    	Double[] geodeticCoordinate = S42_xy_BLH(x, y, z);
++        logger.debug(&quot;S42 - geodeticke souradnice: &quot; + geodeticCoordinate[0]);
++        logger.debug(&quot;S42 - geodeticke souradnice: &quot; + geodeticCoordinate[1]);
++        logger.debug(&quot;S42 - geodeticke souradnice altitude: &quot; + geodeticCoordinate[2] );                      
+         //Vypocet pravouhlych souradnic z geodetickych souradnic pro elipsoid Bessel
+         Double[] cartesianCoordinate = krajovskij_BLH_xyz(geodeticCoordinate[0], geodeticCoordinate[1], geodeticCoordinate[2]);
+-        //Double[] cartesianCoordinate = krajovskij_BLH_xyz(0.8806574639397869, 0.25133270679766656, geodeticCoordinate[2]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[0]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[1]);
+-        System.out.println(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[2] + &quot;\n&quot;);
++        //Double[] cartesianCoordinate = krajovskij_BLH_xyz(0.8541698036319776, 0.29045147854127384, geodeticCoordinate[2]);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[0]);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[1]);
++        logger.debug(&quot;S42 - provouhle souradnice: &quot; + cartesianCoordinate[2] );
+         //Transformace pravouhlych souradnic z S-42 do WGS84
+         Double[] cartesianCoordinate_WGS84 = transformation_S42_WGS84_xyz_xyz(cartesianCoordinate[0], cartesianCoordinate[1], cartesianCoordinate[2]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[0]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[1]);
+-        System.out.println(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[0]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[1]);
++        logger.debug(&quot;WGS84 - pravouhle souradnice: &quot; + cartesianCoordinate_WGS84[2] );
+         //Vypocet geodetickych souradnic z pravouhlych souradnic pro elipsoid WGS84
+         Double[] geodeticCoordinateRAD_WGS84 = WGS84_xyz_BLH(cartesianCoordinate_WGS84[0], cartesianCoordinate_WGS84[1], cartesianCoordinate_WGS84[2]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[0]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[1]);
+-        System.out.println(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[0]);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[1]);
++        logger.debug(&quot;WGS84 - geodeticke souradnice: &quot; + geodeticCoordinateRAD_WGS84[2] );
+         //Transformation latitude and longitude from radiant to degree 
+         Double[] latLong = radiantToDegree(geodeticCoordinateRAD_WGS84[0], geodeticCoordinateRAD_WGS84[1]);
+         Double[] geodeticCoordinate_WGS84 = new Double[3];
+@@ -243,9 +245,9 @@
+         geodeticCoordinate_WGS84[1] = latLong[1];
+         geodeticCoordinate_WGS84[2] = geodeticCoordinateRAD_WGS84[2];
+         
+-        System.out.println(&quot;WGS84 latitude: &quot;+ geodeticCoordinate_WGS84[0]);
+-        System.out.println(&quot;WGS84 longitude: &quot; + geodeticCoordinate_WGS84[1]);
+-        System.out.println(&quot;WGS84 altitude: &quot; + geodeticCoordinate_WGS84[2] + &quot;\n&quot;);
++        logger.debug(&quot;WGS84 latitude: &quot;+ geodeticCoordinate_WGS84[0]);
++        logger.debug(&quot;WGS84 longitude: &quot; + geodeticCoordinate_WGS84[1]);
++        logger.debug(&quot;WGS84 altitude: &quot; + geodeticCoordinate_WGS84[2] );
+         
+         return geodeticCoordinate_WGS84;
+      }
+@@ -373,9 +375,9 @@
+     	double B2 = y;
+     	double C2 = 6378245;
+     	double D2 = 0.0818133340169312;
+-    	double E2 = 500000+Math.rint(A2/1000000)*1000000;
++    	double E2 = 500000+Math.floor(A2/1000000)*1000000;        
+     	double F2 = 0;
+-    	double G2 = 21+6*(Math.rint(A2/1000000)-4);
++    	double G2 = 21+6*(Math.floor(A2/1000000)-4);
+     	double H2 = G2*Math.PI/180;
+     	double I2 = 0;
+     	double J2 = I2*Math.PI/180;
+@@ -849,22 +851,22 @@
+     return geodeticCoordinate;
+   }
+   
+- 
++ /* Main function for testing
+    
+      public static void main(String[] args) {
+             Transformation tr = new Transformation();
+-            System.out.println(&quot;********************WGS84 --&gt; S-JTSK**************************&quot;);
++            logger.debug(&quot;********************WGS84 --&gt; S-JTSK**************************&quot;);
+             Double[] coordinate_SJTSK = tr.transform_WGS84_to_SJTSK(50.4576163694, 14.3986, 289.155);
+-            System.out.println(&quot;******************** S-JTSK --&gt; WGS84 **************************&quot;);
+-            System.out.println(&quot;From: &quot; + coordinate_SJTSK[0]);
+-            System.out.println(&quot;From: &quot; + coordinate_SJTSK[1]);
+-            System.out.println(&quot;From: &quot; + coordinate_SJTSK[2]);
++            logger.debug(&quot;******************** S-JTSK --&gt; WGS84 **************************&quot;);
++            logger.debug(&quot;From: &quot; + coordinate_SJTSK[0]);
++            logger.debug(&quot;From: &quot; + coordinate_SJTSK[1]);
++            logger.debug(&quot;From: &quot; + coordinate_SJTSK[2]);
+             Double[] coordinate_WGS84_SJTSK = tr.transform_SJTSK_to_WGS84(coordinate_SJTSK[0], coordinate_SJTSK[1], coordinate_SJTSK[2]);
+-            System.out.println(&quot;********************WGS84 --&gt; S-42**************************&quot;);
+-            Double[] coordinate_S42 = tr.transform_WGS84_to_S42(50.4576163694, 14.3986, 289.155);
+-            System.out.println(&quot;******************** S-42 --&gt; WGS84 **************************&quot;);                       
++            logger.debug(&quot;********************WGS84 --&gt; S-42**************************&quot;);
++            Double[] coordinate_S42 = tr.transform_WGS84_to_S42(48.94, 16.64, 260.01);
++            logger.debug(&quot;******************** S-42 --&gt; WGS84 **************************&quot;);                       
+             Double[] coordinate_WGS84_S42 = tr.transform_S42_to_WGS84(coordinate_S42[0], coordinate_S42[1], coordinate_S42[2]);            
+      }
+-         
++    */     
+   
+ }
+\ No newline at end of file
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000836.html">[Plantlore-dev] r599 - in trunk/src/net/sf/plantlore:	client/createdb client/login common/debug l10n server
+</A></li>
+	<LI>Next message: <A HREF="000838.html">[Plantlore-dev] [Bug #8607] Checklist doesn't reflect a change of	database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#837">[ date ]</a>
+              <a href="thread.html#837">[ thread ]</a>
+              <a href="subject.html#837">[ subject ]</a>
+              <a href="author.html#837">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

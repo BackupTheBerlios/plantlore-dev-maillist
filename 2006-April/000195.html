@@ -1,0 +1,872 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r179 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r179%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604231526.k3NFQVbL016294%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000194.html">
+   <LINK REL="Next"  HREF="000196.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r179 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r179%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604231526.k3NFQVbL016294%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r179 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record">krater at berlios.de
+       </A><BR>
+    <I>Sun Apr 23 17:26:31 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000194.html">[Plantlore-dev] navrhy od michala bacaka
+</A></li>
+        <LI>Next message: <A HREF="000196.html">[Plantlore-dev] r180 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#195">[ date ]</a>
+              <a href="thread.html#195">[ thread ]</a>
+              <a href="subject.html#195">[ subject ]</a>
+              <a href="author.html#195">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-23 17:26:30 +0200 (Sun, 23 Apr 2006)
+New Revision: 179
+
+Added:
+   trunk/src/net/sf/plantlore/client/export/RecordWalkBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/Builder.java
+   trunk/src/net/sf/plantlore/client/export/Export.java
+   trunk/src/net/sf/plantlore/client/export/MetaBuilder.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+   trunk/src/net/sf/plantlore/common/record/HistoryColumn.java
+   trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+   trunk/src/net/sf/plantlore/common/record/LastUpdate.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+Log:
+Methods of the Builder interface throw IOException now.
+The Exporter (Export.java) is a little bit more general now.
+Two abstract builders have been added:
+1. MetaBuilder - hardwired database structure, faster.
+2. RecordWalkBuilder - little bit more flexible, uses introspection (slower).
+You want to subclass one of these abstract builders. See CSVBuilder.java which is an almost final version of CVS Builder.
+Both abstract builders have the same function; the only difference is how they carry it out.
+The Template class has been extended to suit its purpose better.
+
+All records have two more methods now: getForeignKeys and getColumns - 
+both will be used (at least) by the editor which will present the User with a set of columns that can be exported.
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/export/Builder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -1,5 +1,7 @@
+ package net.sf.plantlore.client.export;
+ 
++import java.io.IOException;
++
+ import net.sf.plantlore.common.record.*;
+ 
+ /**
+@@ -11,14 +13,14 @@
+  */
+ public interface Builder {
+ 		
+-	void makeHeader();
++	void makeHeader() throws IOException;
+ 	
+-	void makeFooter();
++	void makeFooter() throws IOException;
+ 	
+-	void startNewRecord();
++	void startNewRecord() throws IOException;
+ 	
+-	void writeRecord(Record arg);
++	void writeRecord(Record[] args) throws IOException;
+ 	
+-	void finishRecord();
++	void finishRecord() throws IOException;
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/Export.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Export.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/Export.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -1,5 +1,6 @@
+ package net.sf.plantlore.client.export;
+ 
++import java.io.IOException;
+ import java.rmi.RemoteException;
+ 
+ import net.sf.plantlore.common.Selection;
+@@ -43,13 +44,18 @@
+ 			builder.makeHeader();
+ 			
+ 			for(int i = 0; i &lt; database.getNumRows( result ); i++) {
+-				Object[] objRecord = database.next( result );
+-				Record record = (Record)objRecord[0];
+-				if( !selection.contains( record ) ) continue;
++				Record[] records = (Record[]) database.next( result );
++				if( !selection.contains( records[0] ) ) continue;
+ 				
+ 				count++;
+ 				builder.startNewRecord();
+-				builder.writeRecord( record );
++				/* Why do we give the whole array of records?
++				 * It is more general - the builder can 
++				 * # either start with the records[0] and use the introspection,
++				 * # or use the whole records array and the template
++				 * to re-create the record.
++				 */
++				builder.writeRecord( records );
+ 				builder.finishRecord();
+ 			}
+ 		
+@@ -62,6 +68,9 @@
+ 		catch(RemoteException e) {
+ 			logger.error(e); e.printStackTrace();
+ 		}
++		catch(IOException e) {
++			logger.error(e); e.printStackTrace();
++		}
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/MetaBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/MetaBuilder.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/MetaBuilder.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -1,18 +1,194 @@
+ package net.sf.plantlore.client.export;
+ 
+-import net.sf.plantlore.common.record.Record;
++import java.io.IOException;
+ 
++import net.sf.plantlore.client.export.Template;
++import net.sf.plantlore.common.record.*;
+ 
+-public class MetaBuilder implements Builder {
++
++/**
++ * MetaBuilder. Hard-wired database scheme.
++ * Fast, but not flexible (other permutations of columns aren't possible).
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-04-23
++ */
++
++
++
++public abstract class MetaBuilder implements Builder {
+ 	
+-	public void makeHeader() {}
++	private Template tmp;
+ 	
+-	public void makeFooter() {}
++	public MetaBuilder(Template tmp) {
++		this.tmp = tmp;
++	}
+ 	
+-	public void startNewRecord() {}
+ 	
+-	public void finishRecord() {}
++	public void writeRecord(Record[] args) throws IOException {
++		Record r = args[0];
++		if(r instanceof Author) process( (Author)r );
++		else if(r instanceof AuthorOccurrence) process( (AuthorOccurrence)r );
++		else if(r instanceof Habitat) process( (Habitat)r );
++		else if(r instanceof Metadata) process( (Metadata)r );
++		else if(r instanceof Occurrence) process( (Occurrence)r );
++		else if(r instanceof Phytochorion) process( (Phytochorion)r );
++		else if(r instanceof Plant) process( (Plant)r );
++		else if(r instanceof Publication) process( (Publication)r );
++		else if(r instanceof Territory) process( (Territory)r );
++		else if(r instanceof Village) process( (Village)r );
++		else /* ERROR! */;
++	}
++
++	protected void process(Author a) throws IOException {
++		if (!tmp.isSetTableD(Author.class))
++			return; // prevent recursion!
++		wc(Author.class, Author.WHOLENAME, a.getWholeName());
++		wc(Author.class, Author.ORGANIZATION, a.getOrganization());
++		wc(Author.class, Author.ADDRESS, a.getAddress());
++		wc(Author.class, Author.EMAIL, a.getEmail());
++		wc(Author.class, Author.PHONENUMBER, a.getPhoneNumber());
++		wc(Author.class, Author.URL, a.getUrl());
++		wc(Author.class, Author.ROLE, a.getRole());
++		wc(Author.class, Author.NOTE, a.getNote());
++	}
++
++	protected void process(AuthorOccurrence a) throws IOException {
++		if (!tmp.isSetTableD(AuthorOccurrence.class))
++			return; // prevent recursion!
++		process(a.getAuthor());
++		process(a.getOccurrence());
++		wc(AuthorOccurrence.class, AuthorOccurrence.ROLE, a.getRole());
++		wc(AuthorOccurrence.class, AuthorOccurrence.RESULTREVISION, a
++				.getResultRevision());
++	}
++
++	protected void process(Habitat a) throws IOException {
++		if (!tmp.isSetTableD(Habitat.class))
++			return; // prevent recursion!
++		process(a.getTerritory());
++		process(a.getPhytochorion());
++		process(a.getNearestVillage());
++		wc(Habitat.class, Habitat.DESCRIPTION, a.getDescription());
++		wc(Habitat.class, Habitat.COUNTRY, a.getCountry());
++		wc(Habitat.class, Habitat.NOTE, a.getNote());
++		wc(Habitat.class, Habitat.QUADRANT, a.getQuadrant());
++		wc(Habitat.class, Habitat.ALTITUDE, a.getAltitude());
++		wc(Habitat.class, Habitat.LATITUDE, a.getLatitude());
++		wc(Habitat.class, Habitat.LONGITUDE, a.getLongitude());
++	}
++
++	protected void process(Metadata a) throws IOException {
++		if (!tmp.isSetTableD(Metadata.class))
++			return; // prevent recursion!
++		wc(Metadata.class, Metadata.CONTENTCONTACTNAME, a
++				.getContentContactName());
++		wc(Metadata.class, Metadata.CONTENTCONTACTADDRESS, a
++				.getContentContactAddress());
++		wc(Metadata.class, Metadata.CONTENTCONTACTEMAIL, a
++				.getContentContactEmail());
++		wc(Metadata.class, Metadata.DATASETTITLE, a.getDataSetTitle());
++		wc(Metadata.class, Metadata.DATASETDETAILS, a.getDataSetDetails());
++		wc(Metadata.class, Metadata.DATECREATE, a.getDateCreate());
++		wc(Metadata.class, Metadata.DATEMODIFIED, a.getDateModified());
++		wc(Metadata.class, Metadata.OWNERORGANIZATIONABBREV, a
++				.getOwnerOrganizationAbbrev());
++		wc(Metadata.class, Metadata.RECORDBASIS, a.getRecordBasis());
++		wc(Metadata.class, Metadata.SOURCEINSTITUTIONID, a
++				.getSourceInstitutionId());
++		wc(Metadata.class, Metadata.SOURCEID, a.getSourceId());
++		wc(Metadata.class, Metadata.TECHNICALCONTACTNAME, a
++				.getTechnicalContactName());
++		wc(Metadata.class, Metadata.TECHNICALCONTACTADDRESS, a
++				.getTechnicalContactAddress());
++		wc(Metadata.class, Metadata.TECHNICALCONTACTEMAIL, a
++				.getTechnicalContactEmail());
++		wc(Metadata.class, Metadata.VERSIONPLANTSFILE, a.getVersionPlantsFile());
++	}
++
++	protected void process(Occurrence a) throws IOException {
++		if (!tmp.isSetTableD(Occurrence.class))
++			return; // prevent recursion!
++		process(a.getPlant());
++		process(a.getHabitat());
++		process(a.getMetadata());
++		process(a.getPublication());
++		wc(Occurrence.class, Occurrence.UNITIDDB, a.getUnitIdDb());
++		wc(Occurrence.class, Occurrence.UNITVALUE, a.getUnitValue());
++		wc(Occurrence.class, Occurrence.DAYCOLLECTED, a.getDayCollected());
++		wc(Occurrence.class, Occurrence.MONTHCOLLECTED, a.getMonthCollected());
++		wc(Occurrence.class, Occurrence.YEARCOLLECTED, a.getYearCollected());
++		wc(Occurrence.class, Occurrence.TIMECOLLECTED, a.getTimeCollected());
++		wc(Occurrence.class, Occurrence.ISODATETIMEBEGIN, a
++				.getIsoDateTimeBegin());
++		wc(Occurrence.class, Occurrence.DATASOURCE, a.getDataSource());
++		wc(Occurrence.class, Occurrence.HERBARIUM, a.getHerbarium());
++		wc(Occurrence.class, Occurrence.NOTE, a.getNote());
++		wc(Occurrence.class, Occurrence.CREATEDWHEN, a.getCreatedWhen());
++		wc(Occurrence.class, Occurrence.UPDATEDWHEN, a.getUpdatedWhen());
++	}
++
++	protected void process(Phytochorion a) throws IOException {
++		if (!tmp.isSetTableD(Phytochorion.class))
++			return; // prevent recursion!
++		wc(Phytochorion.class, Phytochorion.NAME, a.getName());
++		wc(Phytochorion.class, Phytochorion.CODE, a.getCode());
++	}
++
++	protected void process(Plant a) throws IOException {
++		if (!tmp.isSetTableD(Plant.class))
++			return; // prevent recursion!
++		wc(Plant.class, Plant.TAXON, a.getTaxon());
++		wc(Plant.class, Plant.SCIENTIFICNAMEAUTHOR, a.getScientificNameAuthor());
++		wc(Plant.class, Plant.CZECHNAME, a.getCzechName());
++		wc(Plant.class, Plant.GENUS, a.getGenus());
++		wc(Plant.class, Plant.SPECIES, a.getSpecies());
++		wc(Plant.class, Plant.SYNONYMS, a.getSynonyms());
++		wc(Plant.class, Plant.SURVEYTAXID, a.getSurveyTaxId());
++		wc(Plant.class, Plant.NOTE, a.getNote());
++	}
++
++	protected void process(Publication a) throws IOException {
++		if (!tmp.isSetTableD(Publication.class))
++			return; // prevent recursion!
++		wc(Publication.class, Publication.COLLECTIONNAME, a.getCollectionName());
++		wc(Publication.class, Publication.COLLECTIONYEARPUBLICATION, a
++				.getCollectionYearPublication());
++		wc(Publication.class, Publication.JOURNALNAME, a.getJournalName());
++		wc(Publication.class, Publication.JOURNALAUTHORNAME, a
++				.getJournalAuthorName());
++		wc(Publication.class, Publication.NOTE, a.getNote());
++		wc(Publication.class, Publication.REFERENCECITATION, a
++				.getReferenceCitation());
++		wc(Publication.class, Publication.REFERENCEDETAIL, a
++				.getReferenceDetail());
++		wc(Publication.class, Publication.URL, a.getUrl());
++	}
++
++	protected void process(Territory a) throws IOException {
++		if (!tmp.isSetTableD(Territory.class))
++			return; // prevent recursion!
++		wc(Territory.class, Territory.NAME, a.getName());
++	}
++
++	protected void process(Village a) throws IOException {
++		if (!tmp.isSetTableD(Village.class))
++			return; // prevent recursion!
++		wc(Village.class, Village.NAME, a.getName());
++	}
++
++	/** Write Column! */
++	protected abstract void wc(Class table, String column, Object value)
++		throws IOException;
++
+ 	
+-	public void writeRecord(Record arg) {}
+ 	
++	public void makeHeader() throws IOException {}
++	
++	public void makeFooter() throws IOException {}
++	
++	public void startNewRecord() throws IOException {}
++	
++	public void finishRecord() throws IOException {}
++
+ }
+
+Added: trunk/src/net/sf/plantlore/client/export/RecordWalkBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/RecordWalkBuilder.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/RecordWalkBuilder.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -0,0 +1,58 @@
++package net.sf.plantlore.client.export;
++
++import java.io.IOException;
++import java.util.HashSet;
++
++import net.sf.plantlore.common.record.Record;
++
++
++public abstract class RecordWalkBuilder implements Builder {
++	
++	private Template tmp;
++	
++		
++	public RecordWalkBuilder(Template tmp) {
++		this.tmp = tmp;
++	}
++	
++	
++	
++	public void writeRecord(Record[] args) throws IOException {
++		for(Record record : args) dealWith( record );
++	}
++	
++	private String methodName(String column) {
++		StringBuilder s = new StringBuilder(&quot;get&quot; + column);
++		s.setCharAt(3, Character.toUpperCase(s.charAt(3)));
++		return s.toString();
++	}
++	
++	protected void dealWith(Record record) throws IOException {
++		Class table = Template.whichTable( record );
++		if( table == null ||  !tmp.isSetTableD( table ) ) return;
++		
++		String[] foreignKeys = record.getForeignKeys(); // I love inheritance ;)
++		String[] allColumns = record.getColumns();
++		
++		HashSet&lt;String&gt; fk = new HashSet&lt;String&gt;(20);
++		if( foreignKeys != null ) for(String key : foreignKeys) fk.add( key );
++		
++		for(String column : allColumns) {
++			if( fk.contains(column) || !tmp.isSet(table, column) ) continue; // skip foreign keys and unwanted columns
++			try {
++				Object value = table.getMethod( methodName(column), new Class[0] ).invoke( record, new Object[0] );
++				wc(table, column, value);
++			} catch(Exception e) {}
++		}
++	}
++	
++	
++	protected abstract void wc(Class table, String column, Object value) throws IOException;
++		
++		
++	
++	public void makeHeader() throws IOException {}
++	public void makeFooter() throws IOException {}
++	public void startNewRecord() throws IOException {}
++	public void finishRecord() throws IOException {}
++}
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -1,9 +1,12 @@
+ package net.sf.plantlore.client.export;
+ 
++import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
+ 
++import net.sf.plantlore.common.record.*;
+ 
++
+ /**
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+@@ -11,23 +14,41 @@
+  */
+ public class Template {
+ 	
+-	private Class root = null;
+-	private Collection&lt;String&gt; tableColumn = new HashSet&lt;String&gt;(20);
++	/** The list of all pairs Table:Column that shall be exported. */
++	private Collection&lt;String&gt; columns = new HashSet&lt;String&gt;(20);
+ 	
+-		
+-	public void setRootTable(Class table) { root = table; }
+-	public Class getRootTable() { return root; }
++	/** The list of all tables the current template covers. */
++	private ArrayList&lt;Class&gt; tables = new ArrayList&lt;Class&gt;(20);
+ 	
+-	public void setTable(Class table) { tableColumn.add(table.toString()); }
+-	public void unsetTable(Class table) { tableColumn.remove(table.toString()); }
+-	public boolean isSetTable(Class table) { return tableColumn.contains(table.toString()); } 
++	/** The list of &quot;basic tables&quot; i.e. tables related directly to the Occurence data. */
++	public final static Class[] BASIC_TABLES = new Class[] { 
++			Author.class, AuthorOccurrence.class, Habitat.class,
++			Metadata.class, Occurrence.class, Phytochorion.class,
++			Plant.class, Publication.class, Territory.class,
++			Village.class
++			};
+ 	
+-	public void set(Class table, String column) { tableColumn.add(table+&quot;.&quot;+column); }
+-	public void unset(Class table, String column) { tableColumn.remove(table+&quot;.&quot;+column); }
+-	public boolean isSet(Class table, String column) { return tableColumn.contains(table+&quot;.&quot;+column); }
++	public static Class whichTable(Record record) {
++		for(Class c : BASIC_TABLES)
++			if( c.isInstance( record ) ) return c;
++		return null;
++	}
+ 	
+-	public void unsetAll() { tableColumn.clear(); }
++	/** The table that is central to the current query. */
++	public Class getRootTable() { return tables.get(0); }
+ 	
+-	public boolean match(Template t) { return tableColumn.containsAll(t.tableColumn); }
++	public void setTable(Class table) { tables.add(table); }
++	public void unsetTable(Class table) { tables.remove(table); }
++	public boolean isSetTable(Class table) { return tables.contains(table); } 
++	public boolean isSetTableD(Class table) { return tables.remove(table); }
++	
++	public void set(Class table, String column) { columns.add(table+&quot;.&quot;+column); }
++	public void unset(Class table, String column) { columns.remove(table+&quot;.&quot;+column); }
++	public boolean isSet(Class table, String column) { return columns.contains(table+&quot;.&quot;+column); }
++	
++		
++	public void unsetAll() { columns.clear(); }
++	
++	public boolean match(Template t) { return columns.containsAll(t.columns); }
+ 
+ }
+
+Added: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -0,0 +1,73 @@
++package net.sf.plantlore.client.export.builders;
++
++import java.io.IOException;
++import java.io.Writer;
++
++import net.sf.plantlore.client.export.MetaBuilder;
++import net.sf.plantlore.client.export.RecordWalkBuilder;
++import net.sf.plantlore.client.export.Template;
++
++
++/**
++ * CSV Builder.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 23.4.2006
++ *
++ */
++public class CSVBuilder extends /*MetaBuilder*/RecordWalkBuilder {
++	
++	private Writer output;
++	private Template tmp;
++		
++	private static final String DELIMITER = &quot;,&quot;;
++	private static final String DOUBLEQUOTE = &quot;\&quot;&quot;;
++	private static final String NEWLINE = System.getProperty(&quot;line.separator&quot;);
++	
++	private boolean firstColumn = true;
++	
++		
++	
++	public CSVBuilder(Writer output, Template tmp) {
++		super( tmp );
++		this.output = output; this.tmp = tmp;
++	}
++	
++	
++	@Override
++	public void finishRecord() throws IOException {
++		output.write(NEWLINE);		
++		firstColumn = true;
++	}
++	
++	/** CSV */
++	protected void wc(Class table, String column, Object value) throws IOException {
++		// Shall we export this column?
++		if( !tmp.isSet(table, column) ) return;
++		
++		StringBuilder r = new StringBuilder( value.toString() );
++		boolean containsDoubleQuote = r.indexOf(DOUBLEQUOTE) &gt;= 0, 
++			containsDelimiter = r.indexOf(DELIMITER) &gt;= 0,
++			containsNewline = r.indexOf(NEWLINE) &gt;= 0;
++		
++		// Convert doublequotes to double-doublequotes: &quot; -&gt; &quot;&quot;
++		if( containsDoubleQuote ) { 
++			int k = 0;
++			while( (k = r.indexOf(DOUBLEQUOTE, k)) &gt;= 0 ) { 
++				r.insert(k, DOUBLEQUOTE); k += 2;
++			}
++		}
++		
++		// Wrap problematic records.
++		if( containsDoubleQuote || containsDelimiter || containsNewline ) {
++			r.insert(0, DOUBLEQUOTE); r.append(DOUBLEQUOTE);
++		}
++		
++		if( firstColumn ) firstColumn = false; 
++		else output.write( DELIMITER );
++		output.write( r.toString() );
++			
++	}
++	
++
++}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -42,9 +42,12 @@
+     
+     /** Creates a new instance of AuthorRecord */
+     public Author() {
+-        
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, WHOLENAME, ORGANIZATION, ROLE, ADDRESS, PHONENUMBER, EMAIL, URL, NOTE };
++    }
++    
+     /**
+      *   Set unique id of the author
+      *   @param id unique id of the author
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -31,6 +31,15 @@
+     public static final String ROLE = &quot;role&quot;;
+     public static final String RESULTREVISION = &quot;resultRevision&quot;;
+     
++    @Override
++    public String[] getForeignKeys() { 
++    	return new String[] { AUTHOR, OCCURRENCE }; 
++    }
++    
++    public String[] getColumns() {
++    	return new String[] { ID, AUTHOR, OCCURRENCE, ROLE, RESULTREVISION };
++    }
++    
+     /**
+      *   Default constructor to create new class AuthorOccurrences
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -45,6 +45,16 @@
+     public static final String DELETED = &quot;deleted&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+     
++    @Override
++    public String[] getForeignKeys() { 
++    	return new String[] { TERRITORY, PHYTOCHORION, NEARESTVILLAGE }; 
++    }
++    
++    public String[] getColumns() {
++    	return new String[] { ID, TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++    			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE };
++    }
++    
+     /**
+      * Default constructor to create new class Habitat
+      */
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -48,6 +48,7 @@
+         
+     }
+     
++      
+     /**
+      *   Get HistoryChange record id
+      *   @return id of the HistoryChange record
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryColumn.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryColumn.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/HistoryColumn.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -33,6 +33,7 @@
+         
+     }
+     
++      
+     /**
+      *   Get HistoryColumn id
+      *   @return id of the HistoryColumn
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -29,6 +29,7 @@
+         
+     }
+     
++       
+     /**
+      *   Get History record id
+      *   @return History record id
+
+Modified: trunk/src/net/sf/plantlore/common/record/LastUpdate.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/LastUpdate.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/LastUpdate.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -27,6 +27,7 @@
+         
+     }
+     
++        
+     /**
+      *   Get LastUpdate record id
+      *   @return id of the LastUpdate record
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -46,7 +46,8 @@
+     public static final String CONTENTCONTACTEMAIL = &quot;contentContactEmail&quot;;
+     public static final String DATASETTITLE = &quot;dataSetTitle&quot;;    
+     public static final String DATASETDETAILS = &quot;dataSetDetails&quot;;    
+-    public static final String SOURCEINSTITUTIONID = &quot;sourceInstitutionId&quot;;    
++    public static final String SOURCEINSTITUTIONID = &quot;sourceInstitutionId&quot;;
++    public static final String SOURCEID = &quot;sourceId&quot;;
+     public static final String OWNERORGANIZATIONABBREV = &quot;ownerOrganizationAbbrev&quot;;
+     public static final String DATECREATE = &quot;dateCreate&quot;;    
+     public static final String DATEMODIFIED = &quot;dateModified&quot;;    
+@@ -60,6 +61,14 @@
+     public Metadata() {
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, TECHNICALCONTACTNAME,
++    			CONTENTCONTACTADDRESS, CONTENTCONTACTEMAIL, CONTENTCONTACTNAME,
++    			DATASETDETAILS, DATASETTITLE, SOURCEID, SOURCEINSTITUTIONID,
++    			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, VERSIONPLANTSFILE,
++    			DATECREATE, DATEMODIFIED };
++    }
++    
+     /**
+      *   Get metadata id
+      *   @return id of the metadata
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -62,6 +62,20 @@
+     public static final String DELETED = &quot;deleted&quot;;
+     public static final String NOTE = &quot;note&quot;;        
+     
++    
++    @Override
++    public String[] getForeignKeys() { 
++    	return new String[] { HABITAT, PLANT, PUBLICATION, METADATA }; 
++    }
++    
++    public String[] getColumns() {
++    	return new String[] { ID, UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED,
++    			MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, ISODATETIMEBEGIN,
++    			DATASOURCE, PUBLICATION, HERBARIUM, CREATEDWHEN, 
++    			UPDATEDWHEN, METADATA, NOTE };
++    }
++    
++    
+     /** Creates a new instance of OccurrenceRecord */
+     public Occurrence() {
+         
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -34,6 +34,10 @@
+         
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, CODE, NAME };
++    }
++    
+     /**
+      *   Get phytochorion id
+      *   @return id of the phytochorion
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -44,6 +44,11 @@
+         
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, TAXON, GENUS, SPECIES, SCIENTIFICNAMEAUTHOR,
++    			CZECHNAME, SYNONYMS, NOTE, SURVEYTAXID };
++    }
++    
+     /**
+      *   Get plant id
+      *   @return id of the plant
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -45,6 +45,12 @@
+     public Publication() {
+         
+     }
++    
++    public String[] getColumns() {
++    	return new String[] { ID, COLLECTIONNAME, COLLECTIONYEARPUBLICATION, JOURNALNAME,
++    			JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL, URL, NOTE };
++    }
++    
+     /**
+      *   Get publication id
+      *   @return id of the publication
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -6,4 +6,8 @@
+ 
+ 	public abstract Integer getId();
+ 	
++	public String[] getForeignKeys() { return null; }
++	
++	public String[] getColumns() { return null; }
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -32,6 +32,10 @@
+         
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, NAME };
++    }
++    
+     /**
+      *   Get territory id
+      *   @return id of the territory
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-23 12:55:45 UTC (rev 178)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-23 15:26:30 UTC (rev 179)
+@@ -30,6 +30,10 @@
+         
+     }
+     
++    public String[] getColumns() {
++    	return new String[] { ID, NAME };
++    }
++    
+     /**
+      *   Get village id
+      *   @return id of the village
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000194.html">[Plantlore-dev] navrhy od michala bacaka
+</A></li>
+	<LI>Next message: <A HREF="000196.html">[Plantlore-dev] r180 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#195">[ date ]</a>
+              <a href="thread.html#195">[ thread ]</a>
+              <a href="subject.html#195">[ subject ]</a>
+              <a href="author.html#195">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

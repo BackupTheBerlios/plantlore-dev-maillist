@@ -1,0 +1,1652 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r189 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r189%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200604262118.k3QLIg13023930%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000210.html">
+   <LINK REL="Next"  HREF="000211.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r189 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r189%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200604262118.k3QLIg13023930%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r189 - in trunk/src/net/sf/plantlore: client common">fraktalek at berlios.de
+       </A><BR>
+    <I>Wed Apr 26 23:18:42 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000210.html">[Plantlore-dev] r188 - in trunk/src/net/sf/plantlore: client client/publication common/record l10n
+</A></li>
+        <LI>Next message: <A HREF="000211.html">[Plantlore-dev] r190 - in trunk/src/net/sf/plantlore/client/export: . builders
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#212">[ date ]</a>
+              <a href="thread.html#212">[ thread ]</a>
+              <a href="subject.html#212">[ subject ]</a>
+              <a href="author.html#212">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-04-26 23:18:40 +0200 (Wed, 26 Apr 2006)
+New Revision: 189
+
+Added:
+   trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+   trunk/src/net/sf/plantlore/client/ButtonEditor.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+Log:
+Multiple author AddEdit. Overview now fetches occurrences and displays only 
+the first user it finds for it. Update doesn't work yet, so clicking on Ok in
+AddEdit is likely to either throw exceptions or corrupt the database.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -10,8 +10,12 @@
+ package net.sf.plantlore.client;
+ 
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
++import java.util.Calendar;
+ import java.util.Date;
++import java.util.HashMap;
+ import java.util.Observable;
++import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Author;
+@@ -42,8 +46,13 @@
+     private DBLayer database;      
+     
+     private int coordinateSystem;
+-    private AuthorOccurrence ao;
+-    private Pair&lt;String,Integer&gt; author;
++    private Occurrence o;
++    
++    //list of authors user selects
++    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList;
++    
++    //list of AuthorOccurrence objects that correspond to our Occurrence object, we need it for update
++    private HashMap&lt;Integer,AuthorOccurrence&gt; authorOccurrences;
+     private Pair&lt;String,Integer&gt; village;
+     private String taxon;
+     private String localityDescription;
+@@ -68,6 +77,7 @@
+     
+     private Pair&lt;String, Integer&gt;[] plants = null;
+     private Pair&lt;String, Integer&gt;[] authors = null;
++    private String[] authorRoles = null;
+     private Pair&lt;String, Integer&gt;[] villages = null;
+     private Pair&lt;String, Integer&gt;[] territories = null;
+     private Pair&lt;String, Integer&gt;[] phytNames = null;
+@@ -79,10 +89,12 @@
+ 
+     //helper variable to avoid recursion potentially caused by phytCode and phytName updates
+     private Boolean skipUpdate = false;
++    private Boolean editMode = false;
+     
+     /** Creates a new instance of AddEdit */
+-    public AddEdit(DBLayer database) {
++    public AddEdit(DBLayer database, Boolean editMode) {
+         this.database = database;
++        this.editMode = editMode;
+         logger = Logger.getLogger(this.getClass().getPackage().getName());                
+     }
+  
+@@ -90,42 +102,56 @@
+      *
+      * @param ao Assumes it is from database and therefore assumes WGS84 coordinate system.
+      */
+-    public void setRecord(AuthorOccurrence ao) {
+-        this.ao = ao;
++    public void setRecord(Occurrence o) {
++        this.o = o;
+         coordinateSystem = WGS84;
+-        author = new Pair(ao.getAuthor().getWholeName(),ao.getAuthor().getId());
+-        village = new Pair(ao.getOccurrence().getHabitat().getNearestVillage().getName(), ao.getOccurrence().getHabitat().getNearestVillage().getId());
+-        taxon = ao.getOccurrence().getPlant().getTaxon();
+-        localityDescription = ao.getOccurrence().getHabitat().getDescription();
+-        year = ao.getOccurrence().getYearCollected();
++        authorList = getAuthorsOf(o);
++        village = new Pair(o.getHabitat().getNearestVillage().getName(), o.getHabitat().getNearestVillage().getId());
++        taxon = o.getPlant().getTaxon();
++        localityDescription = o.getHabitat().getDescription();
++        year = o.getYearCollected();
+         
+-        occurrenceNote = ao.getOccurrence().getNote();
+-        habitatNote = ao.getOccurrence().getHabitat().getNote();
+-        territoryName = new Pair(ao.getOccurrence().getHabitat().getTerritory().getName(),ao.getOccurrence().getHabitat().getTerritory().getId());
+-        phytName = new Pair(ao.getOccurrence().getHabitat().getPhytochorion().getName(), ao.getOccurrence().getHabitat().getPhytochorion().getId());
+-        phytCode = new Pair(ao.getOccurrence().getHabitat().getPhytochorion().getCode(), ao.getOccurrence().getHabitat().getPhytochorion().getId());
+-        phytCountry = ao.getOccurrence().getHabitat().getCountry();
+-        quadrant = ao.getOccurrence().getHabitat().getQuadrant();
+-        altitude = ao.getOccurrence().getHabitat().getAltitude();
+-        longitude = ao.getOccurrence().getHabitat().getLongitude();
+-        latitude = ao.getOccurrence().getHabitat().getLatitude();
+-        source = ao.getOccurrence().getDataSource();
+-        publication = new Pair(ao.getOccurrence().getPublication().getReferenceCitation(), ao.getOccurrence().getPublication().getId());
+-        herbarium = ao.getOccurrence().getHerbarium();
+-        month = ao.getOccurrence().getMonthCollected();
+-        day = ao.getOccurrence().getDayCollected();
+-        time = ao.getOccurrence().getTimeCollected();
++        occurrenceNote = o.getNote();
++        habitatNote = o.getHabitat().getNote();
++        territoryName = new Pair(o.getHabitat().getTerritory().getName(),o.getHabitat().getTerritory().getId());
++        phytName = new Pair(o.getHabitat().getPhytochorion().getName(), o.getHabitat().getPhytochorion().getId());
++        phytCode = new Pair(o.getHabitat().getPhytochorion().getCode(), o.getHabitat().getPhytochorion().getId());
++        phytCountry = o.getHabitat().getCountry();
++        quadrant = o.getHabitat().getQuadrant();
++        altitude = o.getHabitat().getAltitude();
++        longitude = o.getHabitat().getLongitude();
++        latitude = o.getHabitat().getLatitude();
++        source = o.getDataSource();
++        publication = new Pair(o.getPublication().getReferenceCitation(), o.getPublication().getId());
++        herbarium = o.getHerbarium();
++        month = o.getMonthCollected();
++        day = o.getDayCollected();
++        time = o.getTimeCollected();
+     }
+ 
+-    public Pair&lt;String, Integer&gt; getAuthor() {
++    public Pair&lt;String, Integer&gt; getAuthor(int i) {
++        return ((Pair&lt;Pair&lt;String,Integer&gt;,String&gt;)authorList.get(i)).getFirst();
++    }
++    
++    public String getAuthorRole(int i) {
++        return ((Pair&lt;Pair&lt;String,Integer&gt;,String&gt;)authorList.get(i)).getSecond();
++    }
++    
++    public int getAuthorCount() {
++        return authorList.size();
++    }
++    
++    public void addAuthor(Pair&lt;Pair&lt;String, Integer&gt;,String&gt; author) {
++        authorList.add(author);
++        logger.debug(&quot;Added author &quot;+author.getFirst()+&quot; as &quot;+author.getSecond());
++    }
++    
++    public Pair&lt;Pair&lt;String, Integer&gt;,String&gt; removeAuthor(int i) {
++        Pair&lt;Pair&lt;String, Integer&gt;,String&gt; author = authorList.remove(i);
++        logger.debug(&quot;Removed author &quot;+author.getFirst()+&quot; &quot;+author.getSecond());
+         return author;
+     }
+ 
+-    public void setAuthor(Pair&lt;String, Integer&gt; author) {
+-        this.author = author;
+-        logger.debug(&quot;Author set to &quot;+author);
+-    }
+-
+     public Pair&lt;String, Integer&gt; getVillage() {
+         return village;
+     }
+@@ -210,7 +236,7 @@
+         }
+         logger.debug(&quot;PhytName set to &quot;+phytName);
+         setChanged();
+-        notifyObservers(&quot;updateCode&quot;);
++        notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateCode&quot;,-1));
+     }
+ 
+     public Pair&lt;String, Integer&gt; getPhytCode() {
+@@ -234,7 +260,7 @@
+         }
+         logger.debug(&quot;PhytCode set to &quot;+phytCode);
+         setChanged();
+-        notifyObservers(&quot;updateName&quot;);
++        notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateName&quot;,-1));
+     }
+ 
+     public String getPhytCountry() {
+@@ -368,6 +394,7 @@
+         } else
+             return plants;
+     }
++    
+     public Pair&lt;String, Integer&gt;[] getAuthors() {
+         if (authors == null)
+         {
+@@ -399,6 +426,39 @@
+             return authors;
+     }
+     
++    public String[] getAuthorRoles() {
++        if (authorRoles == null)
++        {
++            SelectQuery sq;
++            int resultid;
++            int resultsCount;
++            Object[] records;
++            AuthorOccurrence ao;
++            //FIXME:
++            try {
++                sq = database.createQuery(AuthorOccurrence.class);
++                sq.addProjection(PlantloreConstants.PROJ_DISTINCT,AuthorOccurrence.ROLE);
++                sq.addOrder(PlantloreConstants.DIRECT_ASC, AuthorOccurrence.ROLE);
++                resultid = database.executeQuery(sq);
++                resultsCount = database.getNumRows(resultid);
++                records = database.more(resultid, 1, resultsCount);
++                authorRoles = new String[resultsCount];
++                String r;
++                for (int i = 1; i &lt;= resultsCount; i++)
++                {
++                    r = (String)((Object[])records[i-1])[0];
++                    authorRoles[i-1] = r;
++                }
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++            }            
++            return authorRoles;
++        } else
++            return authorRoles;
++    }
++
+     public Pair&lt;String, Integer&gt;[] getVillages() {
+         if (villages == null)
+         {
+@@ -598,7 +658,6 @@
+                 {
+                     o = (Occurrence)((Object[])records[i-1])[0];
+                     sources[i-1] = o.getDataSource();
+-                    System.out.println(&quot;Sources: \&quot;&quot;+o.getDataSource()+&quot;\&quot;&quot;);
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -711,7 +770,15 @@
+         }
+     }
+     
+-    private AuthorOccurrence prepareAuthorOccurrence(boolean newRecord) {
++    /** Pre-processes data gathered from the user.
++     *
++     * @return AuthorOccurrence the object that will be created or updated
++     * @return true the object has to be updated
++     * @return false the object has to be created
++     */
++    private Pair&lt;AuthorOccurrence,Boolean&gt; prepareAuthorOccurrence(boolean newRecord, Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author) {
++        Pair&lt;AuthorOccurrence,Boolean&gt; result;
++        DBLayerUtils dlu = new DBLayerUtils(database);
+         Occurrence o;
+         Author a;
+         Habitat h;
+@@ -725,14 +792,18 @@
+         if (newRecord)
+             o = new Occurrence();
+         else 
+-            o = ao.getOccurrence();
++            o = this.o;
+         
+-        assert author != null;
+-        if (newRecord)
++        assert authorList.size() &gt; 0;
++        if (newRecord) {
+             a = new Author();
+-        else
+-            a = ao.getAuthor();
+-        a.setId(author.getSecond());
++            a.setId(author.getFirst().getSecond());
++        } else {
++            if (authorOccurrences.containsKey(author.getFirst().getSecond()))
++                a = authorOccurrences.get(author.getFirst().getSecond()).getAuthor(); //we already have the author Object
++            else
++                a = (Author) dlu.getObjectFor(author.getFirst().getSecond(), Author.class); //have to retrieve the author object from database
++        }
+         
+         if (newRecord)
+             h = new Habitat();
+@@ -794,7 +865,18 @@
+         o.setDayCollected(day);
+         o.setHabitat(h);
+         o.setHerbarium(herbarium);
+-        //o.setIsoDateTimeBegin(); ???
++        
++        //cIsoDateTimeBegin construction
++        Calendar c = Calendar.getInstance();
++        c.set(Calendar.YEAR, year);
++        c.set(Calendar.MONTH, month);
++        c.set(Calendar.DAY_OF_MONTH,day);
++        Calendar temp = Calendar.getInstance();
++        temp.setTime(time);
++        c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
++        c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        o.setIsoDateTimeBegin(c.getTime());
++        
+         o.setMetadata(m);
+         o.setMonthCollected(month);
+         o.setNote(occurrenceNote);
+@@ -808,20 +890,43 @@
+             AuthorOccurrence newAO = new AuthorOccurrence();
+             newAO.setAuthor(a);
+             newAO.setOccurrence(o);
+-            return newAO;
++            return new Pair&lt;AuthorOccurrence,Boolean&gt;(newAO, false);
+         } else {
++            AuthorOccurrence ao;
++            Boolean update;
++            if (authorOccurrences.containsKey(author.getFirst().getSecond())) {
++                ao = authorOccurrences.get(author.getFirst().getSecond());
++                update = true;
++            } else {
++                ao = new AuthorOccurrence();
++                update = false;
++            }
+             ao.setAuthor(a);
+             ao.setOccurrence(o);
+-            return ao;
++            return new Pair&lt;AuthorOccurrence, Boolean&gt;(ao, update);
+         }
+         
+     }//prepareAuthorOccurrence
+     
+-    public void createRecord() {
+-        logger.debug(&quot;About to insert new occurrence record&quot;);
++    public void storeRecord() {
+         //FIXME:
+         try {     
+-            database.executeInsert(prepareAuthorOccurrence(true));
++            Pair&lt;AuthorOccurrence,Boolean&gt; rec;
++            for (int i = 0; i &lt; authorList.size(); i++) {
++                Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author = authorList.get(i);
++                if (editMode)
++                    rec = prepareAuthorOccurrence(false,author);
++                else
++                    rec = prepareAuthorOccurrence(true,author);
++                rec.getFirst().setRole(author.getSecond());
++                if (rec.getSecond()) {
++                    logger.info(&quot;Updating AuthorOccurrence record id=&quot;+rec.getFirst().getId());
++                    database.executeUpdate(rec.getFirst());
++                } else {
++                    logger.info(&quot;Creating a new AuthorOccurrence record for author &quot;+author.getFirst().getFirst()+&quot; role &quot;+author.getSecond());
++                    database.executeInsert(rec.getFirst());
++                }
++            }
+         } catch (RemoteException ex) {
+             ex.printStackTrace();
+         } catch (DBLayerException ex) {
+@@ -829,17 +934,61 @@
+         }        
+     }//createRecord()
+     
+-    public void updateRecord() {        
+-        logger.debug(&quot;About to update existing occurrence record id=&quot;+ao.getId());
++    
++    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; getAuthorsOf(Occurrence o) {
++        ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorResults = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
++        authorOccurrences = new HashMap&lt;Integer,AuthorOccurrence&gt;();
+         //FIXME:
+-        try {     
+-            database.executeUpdate(prepareAuthorOccurrence(false));
++        try {
++            //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
++            SelectQuery sq = database.createQuery(AuthorOccurrence.class);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++            int resultid = database.executeQuery(sq);
++            int resultCount = database.getNumRows(resultid);
++            Object[] results = database.more(resultid, 1, resultCount);
++            Object[] tmp;
++            AuthorOccurrence ao;
++            Author a;
++            for (int i = 0; i &lt; resultCount; i++) {
++                tmp = (Object[]) results[i];
++                ao = (AuthorOccurrence)tmp[0];
++                a = ao.getAuthor();
++                authorResults.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(
++                        new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),ao.getRole() ) );
++                authorOccurrences.put(a.getId(),ao);
++            }
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
+         } catch (RemoteException ex) {
+             ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+         }
+-    }//updateRecord()
++        return authorResults;
++    }
++    
++    
++    public void addAuthorRow() {
++        authorList.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(new Pair&lt;String,Integer&gt;(&quot;&quot;,0),&quot;&quot;));
++        logger.info(&quot;Adding a new author row&quot;);
++        setChanged();
++        notifyObservers(new Pair&lt;String,Integer&gt;(&quot;addAuthorRow&quot;,-1));
++    }
++    
++    public void removeAuthorRow(int i) {
++        authorList.remove(i);
++        logger.info(&quot;AddEdit: Removing author row #&quot;+i);
++        setChanged();
++        notifyObservers(new Pair&lt;String,Integer&gt;(&quot;removeAuthorRow&quot;,i));        
++    }
++    
++    public void setAuthor(int i, Pair&lt;String,Integer&gt; author) {
++        authorList.get(i).setFirst(author);
++        logger.debug(&quot;Author name in row &quot;+i+&quot; set to &quot;+author);
++    }
++    
++    public void setAuthorRole(int i, String role) {
++        authorList.get(i).setSecond(role);
++        logger.debug(&quot;Author role in row &quot;+i+&quot; set to &quot;+role);
++    }
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -20,6 +20,8 @@
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ import java.util.Date;
++import javax.swing.DefaultCellEditor;
++import javax.swing.JButton;
+ import javax.swing.JComboBox;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JSpinner;
+@@ -27,6 +29,8 @@
+ import javax.swing.JTextField;
+ import javax.swing.event.ChangeEvent;
+ import javax.swing.event.ChangeListener;
++import javax.swing.table.TableColumn;
++import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.Pair;
+ 
+ /**
+@@ -47,7 +51,6 @@
+         this.view = view;
+         
+         //------- ComboBoxes --------
+-        view.authorComboBox.addActionListener(new CommonActionListener());
+         view.townComboBox.addActionListener(new CommonActionListener());
+         view.territoryNameCombo.addActionListener(new CommonActionListener());
+         view.phytNameCombo.addActionListener(new CommonActionListener());
+@@ -97,8 +100,8 @@
+             String command = e.getActionCommand();
+             
+             //------- ComboBoxes --------            
+-            if (command.equals(&quot;authorComboBox&quot;))
+-                model.setAuthor((Pair&lt;String, Integer&gt;) c.getSelectedItem());
++//            if (command.equals(&quot;authorComboBox&quot;))
++//                model.setAuthor((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+                 
+             if (command.equals(&quot;townComboBox&quot;))
+                 model.setVillage((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+@@ -254,10 +257,7 @@
+     
+     class OkButtonListener extends MouseAdapter {
+         public void mouseClicked(MouseEvent e) {
+-            if (inEditMode)
+-                model.updateRecord();
+-            else
+-                model.createRecord();
++            model.storeRecord();
+             view.setVisible(false);
+         }
+     }//OkButtonListener
+@@ -274,5 +274,6 @@
+             System.out.println(&quot;Help&quot;);
+         }
+     }//HelpButtonListener
++    
+ }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-04-26 21:18:40 UTC (rev 189)
+@@ -17,7 +17,7 @@
+     &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+-    &lt;AuxValue name=&quot;designerSize&quot; type=&quot;java.awt.Dimension&quot; value=&quot;-84,-19,0,5,115,114,0,18,106,97,118,97,46,97,119,116,46,68,105,109,101,110,115,105,111,110,65,-114,-39,-41,-84,95,68,20,2,0,2,73,0,6,104,101,105,103,104,116,73,0,5,119,105,100,116,104,120,112,0,0,2,-19,0,0,3,-88&quot;/&gt;
++    &lt;AuxValue name=&quot;designerSize&quot; type=&quot;java.awt.Dimension&quot; value=&quot;-84,-19,0,5,115,114,0,18,106,97,118,97,46,97,119,116,46,68,105,109,101,110,115,105,111,110,65,-114,-39,-41,-84,95,68,20,2,0,2,73,0,6,104,101,105,103,104,116,73,0,5,119,105,100,116,104,120,112,0,0,4,20,0,0,3,85&quot;/&gt;
+   &lt;/AuxValues&gt;
+ 
+   &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.DesignBorderLayout&quot;/&gt;
+@@ -47,34 +47,36 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;YearLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;AuthorLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;22&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;YearLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;yearSpinner&quot; min=&quot;-2&quot; pref=&quot;73&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;183&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;102&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;checklistButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;266&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane3&quot; alignment=&quot;0&quot; pref=&quot;266&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+-                      &lt;Component id=&quot;authorComboBox&quot; pref=&quot;348&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane3&quot; linkSize=&quot;9&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;315&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;110&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane2&quot; linkSize=&quot;9&quot; alignment=&quot;1&quot; pref=&quot;348&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;0&quot; pref=&quot;254&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;extendedButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;townComboBox&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;townComboBox&quot; alignment=&quot;0&quot; pref=&quot;254&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+@@ -82,63 +84,43 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;AuthorLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;townComboBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;24&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;authorComboBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;TownLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jScrollPane3&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;jScrollPane2&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;townComboBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;24&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;26&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;1&quot;&gt;
++                                  &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;38&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
++                              &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;EmptySpace pref=&quot;30&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;checklistButton&quot; alignment=&quot;3&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;YearLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;yearSpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;extendedButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+-                      &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; pref=&quot;69&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;53&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;/Group&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;checklistButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;yearSpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;YearLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;extendedButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+       &lt;SubComponents&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;AuthorLabel&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Author:&quot;/&gt;
+-          &lt;/Properties&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JComboBox&quot; name=&quot;authorComboBox&quot;&gt;
+-          &lt;Properties&gt;
+-            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ComboBoxModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ComboBoxModelEditor&quot;&gt;
+-              &lt;StringArray count=&quot;0&quot;/&gt;
+-            &lt;/Property&gt;
+-          &lt;/Properties&gt;
+-          &lt;Events&gt;
+-            &lt;EventHandler event=&quot;actionPerformed&quot; listener=&quot;java.awt.event.ActionListener&quot; parameters=&quot;java.awt.event.ActionEvent&quot; handler=&quot;authorComboBoxActionPerformed&quot;/&gt;
+-          &lt;/Events&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getAuthors());&amp;#xa;&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;Object [] items;&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)authorComboBox).setStrict(true);&amp;#xa;authorComboBox.setActionCommand(&quot;authorComboBox&quot;);&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;TownLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Nearest bigger seat:&quot;/&gt;
+@@ -155,7 +137,7 @@
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getVillages());&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;//items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)townComboBox).setStrict(true);&amp;#xa;townComboBox.setActionCommand(&quot;townComboBox&quot;);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+@@ -254,6 +236,30 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
++        &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++          &lt;/AuxValues&gt;
++
++          &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++          &lt;SubComponents&gt;
++            &lt;Component class=&quot;javax.swing.JTable&quot; name=&quot;authorTable&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;model&quot; type=&quot;javax.swing.table.TableModel&quot; editor=&quot;org.netbeans.modules.form.editors2.TableModelEditor&quot;&gt;
++                  &lt;Table columnCount=&quot;4&quot; rowCount=&quot;4&quot;&gt;
++                    &lt;Column editable=&quot;true&quot; title=&quot;Title 1&quot; type=&quot;java.lang.Object&quot;/&gt;
++                    &lt;Column editable=&quot;true&quot; title=&quot;Title 2&quot; type=&quot;java.lang.Object&quot;/&gt;
++                    &lt;Column editable=&quot;true&quot; title=&quot;Title 3&quot; type=&quot;java.lang.Object&quot;/&gt;
++                    &lt;Column editable=&quot;true&quot; title=&quot;Title 4&quot; type=&quot;java.lang.Object&quot;/&gt;
++                  &lt;/Table&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel3&quot;&gt;
+@@ -328,7 +334,7 @@
+                       &lt;/Group&gt;
+                       &lt;Component id=&quot;jPanel9&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;159&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;382&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -364,7 +370,7 @@
+                       &lt;Component id=&quot;jLabel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;timeFormattedTextField&quot; min=&quot;-2&quot; pref=&quot;69&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;127&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;44&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -511,7 +517,7 @@
+                           &lt;Component id=&quot;jLabel9&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;quadrantTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;17&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -772,7 +778,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;306&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -780,7 +786,7 @@
+             &lt;DimensionLayout dim=&quot;1&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;101&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;96&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1038,7 +1044,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;306&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1088,7 +1094,7 @@
+               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;helpButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;EmptySpace pref=&quot;681&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;598&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;okButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -15,11 +15,16 @@
+ import java.util.Hashtable;
+ import java.util.Observable;
+ import java.util.Observer;
++import javax.swing.DefaultCellEditor;
++import javax.swing.JButton;
++import javax.swing.JComboBox;
+ import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JPanel;
+ import javax.swing.SpinnerDateModel;
+ import javax.swing.SpinnerNumberModel;
++import javax.swing.table.AbstractTableModel;
++import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
+@@ -36,6 +41,7 @@
+     private AddEdit model;
+     private boolean inEditMode = false;
+     private boolean inAddMode = true;
++    protected AuthorTableModel tableModel;
+     
+     /** Creates new form AddEdit2 */
+     public AddEditView(java.awt.Frame parent, boolean modal, AddEdit model, boolean edit) {
+@@ -63,12 +69,8 @@
+     private void initComponents() {
+         convertCoordinatesGroup = new javax.swing.ButtonGroup();
+         jPanel2 = new javax.swing.JPanel();
+-        AuthorLabel = new javax.swing.JLabel();
+-        Object [] items;
+-        authorComboBox = new AutoComboBox(model.getAuthors());
+-
+         TownLabel = new javax.swing.JLabel();
+-        items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};
++        //items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};
+         townComboBox = new AutoComboBox(model.getVillages());
+         TaxonLabel = new javax.swing.JLabel();
+         YearLabel = new javax.swing.JLabel();
+@@ -85,6 +87,8 @@
+         extendedButton = new javax.swing.JToggleButton();
+         checklistButton = new javax.swing.JButton();
+         yearSpinner = new javax.swing.JSpinner();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        authorTable = new javax.swing.JTable();
+         jPanel3 = new javax.swing.JPanel();
+         jPanel4 = new javax.swing.JPanel();
+         monthSpinner = new javax.swing.JSpinner();
+@@ -141,16 +145,6 @@
+         setResizable(false);
+         jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Basic data&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         jPanel2.setPreferredSize(new java.awt.Dimension(700, 200));
+-        AuthorLabel.setText(&quot;Author:&quot;);
+-
+-        ((AutoComboBox)authorComboBox).setStrict(true);
+-        authorComboBox.setActionCommand(&quot;authorComboBox&quot;);
+-        authorComboBox.addActionListener(new java.awt.event.ActionListener() {
+-            public void actionPerformed(java.awt.event.ActionEvent evt) {
+-                authorComboBoxActionPerformed(evt);
+-            }
+-        });
+-
+         TownLabel.setText(&quot;Nearest bigger seat:&quot;);
+ 
+         ((AutoComboBox)townComboBox).setStrict(true);
+@@ -188,63 +182,77 @@
+         yearSpinner.setValue(2006);
+         ((SpinnerNumberModel)yearSpinner.getModel()).setMinimum(1);
+ 
++        authorTable.setModel(new javax.swing.table.DefaultTableModel(
++            new Object [][] {
++                {null, null, null, null},
++                {null, null, null, null},
++                {null, null, null, null},
++                {null, null, null, null}
++            },
++            new String [] {
++                &quot;Title 1&quot;, &quot;Title 2&quot;, &quot;Title 3&quot;, &quot;Title 4&quot;
++            }
++        ));
++        jScrollPane1.setViewportView(authorTable);
++
+         org.jdesktop.layout.GroupLayout jPanel2Layout = new org.jdesktop.layout.GroupLayout(jPanel2);
+         jPanel2.setLayout(jPanel2Layout);
+         jPanel2Layout.setHorizontalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2Layout.createSequentialGroup()
+-                .addContainerGap()
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(YearLabel)
+-                    .add(AuthorLabel)
+-                    .add(TaxonLabel))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++            .add(jPanel2Layout.createSequentialGroup()
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel2Layout.createSequentialGroup()
++                        .add(22, 22, 22)
++                        .add(YearLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 73, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 183, Short.MAX_VALUE)
+-                        .add(checklistButton)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))
+-                    .add(authorComboBox, 0, 348, Short.MAX_VALUE)
+-                    .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 315, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 102, Short.MAX_VALUE)
++                        .add(checklistButton))
++                    .add(jPanel2Layout.createSequentialGroup()
++                        .addContainerGap()
++                        .add(TaxonLabel)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 266, Short.MAX_VALUE)
++                            .add(jScrollPane3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 266, Short.MAX_VALUE))))
++                .add(110, 110, 110)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jLabel2)
+                     .add(TownLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 348, Short.MAX_VALUE)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 254, Short.MAX_VALUE)
+                     .add(extendedButton)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, townComboBox, 0, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(townComboBox, 0, 254, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+-
+-        jPanel2Layout.linkSize(new java.awt.Component[] {jScrollPane2, jScrollPane3}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+-
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2Layout.createSequentialGroup()
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(AuthorLabel)
+-                    .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 24, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(authorComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(TownLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel2Layout.createSequentialGroup()
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel2Layout.createSequentialGroup()
+-                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jScrollPane3)
+-                            .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                                .add(jScrollPane2)
+-                                .add(TaxonLabel)))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 30, Short.MAX_VALUE)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(checklistButton, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                            .add(YearLabel)
+-                            .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(extendedButton)))
+-                    .add(jLabel2))
+-                .addContainerGap())
++                            .add(jLabel2)
++                            .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 24, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .add(26, 26, 26)
++                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2Layout.createSequentialGroup()
++                                .add(TownLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                                .add(TaxonLabel)
++                                .add(38, 38, 38))
++                            .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                    .add(jPanel2Layout.createSequentialGroup()
++                        .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 69, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 53, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(checklistButton)
++                    .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(YearLabel)
++                    .add(extendedButton))
++                .add(4, 4, 4))
+         );
+         getContentPane().add(jPanel2, java.awt.BorderLayout.NORTH);
+ 
+@@ -283,7 +291,7 @@
+                 .add(jLabel5)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(timeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 69, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(127, Short.MAX_VALUE))
++                .addContainerGap(44, Short.MAX_VALUE))
+         );
+ 
+         jPanel4Layout.linkSize(new java.awt.Component[] {daySpinner, monthSpinner}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+@@ -382,7 +390,7 @@
+                     .add(phytCountryCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(jLabel9)
+                     .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(17, Short.MAX_VALUE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+         jPanel6.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Other&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+@@ -456,13 +464,13 @@
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 306, Short.MAX_VALUE)
++                .add(jScrollPane4)
+                 .addContainerGap())
+         );
+         jPanel7Layout.setVerticalGroup(
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+-                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 101, Short.MAX_VALUE)
++                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 96, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+ 
+@@ -568,7 +576,7 @@
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 306, Short.MAX_VALUE)
++                .add(jScrollPane5)
+                 .addContainerGap())
+         );
+         jPanel9Layout.setVerticalGroup(
+@@ -617,7 +625,7 @@
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(jPanel9, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .add(159, 159, 159))
++                .add(382, 382, 382))
+         );
+         getContentPane().add(jPanel3, java.awt.BorderLayout.CENTER);
+ 
+@@ -639,7 +647,7 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel8Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(helpButton)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 681, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 598, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+@@ -681,11 +689,31 @@
+     private void extendedButtonMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_extendedButtonMouseClicked
+ // TODO add your handling code here:
+     }//GEN-LAST:event_extendedButtonMouseClicked
++    
++    
++    //musn't delete contents of tableModel, because it's also called to update the table's user interface unfortunately...
++    protected void initAuthorTable() {
++        if (tableModel == null) 
++            tableModel = new AuthorTableModel(model);
++        authorTable.setModel(tableModel);
+ 
+-    private void authorComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_authorComboBoxActionPerformed
+-// TODO add your handling code here:
+-    }//GEN-LAST:event_authorComboBoxActionPerformed
++        authorTable.setDefaultEditor(JButton.class, new ButtonEditor());
++        authorTable.setDefaultRenderer(JButton.class, new ButtonEditor());
++
++        TableColumn tc1 = authorTable.getColumnModel().getColumn(0);
++        TableColumn tc2 = authorTable.getColumnModel().getColumn(1);
++
++        JComboBox cb = new AutoComboBox(model.getAuthors());
++        tc1.setCellEditor(new DefaultCellEditor(cb));  
++        cb = new AutoComboBox(model.getAuthorRoles());
++        tc2.setCellEditor(new DefaultCellEditor(cb));
++    }
+     
++    private void resetAuthorModel() {
++        if (tableModel != null)
++            tableModel.reset();
++    }
++    
+     public void loadComponentData()
+     {
+         switch (model.getCoordinateSystem()) {
+@@ -701,7 +729,10 @@
+             default:
+                 WGS84Button.setSelected(true);
+         }
+-        authorComboBox.setSelectedItem(model.getAuthor());        
++        
++        resetAuthorModel();
++        initAuthorTable();
++        
+         townComboBox.setSelectedItem(model.getVillage());
+         taxonTextArea.insert(model.getTaxon(),0);
+         descriptionArea.setText(model.getLocalityDescription());
+@@ -728,7 +759,7 @@
+     }
+     
+     public void clearComponentData() {
+-        authorComboBox.setSelectedIndex(-1);        
++        //authorComboBox.setSelectedIndex(-1);        
+         townComboBox.setSelectedIndex(-1);
+         taxonTextArea.setText(&quot;&quot;);
+         descriptionArea.setText(&quot;&quot;);
+@@ -774,15 +805,29 @@
+     }
+ 
+     public void update(Observable o, Object arg) {
+-        String s = (String) arg;
++        String s = ((Pair&lt;String,Integer&gt;)arg).getFirst();
++        int i = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
+         if (s.equals(&quot;updateCode&quot;))
+             phytCodeCombo.setSelectedItem(model.getPhytCode());
+         if (s.equals(&quot;updateName&quot;))
+             phytNameCombo.setSelectedItem(model.getPhytName());
++        if (s.equals(&quot;addAuthorRow&quot;)) {
++            tableModel.addRow();
++            /*
++            DefaultCellEditor dce = (DefaultCellEditor) authorTable.getCellEditor(0,0);
++            Object o = dce.getCellEditorValue();
++             */            
++        }             
++        if (s.equals(&quot;removeAuthorRow&quot;)) {
++            tableModel.removeRow(i);
++            //unfortunately have to set up the editors and renderers again because of the
++            //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
++            initAuthorTable();            
++        }
+     }
++        
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+-    protected javax.swing.JLabel AuthorLabel;
+     protected javax.swing.JRadioButton S42Button;
+     protected javax.swing.JRadioButton SJTSKButton;
+     protected javax.swing.JLabel TaxonLabel;
+@@ -790,7 +835,7 @@
+     protected javax.swing.JRadioButton WGS84Button;
+     protected javax.swing.JLabel YearLabel;
+     protected javax.swing.JFormattedTextField altitudeFormattedTextField;
+-    protected javax.swing.JComboBox authorComboBox;
++    protected javax.swing.JTable authorTable;
+     protected javax.swing.JButton cancelButton;
+     protected javax.swing.JButton checklistButton;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
+@@ -821,6 +866,7 @@
+     protected javax.swing.JPanel jPanel7;
+     private javax.swing.JPanel jPanel8;
+     protected javax.swing.JPanel jPanel9;
++    private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JScrollPane jScrollPane2;
+     private javax.swing.JScrollPane jScrollPane3;
+     private javax.swing.JScrollPane jScrollPane4;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -287,7 +287,7 @@
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+             if (addView == null) {
+-                addModel = new AddEdit(model.getDatabase());
++                addModel = new AddEdit(model.getDatabase(),false);
+                 addView = new AddEditView(view, true, addModel, false);
+                 addView.setTitle(&quot;Add a new occurrence&quot;);
+             }
+@@ -305,9 +305,9 @@
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+             if (editView == null) {
+-                editModel = new AddEdit(model.getDatabase());
++                editModel = new AddEdit(model.getDatabase(),true);
+                 Object[] row = model.getSelectedRow();
+-                editModel.setRecord((AuthorOccurrence) row[row.length-1]);
++                editModel.setRecord((Occurrence) row[row.length-1]);
+                 editView = new AddEditView(view, true, editModel, true);
+                 editView.setTitle(&quot;Edit occurrence&quot;);
+                 editCtrl = new AddEditCtrl(editModel, editView, true);
+@@ -316,7 +316,7 @@
+                 return;
+             } else {
+                 Object[] row = model.getSelectedRow();
+-                editModel.setRecord((AuthorOccurrence) row[row.length-1]);
++                editModel.setRecord((Occurrence) row[row.length-1]);
+                 editView.loadComponentData();
+                 editView.setVisible(true);
+             }
+
+Added: trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -0,0 +1,194 @@
++/*
++ * AuthorTableModel.java
++ *
++ * Created on 25. duben 2006, 17:42
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.util.ArrayList;
++import javax.swing.JButton;
++import javax.swing.event.TableModelEvent;
++import javax.swing.event.TableModelListener;
++import javax.swing.table.AbstractTableModel;
++import net.sf.plantlore.common.Pair;
++
++/** Listener for buttons in the table.
++ * Adds or removes rows calling the view according to the button's text.
++ */
++class AuthorButtonListener implements ActionListener {
++    AddEdit aemodel;
++    
++    public AuthorButtonListener(AddEdit aemodel) {
++        this.aemodel = aemodel;
++    }
++    
++    public void actionPerformed(ActionEvent actionEvent) {
++        JButton btn = (JButton) actionEvent.getSource();
++        if (btn.getText().equals(&quot;Add&quot;))
++            aemodel.addAuthorRow();
++        else
++            aemodel.removeAuthorRow(Integer.parseInt(actionEvent.getActionCommand()));
++    }
++}
++
++
++/** Table model for the authors table in AddEditView.
++ *
++ */
++public class AuthorTableModel extends AbstractTableModel {
++    ArrayList&lt;Object[]&gt; data = new ArrayList&lt;Object[]&gt;();
++    Object[] row;
++    AddEdit aemodel;
++    
++    public AuthorTableModel(AddEdit aemodel) {
++        this.aemodel = aemodel;
++        row = new Object[3];
++        row[0] = new Pair(&quot;&quot;,0);
++        row[1] = &quot;&quot;;
++        JButton b = new JButton(&quot;Add&quot;);
++        b.addActionListener(new AuthorButtonListener(aemodel));
++        b.setActionCommand(&quot;0&quot;);
++        row[2] = b;
++        data.add(row);
++        loadDataFromModel();
++        fireTableDataChanged();
++    }
++    
++    private void loadDataFromModel() {
++        for (int i = 0; i &lt; aemodel.getAuthorCount(); i++)
++            addRow(aemodel.getAuthor(i), aemodel.getAuthorRole(i));        
++    }
++    
++    public void reset() {
++        data.clear();
++        row = new Object[3];
++        row[0] = new Pair(&quot;&quot;,0);
++        row[1] = &quot;&quot;;
++        JButton b = new JButton(&quot;Add&quot;);
++        b.addActionListener(new AuthorButtonListener(aemodel));
++        b.setActionCommand(&quot;0&quot;);
++        row[2] = b;
++        data.add(row);
++        loadDataFromModel();
++        fireTableDataChanged();        
++    }
++    
++    public void addRow() {
++        //create a new row
++        row = new Object[3];
++        row[0] = new Pair(&quot;&quot;,0);
++        row[1] = &quot;&quot;;
++        JButton b = new JButton(&quot;Add&quot;);
++        b.addActionListener(new AuthorButtonListener(aemodel));
++        b.setActionCommand(&quot;&quot;+data.size());
++        row[2] = b;
++        
++        //get the last row and update it's text to Remove
++        Object[] rowTmp = data.get(data.size()-1);
++        ((JButton)rowTmp[2]).setText(&quot;Remove&quot;);
++        
++        data.add(row);
++
++        //we fire that in case someone would like to register a table model listener with us
++        //and get some reasonable data
++        fireTableRowsInserted(data.size()-1,data.size()-1);
++    }
++    
++    public void addRow(Pair&lt;String, Integer&gt; author, String role) {
++        addRow();
++        Object[] row = data.get(data.size()-2);
++        row[0] = author;
++        row[1] = role;
++        fireTableDataChanged();
++    }
++    
++    public void removeRow(int i) {
++        System.out.println(&quot;AuthorTableModel: removing row #&quot;+i);
++        Object[] row = data.remove(i);
++        JButton b = (JButton)row[2];
++        for (int j=0; j &lt; data.size(); j++){
++            b = (JButton)data.get(j)[2];
++            b.setActionCommand(&quot;&quot;+j);
++        }
++
++        //we fire that in case someone would like to register a table model listener with us
++        //and get some reasonable data
++        fireTableRowsDeleted(i,i);
++
++        //unfortunately have to do this so that each cell regets it's updated renderer
++        //which is needed for the last row mainly
++        fireTableStructureChanged();
++    }
++    
++    public int getRowCount() {
++        return data.size();
++    }
++    
++    public int getColumnCount() {
++        return row.length;
++    }
++    
++    public Object getValueAt(int i, int i0) {
++        return data.get(i)[i0];
++    }
++    
++    /** Has to be overriden so that our data (and table) get updated after editing.
++     */
++    public void setValueAt(Object o, int r, int c) {
++        if (c == 2) //we don't want to lose our nice buttons with listeners, proper text, ...
++            return;
++        Object[] row = data.get(r);
++        row[c] = o;
++        if (c == 0)
++            aemodel.setAuthor(r, (Pair&lt;String, Integer&gt;) o);
++        if (c == 1)
++            aemodel.setAuthorRole(r, (String) o);
++    }
++    
++    public Class getColumnClass(int c) {
++        //can't do this:
++        //return getValueAt(0,c).getClass();
++        //otherwise it throws NullPointerException perhaps thanks to some multiple threads running simultaneously
++        //so that the table view exists earlier than this model fetched data :-(
++        switch (c) {
++            case 0:
++                return Pair.class;
++            case 1:
++                return String.class;
++            case 2:
++                return JButton.class;
++            default:
++                return null;
++        }                                
++    }
++    
++    public boolean isCellEditable(int row, int col) {
++        //we don't want the last row to be editable except it's last(=button) column
++        if (row == data.size()-1)
++            if (col == 2)
++                return true;
++            else
++                return false;
++        else
++            return true;
++    }
++    public String getColumnName(int col) {
++        switch (col) {
++            case 0:
++                return &quot;Name&quot;;
++            case 1:
++                return &quot;Role&quot;;
++            case 2:
++                return &quot;&quot;;
++            default:
++                return &quot;&quot;;
++        }
++    }
++}
++    
+\ No newline at end of file
+
+Added: trunk/src/net/sf/plantlore/client/ButtonEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -0,0 +1,50 @@
++/*
++ * ButtonEditor.java
++ *
++ * Created on 24. duben 2006, 17:39
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.awt.Component;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.awt.event.MouseAdapter;
++import java.awt.event.MouseEvent;
++import java.util.ArrayList;
++import javax.swing.AbstractCellEditor;
++import javax.swing.JButton;
++import javax.swing.JTable;
++import javax.swing.table.TableCellEditor;
++import javax.swing.table.TableCellRenderer;
++
++/** Button Editor and Renderer used by the author table in AddEdit dialog.
++ *
++ * Simply returns the buttons stored in the table model.
++ * @author reimei
++ */
++public class ButtonEditor extends AbstractCellEditor implements TableCellEditor, TableCellRenderer  {
++    JButton button;
++    
++    /** Creates a new instance of ButtonEditor */
++    public ButtonEditor() {
++        button = new JButton(&quot;Add&quot;);
++    }
++
++    public Object getCellEditorValue() {
++        return button;
++    }
++    public Component getTableCellEditorComponent(JTable table, Object value,
++                                                 boolean isSelected,
++                                                 int row,
++                                                 int column) {
++        return (Component)table.getModel().getValueAt(row,2);
++    }
++
++    public Component getTableCellRendererComponent(JTable table, Object object, boolean b, boolean b0, int row, int i0) {
++        return (Component)table.getModel().getValueAt(row,2);
++    }
++}
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -11,7 +11,9 @@
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import javax.swing.table.AbstractTableModel;
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Plant;
+@@ -79,7 +81,8 @@
+         this.pageSize = pageSize;
+         resultsCount = 0;
+         this.db = db;
+-        SelectQuery sq = db.createQuery(AuthorOccurrence.class);
++        SelectQuery sq = db.createQuery(Occurrence.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.YEARCOLLECTED); //setridit podle roku
+         //FIXME:
+         try {
+             setResultid(db.executeQuery(sq));
+@@ -142,13 +145,38 @@
+         columnSizes[23] = 100;
+     }
+     
++    private Pair&lt;String,Integer&gt;[] getAuthorsOf(Occurrence o) {
++        Pair&lt;String,Integer&gt;[] authorResults = null;
++        //FIXME:
++        try {
++            SelectQuery sq = db.createQuery(AuthorOccurrence.class);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++            int resultid = db.executeQuery(sq);
++            int resultCount = db.getNumRows(resultid);
++            authorResults = new Pair[resultCount];
++            Object[] results = db.more(resultid, 1, resultCount);
++            Object[] tmp;
++            Author a;
++            for (int i = 0; i &lt; resultCount; i++) {
++                tmp = (Object[]) results[i];
++                a = (Author)((AuthorOccurrence)tmp[0]).getAuthor();
++                authorResults[i] = new Pair&lt;String,Integer&gt;(a.getWholeName(), a.getId());
++            }
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        }
++        return authorResults;
++    }
++    
+     /**
+      * Expects from, pageSize, currentPage and resultid variables to be set appropriately.
+      */
+     private void loadData() throws DBLayerException, RemoteException
+     {
+         Object[] row;
+-        AuthorOccurrence result;
++        Occurrence result;
+         Plant plant;
+         Object[] resultObj, records;
+         resultsCount = db.getNumRows(getResultid());
+@@ -162,7 +190,7 @@
+ 
+         for (int i = 1; i &lt;= to - from + 1 ; i++) {
+             resultObj = (Object[])records[i-1];
+-            result = (AuthorOccurrence)resultObj[0];
++            result = (Occurrence)resultObj[0];
+             Record999 r = new Record999(result.getId(), false, from + i - 1);
+             if (from + i - 1 &gt; recordsArray.size()) //most probably much faster than to ask recordsArray.contains(r)
+                 recordsArray.add(r);
+@@ -172,33 +200,34 @@
+             row = new Object[COLUMN_COUNT + 1]; //we'll store the record id in the last column
+             row[0] = r.selected;
+             row[1] = r.number;
+-            row[2] = result.getOccurrence().getPlant().getTaxon();
+-            row[3] = result.getAuthor().getWholeName();
+-            row[4] = result.getOccurrence().getHabitat().getNearestVillage().getName();
+-            row[5] = result.getOccurrence().getHabitat().getDescription();
+-            row[6] = result.getOccurrence().getYearCollected();
+-            row[7] = result.getOccurrence().getHabitat().getTerritory().getName();
+-            row[8] = result.getOccurrence().getHabitat().getPhytochorion().getName();
+-            row[9] = result.getOccurrence().getHabitat().getPhytochorion().getCode();
+-            row[10] = result.getOccurrence().getHabitat().getCountry();
+-            row[11] = result.getOccurrence().getHabitat().getQuadrant();
+-            row[12] = result.getOccurrence().getNote();
+-            row[13] = result.getOccurrence().getHabitat().getNote();
+-            row[14] = result.getOccurrence().getHabitat().getAltitude();
+-            row[15] = result.getOccurrence().getHabitat().getLongitude();
+-            row[16] = result.getOccurrence().getHabitat().getLatitude();
+-            row[17] = result.getOccurrence().getDataSource();
+-            row[18] = result.getOccurrence().getPublication().getCollectionName();
+-            row[19] = result.getOccurrence().getHerbarium();
+-            row[20] = result.getOccurrence().getMetadata().getDataSetTitle();
+-            row[21] = result.getOccurrence().getMonthCollected();
+-            row[22] = result.getOccurrence().getDayCollected();
+-            row[23] = result.getOccurrence().getTimeCollected();
++            row[2] = result.getPlant().getTaxon();
++            row[3] = ((Object[])getAuthorsOf(result))[0];//occurrence must have at least one author, we'll choose the first one
++            row[4] = result.getHabitat().getNearestVillage().getName();
++            row[5] = result.getHabitat().getDescription();
++            row[6] = result.getYearCollected();
++            row[7] = result.getHabitat().getTerritory().getName();
++            row[8] = result.getHabitat().getPhytochorion().getName();
++            row[9] = result.getHabitat().getPhytochorion().getCode();
++            row[10] = result.getHabitat().getCountry();
++            row[11] = result.getHabitat().getQuadrant();
++            row[12] = result.getNote();
++            row[13] = result.getHabitat().getNote();
++            row[14] = result.getHabitat().getAltitude();
++            row[15] = result.getHabitat().getLongitude();
++            row[16] = result.getHabitat().getLatitude();
++            row[17] = result.getDataSource();
++            row[18] = result.getPublication().getCollectionName();
++            row[19] = result.getHerbarium();
++            row[20] = result.getMetadata().getDataSetTitle();
++            row[21] = result.getMonthCollected();
++            row[22] = result.getDayCollected();
++            row[23] = result.getTimeCollected();
+             row[24] = result; //won't  be displayed, because in getColumnCount we pretend not to have this column
+             data[i-1] = row;
+         }//i        
+     }
+     
++    //momentalne nepouzita metoda
+     public AuthorOccurrence getRecord(int row) {
+         AuthorOccurrence result = null;
+         Object[] resultObj, records;
+
+Added: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-04-26 17:46:33 UTC (rev 188)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-04-26 21:18:40 UTC (rev 189)
+@@ -0,0 +1,71 @@
++/*
++ * TempClass.java
++ *
++ * Created on 26. duben 2006, 10:20
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.common;
++
++import java.rmi.RemoteException;
++import net.sf.plantlore.common.record.Author;
++import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Record;
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
++import net.sf.plantlore.server.DBLayerException;
++import net.sf.plantlore.server.HibernateDBLayer;
++
++/** Class offering convenience methods for DBLayer.
++ *
++ * @author reimei
++ */
++public class DBLayerUtils {
++    DBLayer db;
++    
++    /** Creates a new instance of TempClass */
++    public DBLayerUtils(DBLayer db) {
++        this.db = db;
++    }
++    
++    /** Gets an object according to it's id.
++     *
++     * @param id id of the row
++     * @param c class of the object
++     * @return Record Object of type c with id id.
++     * @return null in case an exception is thrown or no row with that id exists
++     */
++    public Record getObjectFor(int id, Class c) {
++        //FIXME:
++        try {
++            SelectQuery sq = db.createQuery(c);
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;id&quot;,null,id,null);
++            int resultid = db.executeQuery(sq);
++            int resultCount = db.getNumRows(resultid);
++            if (resultCount == 0)
++                return null;
++            Object[] results = db.more(resultid, 1, 1);
++            Object[] tmp = (Object[]) results[0];
++            return (Record)tmp[0];
++            
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        return null;
++    }
++    
++    public static void main(String[] args) throws DBLayerException, RemoteException {
++        DBLayer db = new HibernateDBLayer();
++        db.initialize(&quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreHIBdataUTF.fdb&quot;,&quot;sysdba&quot;,&quot;masterkey&quot;);
++        DBLayerUtils dlu = new DBLayerUtils(db);
++        Author a = (Author)dlu.getObjectFor(1,Author.class);
++        System.out.println(&quot;class &quot;+a.getWholeName());
++        Occurrence o = (Occurrence)dlu.getObjectFor(1,Occurrence.class);
++        System.out.println(&quot;nalez &quot;+o.getPlant().getTaxon());
++    }
++    
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000210.html">[Plantlore-dev] r188 - in trunk/src/net/sf/plantlore: client client/publication common/record l10n
+</A></li>
+	<LI>Next message: <A HREF="000211.html">[Plantlore-dev] r190 - in trunk/src/net/sf/plantlore/client/export: . builders
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#212">[ date ]</a>
+              <a href="thread.html#212">[ thread ]</a>
+              <a href="subject.html#212">[ subject ]</a>
+              <a href="author.html#212">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

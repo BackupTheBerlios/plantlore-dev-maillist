@@ -1,0 +1,420 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r512 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r512%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/tableimport%20client/tableimport/parsers%20common&In-Reply-To=%3C200608142027.k7EKRVhK022631%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000701.html">
+   <LINK REL="Next"  HREF="000703.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r512 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r512%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/tableimport%20client/tableimport/parsers%20common&In-Reply-To=%3C200608142027.k7EKRVhK022631%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r512 - in trunk/src/net/sf/plantlore: client	client/tableimport client/tableimport/parsers common">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 14 22:27:31 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000701.html">[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat Dovetek
+</A></li>
+        <LI>Next message: <A HREF="000703.html">[Plantlore-dev] Empty database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#702">[ date ]</a>
+              <a href="thread.html#702">[ thread ]</a>
+              <a href="subject.html#702">[ subject ]</a>
+              <a href="author.html#702">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-14 22:27:30 +0200 (Mon, 14 Aug 2006)
+New Revision: 512
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableImportMng.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+   trunk/src/net/sf/plantlore/client/tableimport/TableParser.java
+   trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+   trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+Log:
+PlantloreConstants can perform the CLASS to TABLE translation (Occurrence.class ~&gt; Table.OCCURRENCE).
+
+TableImport updated. The UnifiedTableParser can recognize the table (into which the data belong) automatically. Parsers contain a special method initialize() that is called in the Task instead of the TableImportMng. This way the User is presented with a ProgressBar during the (possibly long) parsing of the file. That method returns the CLASS of the detected table. The TableImportTask informs the &quot;Environment&quot; that the table has changed.
+
+AppCoreCtrl supplies the TableImportMng with a callback allowing the &quot;Environment&quot; to be updated (meaning: the Add, Edit and Search dialogs will reload the contents of the updated table). Also the windowClosing operation is handled more carefully - logout() is performed.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -605,7 +605,7 @@
+ 		public void actionPerformed(ActionEvent actionEvent) {
+ 			if (tableImportModel == null) {
+ 				try {
+-					tableImportModel = new TableImportMng(model.getDatabase());
++					tableImportModel = new TableImportMng(model.getDatabase(), managerBridge);
+ 					tableImportCtrl = new TableImportMngCtrl(tableImportModel, view);
+ 				} catch (Exception e) {
+ 					logger.error(&quot;Import MVC cannot be created. &quot;
+@@ -1175,6 +1175,9 @@
+ 	class AppWindowListener extends WindowAdapter {
+ 		public void windowClosing(WindowEvent e) {
+ 			try {
++				if(loginModel != null)
++					loginModel.logout();
++				
+ 				model.savePreferences();
+ 			} catch (IOException ex) {
+ 				JOptionPane.showMessageDialog(view,
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableImportMng.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableImportMng.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -7,6 +7,7 @@
+ import java.io.InputStreamReader;
+ import java.io.Reader;
+ import java.rmi.RemoteException;
++import java.util.Observer;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -28,9 +29,11 @@
+ 	
+ 	private Logger logger = Logger.getLogger(TableImportMng.class.getPackage().getName());
+ 	private DBLayer db; 
++	private Observer tableChangeObserver;
+ 	
+-	public TableImportMng(DBLayer db) {
++	public TableImportMng(DBLayer db, Observer tableChangeObserver) {
+ 		this.db = db;
++		this.tableChangeObserver = tableChangeObserver;
+ 	}
+ 	
+ 	public void setDBLayer(DBLayer dblayer) {
+@@ -65,8 +68,10 @@
+ 		}
+ 		
+ 		UnifiedTableParser parser = new UnifiedTableParser(reader);
+-
+-		return new TableImportTask(db, parser);
++		Task tableImportTask = new TableImportTask(db, parser);
++		tableImportTask.addObserver( tableChangeObserver );
++		
++		return tableImportTask;
+ 	}
+ 
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableImportTask.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -6,6 +6,7 @@
+ 
+ import net.sf.plantlore.client.tableimport.TableParser.Action;
+ import net.sf.plantlore.common.DBLayerUtils;
++import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ImportException;
+@@ -66,97 +67,91 @@
+ 		logger.info(&quot;Table Import begins...&quot;);
+ 		
+ 		setStatusMessage(&quot;Import.Initializing&quot;);
+-		parser.initialize();
++		Class table = parser.initialize();
+ 		
+ 		setStatusMessage(&quot;Import.Initialized&quot;);
+ 		setLength( parser.getNumberOfRecords() );
+ 				
+-//		try {
+-			while( !isCanceled() &amp;&amp; parser.hasNext() ) {
+-				DataHolder data = null;
+-				try {
+-					count++;
+-					setPosition( count );
+-					setStatusMessage(count + &quot; &quot; + L10n.getString(&quot;Import.RecordsImported&quot;));
+-					data = parser.getNext();
+-				} catch( ParserException pe ) {
+-					logger.warn(&quot;The record is corrupted. &quot; + pe);
+-					setStatusMessage(L10n.getFormattedString(&quot;Import.CompletelyCorruptedRecord&quot;, count));
+-					continue;
+-				}
+-				
+-				if( data.record == null
+-						|| !data.record.areAllNNSet()
+-						|| (data.action == TableParser.Action.UPDATE 
+-								&amp;&amp; (data.replacement == null || !data.replacement.areAllNNSet()))   ) {
+-					
+-					logger.info(&quot;Rejecting the record No. &quot;+count+&quot;! Some of the not-null values are not specified!&quot;);
+-					setStatusMessage(L10n.getFormattedString(&quot;Import.IncompleteRecord&quot;, count));					
+-				}
+-				
+-				logger.debug(data.action+&quot; &quot;+data.record + 
+-						((data.action == Action.UPDATE) ? 
+-								&quot; ==&gt; &quot; + data.replacement :
+-								&quot;&quot;));
+-				
+-				
+-				Record recordInDB = dbutils.findMatchInDB( data.record );
+-				boolean isRecordInDB = recordInDB != null;
+-								
+-				// Take action.
+-				try {
+-					switch(data.action) {
+-					case INSERT:
+-						if( !isRecordInDB )
+-							insert( data.record );
+-						inserted++;						
+-						break;
+-					case DELETE:
+-						if( isRecordInDB )
+-							delete( recordInDB );
+-						deleted++;
+-						break;
+-					case UPDATE:
+-						Record replacementInDB = dbutils.findMatchInDB( data.replacement ); 
+-						if( replacementInDB == null )
+-							if( !isRecordInDB )
+-								insert( data.replacement );
+-							else
+-								update( recordInDB, data.replacement );
+-						updated ++;
+-						break;
+-					}
+-				} catch(ImportException ie) {
+-					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful! &quot; + ie.getMessage());
+-					setStatusMessage( ie.getMessage() );
+-				} catch(DBLayerException de) {
+-					logger.error(&quot;Delete/update/insert failed! &quot; + de.getMessage());
+-					setStatusMessage( L10n.getFormattedString(&quot;Error.UnableToProcess&quot;, count) + &quot; &quot; + 
+-							((de.getMessage() == null) ? L10n.getString(&quot;Import.UnknownReason&quot;) : de.getMessage()) );
+-				}
++		while( !isCanceled() &amp;&amp; parser.hasNext() ) {
++			DataHolder data = null;
++			try {
++				count++;
++				setPosition( count );
++				setStatusMessage(count + &quot; &quot; + L10n.getString(&quot;Import.RecordsImported&quot;));
++				data = parser.getNext();
++			} catch( ParserException pe ) {
++				logger.warn(&quot;The record is corrupted. &quot; + pe);
++				setStatusMessage(L10n.getFormattedString(&quot;Import.CompletelyCorruptedRecord&quot;, count));
++				continue;
+ 			}
+-
+ 			
+-			if( !isCanceled() ) {
+-				logger.info(&quot;Import completed. &quot;+count+&quot; records processed (&quot;+
+-						inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+-				setStatusMessage(L10n.getString(&quot;Import.Completed&quot;));
++			if( data.record == null
++					|| !data.record.areAllNNSet()
++					|| (data.action == TableParser.Action.UPDATE 
++							&amp;&amp; (data.replacement == null || !data.replacement.areAllNNSet()))   ) {
++				
++				logger.info(&quot;Rejecting the record No. &quot;+count+&quot;! Some of the not-null values are not specified!&quot;);
++				setStatusMessage(L10n.getFormattedString(&quot;Import.IncompleteRecord&quot;, count));					
+ 			}
+-			else {
+-				logger.info(&quot;Import aborted. &quot;+count+&quot; records processed (&quot;+
+-						inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+-				setStatusMessage(L10n.getString(&quot;Import.Aborted&quot;));
+-			}
+ 			
+-//		} catch(Exception e) { // Nothing can leave undetected. 
+-//			logger.fatal(&quot;Import ended prematurely. &quot;+count+&quot; records processed (&quot;+
+-//					inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+-//			setStatusMessage(L10n.getString(&quot;Import.Failed&quot;));
+-//			
+-//			// This is a serious exception, the User should see it.
+-//			throw e;
+-//		}
+-				
++			logger.debug(data.action+&quot; &quot;+data.record + 
++					((data.action == Action.UPDATE) ? 
++							&quot; ==&gt; &quot; + data.replacement :
++					&quot;&quot;));
++			
++			
++			Record recordInDB = dbutils.findMatchInDB( data.record );
++			boolean isRecordInDB = recordInDB != null;
++			
++			// Take action.
++			try {
++				switch(data.action) {
++				case INSERT:
++					if( !isRecordInDB )
++						insert( data.record );
++					inserted++;						
++					break;
++				case DELETE:
++					if( isRecordInDB )
++						delete( recordInDB );
++					deleted++;
++					break;
++				case UPDATE:
++					Record replacementInDB = dbutils.findMatchInDB( data.replacement ); 
++					if( replacementInDB == null )
++						if( !isRecordInDB )
++							insert( data.replacement );
++						else
++							update( recordInDB, data.replacement );
++					updated ++;
++					break;
++				}
++			} catch(ImportException ie) {
++				logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful! &quot; + ie.getMessage());
++				setStatusMessage( ie.getMessage() );
++			} catch(DBLayerException de) {
++				logger.error(&quot;Delete/update/insert failed! &quot; + de.getMessage());
++				setStatusMessage( L10n.getFormattedString(&quot;Error.UnableToProcess&quot;, count) + &quot; &quot; + 
++						((de.getMessage() == null) ? L10n.getString(&quot;Import.UnknownReason&quot;) : de.getMessage()) );
++			}
++		}
++		
++		
++		if( !isCanceled() ) {
++			logger.info(&quot;Import completed. &quot;+count+&quot; records processed (&quot;+
++					inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
++			setStatusMessage(L10n.getString(&quot;Import.Completed&quot;));
++		}
++		else {
++			logger.info(&quot;Import aborted. &quot;+count+&quot; records processed (&quot;+
++					inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
++			setStatusMessage(L10n.getString(&quot;Import.Aborted&quot;));
++		}
++		
++		setStatusMessage(L10n.getString(&quot;Import.UpdatingEnvironment&quot;));
++		setChanged();
++		notifyObservers( new PlantloreConstants.Table[] { PlantloreConstants.classToTable.get(table) } );
++		
+ 		fireStopped(null);
+ 		return null;
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/TableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/TableParser.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/client/tableimport/TableParser.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -6,7 +6,7 @@
+ 	
+ 	enum Action { INSERT, UPDATE, DELETE };
+ 	
+-	void initialize() throws ParserException;
++	Class initialize() throws ParserException;
+ 
+ 	boolean hasNext();
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/client/tableimport/parsers/UnifiedTableParser.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -41,7 +41,7 @@
+ 	}
+ 	
+ 	
+-	public void initialize() throws ParserException {
++	public Class initialize() throws ParserException {
+ 		try {
+         	SAXReader saxReader = new SAXReader();
+             document = saxReader.read( reader );
+@@ -65,7 +65,9 @@
+ 			throw new ParserException(L10n.getString(&quot;Error.OutOfMemory&quot;));			
+         } catch (DocumentException e) {
+         	throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));
+-		} 
++		}
++        
++        return rootTable;
+ 	}
+ 	
+ 
+
+Modified: trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-08-14 16:12:38 UTC (rev 511)
++++ trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-08-14 20:27:30 UTC (rev 512)
+@@ -7,6 +7,10 @@
+ 
+ package net.sf.plantlore.common;
+ 
++import java.util.HashMap;
++import java.util.Map;
++import net.sf.plantlore.common.record.*;
++
+ /**
+  *
+  * @author Tomas Kovarik
+@@ -46,6 +50,22 @@
+     USER,
+     VILLAGE};
+     
++    
++    public static final Map&lt;Class, Table&gt; classToTable = new HashMap&lt;Class, Table&gt;(20);
++    
++    static {
++    	classToTable.put(AuthorOccurrence.class, Table.AUTHOROCCURRENCE);
++    	classToTable.put(Habitat.class, Table.HABITAT);
++    	classToTable.put(Metadata.class, Table.METADATA);
++    	classToTable.put(Occurrence.class, Table.OCCURRENCE);
++    	classToTable.put(Phytochorion.class, Table.PHYTOCHORION);
++    	classToTable.put(Plant.class, Table.PLANT);
++    	classToTable.put(Publication.class, Table.PUBLICATION);
++    	classToTable.put(Territory.class, Table.TERRITORY);
++    	classToTable.put(Village.class, Table.VILLAGE);
++    }
++    
++    
+     /** Constants for restrictions in select query */
+     public static final int RESTR_BETWEEN       = 1;
+     public static final int RESTR_EQ            = 2;
+@@ -105,8 +125,8 @@
+     public static final String PREF_DYNAMIC_PAGE_SIZE = &quot;Overview.dynamicPageSize&quot;;
+     
+     
+-    /** Creates a new instance of PlantloreConstants */
+-    public PlantloreConstants() {
+-    }
++//    /** Creates a new instance of PlantloreConstants */
++//    public PlantloreConstants() {
++//    }
+     
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000701.html">[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat Dovetek
+</A></li>
+	<LI>Next message: <A HREF="000703.html">[Plantlore-dev] Empty database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#702">[ date ]</a>
+              <a href="thread.html#702">[ thread ]</a>
+              <a href="subject.html#702">[ subject ]</a>
+              <a href="author.html#702">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

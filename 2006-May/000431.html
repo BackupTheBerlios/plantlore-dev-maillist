@@ -1,0 +1,504 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r377 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports client/imports/parsers common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r377%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/imports%20client/imports/parsers%20common/record&In-Reply-To=%3C200605281656.k4SGuYhn031320%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000430.html">
+   <LINK REL="Next"  HREF="000432.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r377 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports client/imports/parsers common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r377%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/imports%20client/imports/parsers%20common/record&In-Reply-To=%3C200605281656.k4SGuYhn031320%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r377 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports client/imports/parsers common/record">krater at berlios.de
+       </A><BR>
+    <I>Sun May 28 18:56:34 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000430.html">[Plantlore-dev] r376 - in trunk: lib resources src/net/sf/plantlore/client src/net/sf/plantlore/client/resources src/net/sf/plantlore/common src/net/sf/plantlore/l10n
+</A></li>
+        <LI>Next message: <A HREF="000432.html">[Plantlore-dev] r378 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#431">[ date ]</a>
+              <a href="thread.html#431">[ thread ]</a>
+              <a href="subject.html#431">[ subject ]</a>
+              <a href="author.html#431">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-28 18:56:23 +0200 (Sun, 28 May 2006)
+New Revision: 377
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+   trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+Log:
+Habitat fixed: the annoying thing (holder object Village referenced as NearestVillage) that caused inconvenience during the automatic processing was fixed by adding &quot;correct&quot; methods getVillage()/setVillage() and public static final String VILLAGE. This string did not replace the NEARESTVILLAGE so as to ensure compatibility with already written code.
+
+XMLBuilder and XMLParser work properly with UTF-8 (caused problems with searching in the database - records weren't reconstructed properly). ImportMng and ExportMng construct the reader/writer more carefully - with proper encoding.
+
+ABCDBuilder and DCBuilder are to be fixed!
+
+Minor bugfix in the imports/DefaultDirector.java (immutable tables are detected properly now).
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -1,8 +1,9 @@
+ package net.sf.plantlore.client.export;
+ 
+-import java.io.File;
+-import java.io.FileWriter;
++import java.io.BufferedWriter;
++import java.io.FileOutputStream;
+ import java.io.IOException;
++import java.io.OutputStreamWriter;
+ import java.io.Writer;
+ import java.rmi.RemoteException;
+ import java.util.HashSet;
+@@ -53,6 +54,10 @@
+  */
+ public class ExportMng implements Observer {
+ 	
++	
++	public static final String ENCODING = &quot;UTF-8&quot;;
++	
++	
+ 	/**
+ 	 * List of all filters the Export Manager is capable to handle.
+ 	 */
+@@ -283,14 +288,15 @@
+ 		int results  = db.getNumRows( resultId );
+ 		
+ 		// Create a new file and writer (wrapper).
+-		Writer writer = new FileWriter( new File( filter.suggestName(filename) ) );
++		Writer writer = new BufferedWriter(
++					new OutputStreamWriter(new FileOutputStream(filter.suggestName(filename)),
++					ENCODING));
+ 		if(writer == null) {
+ 			logger.fatal(&quot;Unable to create a new Writer.&quot;);
+ 			throw new ExportException(L10n.getString(&quot;Error.WriterNotCreated&quot;));
+ 		}
+ 		
+-		logger.debug(&quot;filename: &quot;+ filename);
+-		logger.debug(&quot;filename2: &quot;+ filter.suggestName(filename));
++		logger.debug(&quot;Filename: &quot;+ filename);
+ 		
+ 		// Create a new builder according to the selected format. 
+ 		Builder builder;
+@@ -301,9 +307,9 @@
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.ABCD&quot;))) 
+ 			builder = new ABCDBuilder(filter.suggestName(filename));
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
+-			builder = new XMLBuilder(template, filter.suggestName(filename));                       
++			builder = new XMLBuilder(template, writer);                       
+                 else if(filter.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)))                        
+-			builder = new XMLBuilder(filter.suggestName(filename));                       
++			builder = new XMLBuilder(writer);                       
+ 		else {
+ 			builder = new TrainingBuilder(template);
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -1,8 +1,7 @@
+ package net.sf.plantlore.client.export.builders;
+ 
+-import java.io.File;
+-import java.io.FileOutputStream;
+ import java.io.IOException;
++import java.io.Writer;
+ 
+ import net.sf.plantlore.client.export.AbstractBuilder;
+ import net.sf.plantlore.client.export.Template;
+@@ -23,7 +22,7 @@
+ public class XMLBuilder extends AbstractBuilder {
+ 
+     private Document document;
+-    private String filename;
++    private Writer outputWriter;
+     private Element occurrence;
+     
+     /**
+@@ -36,14 +35,14 @@
+      * that will be exported.
+      * 
+      * @param template	Description of important attributes of  the whole record. 
+-     * @param filename	The name of the file where the output should be saved.
++     * @param writer	The writer that will create the file.
+      * @see net.sf.plantlore.client.export.Template
+      */
+-    public XMLBuilder(Template template, String filename) {
++    public XMLBuilder(Template template, Writer writer) {
+     	super(template);
+         document = DocumentHelper.createDocument();
+         document.addElement(&quot;occurrences&quot;);
+-        this.filename = filename;
++        this.outputWriter = writer;
+         this.template = template;
+     }
+     
+@@ -55,11 +54,11 @@
+      * &lt;br/&gt;
+      * Every attribute (column) of the whole record will be exported.
+      * 
+-     * @param filename	The name of the file where the output should be saved.
++     * @param writer	The writer that will create the file.
+      * @see net.sf.plantlore.client.export.Template
+      */
+-    public XMLBuilder(String fileName) {
+-    	this(new Template().setEverything(), fileName);
++    public XMLBuilder(Writer writer) {
++    	this(new Template().setEverything(), writer);
+     }
+     
+     /**
+@@ -67,14 +66,10 @@
+      */
+     @Override
+     public void footer() throws IOException {
+-        File fXML= new File(filename);
+-        if (!fXML.exists()) fXML.createNewFile();
+-        
+-        FileOutputStream out = new FileOutputStream(fXML);
+         OutputFormat format = OutputFormat.createPrettyPrint();
+-        XMLWriter writer = new XMLWriter( out, format );
+-        writer.write( document );
+-        writer.close();
++        XMLWriter xmlwriter = new XMLWriter( outputWriter, format );
++        xmlwriter.write( document );
++        xmlwriter.close();
+     }
+ 
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -255,7 +255,7 @@
+ 				
+ 				int numberOfUndeadAuthors = 0; 
+ 				
+-				logger.info(&quot;Fetching a new record from the Parser.&quot;);
++				logger.debug(&quot;Fetching a new record from the Parser.&quot;);
+ 				// What is supposed to happen with the occurrence.
+ 				Action intention = parser.fetchNextRecord(); 
+ 				// Get a new Occurrence.
+@@ -375,7 +375,7 @@
+ 				}
+ 				catch(ImportException ie) {
+ 					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
+-					logger.error(&quot;This exception occured during insert/update/delete: &quot; + ie);
++					logger.error(&quot;This exception occured during insert/update/delete: &quot; + ie.getMessage());
+ 					// Roll back the transaction.
+ 					db.rollbackTransaction();
+ 					transactionInProgress = false;
+@@ -418,7 +418,7 @@
+ 						try {
+ 							ao = (AuthorOccurrence)parser.getNextPart(AuthorOccurrence.class);
+ 						} catch (ParserException e) {
+-							logger.warn(&quot;The associated record is not valid. &quot; + e);
++							logger.warn(&quot;The associated record is not valid. &quot; + e.getMessage());
+ 							continue;
+ 						}
+ 						
+@@ -486,7 +486,7 @@
+ 									break;
+ 								}
+ 						} catch (DBLayerException e) {
+-							logger.error(&quot;The associated record was not processed properly. &quot;  + e );
++							logger.error(&quot;The associated record was not processed properly. &quot;  + e.getMessage() );
+ 							continue;
+ 						}
+ 						
+@@ -509,7 +509,7 @@
+ 			}
+ 		} 
+ 		catch(Exception e) {
+-			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database. &quot; + e);
++			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database. &quot; + e.getMessage());
+ 
+ 			e.printStackTrace();
+ 			
+@@ -606,11 +606,11 @@
+ 		Class table = record.getClass();
+ 		
+ 		// Look in the cache.
+-		if(cacheEnabled) {
+-			Record cachedRecord = cache.remove(table);
+-			if( cachedRecord != null &amp;&amp; record.equals(cachedRecord))
+-				return cachedRecord; // hooray, one select has been saved!
+-		}
++//		if(cacheEnabled) {
++//			Record cachedRecord = cache.remove(table);
++//			if( cachedRecord != null &amp;&amp; record.equals(cachedRecord))
++//				return cachedRecord; // hooray, one select has been saved!
++//		}
+ 				
+ 		// Create a query that will look for the record with the same properties.
+ 		SelectQuery query = db.createQuery( table );
+@@ -618,6 +618,14 @@
+ 		// Equal properties.
+ 		for(String property : record.getProperties()) {
+ 			Object value = record.getValue(property);
++			
++			System.out.println(&quot; + &quot;+table.getSimpleName()+&quot;.&quot;+property+&quot;=&quot;+value);
++			
++//			String newValue = null;
++//			try {
++//				newValue = new String(value.toString().getBytes(), &quot;UTF-8&quot;);
++//			}catch(Exception e) {}
++			
+ 			if( value == null ) // use the database null
+ 				query.addRestriction(RESTR_IS_NULL, property, null, null, null);
+ 			else
+@@ -643,8 +651,8 @@
+ 		db.closeQuery( query );
+ 		
+ 		// Update the cache appropriately - store the record for future generations.
+-		if( record != null &amp;&amp; cacheEnabled ) 
+-			cache.put(table, record);
++//		if( record != null &amp;&amp; cacheEnabled ) 
++//			cache.put(table, record);
+ 		
+ 		
+ 		return record;
+@@ -668,8 +676,8 @@
+ 		
+ 		// Is this part of the record from an immutable table?
+ 		boolean immutable = user.isAdmin() ?
+-				Record.IMMUTABLE.contains( record.getClass() ) :
+-				record instanceof Plant;
++				record instanceof Plant :
++				Record.IMMUTABLE.contains( record.getClass() ) ;
+ 		
+ 		// This part of the record is from an immutable table -
+ 		// try to find it in the table.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -1,8 +1,10 @@
+ package net.sf.plantlore.client.imports;
+ 
++import java.io.BufferedReader;
+ import java.io.File;
+-import java.io.FileReader;
++import java.io.FileInputStream;
+ import java.io.IOException;
++import java.io.InputStreamReader;
+ import java.io.Reader;
+ import java.util.ArrayList;
+ import java.util.Observable;
+@@ -18,10 +20,10 @@
+ import net.sf.plantlore.client.imports.parsers.*;
+ import net.sf.plantlore.common.exception.ImportException;
+ import net.sf.plantlore.common.exception.ParserException;
+-import net.sf.plantlore.common.record.Record;
+-import net.sf.plantlore.common.record.User;
++import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
++import static net.sf.plantlore.client.export.ExportMng.ENCODING;
+ 
+ /**
+  * The Import Manager.
+@@ -98,7 +100,12 @@
+ 			user = db.getUser();
+ 			if(user == null) {
+ 				user = new User();
++				Right right = new Right();
+ 				user.setLogin(&quot;to su ja ne&quot;);
++				user.setRight(right);
++				right.setAdd(1);
++				right.setAdministrator(0);
++				right.setEditAll(1);
+ 			}
+ 		} catch (Exception e)  {
+ 			user = new User();
+@@ -190,7 +197,9 @@
+ 			logger.error(&quot;Cannot import data from a directory - you must select a file.&quot;);
+ 			throw new ImportException(L10n.getString(&quot;Error.InvalidFileName&quot;));
+ 		}
+-		reader = new FileReader( file );
++		reader = new BufferedReader(
++				new InputStreamReader(new FileInputStream(file),
++				ENCODING));
+ 		if(reader == null) {
+ 			logger.error(&quot;Unable to create a new Reader.&quot;);
+ 			throw new ImportException(L10n.getString(&quot;Error.ReaderNotCreated&quot;));
+
+Modified: trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -1,5 +1,8 @@
+ package net.sf.plantlore.client.imports.parsers;
+ 
++//import java.io.BufferedReader;
++//import java.io.FileInputStream;
++//import java.io.InputStreamReader;
+ import java.io.Reader;
+ import java.util.Iterator;
+ import java.util.List;
+@@ -80,8 +83,10 @@
+     	if(part == null || node == null)
+     		return;
+     	// Retrieve properties.
+-    	for(String property : part.getProperties()) 
++    	for(String property : part.getProperties()) {
++//    		System.out.println(&quot; &gt; &quot;+part.getClass().getSimpleName()+&quot;.&quot;+property+&quot; = &quot;+node.valueOf(property.toLowerCase()));
+     		part.setValue(property, node.valueOf(property.toLowerCase()));
++    	}
+     	
+     	// Reconstruct subrecords as well.
+     	List&lt;String&gt; foreignKeys = part.getForeignKeys();
+@@ -117,5 +122,29 @@
+     	else
+     		return false;
+     }
++    
++    
++//    public static void main(String[] args) 
++//    throws java.io.IOException, ParserException {
++//    	
++//    	XMLParser p = new XMLParser(
++//    			new BufferedReader(
++//    					new InputStreamReader(new FileInputStream(&quot;c:/documents and settings/yaa/dokumenty/plantlore/this.xml&quot;),
++//    					&quot;UTF-8&quot;))
++//    	);
++//    	p.initialize();
++//    	while(p.hasNextRecord()) {
++//    		System.out.println(&quot;=============&quot;);
++//    		p.fetchNextRecord();
++//    		Record r = p.getNextPart(Occurrence.class);
++//    		System.out.println(r.areAllNNSet());
++//    		for(int i = 0; p.hasNextPart(AuthorOccurrence.class); i++) {
++//    			r = p.getNextPart(AuthorOccurrence.class);
++//    			System.out.print(&quot;(&quot;+i+&quot;)&quot;);
++//    		}
++//    		System.out.println(&quot;&quot;);
++//    	}
++//    	p.cleanup();
++//    }
+    
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-28 15:04:06 UTC (rev 376)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-28 16:56:23 UTC (rev 377)
+@@ -47,20 +47,22 @@
+     public static final String DELETED = &quot;deleted&quot;;    
+     public static final String NOTE = &quot;note&quot;;
+     
++    public static final String VILLAGE = &quot;village&quot;;
++    
+     //public enum Column {ID, TERRITORY, PHYTOCHORION, NEARESTVILLAGE, QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, DELETED, NOTE};
+     
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+-    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE ); 
++    	return asList( TERRITORY, PHYTOCHORION, VILLAGE ); 
+     }
+     
+     public List&lt;String&gt; getColumns() {
+-    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++    	return asList( TERRITORY, PHYTOCHORION, VILLAGE, 
+     			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE, DELETED );
+     }
+     
+     public List&lt;String&gt; getHistoryColumns() {
+-        return asList(  TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++        return asList(  TERRITORY, PHYTOCHORION, VILLAGE, 
+                         QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE);
+     }
+     
+@@ -79,7 +81,7 @@
+ 		if(column.equals(ID)) setId((Integer)value);
+ 		else if(column.equals(TERRITORY)) setTerritory((Territory)value);
+ 		else if(column.equals(PHYTOCHORION)) setPhytochorion((Phytochorion)value);
+-		else if(column.equals(NEARESTVILLAGE)) setNearestVillage((Village)value);
++		else if(column.equals(NEARESTVILLAGE) || column.equals(VILLAGE)) setNearestVillage((Village)value);
+ 		else if(column.equals(QUADRANT)) setQuadrant((String)value);
+ 		else if(column.equals(DESCRIPTION)) setDescription((String)value);
+ 		else if(column.equals(COUNTRY)) setCountry((String)value);
+@@ -185,6 +187,16 @@
+     }
+     
+     /**
++     *   Get associated Village record
++     *   @return associated Village record
++     *   @see setNearestVillage
++     */
++    public Village getVillage() {
++        //obligatory
++        return getNearestVillage();
++    }
++    
++    /**
+      *   Set associated Village record
+      *   @param nearestVillage associated Village record
+      *   @see getNearestVillage
+@@ -193,7 +205,17 @@
+         this.nearestVillage = nearestVillage;
+     }
+     
++    /**
++     *   Set associated Village record
++     *   @param nearestVillage associated Village record
++     *   @see getNearestVillage
++     */
++    public void setVillage(Village nearestVillage) {
++        //obligatory
++        setNearestVillage(nearestVillage);
++    }
+     
++    
+     /**
+      *   Get quadrant
+      *   @return quadrant
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000430.html">[Plantlore-dev] r376 - in trunk: lib resources src/net/sf/plantlore/client src/net/sf/plantlore/client/resources src/net/sf/plantlore/common src/net/sf/plantlore/l10n
+</A></li>
+	<LI>Next message: <A HREF="000432.html">[Plantlore-dev] r378 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#431">[ date ]</a>
+              <a href="thread.html#431">[ thread ]</a>
+              <a href="subject.html#431">[ subject ]</a>
+              <a href="author.html#431">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,282 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r346 - in trunk/src/net/sf/plantlore: common/record server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r346%20-%20in%20trunk/src/net/sf/plantlore%3A%20common/record%20server&In-Reply-To=%3C200605250134.k4P1YoH2003528%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000395.html">
+   <LINK REL="Next"  HREF="000397.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r346 - in trunk/src/net/sf/plantlore: common/record server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r346%20-%20in%20trunk/src/net/sf/plantlore%3A%20common/record%20server&In-Reply-To=%3C200605250134.k4P1YoH2003528%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r346 - in trunk/src/net/sf/plantlore: common/record server">kovo at berlios.de
+       </A><BR>
+    <I>Thu May 25 03:34:50 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000395.html">[Plantlore-dev] r345 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html/images
+</A></li>
+        <LI>Next message: <A HREF="000397.html">[Plantlore-dev] r347 - in trunk/src/net/sf/plantlore/help/cs/html: . picture
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#396">[ date ]</a>
+              <a href="thread.html#396">[ thread ]</a>
+              <a href="subject.html#396">[ subject ]</a>
+              <a href="author.html#396">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-25 03:34:34 +0200 (Thu, 25 May 2006)
+New Revision: 346
+
+Modified:
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fixed several problems in saveHistory() and checkRights(). Add occurrence should work now, though there are still cases where history is not properly saved.
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-25 00:15:15 UTC (rev 345)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-25 01:34:34 UTC (rev 346)
+@@ -59,6 +59,11 @@
+     			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE, DELETED );
+     }
+     
++    public List&lt;String&gt; getHistoryColumns() {
++        return asList(  TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++                        QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE);
++    }
++    
+     @Override 
+     public boolean isDead() {
+     	Integer c = getDeleted();
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-25 00:15:15 UTC (rev 345)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-25 01:34:34 UTC (rev 346)
+@@ -80,6 +80,11 @@
+     			/*UPDATEDWHEN,*/ METADATA, NOTE );
+     }
+     
++    public List&lt;String&gt; getHistoryColumns() {
++        return asList(  PLANT, YEARCOLLECTED, MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, 
++                        ISODATETIMEBEGIN, DATASOURCE, PUBLICATION, HERBARIUM, METADATA, NOTE);
++    }
++            
+     public List&lt;String&gt; getNN() {
+     	List&lt;String&gt; nn = getForeignKeys();
+     	nn.remove(PUBLICATION);
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-25 00:15:15 UTC (rev 345)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-25 01:34:34 UTC (rev 346)
+@@ -137,8 +137,6 @@
+         }
+         // TODO: this should be loaded from a configuration file on the server
+         // We are temporarily using this for DB authetication and user athentication as well
+-        System.out.println(&quot;USER: &quot;+user);
+-        System.out.println(&quot;PASSWORD: &quot;+password); 
+         cfg.setProperty(&quot;hibernate.connection.url&quot;, dbID);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, user);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, password);        
+@@ -264,7 +262,9 @@
+         if (data instanceof Occurrence) {
+             Occurrence occ = (Occurrence)data;
+             occ.setCreatedWhen(new java.util.Date());
++            occ.setUpdatedWhen(new java.util.Date());
+             occ.setCreatedWho(this.plantloreUser);
++            occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
+         if (data instanceof Publication) {
+@@ -406,7 +406,6 @@
+         try {
+             tx = session.beginTransaction();            
+             // Save records into the history
+-            System.out.println(&quot;GOING TO SAVE HISTORY&quot;);
+             saveHistory(session, data, UPDATE, null);            
+             // Save item into the database
+             session.update(data);
+@@ -417,6 +416,7 @@
+                 tx.rollback();
+             }
+             logger.fatal(&quot;Updating record in the database failed. Details: &quot;+e.getMessage());
++            e.printStackTrace();
+             DBLayerException ex = new DBLayerException(&quot;Updating record in the database failed. Details: &quot;+e.getMessage());
+             ex.setError(ex.ERROR_UPDATE, null);
+             throw ex;            
+@@ -1106,10 +1106,12 @@
+                 }
+                 Object[] res = sc.get();
+                 Habitat hab = (Habitat)res[0];
++                sess.close();
++                sess = this.sessionFactory.openSession();                
+                 boolean equal = false;
+                 // Check for direct ownership first. Find owner of associated occurrence
+                 sc = sess.createCriteria(Occurrence.class)
+-                    .add(Restrictions.eq(Occurrence.HABITAT, hab.getId()))
++                    .add(Restrictions.eq(Occurrence.HABITAT, hab))
+                     .scroll();
+                 // If no occurrence was found
+                 if (!sc.next()) {
+@@ -1117,12 +1119,12 @@
+                     ex = new DBLayerException(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());
+                     ex.setError(ex.ERROR_DB, null);
+                     throw ex;                          
+-                }                
++                }    
+                 res = sc.get();
+                 Occurrence occ = (Occurrence)res[0];
+                 if (occ.getCreatedWho().equals(this.plantloreUser)) {
+                     equal = true;
+-                }                
++                }       
+                 // Check for administrator rights
+                 // TODO: This should be done at the beginning to save one query if the user is admin
+                 if (this.plantloreUser.getRight().getAdministrator() == 1) {
+@@ -1161,7 +1163,7 @@
+             if ((type == DELETE) || (type == UPDATE)) {
+                 // Only data of the user and those listed in CEDITGROUP
+                 sess = this.sessionFactory.openSession();
+-                ScrollableResults sc = sess.createCriteria(Occurrence.class)
++                ScrollableResults sc = sess.createCriteria(AuthorOccurrence.class)
+                     .add(Restrictions.eq(AuthorOccurrence.ID, ((AuthorOccurrence)data).getId()))
+                     .scroll();
+                 // If we haven't found the occurrence in the database, raise exception
+@@ -1224,34 +1226,25 @@
+         Integer updatedId = null;
+         ScrollableResults sr;
+         
+-        System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; ENTERING saveHistory()&quot;);
+         // Update tMetaData.cDateModified for any operation on Occurrences and Habitats
+-/*        if ((data instanceof Occurrence) || (data instanceof Habitat)) {
+-            if (data instanceof Occurrence) {
+-                // Read the associated metadata
+-                sr = sess.createCriteria(Occurrence.class)
+-                    .add(Restrictions.eq(Occurrence.ID, recordId))
+-                    .scroll();
+-            } else {
+-                // Read the associated occurrence and metadata
+-                // System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; GOT HABITAT: &quot;+data.toString());
+-                sr = sess.createCriteria(Occurrence.class)
+-                    .add(Restrictions.eq(Occurrence.HABITAT, recordId))
+-                    .scroll();                    
+-            }
++        if (data instanceof Occurrence) {
++            Integer occId = ((Occurrence)data).getId();
++            // Read the associated metadata
++            sr = sess.createCriteria(Occurrence.class)
++                .add(Restrictions.eq(Occurrence.ID, occId))
++                .scroll();
+             if (!sr.next()) {
+                 logger.error(&quot;Occurrence record for the given Metadata not found&quot;);
+                 DBLayerException ex = new DBLayerException(&quot;Occurrence record for the given Metadata not found&quot;);
+                 ex.setError(ex.ERROR_OTHER, null);
+                 throw ex;                    
+             }
+-            System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; We got the Occurrence!&quot;);
+             Object[] res = sr.get();
+             Occurrence occ = (Occurrence)res[0];
+             occ.getMetadata().setDateModified(new java.util.Date());
+             sess.update(occ.getMetadata());
+         }
+- */
++ 
+         // Saving history when new record is inserted
+         if (type == INSERT) {
+             HistoryChange historyChange = new HistoryChange();            
+@@ -1413,7 +1406,6 @@
+                     historyChange.setRecordId(((Village)data).getId());                    
+                 }                    
+                 // Save the HistoryChange object
+-                System.out.println(&quot;GOING TO SAVE HISTORY RECORD&quot;);
+                 sess.save(historyChange);
+                 // Read the to-be-updated object
+                 Session tempSess = this.sessionFactory.openSession(); 
+@@ -1480,7 +1472,7 @@
+                             hist.setHistoryColumn((HistoryColumn)colNames[0]);                            
+                             hist.setOldValue((String)origRec.getValue((String)cols.get(i)));
+                             hist.setNewValue((String)newRec.getValue((String)cols.get(i)));
+-                            sess.save(hist);                            
++                            sess.save(hist);     
+                         }
+                     }
+                 } else if (data instanceof Territory) {
+@@ -1612,7 +1604,9 @@
+                 Object[] original = res.get();
+                 Occurrence origRec = (Occurrence)original[0];
+                 Occurrence newRec = (Occurrence)data;
+-                ArrayList cols = (ArrayList)origRec.getColumns();
++                // Save the historyChange
++                sess.save(historyChange);                
++                ArrayList cols = (ArrayList)origRec.getHistoryColumns();
+                 for (int i=0;i&lt;cols.size();i++) {
+                     if (!origRec.getValue((String)cols.get(i)).equals(newRec.getValue((String)cols.get(i)))) {
+                         // Read record from THISTORYCOLUMN first
+@@ -1628,20 +1622,20 @@
+                         }
+                         Object[] colNames = res.get();
+                         // Save OldRecordId if neccessary
+-                        if ((((String)cols.get(i)).equals(Occurrence.PLANT)) || (((String)cols.get(i)).equals(Occurrence.PUBLICATION))) {
+-                            historyChange.setOldRecordId((Integer)newRec.getValue((String)cols.get(i)));
+-                        }
++                        
++// TODO: Save oldRecordId                        
++//                        if ((((String)cols.get(i)).equals(Occurrence.PLANT)) || (((String)cols.get(i)).equals(Occurrence.PUBLICATION))) {
++//                            historyChange.setOldRecordId((Integer)newRec.getValue((String)cols.get(i)));
++//                        }
+                         // Save record into THISTORY
+                         HistoryRecord hist = new HistoryRecord();
+                         hist.setHistoryChange(historyChange);
+                         hist.setHistoryColumn((HistoryColumn)colNames[0]);                            
+-                        hist.setOldValue((String)origRec.getValue((String)cols.get(i)));
+-                        hist.setNewValue((String)newRec.getValue((String)cols.get(i)));
++                        hist.setOldValue(origRec.getValue((String)cols.get(i)).toString());
++                        hist.setNewValue(newRec.getValue((String)cols.get(i)).toString());
+                         sess.save(hist);
+                     }
+                 }
+-                // Save the historyChange
+-                sess.save(historyChange);
+             }
+         }
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000395.html">[Plantlore-dev] r345 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html/images
+</A></li>
+	<LI>Next message: <A HREF="000397.html">[Plantlore-dev] r347 - in trunk/src/net/sf/plantlore/help/cs/html: . picture
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#396">[ date ]</a>
+              <a href="thread.html#396">[ thread ]</a>
+              <a href="subject.html#396">[ subject ]</a>
+              <a href="author.html#396">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

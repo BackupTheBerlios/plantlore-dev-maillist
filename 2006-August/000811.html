@@ -1,0 +1,185 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Kterak spravne vyjimku z DBLayer vyhoditi
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Kterak%20spravne%20vyjimku%20z%20DBLayer%20vyhoditi&In-Reply-To=%3Cf4dc39b90608280624k66ad03adka5fa79303675ef46%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000810.html">
+   <LINK REL="Next"  HREF="000812.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Kterak spravne vyjimku z DBLayer vyhoditi</H1>
+    <B>Erik Kratochv&#237;l</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Kterak%20spravne%20vyjimku%20z%20DBLayer%20vyhoditi&In-Reply-To=%3Cf4dc39b90608280624k66ad03adka5fa79303675ef46%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Kterak spravne vyjimku z DBLayer vyhoditi">discontinuum at gmail.com
+       </A><BR>
+    <I>Mon Aug 28 15:24:13 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000810.html">[Plantlore-dev] [Bug #8600] Define create,	alter and drop user for other database
+</A></li>
+        <LI>Next message: <A HREF="000812.html">[Plantlore-dev] r585 - in trunk/src/net/sf/plantlore:	client/history client/login common common/exception l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#811">[ date ]</a>
+              <a href="thread.html#811">[ thread ]</a>
+              <a href="subject.html#811">[ subject ]</a>
+              <a href="author.html#811">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Kvuli zjednoduseni zpracovani vyjimek obecnymi handlery a snadnemu rozliseni
+problemu vyzadujicich reconnect apod. je nadale zadouci, aby vyjimky z
+DBLayer byly hazeny takto:
+
+A. Uplne nova vyjimka
+
+Pokud problem vznikne na urovni DBLayer - napriklad nedostatecna prava - je
+treba pouzit:
+
+   throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;));
+
+nebo jeste lepe:
+
+   throw new DBLayerException(L10n.getString(&quot;Error.InsufficientRights&quot;),
+DBLayerException.ERROR_RIGHTS);
+
+Tedy je zavazne pouzit konstruktor DBLayerException(String message, int
+error). Do error se vkladaji vyhradne hodnoty z DBLayerException.ERROR_XXX;
+nevite-li, co vlozit, pouzijte ERROR_UNSPECIFIED.
+
+
+B. Obalujeme JDBCException a HibernateException a  dalsi
+
+Pokud v nizsich vrstvach DBLayer (Hibernate layer nebo JDBC layer) vznikne
+vyjimka, je potreba ji osetrit nasledujicim postupem:
+vyjimku je nutne radne obalit tak, aby nedoslo ke ztrate informace o
+stack-trace a tedy informace, co je presnym duvodem vyjimky. Toto provedeme
+nasledujicim zpusobem:
+
+   catch ( JDBCException e ) {
+      throw new DBLayerException(L10n.getString(&quot;Error.XXXX&quot;), e);
+   }
+
+DBLayerException ma zabudovany vlastni prekladac vyjimek JDBC na chybova
+cisla.
+
+Naposled korektni obaleni druhe zminene vyjimky provede takto:
+
+   catch ( HibernateException e ) {
+      throw new DBLayerException(L10n.getString(&quot;Error.InsertFailed&quot;),
+DBLayerException.ERROR_SAVE, e);
+   }
+
+Zde je nutne primo naznacit, jaky chybovy kod ma byt pouzit. Neni-li jiste,
+ktery kod se bude hodit, lze pouzit pouze
+
+   catch ( HibernateException e ) {
+      throw new DBLayerException(L10n.getString(&quot;Error.InsertFailed&quot;), e);
+   }
+
+tedy kod shodny s osetrovanim vyjimky JDBCException.
+K prekladu kodu nedojde, nastavi se rovnou DBLayerException.
+ERROR_UNSPECIFIED.
+
+
+Obecna pravidla hazeni vyjimek z DBLayer
+
+Vyjimky HibernateDBLayer maji nekolik konstruktoru:
+
+1. public DBLayerException(String message);
+2. public DBLayerException(String message, int error);
+
+Tyto dve vyjimky hazeme vyhradne v pripadech A. Zadouci je samosebou moznost
+2.
+
+3. public DBLayerException(String message, Throwable originalException);
+4. public DBLayerException(String message, int error, Throwable
+originalException);
+
+Tyto dve vyjimky hazeme v pripadech B, tedy vzdycky, krom pripadu A.
+Jedna-li se o JDBCException, je zadouci pouzit verzi 3. ve zbylych pripadech
+jednu z moznosti 3. a 4.
+
+
+Finalni upozorneni (jak to nema vypadat)
+
+   DBLayerException ex = new DBLayerException(&quot;Exception.NotConnected&quot;);
+   ex.setError(ex.ERROR_CONNECT, null);
+   throw ex;
+
+Tri chyby, ktere se v DBLayer nadmerne vyskytuji (krom jinych, ktere
+ustavicne drasaji moje programatorske oko), demonstruje vyse uvedeny
+priklad.
+
+   1. Vsechna chybova hlaseni jsou v properties souborech uvozena
+   prefixem Error nikoli Exception.
+   2. DBLayer vyhazuje hlasky uz ve zvolenem jazyce, tj. pouzitim
+   L10n.getString(&quot;Error.NotConnected&quot;) nikoli samotnym retezcem &quot;
+   Error.NotConnected&quot;.
+   3. Metoda DBLayerException.setError() by se mela pouzivat vyhradne
+   uvnitr DBLayerException, mela by byt private, stejne tak i metoda
+   translateSQLState()
+
+
+
+
+
+
+
+Male doporuceni pro Kova /pod carou/
+
+Donekonecna se opakujici kod
+
+        if (sessionFactory == null) {
+            logger.warn(&quot;SessionFactory not avilable. Not connected to the
+database.&quot;);
+            DBLayerException ex = new DBLayerException(&quot;
+Exception.NotConnected&quot;);
+            ex.setError(ex.ERROR_CONNECT, null);
+            throw ex;
+        }
+
+prosim nahradit
+
+       checkConnection();
+
+A vubec se naucit uprednostnovat funkce pred copy-paste. Vyhoda je
+nasledujici: zmeni-li se napr. zpusob hazeni vyjimek, staci pak prislusnou
+zmenu provest pouze v kodu checkConnection(); Neni nutne pracne dohledavat
+vsechny vyskyty copy-pastovaneho kodu. Podobny trik, jak sis uz povsiml, byl
+pouzit na vsechny executeInsert/Update/Delete operace. HibernateDBlayer tim
+pozbyl cca 18kB zbytecneho kodu a doslo k vyraznemu navyseni prehlednosti!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060828/178160b8/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060828/178160b8/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000810.html">[Plantlore-dev] [Bug #8600] Define create,	alter and drop user for other database
+</A></li>
+	<LI>Next message: <A HREF="000812.html">[Plantlore-dev] r585 - in trunk/src/net/sf/plantlore:	client/history client/login common common/exception l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#811">[ date ]</a>
+              <a href="thread.html#811">[ thread ]</a>
+              <a href="subject.html#811">[ subject ]</a>
+              <a href="author.html#811">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

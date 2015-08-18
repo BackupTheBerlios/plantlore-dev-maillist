@@ -1,0 +1,497 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r876 - in trunk/src/net/sf/plantlore:	client/overview/search l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-December/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r876%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/overview/search%20l10n&In-Reply-To=%3C200612050013.kB50D9sM028541%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001305.html">
+   <LINK REL="Next"  HREF="001306.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r876 - in trunk/src/net/sf/plantlore:	client/overview/search l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r876%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/overview/search%20l10n&In-Reply-To=%3C200612050013.kB50D9sM028541%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r876 - in trunk/src/net/sf/plantlore:	client/overview/search l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Tue Dec  5 01:13:09 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001305.html">[Plantlore-dev] [Bug #9618] Search - localize warning about badly	filled in form
+</A></li>
+        <LI>Next message: <A HREF="001306.html">[Plantlore-dev] [Bug #9098] Fix the loop of focus
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1303">[ date ]</a>
+              <a href="thread.html#1303">[ thread ]</a>
+              <a href="subject.html#1303">[ subject ]</a>
+              <a href="author.html#1303">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-12-05 01:13:08 +0100 (Tue, 05 Dec 2006)
+New Revision: 876
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/search/Search.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.form
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented [ Bug #9177 ] Allow range-search by Herbarium
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-12-05 00:13:08 UTC (rev 876)
+@@ -84,6 +84,9 @@
+     private Pair&lt;String,Integer&gt; project = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
+     private Integer month;
+     private Date fromDate, toDate;
++    
++    private String herbariumFrom;
++    private String herbariumTo;
+         
+     private boolean altitudeValid = true;
+     private boolean latitudeValid = true;
+@@ -365,6 +368,25 @@
+         logger.debug(&quot;Herbarium set to &quot;+herbarium);
+     }
+ 
++    public String getHerbariumFrom() {
++        return herbariumFrom;
++    }
++    
++    public String getHerbariumTo() {
++        return herbariumTo;
++    }
++    
++    public void setHerbariumFrom(String herbarium) {
++        herbariumFrom = herbarium;
++        logger.debug(&quot;HerbariumFrom set to &quot;+herbarium);
++    }
++    
++    public void setHerbariumTo(String herbarium) {
++        herbariumTo = herbarium;
++        logger.debug(&quot;HerbariumTo set to &quot;+herbarium);
++    }
++    
++    
+     public Integer getMonth() {
+         return month;
+     }
+@@ -550,6 +572,11 @@
+                 return new Pair&lt;Boolean,String&gt;(false,&quot;You have to specify either both from and to date or none of them.&quot;);
+         }
+         
++        if ((isNotEmpty(herbariumFrom) &amp;&amp; !isNotEmpty(herbariumTo)) ||
++            (!isNotEmpty(herbariumFrom) &amp;&amp; isNotEmpty(herbariumTo))
++            )
++            return new Pair&lt;Boolean,String&gt;(false,&quot;You have to specify either both from and to herbarium or none of them.&quot;);
++        
+         if (timeChoice == MONTH)
+             if (isNotEmpty(month) &amp;&amp; !month.equals(12)) //12 is the index of the empty String in the MonthChooser's ComboBox, the empty String is added in Post-init code in SearchView
+                 allNull = false;
+@@ -896,11 +923,21 @@
+                 ArrayList a = new ArrayList();
+                 a.add(from.getTime());
+                 a.add(to.getTime());
+-                System.out.println(&quot;Searching between &quot;+from.getTime()+&quot; and &quot;+to.getTime());
++                logger.debug(&quot;Searching between &quot;+from.getTime()+&quot; and &quot;+to.getTime());
+                 sq.addRestriction(PlantloreConstants.RESTR_BETWEEN,&quot;occ.&quot;+Occurrence.ISODATETIMEBEGIN,null,null,a);
+ 
+                 restrictions.add(new Restriction(RESTR_BETWEEN, Occurrence.ISODATETIMEBEGIN, a));
+             }
++            
++            if (isNotEmpty(herbariumFrom) &amp;&amp; isNotEmpty(herbariumTo)) {
++                ArrayList a = new ArrayList();
++                a.add(herbariumFrom);
++                a.add(herbariumTo);
++                logger.debug(&quot;Searching between &quot;+herbariumFrom+&quot; and &quot;+herbariumTo);
++                sq.addRestriction(PlantloreConstants.RESTR_BETWEEN,&quot;occ.&quot;+Occurrence.HERBARIUM,null,null,a);
++                
++                restrictions.add(new Restriction(RESTR_BETWEEN, Occurrence.HERBARIUM, a));
++            }
+ 
+             if (timeChoice == MONTH &amp;&amp; isNotEmpty(month)) {
+                 sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;occ.&quot;+Occurrence.MONTHCOLLECTED,null,month,null);
+@@ -951,6 +988,8 @@
+         source = null;
+         publication = null;
+         herbarium = null;
++        herbariumFrom = null;
++        herbariumTo = null;
+         project = null;
+         month  = null;
+         fromDate = null;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java	2006-12-05 00:13:08 UTC (rev 876)
+@@ -87,6 +87,8 @@
+         view.altitudeTextField.getDocument().addDocumentListener(new AltitudeListener());
+         view.longitudeTextField.getDocument().addDocumentListener(new LongitudeListener());
+         view.latitudeTextField.getDocument().addDocumentListener(new LatitudeListener());
++        view.herbariumRangeFieldFrom.addFocusListener(new HerbariumFromListener());
++        view.herbariumRangeFieldTo.addFocusListener(new HerbariumToListener());
+         
+         //------- TextAreas --------        
+         view.taxonTextArea.addFocusListener(new TaxonAreaListener());
+@@ -285,6 +287,27 @@
+             model.setQuadrant(tf.getText());
+         }
+     }//QuadrantListener
++    
++    class HerbariumFromListener implements FocusListener {
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            model.setHerbariumFrom(tf.getText());
++        }        
++    }
++    
++    class HerbariumToListener implements FocusListener {
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            model.setHerbariumTo(tf.getText());
++        }        
++    }
++    
+     class AltitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+         Color oldColor;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.form	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.form	2006-12-05 00:13:08 UTC (rev 876)
+@@ -319,11 +319,10 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jPanel4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;390&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+@@ -338,6 +337,12 @@
+                               &lt;Component id=&quot;jPanel7&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; pref=&quot;390&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jPanel10&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+@@ -356,9 +361,12 @@
+                       &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel1&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;358&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jPanel10&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel4&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;352&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -1060,6 +1068,78 @@
+             &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel10&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++              &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++                &lt;TitledBorder title=&quot;Herbarium code range search&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Search.HerbariumRangePanelLabel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                  &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
++                &lt;/TitledBorder&gt;
++              &lt;/Border&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
++
++          &lt;Layout&gt;
++            &lt;DimensionLayout dim=&quot;0&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;herbariumRangeLabelFrom&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;herbariumRangeFieldFrom&quot; linkSize=&quot;17&quot; min=&quot;-2&quot; pref=&quot;109&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;41&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;herbariumRangeLabelTo&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;herbariumRangeFieldTo&quot; linkSize=&quot;17&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;28&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++            &lt;DimensionLayout dim=&quot;1&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;herbariumRangeLabelFrom&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;herbariumRangeFieldFrom&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;herbariumRangeLabelTo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;herbariumRangeFieldTo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace pref=&quot;42&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++          &lt;/Layout&gt;
++          &lt;SubComponents&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;herbariumRangeLabelFrom&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel1&quot;/&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;herbariumRangeFieldFrom&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;herbariumRangeLabelTo&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jLabel2&quot;/&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;herbariumRangeFieldTo&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel8&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-12-05 00:13:08 UTC (rev 876)
+@@ -138,6 +138,11 @@
+         jPanel9 = new javax.swing.JPanel();
+         jScrollPane5 = new javax.swing.JScrollPane();
+         occurrenceNoteArea = new javax.swing.JTextArea();
++        jPanel10 = new javax.swing.JPanel();
++        herbariumRangeLabelFrom = new javax.swing.JLabel();
++        herbariumRangeFieldFrom = new javax.swing.JTextField();
++        herbariumRangeLabelTo = new javax.swing.JLabel();
++        herbariumRangeFieldTo = new javax.swing.JTextField();
+         jPanel8 = new javax.swing.JPanel();
+         cancelButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+@@ -576,15 +581,49 @@
+                 .addContainerGap())
+         );
+ 
++        jPanel10.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;Search.HerbariumRangePanelLabel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        herbariumRangeLabelFrom.setText(&quot;jLabel1&quot;);
++
++        herbariumRangeLabelTo.setText(&quot;jLabel2&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel10Layout = new org.jdesktop.layout.GroupLayout(jPanel10);
++        jPanel10.setLayout(jPanel10Layout);
++        jPanel10Layout.setHorizontalGroup(
++            jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel10Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(herbariumRangeLabelFrom)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(herbariumRangeFieldFrom, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 109, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(41, 41, 41)
++                .add(herbariumRangeLabelTo)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(herbariumRangeFieldTo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap(28, Short.MAX_VALUE))
++        );
++
++        jPanel10Layout.linkSize(new java.awt.Component[] {herbariumRangeFieldFrom, herbariumRangeFieldTo}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
++        jPanel10Layout.setVerticalGroup(
++            jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel10Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(herbariumRangeLabelFrom)
++                    .add(herbariumRangeFieldFrom, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(herbariumRangeLabelTo)
++                    .add(herbariumRangeFieldTo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(42, Short.MAX_VALUE))
++        );
++
+         org.jdesktop.layout.GroupLayout jPanel3Layout = new org.jdesktop.layout.GroupLayout(jPanel3);
+         jPanel3.setLayout(jPanel3Layout);
+         jPanel3Layout.setHorizontalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+-                .add(12, 12, 12)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 390, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(jPanel3Layout.createSequentialGroup()
++                        .add(12, 12, 12)
+                         .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel3Layout.createSequentialGroup()
+                                 .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+@@ -594,7 +633,12 @@
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                            .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
++                            .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
++                    .add(jPanel3Layout.createSequentialGroup()
++                        .addContainerGap()
++                        .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 390, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel10, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                 .addContainerGap())
+         );
+         jPanel3Layout.setVerticalGroup(
+@@ -608,9 +652,11 @@
+                     .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+-                .add(0, 0, 0)
+-                .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .add(358, 358, 358))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(jPanel10, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .add(352, 352, 352))
+         );
+         getContentPane().add(jPanel3, java.awt.BorderLayout.CENTER);
+ 
+@@ -768,6 +814,8 @@
+         publicationCombo.setSelectedIndex(0);
+         projectCombo.setSelectedIndex(0);
+         herbariumTextField.setText(&quot;&quot;);
++        herbariumRangeFieldFrom.setText(&quot;&quot;);
++        herbariumRangeFieldTo.setText(&quot;&quot;);
+         ((JComboBox)monthChooser.getComboBox()).setSelectedIndex(12);
+         
+         intervalRadioButton.setSelected(true);        
+@@ -809,6 +857,9 @@
+         
+         helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
+         helpButton.setMnemonic(L10n.getMnemonic(&quot;Common.Help&quot;));
++        
++        herbariumRangeLabelFrom.setText(L10n.getString(&quot;Search.FromLabel&quot;));
++        herbariumRangeLabelTo.setText(L10n.getString(&quot;Search.ToLabel&quot;));        
+     }
+ 
+     private void setSizeRestrictions() {
+@@ -1030,9 +1081,14 @@
+     protected javax.swing.JLabel fromLabel;
+     protected javax.swing.JButton helpButton;
+     protected javax.swing.JLabel herbariumLabel;
++    protected javax.swing.JTextField herbariumRangeFieldFrom;
++    protected javax.swing.JTextField herbariumRangeFieldTo;
++    protected javax.swing.JLabel herbariumRangeLabelFrom;
++    protected javax.swing.JLabel herbariumRangeLabelTo;
+     protected javax.swing.JTextField herbariumTextField;
+     protected javax.swing.JRadioButton intervalRadioButton;
+     protected javax.swing.JPanel jPanel1;
++    private javax.swing.JPanel jPanel10;
+     protected javax.swing.JPanel jPanel2;
+     private javax.swing.JPanel jPanel3;
+     protected javax.swing.JPanel jPanel4;
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-12-05 00:13:08 UTC (rev 876)
+@@ -1897,3 +1897,5 @@
+ 
+ PlantSearch.ObtainPlants=Retrieving plants from the database...
+ 
++
++Search.HerbariumRangePanelLabel=Herbarium code range search
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-12-05 00:13:08 UTC (rev 876)
+@@ -2217,3 +2217,5 @@
+ 
+ PlantSearch.ObtainPlants=Nahr\u00E1v\u00E1m rostliny z datab\u00E1ze...
+ 
++
++Search.HerbariumRangePanelLabel=Hled\u00E1n\u00ED rozsahu herb. k\u00F3d\u016F
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-12-04 23:02:35 UTC (rev 875)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-12-05 00:13:08 UTC (rev 876)
+@@ -2217,3 +2217,5 @@
+ 
+ PlantSearch.ObtainPlants=Retrieving plants from the database
+ 
++
++Search.HerbariumRangePanelLabel=Herbarium code range search
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001305.html">[Plantlore-dev] [Bug #9618] Search - localize warning about badly	filled in form
+</A></li>
+	<LI>Next message: <A HREF="001306.html">[Plantlore-dev] [Bug #9098] Fix the loop of focus
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1303">[ date ]</a>
+              <a href="thread.html#1303">[ thread ]</a>
+              <a href="subject.html#1303">[ subject ]</a>
+              <a href="author.html#1303">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

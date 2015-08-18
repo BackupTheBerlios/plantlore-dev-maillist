@@ -1,0 +1,1173 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r662 - trunk/src/net/sf/plantlore/client/authors
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r662%20-%20trunk/src/net/sf/plantlore/client/authors&In-Reply-To=%3C200609041218.k84CI1xm026863%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000920.html">
+   <LINK REL="Next"  HREF="000922.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r662 - trunk/src/net/sf/plantlore/client/authors</H1>
+    <B>kovo at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r662%20-%20trunk/src/net/sf/plantlore/client/authors&In-Reply-To=%3C200609041218.k84CI1xm026863%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r662 - trunk/src/net/sf/plantlore/client/authors">kovo at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 14:18:01 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000920.html">[Plantlore-dev] Request for comments: Co a ako prezentovat
+</A></li>
+        <LI>Next message: <A HREF="000922.html">[Plantlore-dev] Why not Exception.printStackTrace()?
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#921">[ date ]</a>
+              <a href="thread.html#921">[ thread ]</a>
+              <a href="subject.html#921">[ subject ]</a>
+              <a href="author.html#921">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-09-04 14:17:58 +0200 (Mon, 04 Sep 2006)
+New Revision: 662
+
+Modified:
+   trunk/src/net/sf/plantlore/client/authors/AddAuthorCtrl.java
+   trunk/src/net/sf/plantlore/client/authors/AddAuthorView.java
+   trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+   trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+Log:
+Update of author manager. It now uses the new task and progressbar management. Some code cleanup and l10n changes still pending.
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AddAuthorCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AddAuthorCtrl.java	2006-09-04 11:34:42 UTC (rev 661)
++++ trunk/src/net/sf/plantlore/client/authors/AddAuthorCtrl.java	2006-09-04 12:17:58 UTC (rev 662)
+@@ -1,9 +1,3 @@
+-/*
+- * AddAuthorCtrl.java
+- *
+- * Created on 21. leden 2006, 0:58
+- *
+- */
+ 
+ package net.sf.plantlore.client.authors;
+ 
+@@ -13,17 +7,23 @@
+ import java.awt.event.FocusListener;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.rmi.RemoteException;
++import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import javax.swing.Timer;
+ import net.sf.plantlore.client.authors.AuthorManagerCtrl.RoleFieldPropertyChangeListener;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.ProgressDialog;
++import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import org.apache.log4j.Logger;
+ 
+ /**
+  * Controller for the Add/Edit author dialog in the AuthorManager MVC.
+  *
+  * @author Tomas Kovarik
+- * @version 1.0 BETA, May 1, 2006
++ * @version 1.0
+  */
+ public class AddAuthorCtrl {
+     /** Model of the Author manager MVC */
+@@ -58,22 +58,6 @@
+         view.emailAddPropertyChangeListener(new EmailFieldPropertyChangeListener());
+         view.urlAddPropertyChangeListener(new UrlFieldPropertyChangeListener());
+         view.noteAddFocusListener(new NoteAreaFocusListener());                
+-        // Create a timer to check for the end of long running task
+-        timer = new Timer(100, new ActionListener() {
+-            public void actionPerformed(ActionEvent evt) {
+-                if (model.isOperationDone() == true) {
+-                    timer.stop();
+-                    // Close progress bar dialog
+-                    progress.close();
+-                    view.setDialogEnabled(true);                    
+-                    if (model.processErrors() == false) {    
+-                        if (model.isResultAvailable()) {   
+-                            model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());                        
+-                        }
+-                    }
+-                }
+-            }
+-        });        
+     }
+     
+     /**
+@@ -92,22 +76,56 @@
+      * This metod is used for saving new author as well as updating the existing one.
+      */    
+     class SaveAuthorButtonListener implements ActionListener {
+-        public void actionPerformed(ActionEvent e) {            
++        public void actionPerformed(ActionEvent e) {                        
+             // Check whether all the required fields are present
+             if (view.checkNonEmpty(&quot;name&quot;)) {
+-                if (model.getEditAuthor() == null) {
++                if (model.getEditAuthor() == null) {                    
+                     // Save new author
+-                    model.saveAuthor();                
+-                } else {
++                    Task task = model.saveAuthor();     
++                    task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            model.searchAuthor(false);
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
++                            model.reloadCache();
++                        }                        
++                    });
++                    Dispatcher.getDispatcher().dispatch(task, view, false);
++                } else {                    
+                     // Edit existing author
+-                    model.editAuthor();
++                    Task task = model.editAuthor();
++                    task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            model.searchAuthor(false);
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
++                            model.reloadCache();                            
++                        }                        
++                    });
++                    Dispatcher.getDispatcher().dispatch(task, view, false);
+                 }
+-                // Disable the dialog while saving author
+-                view.setDialogEnabled(false);                                
+-                timer.start();                
+-                // Display dialog with progress bar
+-                progress = new ProgressDialog(view.getDialog(), true);
+-                progress.show();
+                 // Close the add dialog when save finished
+                 view.close();
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AddAuthorView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AddAuthorView.java	2006-09-04 11:34:42 UTC (rev 661)
++++ trunk/src/net/sf/plantlore/client/authors/AddAuthorView.java	2006-09-04 12:17:58 UTC (rev 662)
+@@ -1,8 +1,3 @@
+-/*
+- * AddAuthorView.java
+- *
+- * Created on 30. duben 2006, 17:46
+- */
+ 
+ package net.sf.plantlore.client.authors;
+ 
+@@ -24,7 +19,7 @@
+  * Dialog used for adding / editing authors.
+  *
+  * @author  Tomas Kovarik
+- * @version 1.0 BETA, May 1, 2006
++ * @version 1.0
+  */
+ public class AddAuthorView extends javax.swing.JDialog implements Observer {
+     /** Model of the Author manager MVC */
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-09-04 11:34:42 UTC (rev 661)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-09-04 12:17:58 UTC (rev 662)
+@@ -1,9 +1,3 @@
+-/*
+- * AuthorManager.java
+- *
+- * Created on 15. leden 2006, 2:04
+- *
+- */
+ 
+ package net.sf.plantlore.client.authors;
+ 
+@@ -11,6 +5,7 @@
+ import java.util.ArrayList;
+ import java.util.Observable;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.HistoryRecord;
+@@ -84,6 +79,10 @@
+     private int sortDirection = 0;
+     /** Author we want to edit */
+     private Author editAuthor;
++    /** Enum used for notifying AppCore to reload cached publications */
++    private PlantloreConstants.Table[] editTypeArray = new PlantloreConstants.Table[]{PlantloreConstants.Table.AUTHOR};
++    
++    
+     /** Constants used for identification of fields for sorting */
+     public static final int SORT_NAME = 1;
+     public static final int SORT_ORGANIZATION = 2;
+@@ -115,12 +114,16 @@
+     /**
+      *  Save new author to the database. Information about the author are stored in data fields of this class.
+      *  Operation is executed in a separate thread using &lt;code&gt;SwingWorker&lt;/code&gt;. Error is set in case of an exception.
++     *
++     *  @return Task instance of the Task with the long running operation (saving data)
+      */
+-    public void saveAuthor() {
+-        final SwingWorker worker = new SwingWorker() {
+-            public Object construct() {
++    public Task saveAuthor() {
++        // Create Task
++        final Task task = new Task() {
++            public Object task() throws Exception {
+                 // The operation is not finished yet
+                 done = false;
++                setStatusMessage(L10n.getString(&quot;Authors.ProgressBar.Save&quot;));                
+                 // Create Author object for author we want to add
+                 Author author = new Author();
+                 author.setWholeName(name);
+@@ -133,95 +136,59 @@
+                 author.setDeleted(0);
+                 author.setNote(note);
+                 int rowId = -1;
+-                try {
+-                    // Execute query
+-                    rowId = database.executeInsert(author);
+-                } catch (DBLayerException e) {
+-                    // Check the type of an exception
+-                    int errorCode = e.getErrorCode();
+-                    switch (errorCode) {
+-                        case DBLayerException.ERROR_RIGHTS:
+-                            logger.info(&quot;Insufficient rights for the operation&quot;);
+-                            setError(ERROR_RIGHTS);
+-                            break;
+-                        case DBLayerException.ERROR_SAVE:
+-                            logger.error(&quot;Saving author failed. Unable to execute insert query&quot;);
+-                            setError(ERROR_SAVE);                            
+-                            break;
+-                        default:
+-                            logger.error(&quot;Saving author failed. An error occurred&quot;);                            
+-                            setError(ERROR_SAVE);                            
+-                    }
+-                    // Set operation state to finished
+-                    done = true;
+-                    return null;
+-                } catch(RemoteException e) {
+-                    System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                }
+-                logger.info(&quot;Author &quot;+name+&quot; saved successfuly.&quot;);
+-                if (isResultAvailable()) {
+-                    searchAuthor();
+-                }                
++                clearDataHolders();                
++                // Execute query
++                rowId = database.executeInsert(author);
++                logger.info(&quot;Author &quot;+name+&quot; saved successfuly.&quot;);                
++                // Set operation state to finished
+                 done = true;
+-                return rowId;
++                // Stop the Task
++                fireStopped(null);               
++                return rowId;                
+             }
+         };
+-        worker.start();
++        return task;
+     }
+     
+     /**
+      *  Delete an author from the database. To-be-deleted author is identified by his ID and is
+      *  retrieved based on the value of &lt;code&gt;authorIndex&lt;/code&gt; field. Error is set in case of an exception.
++     *
++     *  @return instance of the Task with the long running operation (deleting data)
+      */
+-    public void deleteAuthor() {
+-        final SwingWorker worker = new SwingWorker() {
+-            public Object construct() {
++    public Task deleteAuthor() {
++        // Create Task
++        final Task task = new Task() {
++            public Object task() throws Exception {
++                setStatusMessage(L10n.getString(&quot;Authors.ProgressBar.Delete&quot;));
+                 // Operation not finished yet
+                 done = false;
+-                try {
+-                    // Execute query
+-                    Author delAuthor = (Author)data.get(getAuthorIndex());
+-                    delAuthor.setDeleted(1);
+-                    database.executeUpdate(delAuthor);
+-                } catch (DBLayerException e) {
+-                    int errorCode = e.getErrorCode();
+-                    switch (errorCode) {
+-                        case DBLayerException.ERROR_RIGHTS:
+-                            logger.info(&quot;Insufficient rights for the operation&quot;);
+-                            setError(ERROR_RIGHTS);
+-                            break;
+-                        case DBLayerException.ERROR_DELETE:
+-                            logger.error(&quot;Deleting author failed. Unable to execute delete query&quot;);
+-                            setError(ERROR_DELETE);
+-                            break;
+-                        default:
+-                            logger.error(&quot;Deleting author failed. An error occurred&quot;);                            
+-                            setError(ERROR_DELETE);                            
+-                    }                    
+-                    // Set operation state to finished
+-                    done = true;
+-                    return false;
+-                } catch(RemoteException e) {
+-                    System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                }
++                // Execute query
++                Author delAuthor = (Author)data.get(getAuthorIndex());
++                delAuthor.setDeleted(1);
++                database.executeUpdate(delAuthor);
+                 logger.info(&quot;Author &quot;+name+&quot; deleted succesfully&quot;);
+-                // Execute author search - required in order to display up-to-date data in the table of authors
+-                searchAuthor();
+                 // Set operation state to finished
+                 done = true;
++                // Stop the Task
++                fireStopped(null);
+                 return true;
+             }
+         };
+-        worker.start();
++        return task;
+     }
+ 
+     /**
+      *  Update author in the database. To-be-updated author is stored in &lt;code&gt;editAuthor&lt;/code&gt; field. Operation 
+      *  is executed in a separate thread using &lt;code&gt;SwingWorker&lt;/code&gt;. Error is set in case of an exception.
++     *
++     *  @return instance of the Task with the long running operation (updating data)
+      */    
+-    public void editAuthor() {
+-        final SwingWorker worker = new SwingWorker() {
+-            public Object construct() {
++    public Task editAuthor() {
++        // Create the Task
++        final Task task = new Task() {
++            public Object task() throws Exception {
++                setStatusMessage(L10n.getString(&quot;Authors.ProgressBar.Save&quot;));
+                 // The operation is not finished yet
+                 done = false;
+                 // Update to*be-updated author based on user input
+@@ -234,138 +201,129 @@
+                 author.setEmail(email);
+                 author.setUrl(url);
+                 author.setNote(note);
+-                try {
+-                    // Execute query
+-                    database.executeUpdate(author);
+-                } catch (DBLayerException e) {
+-                    int errorCode = e.getErrorCode();
+-                    switch (errorCode) {
+-                        case DBLayerException.ERROR_RIGHTS:
+-                            logger.info(&quot;Insufficient rights for the operation&quot;);
+-                            setError(ERROR_RIGHTS);
+-                            break;
+-                        case DBLayerException.ERROR_UPDATE:
+-                            logger.error(&quot;Updating author failed. Unable to execute update query&quot;);
+-                            setError(ERROR_UPDATE);                            
+-                            break;
+-                        default:
+-                            logger.error(&quot;Updating author failed. An error occurred&quot;);                            
+-                            setError(ERROR_UPDATE);                            
+-                    }                    
+-                    // Set operation state to finished
+-                    done = true;
+-                    return false;
+-                } catch(RemoteException e) {
+-                    System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                }
++                clearDataHolders();                
++                // Execute query
++                database.executeUpdate(author);
+                 logger.info(&quot;Author &quot;+name+&quot; updated successfuly.&quot;);
+-                if (isResultAvailable()) {
+-                    searchAuthor();
+-                }
+                 done = true;
++                // Stop the Task
++                fireStopped(null);
+                 return true;
+             }
+         };
+-        worker.start();        
++        return task;
+     }
+     
+     /**
+-     *  Search for authors in the database. Criteria for search are stored in data fields of this class.
+-     *  Operation is executed in a separate thread using &lt;code&gt;SwingWorker&lt;/code&gt;. Error is set in case of an exception
++     *  Search for authors in the database. Criteria for search are stored in data fields of 
++     *  this class. Operation might be executed in a separate thread using the Task class (depends
++     *  on the input parameters). the reason for this is that we are sometimes executing search from
++     *  another long running operation, teherefore we do not need a new thread.
++     *
++     *  @param createTask tells whether to execute search in a separate thread
++     *  @return instance of the Task with the long running operation (searching data)
++     *  @see #search()
+      */
+-    public void searchAuthor() {
+-        final SwingWorker worker = new SwingWorker() {
+-            public Object construct() {
+-                // Operation not finished yet
+-                done = false;
+-                SelectQuery query;
+-                try {
+-                    // Create new Select query                    
+-                    query = database.createQuery(Author.class);                    
+-                    // Display only authors who haven't been deleted
+-                    query.addRestriction(PlantloreConstants.RESTR_EQ, Author.DELETED, null, 0, null);
+-                    // Add given restrictions (WHERE clause)
+-                    if ((searchName != null) &amp;&amp; (searchName != &quot;&quot;))
+-                        query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.WHOLENAME, null, &quot;%&quot; + searchName + &quot;%&quot;, null);
+-                    if ((searchOrganization != null) &amp;&amp; (searchOrganization != &quot;&quot;))
+-                        query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.ORGANIZATION, null, &quot;%&quot; + searchOrganization + &quot;%&quot;, null);
+-                    if ((searchRole != null) &amp;&amp; (searchRole != &quot;&quot;))
+-                        query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.ROLE, null, &quot;%&quot; + searchRole + &quot;%&quot;, null);
+-                    if ((searchEmail != null) &amp;&amp; (searchEmail != null))
+-                        query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.EMAIL, null, &quot;%&quot; + searchEmail + &quot;%&quot;, null);
+-                    String field;
+-                    // Add ORDER BY clause
+-                    switch (sortField) {
+-                        case 1: field = Author.WHOLENAME;
+-                                break;
+-                        case 2: field = Author.ORGANIZATION;
+-                                break;
+-                        case 3: field = Author.ROLE;
+-                                break;
+-                        case 4: field = Author.EMAIL;
+-                                break;
+-                        case 5: field = Author.PHONENUMBER;
+-                                break;
+-                        case 6: field = Author.URL;
+-                                break;
+-                        default:field = Author.WHOLENAME;
+-                    }
+-                    
+-                    if (sortDirection == 0) {
+-                        query.addOrder(PlantloreConstants.DIRECT_ASC, field);
+-                    } else {
+-                        query.addOrder(PlantloreConstants.DIRECT_DESC, field);
+-                    }
+-                    int resultId = 0;
+-                    try {
+-                        // Execute query
+-                        resultId = database.executeQuery(query);
+-                    } catch (DBLayerException e) {
+-                        int errorCode = e.getErrorCode();
+-                        switch (errorCode) {
+-                            case DBLayerException.ERROR_SELECT:
+-                                logger.error(&quot;Searching authors failed. Unable to execute search query.&quot;);
+-                                setError(ERROR_SEARCH);
+-                                break;
+-                            default:
+-                                logger.error(&quot;Saving author failed. An error occurred&quot;);                            
+-                                setError(ERROR_SEARCH);
+-                        }                        
+-                    } finally {
+-                        // Set operation state to finished
+-                        done = true;
+-                        logger.info(&quot;Authors successfuly retrieved from the database&quot;);
+-                        // Save the results
+-                        setResult(resultId);
+-                    }
++    public Task searchAuthor(boolean createTask) {
++        // Use the Task class to execute the search in a new thread
++        if (createTask) {
++            final Task task = new Task() {
++                public Object task() throws Exception {
++                    setStatusMessage(L10n.getString(&quot;Authors.ProgressBar.Search&quot;));                    
++                    // Search the data
++                    int resultId = search();
++                    setResult(resultId);
++                    logger.info(&quot;Authors successfuly retrieved from the database&quot;);
++                    // Stop the Task
++                    fireStopped(null);
+                     return resultId;
+-                } catch (RemoteException e) {
+-                    System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                    return null;
+-                } catch (DBLayerException e) {
+-                    System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                    return null;
+                 }
++            };
++            return task;
++        } else {
++            // Do not use Task. Catch exceptions but do not display error.
++            try {
++                int resultId = search();
++                setResult(resultId);
++            } catch (DBLayerException ex1) {
++                logger.error(&quot;DBLayerException caught while searching the database. Details: &quot;+ex1.getMessage());
++                ex1.printStackTrace();
++                return null;
++            } catch (RemoteException ex2) {
++                logger.error(&quot;RemoteException caught while searching the database. Details: &quot;+ex2.getMessage());
++                ex2.printStackTrace();
++                return null;
+             }
+-        };
+-        worker.start();
+-    }
++            logger.info(&quot;Authors successfuly retrieved from the database&quot;);
++            return null;
++        }
++    }   
+     
+     /**
+-     * Checks whether an error is set. If yes, notifies observers to display it.
+-     * Finally unsets the error flag.
++     *  Method to construct and execute the search query. This method is called from searchAuthor method.
+      *
+-     * @return &lt;code&gt;true&lt;/code&gt; if an error was set (and observers were notified), &lt;code&gt;false&lt;/code&gt; otherwise
++     *  @return id identifying the search result
++     *  @throws DBLayerException in case search failed
++     *  @throws RemoteException in case network communication failed
++     *  @see #searchAuthor(boolean)
+      */
+-    public boolean processErrors() {
+-        if (this.error != null) {
+-            setChanged();
+-            notifyObservers();
+-            this.error = null;
+-            return true;
++    public Integer search() throws DBLayerException, RemoteException {
++        SelectQuery query;
++        // Create new Select query
++        query = database.createQuery(Author.class);
++        // Display only authors who haven't been deleted
++        query.addRestriction(PlantloreConstants.RESTR_EQ, Author.DELETED, null, 0, null);
++        // Add given restrictions (WHERE clause)
++        if ((searchName != null) &amp;&amp; (searchName != &quot;&quot;))
++            query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.WHOLENAME, null, &quot;%&quot; + searchName + &quot;%&quot;, null);
++        if ((searchOrganization != null) &amp;&amp; (searchOrganization != &quot;&quot;))
++            query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.ORGANIZATION, null, &quot;%&quot; + searchOrganization + &quot;%&quot;, null);
++        if ((searchRole != null) &amp;&amp; (searchRole != &quot;&quot;))
++            query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.ROLE, null, &quot;%&quot; + searchRole + &quot;%&quot;, null);
++        if ((searchEmail != null) &amp;&amp; (searchEmail != null))
++            query.addRestriction(PlantloreConstants.RESTR_ILIKE, Author.EMAIL, null, &quot;%&quot; + searchEmail + &quot;%&quot;, null);
++        String field;
++        // Add ORDER BY clause
++        switch (sortField) {
++            case 1: field = Author.WHOLENAME;
++            break;
++            case 2: field = Author.ORGANIZATION;
++            break;
++            case 3: field = Author.ROLE;
++            break;
++            case 4: field = Author.EMAIL;
++            break;
++            case 5: field = Author.PHONENUMBER;
++            break;
++            case 6: field = Author.URL;
++            break;
++            default:field = Author.WHOLENAME;
+         }
+-        return false;
++        
++        if (sortDirection == 0) {
++            query.addOrder(PlantloreConstants.DIRECT_ASC, field);
++        } else {
++            query.addOrder(PlantloreConstants.DIRECT_DESC, field);
++        }
++        int resultId = 0;
++        // Execute query
++        resultId = database.executeQuery(query);
++        return resultId;
+     }
++     
++    /**
++     *  Clear the variables with author properties
++     */
++    private void clearDataHolders() {
++        this.name = null;
++        this.organization = null;
++        this.role = null;
++        this.address = null;
++        this.phoneNumber = null;
++        this.email = null;
++        this.url = null;
++        this.note = null;        
++    }
+     
+     /**
+      * Process results of a search query. Retrieves results using the database
+@@ -376,7 +334,7 @@
+      * @param from  index of the first row to retrieve.
+      * @param count number of rows to retrieve
+      */
+-    public void processResults(int from, int count) {
++    public void processResults(int from, int count) throws RemoteException, DBLayerException {
+         if (this.resultId != 0) {
+             logger.info(&quot;Processing &quot;+count+&quot; results from &quot;+from);
+             logger.debug(&quot;Rows in the result: &quot;+getResultRows());
+@@ -384,63 +342,73 @@
+             int to = Math.min(getResultRows(), from+count-1);
+             if (to == 0) {
+                 this.data = new ArrayList();
+-            } else {
+-                try {
+-                    // Retrieve selected row interval
+-                    Object[] objArray;
+-                    try {
+-                        // FIXME: Should change all the usages of processResults to use 0 as the index of the forst row
+-                        // from-1 and to-1 just temporary
+-                        objArray = database.more(resultId, from-1, to-1);
+-                    } catch(RemoteException e) {
+-                        System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                        return;
+-                    }
+-                    logger.debug(&quot;Results retrieved. Count: &quot;+objArray.length);
+-                    // Create storage for the results
+-                    this.data = new ArrayList(objArray.length);
+-                    // Cast the results to the AuthorRecord objects
+-                    for (int i=0;i&lt;objArray.length;i++) {
+-                        Object[] objAuth = (Object[])objArray[i];
+-                        this.data.add((Author)objAuth[0]);
+-                    }
+-                } catch (DBLayerException e) {
+-                    // Log and set error in case of an exception
+-                    logger.error(&quot;Processing search results failed: &quot;+e.toString());
+-                    setError(this.ERROR_PROCESS);
++            } else {                
++                // Retrieve selected row interval
++                Object[] objArray;
++                
++                // FIXME: Should change all the usages of processResults to use 0 as the index of the forst row
++                // from-1 and to-1 just temporary
++                objArray = database.more(resultId, from-1, to-1);
++                logger.debug(&quot;Results retrieved. Count: &quot;+objArray.length);
++                // Create storage for the results
++                this.data = new ArrayList(objArray.length);
++                // Cast the results to the AuthorRecord objects
++                for (int i=0;i&lt;objArray.length;i++) {
++                    Object[] objAuth = (Object[])objArray[i];
++                    this.data.add((Author)objAuth[0]);
+                 }
+-                // Update current first displayed row (only if data retrieval was successful).
+-                if (!this.isError()) {
+-                    logger.info(&quot;Results successfuly retrieved&quot;);
+-                    // Update current first displayed row
+-                    setCurrentFirstRow(from);
+-                }
++                logger.info(&quot;Results successfuly retrieved&quot;);
++                // Update current first displayed row
++                setCurrentFirstRow(from);
++                
+             }
+             // Tell observers to update
+             setChanged();
+             notifyObservers();
+-            // Clean error flag (if it was set)
+-            this.error = null;
+         }
+     }
++
++    /**
++     *  Notify observers  about the change in the list of publications (used to reload cached publications)
++     */
++    public void reloadCache() {
++        // Notify observers about the change in the list of publications. Used to reload cached publications
++        setChanged();
++        notifyObservers(editTypeArray);        
++    }    
+     
+-    public boolean hasRights(int operation) {
+-        try {
+-            if (operation == ADD) {
+-                if (database.getUserRights().getAdd() == 1) {
++    /**
++     *  Check whether the user has appropriate rights for the given operation.
++     *
++     *  @param  operation operation that is executed (for operation codes see constants)
++     *  @return true if the user has the right to execute the operation, false otherwise
++     *  @throws RemoteException in case we could not get user's access privileges
++     */    
++    public boolean hasRights(int operation) throws RemoteException {       
++        if (operation == ADD) {
++            if (database.getUserRights().getAdd() == 1) {
++                return true;
++            } else {
++                return false;
++            }            
++        } else { // Same rules apply for EDIT and DELETE
++            // Check whether the user can edit all the records
++            if (database.getUserRights().getEditAll() == 1) {
++                return true;
++            }
++            // Check whether the user can edit the record through some other user
++            String[] group = database.getUserRights().getEditGroup().split(&quot;,&quot;);
++            // We will need Author that will be edited
++            Author selectedAuth = (Author)data.get(this.getAuthorIndex());
++            // Check whether someone in the group is an owner of the publication
++            for (int i=0;i&lt;group.length;i++) {
++                if (selectedAuth.getCreatedWho().getId().toString().equals(group[i])) {
+                     return true;
+-                } else {
+-                    return false;
+-                }            
+-            } else if (operation == EDIT) {
+-                // TODO
+-            } else if (operation == DELETE) {
+-                // TODO
++                }
+             }
+-        } catch (RemoteException e) {
+-            logger.error(&quot;Remote exception caught&quot;);
++            // No rights to edit the record
++            return false;            
+         }
+-        return false;
+     }
+     
+     /**
+@@ -494,10 +462,14 @@
+      */
+     public int getResultRows() {
+         int result = 0;
+-        if (resultId != 0) try {
+-            result = database.getNumRows(resultId);
+-        } catch(RemoteException e) {
+-            System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++        if (resultId != 0) {
++            try {
++                result = database.getNumRows(resultId);
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while retrieving number of rows in the result. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                return 0;
++            }
+         }
+         return result;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java	2006-09-04 11:34:42 UTC (rev 661)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java	2006-09-04 12:17:58 UTC (rev 662)
+@@ -1,9 +1,3 @@
+-/*
+- * AuthorManagerCtrl.java
+- *
+- * Created on 15. leden 2006, 2:04
+- *
+- */
+ 
+ package net.sf.plantlore.client.authors;
+ 
+@@ -13,15 +7,18 @@
+ import java.awt.event.FocusListener;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.rmi.RemoteException;
+ import net.sf.plantlore.common.*;
+ import javax.swing.Timer;
++import net.sf.plantlore.common.exception.DBLayerException;
++import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+ /**
+  * Controller for the main AuthorManager dialog (part of the AutorManager MVC).
+  *
+  * @author Tomas Kovarik
+- * @version 1.0 BETA, May 1, 2006
++ * @version 1.0
+  */
+ public class AuthorManagerCtrl {
+     /** Instance of a logger */
+@@ -30,12 +27,6 @@
+     AuthorManager model;
+     /** View of the AuthorManager MVC */
+     AuthorManagerView view;
+-         
+-    private Timer timerSearch;          // Used for periodic checking of the state of other thread
+-    private Timer timerDelete;          // Used for periodic checking of the state of other thread    
+-    private ProgressDialog progress;    // Dialog showing progressbar
+-    /** Frequency of the timer used for periodic checking of the state of other threads */
+-    private final int TIMER_FREQUENCY = 100;
+     
+     /** 
+      * Creates a new instance of AuthorManagerCtrl 
+@@ -64,58 +55,27 @@
+         view.rowsAddPropertyChangeListener(new RowsPropertyChangeListener());
+         view.sortAddFocusListener(new SortComboFocusListener());
+         view.sortDirectionAddFocusListener(new SortDirectionRadioFocusListener());
+-        // Create a timer for search operation
+-        timerSearch = new Timer(TIMER_FREQUENCY, new ActionListener() {
+-            public void actionPerformed(ActionEvent evt) {
+-                // Check whether the other thread is still running
+-                if (model.isOperationDone() == true) {
+-                    timerSearch.stop();                    
+-                    progress.close();               // Close dialog with progress bar
+-                    view.setDialogEnabled(true);    // Enable view dialog                
+-                    // Check for errors which might have occured. If none occured, tell model to process the result
+-                    if (model.processErrors() == false) {
+-                        model.setCurrentFirstRow(1);                                                    
+-                        // Display first n rows (n = model.getDisplayRows())                        
+-                        model.processResults(1, model.getDisplayRows());                        
+-                    }
++
++        Task task = model.searchAuthor(true);
++        task.setPostTaskAction(new PostTaskAction() {
++            public void afterStopped(Object value) {
++                model.setCurrentFirstRow(1);
++                try {
++                    model.processResults(1, model.getDisplayRows());
++                } catch (RemoteException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                } catch (DBLayerException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
+                 }
+-            }
+-        });                
+-        // Create a timer for delete operation
+-        timerDelete = new Timer(TIMER_FREQUENCY, new ActionListener() {
+-            public void actionPerformed(ActionEvent evt) {
+-                // Check whether the other thread is still running
+-                if (model.isOperationDone() == true) {
+-                    timerDelete.stop();                    
+-                    progress.close();               // Close dialog with progress bar
+-                    view.setDialogEnabled(true);    // Enable view dialog                
+-                    // Check for errors which might have occured. If none occured, tell model to process the result
+-                    if (model.processErrors() == false) {
+-                        // Update curent first row so that it is not greater than number of rows in the result
+-                        // (this happens in case the last record in the list has been deleted and it was set as 
+-                        // the current first row)
+-                        if (model.getCurrentFirstRow() &gt; model.getResultRows()) {                           
+-                            int row = model.getCurrentFirstRow()-model.getDisplayRows();
+-                            if (row &lt; 1) {
+-                                model.setCurrentFirstRow(1);                                
+-                            } else {
+-                                model.setCurrentFirstRow(row);                                                                
+-                            }
+-                        }
+-                        // Update table with authors - remove deleted author                        
+-                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
+-                    }
+-                }
+-            }
+-        });   
+-        // Display all authors when Author manager is opened
+-        model.searchAuthor();
+-        // Disable current view and run timer
+-        view.setDialogEnabled(false);                                
+-        timerSearch.start();                
+-        // Display dialog with progress bar
+-        progress = new ProgressDialog(view.getDialog(), true);
+-        progress.show();        
++            }            
++        });
++        Dispatcher.getDispatcher().dispatch(task, view, false);        
+     }
+     
+     /**
+@@ -134,10 +94,18 @@
+     class AddAuthorButtonListener implements ActionListener {
+         public void actionPerformed(ActionEvent e) {
+             // Check whether we have rights for this operation
+-            if (!model.hasRights(model.ADD)) {
+-                view.showErrorMessage(&quot;Rights&quot;);
++            try {
++                if (!model.hasRights(model.ADD)) {
++                    view.showErrorMessage(L10n.getString(&quot;Authors.Add.InsufficientRights&quot;));
++                    return;
++                }
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
+                 return;
+             }
++            
+             // Display dialog for adding / editing authors. This dialog shares model with
+             // the rest of the AuthorManager.
+             AddAuthorView addAuthView = new AddAuthorView(model, view.getFrame(), true);
+@@ -161,6 +129,18 @@
+                 view.selectRowMsg();
+                 return;
+             }          
++            try {
++                // Check whether we have rights for this operation
++                if (!model.hasRights(model.EDIT)) {
++                    view.showErrorMessage(L10n.getString(&quot;Authors.Edit.InsufficientRights&quot;));
++                    return;
++                }                        
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;
++            }                        
+             AddAuthorView addAuthView = new AddAuthorView(model, view.getFrame(), false);
+             AddAuthorCtrl addAuthCtrl = new AddAuthorCtrl(model, addAuthView);            
+             // Save author we are going to edit
+@@ -185,20 +165,47 @@
+             if (index == -1) {
+                 view.selectRowMsg();
+                 return;
+-            }           
++            }        
++            try {
++                // Check whether we have rights for this operation
++                if (!model.hasRights(model.DELETE)) {
++                    view.showErrorMessage(L10n.getString(&quot;Authors.Delete.InsufficientRights&quot;));
++                    return;
++                }           
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while checking user's rights. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                
++            }
+             // Confirm deletion
+             if (!view.confirmDelete()) {
+                 return;
+             }
+             // Call delete
+-            model.setAuthorIndex(index);
+-            model.deleteAuthor();
+-            // Disable current view and run timer
+-            view.setDialogEnabled(false);                    
+-            timerDelete.start();                
+-            // Display dialog with progress bar
+-            progress = new ProgressDialog(view.getDialog(), true);
+-            progress.show();                                                
++            model.setAuthorIndex(index);            
++            // Delete is executed in a separate thread using Task
++            Task task = model.deleteAuthor();
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {                    
++                    model.searchAuthor(false);
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }
++                    model.reloadCache();
++                }                
++            });
++            Dispatcher.getDispatcher().dispatch(task, view, false);            
+         }
+     }    
+ 
+@@ -207,14 +214,25 @@
+      */    
+     class SearchAuthorButtonListener implements ActionListener {
+         public void actionPerformed(ActionEvent e) {
+-            // Run DB search
+-            model.searchAuthor();
+-            // Disable current view and run timer
+-            view.setDialogEnabled(false);                                
+-            timerSearch.start();                
+-            // Display dialog with progress bar
+-            progress = new ProgressDialog(view.getDialog(), true);
+-            progress.show();                                                
++            Task task = model.searchAuthor(true);
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }                        
++                }                
++            });
++            Dispatcher.getDispatcher().dispatch(task, view, false);            
+         }
+     }        
+     
+@@ -226,7 +244,19 @@
+             // Call processResults only if we don't see the first page (should not happen, button should be disabled)
+             if (model.getCurrentFirstRow() &gt; 1) {
+                 int firstRow = Math.max(model.getCurrentFirstRow()-view.getDisplayRows(), 1);
+-                model.processResults(firstRow, view.getDisplayRows());                
++                try {
++                    model.processResults(firstRow, view.getDisplayRows());                
++                } catch (RemoteException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                } catch (DBLayerException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                }                    
+             }
+         }
+     }
+@@ -237,8 +267,20 @@
+     class NextButtonListener implements ActionListener {    
+         public void actionPerformed(ActionEvent e) {
+             // Call processResults only if we don't see the last page (should not happen, button should be disabled)
+-            if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResultRows()) {
+-                model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());
++            try {
++                if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResultRows()) {
++                    model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());
++                }
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            } catch (DBLayerException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
+             }
+         }
+     }    
+@@ -328,9 +370,21 @@
+             model.setDisplayRows(view.getDisplayRows());
+             logger.debug(&quot;New number of rows to display: &quot;+view.getDisplayRows());
+             // If neccessary reload search results
+-            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
+-                model.processResults(model.getCurrentFirstRow(), view.getDisplayRows());
+-                logger.debug(&quot;Search results reloaded. First row: &quot;+model.getCurrentFirstRow()+&quot;; Display rows: &quot;+view.getDisplayRows());
++            try {                        
++                if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
++                    model.processResults(model.getCurrentFirstRow(), view.getDisplayRows());
++                    logger.debug(&quot;Search results reloaded. First row: &quot;+model.getCurrentFirstRow()+&quot;; Display rows: &quot;+view.getDisplayRows());
++                }
++            } catch (RemoteException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
++            } catch (DBLayerException ex) {
++                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);
++                return;                    
+             }
+         }        
+     }            
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-09-04 11:34:42 UTC (rev 661)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-09-04 12:17:58 UTC (rev 662)
+@@ -1,8 +1,3 @@
+-/*
+- * AuthorManagerView.java
+- *
+- * Created on 30. duben 2006, 14:58
+- */
+ 
+ package net.sf.plantlore.client.authors;
+ 
+@@ -384,20 +379,14 @@
+      *  @param message Message we want to display
+      */
+     public void showErrorMessage(String message) {
+-        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
++        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Error.GenericMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+     }
+     
+     /**
+      *  Method used for updating the view (called when the model has changed and notifyObservers() was called)
+      */
+     public void update(Observable obs, Object obj) {       
+-        // Check whether we have some kind of error to display
+-        if (model.isError()) {
+-            showErrorMessage(model.getError());            
+-            return;
+-        } else {
+-            displayResults(model.getData());
+-        }
++        displayResults(model.getData());
+     }
+ 
+     /**
+@@ -509,7 +498,7 @@
+      *  Close this dialog.
+      */    
+     public void close() {
+-        this.hide();
++        this.dispose();
+     }
+ 
+     /**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000920.html">[Plantlore-dev] Request for comments: Co a ako prezentovat
+</A></li>
+	<LI>Next message: <A HREF="000922.html">[Plantlore-dev] Why not Exception.printStackTrace()?
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#921">[ date ]</a>
+              <a href="thread.html#921">[ thread ]</a>
+              <a href="subject.html#921">[ subject ]</a>
+              <a href="author.html#921">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,244 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r335 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r335%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605232245.k4NMje3s012008%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000384.html">
+   <LINK REL="Next"  HREF="000386.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r335 - trunk/src/net/sf/plantlore/server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r335%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605232245.k4NMje3s012008%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r335 - trunk/src/net/sf/plantlore/server">kovo at berlios.de
+       </A><BR>
+    <I>Wed May 24 00:45:40 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000384.html">[Plantlore-dev] r334 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+        <LI>Next message: <A HREF="000386.html">[Plantlore-dev] r336 - in trunk/src/net/sf/plantlore: client/checklist client/export client/export/builders client/export/component client/imports common common/record l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#385">[ date ]</a>
+              <a href="thread.html#385">[ thread ]</a>
+              <a href="subject.html#385">[ subject ]</a>
+              <a href="author.html#385">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-24 00:45:38 +0200 (Wed, 24 May 2006)
+New Revision: 335
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fix problems with history, add saving history for Metadata records
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-23 22:10:31 UTC (rev 334)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-23 22:45:38 UTC (rev 335)
+@@ -201,7 +201,9 @@
+         if (data instanceof Occurrence) {
+             Occurrence occ = (Occurrence)data;
+             occ.setCreatedWhen(new java.util.Date());
++            occ.setUpdatedWhen(new java.util.Date());
+             occ.setCreatedWho(this.plantloreUser);
++            occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
+         if (data instanceof Publication) {
+@@ -232,6 +234,7 @@
+                 tx.rollback();
+             }
+             logger.fatal(&quot;Saving record into the database failed. Details: &quot;+e.getMessage());
++            e.printStackTrace();
+             DBLayerException ex = new DBLayerException(&quot;Saving record into the database failed. Details: &quot;+e.getMessage());
+             ex.setError(ex.ERROR_SAVE, null);
+             throw ex;            
+@@ -403,6 +406,7 @@
+         try {
+             tx = session.beginTransaction();            
+             // Save records into the history
++            System.out.println(&quot;GOING TO SAVE HISTORY&quot;);
+             saveHistory(session, data, UPDATE, null);            
+             // Save item into the database
+             session.update(data);
+@@ -757,7 +761,7 @@
+         return this.rights;
+     }
+ 
+-    public boolean beginTransaction() throws DBLayerException, RemoteException {
++    synchronized public boolean beginTransaction() throws DBLayerException, RemoteException {
+         // Check whether we are connected to the database
+         if (sessionFactory == null) {
+             logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
+@@ -790,6 +794,8 @@
+         }
+         // Commit the transaction
+         this.longTx.commit();
++        // Set the transaction object to null
++        this.longTx = null;
+         return true;
+     }
+     
+@@ -807,6 +813,8 @@
+         }
+         // Rollback the transaction
+         this.longTx.rollback();
++        // Set the transaction object to null
++        this.longTx = null;        
+         return true;        
+     }
+     
+@@ -1216,30 +1224,34 @@
+         Integer updatedId = null;
+         ScrollableResults sr;
+         
++        System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; ENTERING saveHistory()&quot;);
+         // Update tMetaData.cDateModified for any operation on Occurrences and Habitats
+-        if ((data instanceof Occurrence) || (data instanceof Habitat)) {
++/*        if ((data instanceof Occurrence) || (data instanceof Habitat)) {
+             if (data instanceof Occurrence) {
+                 // Read the associated metadata
+                 sr = sess.createCriteria(Occurrence.class)
+-                    .add(Restrictions.eq(Occurrence.ID, ((Occurrence)data).getId()))
++                    .add(Restrictions.eq(Occurrence.ID, recordId))
+                     .scroll();
+             } else {
+                 // Read the associated occurrence and metadata
++                // System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; GOT HABITAT: &quot;+data.toString());
+                 sr = sess.createCriteria(Occurrence.class)
+-                    .add(Restrictions.eq(Occurrence.HABITAT, ((Habitat)data).getId()))
++                    .add(Restrictions.eq(Occurrence.HABITAT, recordId))
+                     .scroll();                    
+-             }
++            }
+             if (!sr.next()) {
+                 logger.error(&quot;Occurrence record for the given Metadata not found&quot;);
+                 DBLayerException ex = new DBLayerException(&quot;Occurrence record for the given Metadata not found&quot;);
+                 ex.setError(ex.ERROR_OTHER, null);
+                 throw ex;                    
+             }
++            System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; We got the Occurrence!&quot;);
+             Object[] res = sr.get();
+             Occurrence occ = (Occurrence)res[0];
+             occ.getMetadata().setDateModified(new java.util.Date());
+             sess.update(occ.getMetadata());
+         }
++ */
+         // Saving history when new record is inserted
+         if (type == INSERT) {
+             HistoryChange historyChange = new HistoryChange();            
+@@ -1259,6 +1271,8 @@
+                     table = PlantloreConstants.ENTITY_VILLAGE;
+                 } else if (data instanceof Territory) {
+                     table = PlantloreConstants.ENTITY_TERRITORY;                        
++                } else if (data instanceof Metadata) {
++                    table = PlantloreConstants.ENTITY_METADATA;                    
+                 } else {
+                     return;
+                 }
+@@ -1356,8 +1370,7 @@
+             }
+             if ((data instanceof Author) || (data instanceof Publication) ||
+                 (data instanceof Territory) || (data instanceof Phytochorion) ||
+-                (data instanceof Village)) {            
+-                
++                (data instanceof Village) || (data instanceof Metadata)) {                
+                 historyChange.setOccurrence(null);
+                 historyChange.setOldRecordId(0);                
+                 historyChange.setOperation(UPDATE);
+@@ -1385,8 +1398,14 @@
+                     updated = Phytochorion.class;
+                     updatedId = ((Phytochorion)data).getId();                    
+                     tableId = Phytochorion.ID;
+-                    historyChange.setRecordId(((Phytochorion)data).getId());                    
++                    historyChange.setRecordId(((Phytochorion)data).getId());
+                 } else
++                if (data instanceof Metadata) {
++                    updated = Metadata.class;
++                    updatedId = ((Metadata)data).getId();                    
++                    tableId = Metadata.ID;
++                    historyChange.setRecordId(((Metadata)data).getId());                    
++                } else
+                 if (data instanceof Village) {
+                     updated = Village.class;
+                     updatedId = ((Village)data).getId();
+@@ -1394,6 +1413,7 @@
+                     historyChange.setRecordId(((Village)data).getId());                    
+                 }                    
+                 // Save the HistoryChange object
++                System.out.println(&quot;GOING TO SAVE HISTORY RECORD&quot;);
+                 sess.save(historyChange);
+                 // Read the to-be-updated object
+                 Session tempSess = this.sessionFactory.openSession(); 
+@@ -1490,6 +1510,33 @@
+                             sess.save(hist);                            
+                         }
+                     }
++                } else if (data instanceof Metadata) {
++                    Metadata origRec = (Metadata)original[0];                    
++                    Metadata newRec = (Metadata)data;
++                    ArrayList cols = (ArrayList)origRec.getColumns();
++                    for (int i=0;i&lt;cols.size();i++) {
++                        if (!origRec.getValue((String)cols.get(i)).equals(newRec.getValue((String)cols.get(i)))) {
++                            // Read record from THISTORYCOLUMN first
++                            res = sess.createCriteria(HistoryColumn.class)
++                                .add(Restrictions.eq(HistoryColumn.TABLENAME, PlantloreConstants.ENTITY_METADATA))
++                                .add(Restrictions.eq(HistoryColumn.COLUMNNAME, (String)cols.get(i)))
++                                .scroll();
++                            if (!res.next()) {
++                                logger.error(&quot;tHistoryColumn doesn't contain required data&quot;);
++                                DBLayerException ex = new DBLayerException(&quot;tHistoryColumn doesn't contain required data&quot;);
++                                ex.setError(ex.ERROR_DB, PlantloreConstants.ENTITY_METADATA);
++                                throw ex;                                
++                            }
++                            Object[] colNames = res.get();
++                            // Save record into THISTORY
++                            HistoryRecord hist = new HistoryRecord();
++                            hist.setHistoryChange(historyChange);
++                            hist.setHistoryColumn((HistoryColumn)colNames[0]);                            
++                            hist.setOldValue((String)origRec.getValue((String)cols.get(i)));
++                            hist.setNewValue((String)newRec.getValue((String)cols.get(i)));
++                            sess.save(hist);
++                        }
++                    }                    
+                 } else if (data instanceof Phytochorion) {
+                     Phytochorion origRec = (Phytochorion)original[0];                    
+                     Phytochorion newRec = (Phytochorion)data;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000384.html">[Plantlore-dev] r334 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+	<LI>Next message: <A HREF="000386.html">[Plantlore-dev] r336 - in trunk/src/net/sf/plantlore: client/checklist client/export client/export/builders client/export/component client/imports common common/record l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#385">[ date ]</a>
+              <a href="thread.html#385">[ thread ]</a>
+              <a href="subject.html#385">[ subject ]</a>
+              <a href="author.html#385">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,251 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r639 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r639%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200609022239.k82MdlWC018408%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000894.html">
+   <LINK REL="Next"  HREF="000896.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r639 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r639%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200609022239.k82MdlWC018408%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r639 - in trunk/src/net/sf/plantlore: client common">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep  3 00:39:47 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000894.html">[Plantlore-dev] r638 - in trunk/src/net/sf/plantlore:	client/publications common/record l10n
+</A></li>
+        <LI>Next message: <A HREF="000896.html">[Plantlore-dev] r640 - trunk/src/net/sf/plantlore/help/cs/html
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#895">[ date ]</a>
+              <a href="thread.html#895">[ thread ]</a>
+              <a href="subject.html#895">[ subject ]</a>
+              <a href="author.html#895">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-03 00:39:45 +0200 (Sun, 03 Sep 2006)
+New Revision: 639
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+Log:
+Update method of ProgressBar is now run in EventDispatchThread. This seems to prevent the progress bar freezing. Further testing needed.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-02 21:32:33 UTC (rev 638)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-02 22:39:45 UTC (rev 639)
+@@ -1079,26 +1079,18 @@
+ 					public void exceptionHandler(final Exception ex) {
+ 						logger.error(&quot;Error while filling jasper report in SchedaAction: &quot;+ ex);
+ 						ex.printStackTrace();
+-						SwingUtilities.invokeLater(new Runnable() {
+-							public void run() {
+ 								JOptionPane.showMessageDialog(view.getParent(),
+ 											L10n.getString(&quot;Print.Message.BrokenReport&quot;)
+ 														+ &quot;\n&quot;
+ 														+ ex.getMessage(),
+ 											L10n.getString(&quot;Print.Message.BrokenReport&quot;),
+ 												JOptionPane.WARNING_MESSAGE);
+-							}
+-						});
+ 						getTask().stop();
+ 					}
+ 
+ 					public void afterStopped(final Object value) {
+-						SwingUtilities.invokeLater(new Runnable() {
+-							public void run() {
+-								new SchedaView(view, true, (JasperPrint) value)
+-										.setVisible(true);
+-							}
+-						});
++                                                new SchedaView(view, true, (JasperPrint) value)
++                                                                .setVisible(true);
+ 					}
+ 				};
+ 				task.start();
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-09-02 21:32:33 UTC (rev 638)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-09-02 22:39:45 UTC (rev 639)
+@@ -166,70 +166,76 @@
+      *
+      * Invokes exceptionHanlder on received exceptions.
+      */
+-    public void update(Observable o, Object arg) {
++    public void update(final Observable o, final Object arg) {
+         final ProgressBar pb = this;
+-        if (arg instanceof Pair) {
+-            Pair p = (Pair)arg;
+-            Object first = p.getFirst();
+-            if (first instanceof Task.Message) {
+-                Task.Message msg = (Task.Message)first;
+-                Object value = p.getSecond();
+-                logger.debug(&quot;Received message: &quot;+msg);
+-                switch (msg) {
+-                    case STARTING:
+-                        SwingUtilities.invokeLater(new Runnable() {
+-                            public void run() {
+-                                setLocationRelativeTo(parent);
+-                                setVisible(true);
+-                                logger.debug(&quot;Progress bar visible&quot;);
+-                            }
+-                        });
+-                        break;
+-                    case POSITION_CHANGED:
+-                        SwingUtilities.invokeLater(new Runnable() {
+-                            public void run() {
+-                                progressBar.setValue(task.getPosition());
+-                            }
+-                        });
+-                        break;
+-                    case MESSAGE_CHANGED:
+-                        SwingUtilities.invokeLater(new Runnable() {
+-                            public void run() {
+-                                String text = task.getStatusMessage();
+-                                statusField.setText(text);
+-                                progressBar.setString(text);
+-                                int curWidth = statusField.getWidth();
+-                                if (text.length() &gt; (curWidth/charSizeApprox)) {
+-                                    int newWidth = new Double(text.length()*charSizeApprox).intValue();
+-                                    pb.setSize(pb.getWidth()+(newWidth-curWidth),pb.getHeight());
++        SwingUtilities.invokeLater(new Runnable() {
++            public void run() {
++                
++                if (arg instanceof Pair) {
++                    Pair p = (Pair)arg;
++                    Object first = p.getFirst();
++                    if (first instanceof Task.Message) {
++                        Task.Message msg = (Task.Message)first;
++                        Object value = p.getSecond();
++                        logger.debug(&quot;Received message: &quot;+msg);
++                        switch (msg) {
++                            case STARTING:
++                                SwingUtilities.invokeLater(new Runnable() {
++                                    public void run() {
++                                        setLocationRelativeTo(parent);
++                                        setVisible(true);
++                                        logger.debug(&quot;Progress bar visible&quot;);
++                                    }
++                                });
++                                break;
++                            case POSITION_CHANGED:
++                                SwingUtilities.invokeLater(new Runnable() {
++                                    public void run() {
++                                        progressBar.setValue(task.getPosition());
++                                    }
++                                });
++                                break;
++                            case MESSAGE_CHANGED:
++                                SwingUtilities.invokeLater(new Runnable() {
++                                    public void run() {
++                                        String text = task.getStatusMessage();
++                                        statusField.setText(text);
++                                        progressBar.setString(text);
++                                        int curWidth = statusField.getWidth();
++                                        if (text.length() &gt; (curWidth/charSizeApprox)) {
++                                            int newWidth = new Double(text.length()*charSizeApprox).intValue();
++                                            pb.setSize(pb.getWidth()+(newWidth-curWidth),pb.getHeight());
++                                        }
++                                    }
++                                });
++                                break;
++                            case LENGTH_CHANGED:
++                                if (progressBar.isIndeterminate()) {
++                                    progressBar.setIndeterminate(false);
+                                 }
+-                            }
+-                        });
+-                        break;
+-                    case LENGTH_CHANGED:
+-                        if (progressBar.isIndeterminate()) {
+-                            progressBar.setIndeterminate(false);
+-                        }
+-                        SwingUtilities.invokeLater(new Runnable() {
+-                            public void run() {
+-                                progressBar.setMaximum(task.getLength());
+-                            }
+-                        });
+-                        break;
+-                    case STOPPING:
+-                        setVisible(false);
+-                        dispose(); // FIXME: Should not this method be invoked from the EDT?                    
+-                        parent.setCursor(Cursor.getDefaultCursor());
+-                        logger.debug( &quot;ProgressBar:Stopping &quot; + task );
+-                        afterStopping();
+-                        break;
+-                    case STOPPED:
+-                    	logger.debug( &quot;ProgressBar:Stopped &quot; + task );
+-                        afterStopped(value);
+-                        break;                    
+-                }//switch
+-            }//instanceof Message
+-        }//instanceof Pair
++                                SwingUtilities.invokeLater(new Runnable() {
++                                    public void run() {
++                                        progressBar.setMaximum(task.getLength());
++                                    }
++                                });
++                                break;
++                            case STOPPING:
++                                setVisible(false);
++                                dispose(); // FIXME: Should not this method be invoked from the EDT?                    
++                                parent.setCursor(Cursor.getDefaultCursor());
++                                logger.debug( &quot;ProgressBar:Stopping &quot; + task );
++                                afterStopping();
++                                break;
++                            case STOPPED:
++                                logger.debug( &quot;ProgressBar:Stopped &quot; + task );
++                                afterStopped(value);
++                                break;                    
++                        }//switch
++                    }//instanceof Message
++
++                }//instanceof Pair
++            }//run()
++        });//invokeLater
+         
+         if (arg instanceof Exception) {
+             exceptionHandler((Exception)arg);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000894.html">[Plantlore-dev] r638 - in trunk/src/net/sf/plantlore:	client/publications common/record l10n
+</A></li>
+	<LI>Next message: <A HREF="000896.html">[Plantlore-dev] r640 - trunk/src/net/sf/plantlore/help/cs/html
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#895">[ date ]</a>
+              <a href="thread.html#895">[ thread ]</a>
+              <a href="subject.html#895">[ subject ]</a>
+              <a href="author.html#895">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

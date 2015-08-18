@@ -1,0 +1,149 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r304 - trunk/src/net/sf/plantlore/client
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r304%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605191239.k4JCdeOc010493%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000355.html">
+   <LINK REL="Next"  HREF="000357.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r304 - trunk/src/net/sf/plantlore/client</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r304%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200605191239.k4JCdeOc010493%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r304 - trunk/src/net/sf/plantlore/client">krater at berlios.de
+       </A><BR>
+    <I>Fri May 19 14:39:40 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000355.html">[Plantlore-dev] r303 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+        <LI>Next message: <A HREF="000357.html">[Plantlore-dev] r305 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#356">[ date ]</a>
+              <a href="thread.html#356">[ thread ]</a>
+              <a href="subject.html#356">[ subject ]</a>
+              <a href="author.html#356">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-19 14:39:39 +0200 (Fri, 19 May 2006)
+New Revision: 304
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+Log:
+Proper Export binding to the AppCoreCtrl.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-19 12:06:51 UTC (rev 303)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-19 12:39:39 UTC (rev 304)
+@@ -52,8 +52,10 @@
+     private OverviewTableModel tableModel;
+     private TableSorter tableSorter;
+     private Logger logger;
+-
++    
+     private SelectQuery exportQuery = null;
++    private boolean usingProjections = false;
++    private Class rootTable = null;
+     
+     private int selectedRow = 0;
+     
+@@ -300,14 +302,24 @@
+         notifyObservers(&quot;NEW_QUERY&quot;);
+     }
+ 
+-    public void setExportQuery(SelectQuery query) {
++    public void setExportQuery(SelectQuery query, boolean useProjections, Class rootTable) {
+         this.exportQuery = query;
++        this.usingProjections = useProjections;
++        this.rootTable = rootTable;
+     }
+     
+     public SelectQuery getExportQuery() {
+         return exportQuery;
+     }
+     
++    public Class getRootTable() {
++    	return rootTable;
++    }
++    
++    public boolean areProjectionsEnabled() {
++    	return usingProjections;
++    }
++    
+     public Pair&lt;String, Integer&gt;[] getPlants() {
+         if (plants == null)
+         {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-19 12:06:51 UTC (rev 303)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-19 12:39:39 UTC (rev 304)
+@@ -405,6 +405,10 @@
+             		exportModel = new ExportMng(model.getDatabase());
+                         //FIXME:
+                     try {
++                    	if(model.areProjectionsEnabled()) {
++                    		exportModel.useProjections(true);
++                    		exportModel.setRootTable(model.getRootTable());
++                    	}
+                         exportModel.setSelectQuery(model.getExportQuery());
+                     } catch (RemoteException ex) {
+                         JOptionPane.showMessageDialog(view,&quot;Some remote error: &quot;+ex);
+@@ -416,7 +420,8 @@
+                         JOptionPane.showMessageDialog(view,&quot;Some export error: &quot;+ex);
+                         return;
+                     }
+-                        exportModel.setSelection(model.getTableModel().getSelection());
++                    
++                    exportModel.setSelection(model.getTableModel().getSelection());
+             		exportProgressView = new ExportProgressView(exportModel);
+             		exportProgressCtrl = new ExportProgressCtrl(exportModel, exportProgressView);
+             		exportView = new ExportMngViewA(exportModel);
+@@ -592,7 +597,7 @@
+             if (arg != null &amp;&amp; arg instanceof Integer) {
+                 logger.debug(&quot;Fetching new result id from Search model. Storing it to AppCore model.&quot;);
+                 model.setResultId(searchModel.getNewResultId());
+-                model.setExportQuery(searchModel.getExportQuery());
++                model.setExportQuery(searchModel.getExportQuery(), false, Occurrence.class);
+             }
+         }
+         
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000355.html">[Plantlore-dev] r303 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+	<LI>Next message: <A HREF="000357.html">[Plantlore-dev] r305 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#356">[ date ]</a>
+              <a href="thread.html#356">[ thread ]</a>
+              <a href="subject.html#356">[ subject ]</a>
+              <a href="author.html#356">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

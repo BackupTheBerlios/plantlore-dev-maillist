@@ -1,0 +1,838 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r250 - in trunk/src/net/sf/plantlore/client: export export/builders imports
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r250%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20export%20export/builders%20imports&In-Reply-To=%3C200605091724.k49HOITv018485%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000293.html">
+   <LINK REL="Next"  HREF="000298.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r250 - in trunk/src/net/sf/plantlore/client: export export/builders imports</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r250%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20export%20export/builders%20imports&In-Reply-To=%3C200605091724.k49HOITv018485%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r250 - in trunk/src/net/sf/plantlore/client: export export/builders imports">krater at berlios.de
+       </A><BR>
+    <I>Tue May  9 19:24:18 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000293.html">[Plantlore-dev] r249 - trunk/analysis/examples/hibernatetest
+</A></li>
+        <LI>Next message: <A HREF="000298.html">[Plantlore-dev] r251 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#295">[ date ]</a>
+              <a href="thread.html#295">[ thread ]</a>
+              <a href="subject.html#295">[ subject ]</a>
+              <a href="author.html#295">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-09 19:24:13 +0200 (Tue, 09 May 2006)
+New Revision: 250
+
+Added:
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+Log:
+client.export sealed. CSVBuilder.java fixed and finished (it can produce the header now).
+
+
+Modified: trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -14,7 +14,7 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-27
+- * @version 1.0
++ * @version 1.2
+  * @see net.sf.plantlore.client.Builder
+  * @see AbstractBuilder#output(Class, String, Object)
+  */
+@@ -63,15 +63,16 @@
+ 	protected abstract void output(Class table, String column, Object value) throws IOException;
+ 
+ 	/**
+-	 * Send all properties to output and traverse the subrecords, too.
+-	 * 
++	 * Send all desired properties to the output 
++	 * and traverse the subrecords, too.
+ 	 */
+ 	public void part(Record record) throws IOException {
+ 		if(record == null) return;
+ 		// Build this part of the record.
+ 		Class table = record.getClass();
+ 		for( String property : record.getProperties() ) 
+-			output( table, property, record.getValue(property) );
++			if( template.isSet(table, property) )
++				output( table, property, record.getValue(property) );
+ 		// Now look at all children of this record.
+ 		for(String key : record.getForeignKeys()) {
+ 			// And build'em too.
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -18,7 +18,7 @@
+  * The Director class (for export).
+  * Purpose: The Director continualy fetches results of the resultset
+  * identified by the &lt;code&gt;result&lt;/code&gt;.
+- * The selected results (records whose ID is in the &lt;code&gt;selection&lt;/code&gt;)
++ * The selected results (records containted in the &lt;code&gt;selection&lt;/code&gt;)
+  * are passed to the &lt;code&gt;builder&lt;/code&gt; - the builder is responsible for
+  * creating a corresponing output.
+  * &lt;br/&gt;
+@@ -32,7 +32,7 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- * @version 1.0 RC 1
++ * @version 1.0 RC 2
+  *
+  * @see net.sf.plantlore.client.common.Selection
+  * @see net.sf.plantlore.client.export.Builder
+@@ -70,7 +70,11 @@
+ 		setSelection(selection); 
+ 	}
+ 	
+-	
++	/**
++	 * Set a new Builder
++	 * @param builder	The builder to be used.
++	 * @throws ExportException	If the builder is not valid.
++	 */
+ 	protected void setBuilder(Builder builder) 
+ 	throws ExportException {
+ 		if(builder == null) {
+@@ -79,7 +83,13 @@
+ 		}
+ 		build = builder;
+ 	}
+-	
++
++	/**
++	 * Set a new resultset identificator.
++	 * 
++	 * @param result	The identifier of the resultset.
++	 * @throws ExportException	If the identifier is not valid.
++	 */
+ 	protected void setResult(int result) 
+ 	throws ExportException {
+ 		if(result &lt; 0) {
+@@ -89,6 +99,11 @@
+ 		this.result =  result;
+ 	}
+ 	
++	/**
++	 * Set a new database layer.
++	 * @param db	The database layer to be set.
++	 * @throws ExportException	If the database layer is not valid.
++	 */
+ 	protected void setDatabase(DBLayer db) 
+ 	throws ExportException {
+ 		if(db == null) {
+@@ -98,6 +113,11 @@
+ 		this.database = db;
+ 	}
+ 	
++	/**
++	 * Set a new selection.	
++	 * @param selection	The selection to be cloned.
++	 * @throws ExportException	If the selection is not valid.
++	 */
+ 	protected void setSelection(Selection selection) 
+ 	throws ExportException {
+ 		if(selection == null || selection.isEmpty()) {
+@@ -117,7 +137,12 @@
+ 	}
+ 	
+ 		
+-	
++	/**
++	 * Find all AuthorOccurrences associated with the &lt;code&gt;Occurrence&lt;/code&gt;
++	 * and send them to the Builder, too.
++	 * 
++	 * @param occurrence	The currently processed occurrence data.
++	 */
+ 	private void loadAssociatedAuthors(Occurrence occurrence) 
+ 	throws RemoteException, IOException, DBLayerException {
+ 		
+@@ -182,18 +207,10 @@
+ 			build.footer();
+ 			logger.info(&quot;Export completed. &quot; + count + &quot; records sent to output.&quot;);
+ 		}
+-		catch(DBLayerException e) {
+-			logger.error(&quot;Export ended prematurely &quot; + e);
++		catch(Exception e) {
++			logger.error(&quot;Export ended prematurely. &quot; + e);
+ 			setChanged(); notifyObservers( e ); 
+ 		}
+-		catch(RemoteException e) {
+-			logger.error(&quot;Export ended prematurely &quot; + e);
+-			setChanged(); notifyObservers( e );
+-		}
+-		catch(IOException e) {
+-			logger.error(&quot;Export ended prematurely &quot; + e); 
+-			setChanged(); notifyObservers( e );
+-		}
+ 		if(aborted) logger.info(&quot;Export aborted. &quot; + count + &quot; records sent to output.&quot;);
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -50,6 +50,7 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-29 
++ * @version 1.0
+  * @see net.sf.plantlore.client.export.DefaultDirector
+  * @see net.sf.plantlore.client.export.Builder
+  */
+@@ -232,7 +233,10 @@
+ 		if(selection == null || selection.isEmpty())
+ 			logger.warn(&quot;The list of selected records is empty!&quot;);
+ 
+-		if(selection == null) select = new Selection();
++		if(selection == null) {
++			select = new Selection();
++			select.all();
++		}
+ 		else select = selection.clone();
+ 
+ 		selectedResults = -1;
+@@ -298,11 +302,9 @@
+ 	
+ 	
+ 	/**
+-	 * Start the export procedure. The export procedure
+-	 * will run in its own thread.
++	 * Start the export procedure. The export will run in its own thread.
+ 	 * 
+-	 * @param append	True if the Builder shall append its output to an already existing file.
+-	 * @throws ExportException	If the information provided is not complete.
++	 * @throws ExportException	If information provided is not complete.
+ 	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
+ 	 */
+ 	synchronized public void start() 
+@@ -358,9 +360,11 @@
+ 		Thread monitor = new Thread(new Runnable() {
+ 			public void run() {
+ 				// Sleep until the thread is really dead.
+-				try {
+-					current.join();
+-				}catch(InterruptedException e) {} // FIXME: join the thread again
++				while( !sunExploded )
++					try {
++						current.join();
++						break;
++					}catch(InterruptedException e) {}
+ 				// Dispose of the writer.
+ 				try {
+ 					writer.close();
+@@ -379,6 +383,9 @@
+ 		monitor.start();
+ 	}
+ 	
++	
++	private boolean sunExploded = false;
++	
+ 
+ 	/**
+ 	 * Abort the current export. You &lt;b&gt;must call&lt;/b&gt; &lt;code&gt;finish()&lt;/code&gt; 
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -103,9 +103,25 @@
+     }
+     
+     
++    private boolean exceptionOccured = false;
+     
+ 	public void update(Observable source, Object parameter) {
+-		if(model.isAborted()) {
++		// The final cleanup may overwrite the exception! 
++		if(exceptionOccured)
++			return;
++		
++		if( parameter != null &amp;&amp; parameter instanceof Exception ) {
++			Exception e = (Exception) parameter;
++			setTitle(&quot;Export interrupted&quot;);
++			
++			status.setText(&quot;An exception interrupted the export procedure: &quot; + e);
++			
++			progress.setValue(0);
++			progress.setString(&quot;&quot;);
++			abort.setText(&quot;Close&quot;);
++			exceptionOccured = true;
++		}
++		else if(model.isAborted()) {
+ 			setTitle(&quot;Export aborted&quot;);
+ 			if(total &gt; 0)
+ 				status.setText(&quot;Export procedure aborted.\n &quot; + count +&quot;/&quot; + total + &quot; records exported.&quot;);
+@@ -123,16 +139,6 @@
+ 			progress.setString(&quot;100%&quot;);
+ 			abort.setText(&quot;Close&quot;);
+ 		}
+-		else if( parameter != null &amp;&amp; parameter instanceof Exception ) {
+-			Exception e = (Exception) parameter;
+-			setTitle(&quot;Export interrupted&quot;);
+-			
+-			status.setText(&quot;An exception interrupted the export procedure: &quot; + e);
+-			
+-			progress.setValue(0);
+-			progress.setString(&quot;&quot;);
+-			abort.setText(&quot;Close&quot;);
+-		}
+ 		else if( this.isVisible() ) {
+ 			count = model.getNumberOfExported();
+ 			if(count &gt;= 0) {
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -5,6 +5,7 @@
+ import java.util.ArrayList;
+ 
+ import net.sf.plantlore.client.export.AbstractBuilder;
++import net.sf.plantlore.client.export.Builder;
+ import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.client.export.Template;
+ 
+@@ -12,14 +13,14 @@
+ /**
+  * CSV Builder.
+  * 
+- * FIXME: Possibly broken due to the changes of the AbstractBuilder!
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-23
+- * @version 1.0 header is missing
++ * @version 1.2
+  */
+-public class CSVBuilder extends AbstractBuilder{
++public class CSVBuilder implements Builder {
+ 	
+ 	private Writer stream;
++	private Template template;
+ 	
+ 	/** Is this the first column on this line? */
+ 	private boolean firstColumnOnThisLine;
+@@ -28,8 +29,14 @@
+ 	private static final String DOUBLEQUOTE = &quot;\&quot;&quot;;
+ 	private static final String NEWLINE = System.getProperty(&quot;line.separator&quot;);
+ 	
+-	private ArrayList&lt;Record&gt; cache = new ArrayList&lt;Record&gt;(20);
+-	private ArrayList&lt;Author&gt; authors = new ArrayList&lt;Author&gt;(10);
++	/**
++	 * The basic record.
++	 */
++	private Record cache;
++	/**
++	 * The list of associated records.
++	 * Due to the one-to-many relationship.
++	 */
+ 	private ArrayList&lt;AuthorOccurrence&gt; authocc = new ArrayList&lt;AuthorOccurrence&gt;(10);
+ 	
+ 	
+@@ -44,18 +51,51 @@
+ 	 * @param tmp	The template that describes the selected columns and tables.
+ 	 */
+ 	public CSVBuilder(Writer output, Template tmp) {
+-		super(tmp);
+-		assert(tmp != null);
+-		
+ 		this.stream = output;
++		this.template = tmp;
+ 	}
+ 	
+ 	/**
+ 	 * Make a note that the header is yet to be created.
+ 	 */
+ 	public void header() throws IOException {
++		firstColumnOnThisLine = true;
++		
++		Occurrence sample = new Occurrence();
++		sample.setMetadata(new Metadata());
++		sample.setPublication(new Publication());
++		sample.setHabitat(new Habitat());
++		Habitat habitat = sample.getHabitat();
++		habitat.setPhytochorion(new Phytochorion());
++		habitat.setTerritory(new Territory());
++		habitat.setNearestVillage(new Village());
++		sample.setPlant(new Plant());
++		
++		constructHeader(sample);
++		
++		AuthorOccurrence associated = new AuthorOccurrence();
++		associated.setAuthor(new Author());
++		
++		constructHeader(associated);
++		
++//		stream.write(NEWLINE);
++//		stream.write(&quot;====================================================&quot;);
++		stream.write(NEWLINE);
+ 	}
+ 	
++	
++	private void constructHeader(Record record) throws IOException {
++		if(record == null) return;
++		Class table = record.getClass();
++		for( String property : record.getProperties() ) 
++			if( template.isSet(table, property) ) {
++				output( table.getSimpleName()+&quot;.&quot;+property );
++			}
++		for(String key : record.getForeignKeys()) {
++			constructHeader( (Record)record.getValue(key) );
++		}
++	}
++	
+ 	/**
+ 	 * Insert a line breaker.
+ 	 */
+@@ -67,8 +107,7 @@
+ 	 * Clear the cache before receiving a new record set.
+ 	 */
+ 	public void startRecord() throws IOException {
+-		 cache.clear(); authors.clear(); authocc.clear(); firstColumnOnThisLine = true;
+-		 stream.write(&quot;====================================================&quot;);
++		 cache = null; authocc.clear(); firstColumnOnThisLine = true;
+ 		 stream.write(NEWLINE);
+ 	}
+ 	
+@@ -76,17 +115,14 @@
+ 	 * Flush the cache.
+ 	 */
+ 	public void finishRecord() throws IOException {
+-		if(authors.size() + authocc.size() == 0) {
+-			for(Record record : cache) 
+-				writeCached( record );
++		if(authocc.size() == 0) {
++			writeCached( cache );
+ 			stream.write(NEWLINE);
+ 		}
+ 		else
+-			for(int i = 0; i &lt; Math.max(authors.size(), authocc.size()); i++) {
+-				for(Record record : cache) 
+-					writeCached( record );
+-				if(!authors.isEmpty()) writeCached( authors.get(i) );
+-				if(!authocc.isEmpty()) writeCached( authocc.get(i) );
++			for(int i = 0; i &lt; authocc.size(); i++) {
++				writeCached( cache );
++				writeCached( authocc.get(i) );
+ 				stream.write(NEWLINE);
+ 				firstColumnOnThisLine = true;
+ 			}
+@@ -95,13 +131,21 @@
+ 	/**
+ 	 * Cache the results.
+ 	 */
+-	@Override
+ 	public void part(Record record) throws IOException {
+-		if(record instanceof Author) authors.add( (Author) record );
+-		else if(record instanceof AuthorOccurrence) authocc.add( (AuthorOccurrence) record );
+-		else cache.add(record);
++		if(record instanceof AuthorOccurrence) authocc.add( (AuthorOccurrence) record );
++		else cache = record;
+ 	}
+ 	
++	/**
++	 * Call &lt;code&gt;part(Record)&lt;/code&gt; repeatedly.
++	 * 
++	 * @see AbstractBuilder#part(Record)
++	 */
++	public void part(Record... records) throws IOException {
++		for(Record r : records) 
++			part( r );		
++	}
++	
+ 		
+ 	/**
+ 	 * Convert the value to the CSV format.
+@@ -131,19 +175,30 @@
+ 	
+ 	
+ 	/**
+-	 * Write the cached records - use the &lt;code&gt;part()&lt;/code&gt; method now.
+-	 * 
+-	 * @param record
++	 * Write the cached records.
++	 *  
++	 * @param record	A record from the cache.
+ 	 * @see net.sf.plantlore.client.export.AbstractBuilder#part(Record)
+ 	 */
+ 	protected void writeCached(Record record) throws IOException {
+-		super.part(record);
++		if(record == null) return;
++		// Build this part of the record.
++		Class table = record.getClass();
++		for( String property : record.getProperties() ) 
++			if( template.isSet(table, property) ) {
++				output(record.getValue(property) );
++			}
++		// Now look at all children of this record.
++		for(String key : record.getForeignKeys()) {
++			// And build'em too.
++			writeCached( (Record) record.getValue(key) );
++		}
+ 	}
+ 	
+ 	/**
+ 	 * Send the &lt;code&gt;value&lt;/code&gt; to the output.
+ 	 */
+-	protected void output(Class table, String column, Object value) throws IOException {
++	protected void output(Object value) throws IOException {
+ 		if( firstColumnOnThisLine ) firstColumnOnThisLine = false; 
+ 		else stream.write(DELIMITER);
+ 		stream.write( convertToValidCSV( value ) );
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -30,15 +30,15 @@
+ 	public TrainingBuilder(Template template) {
+ 		super(template);
+ 	}
+-  //vola se na zacatku
++ 
+ 	public void header() throws IOException {
+ 		System.out.println(&quot;Training Builder engaged.&quot;);		
+ 	}
+-  //vola se na konci 
++  
+ 	public void footer() throws IOException {
+ 		System.out.println(&quot;Training Builder disengaged.&quot;);
+ 	}
+-  //pro jednotlive zaznamy
++ 
+ 	public void startRecord() throws IOException {
+ 		System.out.println(&quot; &lt;&quot; + i + &quot;&gt;&quot;);
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -2,7 +2,6 @@
+ 
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+-import java.util.Calendar;
+ import java.util.Date;
+ import java.util.Hashtable;
+ import java.util.Observable;
+@@ -444,20 +443,15 @@
+ 				}
+ 					
+ 				imported++;
++				setChanged(); notifyObservers( imported );
+ 			}
+ 		} 
+-		catch(DBLayerException e) {
++		catch(Exception e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+-			logger.error(&quot;The exception was caused by the DBLayer: &quot; + e);
++			logger.error(e);
+ 			/*e.printStackTrace();*/
+ 			setChanged(); notifyObservers(e);
+ 		}
+-		catch(RemoteException e) {
+-			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+-			logger.error(&quot;The exception was caused by the the transport layer (RMI): &quot; + e);
+-			/*e.printStackTrace();*/
+-			setChanged(); notifyObservers(e);
+-		}
+ 		logger.info(&quot;Import ended. &quot; + imported + &quot; records were imported (out of &quot; + count + &quot;).&quot;);
+ 	}
+ 	
+@@ -865,4 +859,12 @@
+ 		logger.info(&quot;Import aborted!&quot;);
+ 	}
+ 	
++	/**
++	 * 
++	 * @return The number of records inserted into the database.
++	 */
++	public int importedRecords() {
++		return imported;
++	}
++	
+ }
+
+Added: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-09 16:55:14 UTC (rev 249)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-09 17:24:13 UTC (rev 250)
+@@ -0,0 +1,224 @@
++package net.sf.plantlore.client.imports;
++
++import java.io.File;
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.Reader;
++import java.util.Observable;
++import java.util.Observer;
++
++import org.apache.log4j.Logger;
++
++import net.sf.plantlore.client.imports.Parser.Action;
++import net.sf.plantlore.common.exception.ImportException;
++import net.sf.plantlore.common.record.Record;
++import net.sf.plantlore.common.record.User;
++import net.sf.plantlore.l10n.L10n;
++import net.sf.plantlore.middleware.DBLayer;
++
++
++public class ImportMng extends Observable implements Observer {
++	
++	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
++	private DBLayer db ;
++	private String filename;
++	private DefaultDirector director;
++	private Parser parser;
++	private User user;
++	private boolean aborted = false, importInProgress = false;
++	
++	private Reader reader;
++	private Thread current;
++	
++	
++	public ImportMng(DBLayer db, User user, String filename) 
++	throws ImportException {
++		setDBLayer(db);
++		setUser(user);
++		setSelectedFile(filename);
++	}
++	
++	
++	public ImportMng(DBLayer db, User user) 
++	throws ImportException {
++		this(db, user, null);
++	}
++	
++	
++	
++	synchronized public void setDBLayer(DBLayer dblayer) 
++	throws ImportException {
++		if(dblayer == null) { 
++			logger.error(&quot;The database layer is null!&quot;);
++			throw new ImportException(&quot;The database layer cannot be null!&quot;);
++		}
++		db = dblayer;
++	}
++	
++	synchronized public void setUser(User user) 
++	throws ImportException {
++		if(user == null) { 
++			logger.error(&quot;The user is null!&quot;);
++			throw new ImportException(&quot;The user cannot be null!&quot;);
++		}
++		this.user = user;
++	}
++	
++	
++	/**
++	 * Set the selected file. Into this file the builder will 
++	 * spit its output. 
++	 */
++	synchronized public void setSelectedFile(String filename) { 
++		if(filename == null)
++			logger.warn(&quot;The selected file is null!&quot;);
++		this.filename = filename; 
++	}
++	
++	
++	
++	public void makeDecision(Action decision) {
++		if(director != null) 
++			director.makeDecision(decision);
++	}
++	
++	
++	public void setAskAboutTime(boolean arg) {
++		if(director != null) 
++			director.useLastDecisionInTimeIssues(arg);
++	}
++	
++	
++	public void setAskAboutInsert(boolean arg) {
++		if(director != null) 
++			director.useLastDecisionInUpdateInsertIssues(arg);
++	}
++	
++	/**
++	 * Start the import procedure. The import will run in its own thread.
++	 * 
++	 * @throws ImportException	If the information provided is not complete.
++	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
++	 */
++	synchronized public void start() 
++	throws ImportException, IOException {
++		// Check if we have all necessary components ready.
++		if( db == null )
++			throw new ImportException(&quot;There is no point in starting an import - the DBLayer is not set!&quot;);
++		if( filename == null ) 
++			throw new ImportException(&quot;The Filename is not set!&quot;);
++			
++		
++		logger.debug(&quot;Initializing the import environment.&quot;);
++		aborted = false;
++		
++		// Create a new reader.
++		File file = new File( filename );
++		reader = new FileReader( file );
++		if(reader == null) {
++			logger.fatal(&quot;Unable to create a new Reader.&quot;);
++			throw new ImportException(&quot;Unable to create a new Reader.&quot;);
++		}
++		
++		// Create a new parser according to the format.
++		//parser = new ...
++		
++
++		// Create a new Director and run it in a separate thread.
++		director = new DefaultDirector(db, parser, user);
++		director.addObserver(this);
++		
++		current = new Thread( director, &quot;Export&quot; );
++		if(current == null) {
++			logger.fatal(&quot;Unable to create a new thread.&quot;);
++			throw new ImportException(&quot;Unable to create a new thread.&quot;);
++		}
++		current.start();
++		
++		importInProgress = true;
++		
++		// Register a cleanup procedure
++		Thread monitor = new Thread(new Runnable() {
++			public void run() {
++				// Sleep until the thread is really dead.
++				while( !universeImploded )
++					try {
++						current.join();
++						break;
++					}catch(InterruptedException e) {} // FIXME: join the thread again
++				// Dispose of the writer.
++				try {
++					reader.close();
++				}catch(IOException e) {}
++				importInProgress = false;
++				logger.debug(&quot;Environment cleaned up.&quot;);
++				// Notify observers the export has ended.
++				update(null, null);
++			}
++		}, &quot;ImportMonitor&quot;);
++		monitor.start();
++	}
++	
++	
++	private boolean universeImploded = false;
++
++	/**
++	 * Abort the current export. You &lt;b&gt;must call&lt;/b&gt; &lt;code&gt;finish()&lt;/code&gt; 
++	 * after calling &lt;code&gt;abort()&lt;/code&gt;. 
++	 */
++	synchronized public void abort() {
++		if(!importInProgress) return;
++		aborted = true; importInProgress = false;
++		if(director != null) director.abort();
++		setChanged(); notifyObservers();
++	}
++	
++	/**
++	 * @return True if the export was aborted.
++	 */
++	public boolean isAborted() {
++		return aborted;
++	}
++	
++	/**
++	 * @return True if an export procedure already runs.
++	 */
++	public boolean isImportInProgress() {
++		return importInProgress;
++	}
++	
++	
++	/**
++	 * @return The number of results that have already been exported.
++	 */
++	public int getNumberOfImported() {
++		if(director == null) return 0;
++		return director.importedRecords();
++	}
++	
++	
++	public Record getProcessedRecordFromFile() {
++		return (director == null) ? null : director.getProcessedRecordFromFile();
++	}
++	
++	
++	public Record getProcessedRecordInDatabase() {
++		return (director == null) ? null : director.getProcessedRecordInDatabase();
++	}
++	
++	public Record getProblematicRecord() {
++		return (director == null) ? null : director.getProblematic();
++	}
++	
++	
++	/**
++	 * Notify the observers - some of our components has changed its state.
++	 * The parameter can carry either information about progress
++	 * or an exception that has to be dealt with.
++	 */
++	public void update(Observable source, Object parameter) {
++		setChanged(); notifyObservers( parameter );
++	}
++
++
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000293.html">[Plantlore-dev] r249 - trunk/analysis/examples/hibernatetest
+</A></li>
+	<LI>Next message: <A HREF="000298.html">[Plantlore-dev] r251 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#295">[ date ]</a>
+              <a href="thread.html#295">[ thread ]</a>
+              <a href="subject.html#295">[ subject ]</a>
+              <a href="author.html#295">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

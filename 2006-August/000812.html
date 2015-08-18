@@ -1,0 +1,375 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r585 - in trunk/src/net/sf/plantlore:	client/history client/login common common/exception l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r585%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20client/login%20common%20common/exception%20l10n%20server&In-Reply-To=%3C200608281521.k7SFLo2T019486%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000811.html">
+   <LINK REL="Next"  HREF="000813.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r585 - in trunk/src/net/sf/plantlore:	client/history client/login common common/exception l10n server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r585%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20client/login%20common%20common/exception%20l10n%20server&In-Reply-To=%3C200608281521.k7SFLo2T019486%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r585 - in trunk/src/net/sf/plantlore:	client/history client/login common common/exception l10n server">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 28 17:21:50 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000811.html">[Plantlore-dev] Kterak spravne vyjimku z DBLayer vyhoditi
+</A></li>
+        <LI>Next message: <A HREF="000813.html">[Plantlore-dev] r586 - in trunk/src/net/sf/plantlore/client: .	overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#812">[ date ]</a>
+              <a href="thread.html#812">[ thread ]</a>
+              <a href="subject.html#812">[ subject ]</a>
+              <a href="author.html#812">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-28 17:21:48 +0200 (Mon, 28 Aug 2006)
+New Revision: 585
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Preparation for proper exception handling.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -259,7 +259,7 @@
+      	        	 
+      	   //Check rights
+      	   if(! hasRights(occurrence.getCreatedWho().getId())) {
+-     		   DBLayerException dbex = new DBLayerException();
++     		   DBLayerException dbex = new DBLayerException(&quot;Bezparametricky konstruktor byl smazan!&quot;);
+      		   dbex.setError(DBLayerException.ERROR_RIGHTS, ERROR_NO_RIGHTS);
+         	   throw dbex; 		            
+      	   }   
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -8,6 +8,7 @@
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultProgressBarEx;
+ import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ 
+@@ -40,12 +41,14 @@
+ 				public void exceptionHandler(Exception ex) {
+ 					getTask().stop();
+ 					
+-//					if(ex instanceof DBLayerException)
+-//						System.out.println(((DBLayerException)e).getErrorCode());
++					String problem = ex.getMessage();
+ 					
++					if(ex instanceof DBLayerException &amp;&amp; ex.getCause() != null )
++						problem = ( (DBLayerException)ex ).getErrorInfo();
++					
+ 					JOptionPane.showMessageDialog( 
+ 							parent, 
+-							ex.getMessage(), 
++							problem, 
+ 							L10n.getString(&quot;Error.ConnectionFailed&quot;), 
+ 							JOptionPane.ERROR_MESSAGE );
+ 				}
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -302,9 +302,6 @@
+ 			} 
+ 			catch (Exception e) {
+ 				logger.error(&quot;The initialization of the DBLayer failed! &quot; + e.getMessage());
+-				
+-				e.printStackTrace();
+-                                
+ 				// If the initialization of the DBLayer failed, the uninitialized DBLayer must be destroyed!
+ 				// Otherwise, the server's policy may not allow another connection from this client!
+ 				if(currentDBLayer != null)
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -38,12 +38,16 @@
+ 	
+ 	
+ 	public static void show(Component parent, Exception e) {
++		show(parent, e.getMessage());
++	}
++	
++	public static void show(Component parent, String problemDescription) {
+ 		
+ 		defaultReconnectAction.setParent(parent);
+ 		
+ 		int choice = JOptionPane.showOptionDialog(
+ 				parent, 
+-				e.getMessage(), 
++				problemDescription, 
+ 				L10n.getString(&quot;Error.ConnectionLost&quot;),
+ 				0,
+ 				JOptionPane.ERROR_MESSAGE,
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -1,5 +1,7 @@
+ package net.sf.plantlore.common.exception;
+ 
++import net.sf.plantlore.l10n.L10n;
++
+ import org.hibernate.JDBCException;
+ 
+ 
+@@ -55,30 +57,34 @@
+         /** Out of memmory error occurred */
+         public static final int ERROR_OUT_OF_MEMORY = 15;        
+         /** Maximum number of connections achieved */
+-        public static final int ERROR_MAX_CONNECTIONS = 15;                
++        public static final int ERROR_MAX_CONNECTIONS = 16;                
+         /** Some other error */        
+         public static final int ERROR_OTHER = 20;
+         // ==============================================
+         
+         
+            
+-        /** Create new DBLayerException without an error message */
+-        public DBLayerException() { super(); }
+-        
+         /** Create new DBLayerException with an error message */
+         public DBLayerException(String message) { super(message); }
+         
++        
++        public DBLayerException(String message, int error) {
++        	super(message);
++        	setError(error, null);
++        }
++        
++              
+         // Better constructor to allow proper exception wrapping.
+         public DBLayerException(String message, Throwable originalException) {
+         	super(message, originalException);
+         	if(originalException instanceof JDBCException)        	
+-        		setError( translateSQLState( ((JDBCException)originalException).getSQLState()), originalException.getMessage() );
++        		setError( translateSQLState( ((JDBCException)originalException).getSQLState()), null );
+         }
+         
+         // Better constructor to allow proper exception wrapping.
+         public DBLayerException(String message, int error, Throwable originalException) {
+         	super(message, originalException);
+-        	setError( error, originalException.getMessage() );
++        	setError( error, null );
+         }
+         
+         
+@@ -93,7 +99,68 @@
+          */
+         public void setError(int errorCode, String errorInfo) {
+             this.errorCode = errorCode;
+-            this.errorInfo = errorInfo;
++            if(errorInfo != null)
++            	this.errorInfo = errorInfo;
++            else {
++            	switch(errorCode) {
++            	case ERROR_UNSPECIFIED:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Unspecified&quot;);
++            		break;
++            	case ERROR_LOAD_CONFIG:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.LoadConfig&quot;);
++            		break;
++            	case ERROR_CONNECT:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Connect&quot;);
++            		break;
++            	case ERROR_LOGIN:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Login&quot;);
++            		break;
++            	case ERROR_SAVE:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Save&quot;);
++            		break;
++            	case ERROR_DELETE:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Delete&quot;);
++            		break;
++            	case ERROR_UPDATE:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Update&quot;);
++            		break;
++            	case ERROR_SELECT:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Select&quot;);
++            		break;
++            	case ERROR_LOAD_DATA:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.LoadData&quot;);
++            		break;
++            	case ERROR_CLOSE:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Close&quot;);
++            		break;
++            	case ERROR_RIGHTS:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Rights&quot;);
++            		break;
++            	case ERROR_DB:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.DB&quot;);
++            		break;
++            	case ERROR_TRANSACTION:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Transaction&quot;);
++            		break;
++            	case ERROR_RESOURCES:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Resources&quot;);
++            		break;
++            	case ERROR_DISK_FULL:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.DiskFull&quot;);
++            		break;
++            	case ERROR_OUT_OF_MEMORY:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.OutOfMemory&quot;);
++            		break;
++            	case ERROR_MAX_CONNECTIONS:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.MaxConnections&quot;);
++            		break;
++            	case ERROR_OTHER:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Other&quot;);
++            		break;
++            	default:
++            		throw new IllegalArgumentException(L10n.getString(&quot;Error.ImproperUse&quot;));
++            	}
++            }
+         }
+         
+         /**
+@@ -119,7 +186,7 @@
+          *  @param sqlstate String containing SQL State constant
+          *  @return DBLayerException constant identifying a problem
+          */
+-        public static int translateSQLState(String sqlstate) {
++        public int translateSQLState(String sqlstate) {
+             String errorClass = sqlstate.substring(0,2);
+             String errorDetail = sqlstate.substring(2);
+             // Connection exception - Connection does not exist, was interrupted or cannot be established
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-28 15:21:48 UTC (rev 585)
+@@ -438,7 +438,7 @@
+ Import.RecordsDeleted = deleted.
+ Import.RecordsUpdated = updated.
+ Import.RecordsRejected = rejected.
+-Import.RecordsProcessed = processed.
++Import.RecordsProcessed = {0} processed.
+ Import.Abort=Abort
+ Import.Hide = Hide
+ Import.Skip = Skip
+@@ -1358,3 +1358,24 @@
+ Overview.MenuFileExitTT=Exits the application
+ 
+ Search.Extended=&amp;Extended
++
++DBLayer.Error.Unspecified=There is no additional information regarding to the problem.
++DBLayer.Error.LoadConfig=Unable to load the database configuration file. 
++DBLayer.Error.Connect=Unable to connect to the database engine.\nIs it running?
++DBLayer.Error.Login=Authentication failed.\nIncorrect user name or password.
++DBLayer.Error.Save=Unable to store data into the database.
++DBLayer.Error.Delete=Unable to delete the record from the database.
++DBLayer.Error.Update=Ubable to update the record in the database.
++DBLayer.Error.Select=Unable to perform the selection.
++DBLayer.Error.LoadData=Unable to obtain the data.
++DBLayer.Error.Close=Unable to close something.
++DBLayer.Error.Rights=Insufficient access rights.
++DBLayer.Error.DB=Something happened to the database, devil knows what.
++DBLayer.Error.Transaction=Another transaction is already running.
++DBLayer.Error.Resources=Out of resources!
++DBLayer.Error.DiskFull=The disk is full.
++DBLayer.Error.OutOfMemory=Out of memory.
++DBLayer.Error.MaxConnections=Maximum number of users reached.
++DBLayer.Error.Other=Unable to comply.
++
++
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-28 10:14:20 UTC (rev 584)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-28 15:21:48 UTC (rev 585)
+@@ -207,8 +207,8 @@
+         catch (JDBCException e) {
+             sessionFactory.close();
+             sessionFactory = null;
+-            logger.fatal(&quot;Selecting records from the database failed. Details: &quot;+e.getMessage());
+-            throw new DBLayerException(L10n.getString(&quot;Error.AuthenticationFailed&quot;), e);
++            logger.fatal(&quot;Cannot connect to the database. Details: &quot;+e.getMessage());
++            throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), e);
+         }
+         finally {
+         	if(sess != null) sess.close();
+@@ -762,7 +762,8 @@
+         Session session = sessions.remove(query);
+         if(session == null) {
+         	logger.warn(&quot;Client wants to close a query this database layer did not create! &quot; + query);
+-        	throw new DBLayerException(L10n.getString(&quot;Error.ClosingFakeQuery&quot;));
++        	//FIXME: throw new DBLayerException(L10n.getString(&quot;Error.ClosingFakeQuery&quot;));
++        	return;
+         }
+         session.close();     
+     	// Remove the query from the list of opened queries
+@@ -2222,11 +2223,12 @@
+     	
+     	logger.debug(&quot;Rolling back a possibly unfinished transaction...&quot;);
+     	// Some transactions may still run!
+-    	try {
+-    		rollbackTransaction();
+-    	} catch(Exception e) {
+-    		// Maintain silence.
+-    	}
++    	if(txSession != null)
++    		try {
++    			rollbackTransaction();
++    		} catch(Exception e) {
++    			// Maintain silence.
++    		}
+     	
+         // Check whether we are connected to the database
+     	logger.debug(&quot;Closing the session factory itself...&quot;);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000811.html">[Plantlore-dev] Kterak spravne vyjimku z DBLayer vyhoditi
+</A></li>
+	<LI>Next message: <A HREF="000813.html">[Plantlore-dev] r586 - in trunk/src/net/sf/plantlore/client: .	overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#812">[ date ]</a>
+              <a href="thread.html#812">[ thread ]</a>
+              <a href="subject.html#812">[ subject ]</a>
+              <a href="author.html#812">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

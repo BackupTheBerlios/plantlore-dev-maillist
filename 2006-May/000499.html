@@ -1,0 +1,1929 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r411 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r411%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605311753.k4VHrHMx020715%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000498.html">
+   <LINK REL="Next"  HREF="000500.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r411 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r411%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605311753.k4VHrHMx020715%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r411 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Wed May 31 19:53:17 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000498.html">[Plantlore-dev] r410 - in trunk: analysis/database src/net/sf/plantlore/common/record
+</A></li>
+        <LI>Next message: <A HREF="000500.html">[Plantlore-dev] [Bug #7667] Column choosing doesn't always work
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#499">[ date ]</a>
+              <a href="thread.html#499">[ thread ]</a>
+              <a href="subject.html#499">[ subject ]</a>
+              <a href="author.html#499">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-31 19:53:07 +0200 (Wed, 31 May 2006)
+New Revision: 411
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/SearchCtrl.java
+   trunk/src/net/sf/plantlore/client/SearchView.form
+   trunk/src/net/sf/plantlore/client/SearchView.java
+   trunk/src/net/sf/plantlore/client/TableSorter.java
+   trunk/src/net/sf/plantlore/common/Assistant.java
+   trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java
+   trunk/src/net/sf/plantlore/common/AutoTextArea.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Partially fixed Bug #7686 - Changes the user made in managers are not propagated.
+Most of the application is now ready for the propagation. Dialogs for Add, Edit and Search are constructed when Plantlore starts. Then after login data are feeded into these dialogs. To be able to do this I had to add new constructors and methods to AutoTextArea, AutoComboBoxNG3, Assistant (also fixed the AutoComboBoxe's missing border).
+
+ManagerBridge is now registered as an Observer of historyModel, wholeHistoryModel and metadataManagerModel and propagates changes to the rest of the application.
+Other managers are to be fixed yet.
+
+Another problem occurred related to Bug #7667 - Column choosing doesn't always work, the table column headers didn't change when the order and number of columns were changed in Settings. Fixed that too.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -58,7 +58,7 @@
+     private Occurrence o; //original occurrence
+     
+     //list of authors user selects
+-    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList;
++    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
+     private ArrayList&lt;String&gt; resultRevision;
+     private HashSet&lt;Pair&lt;Integer,String&gt;&gt; originalAuthors;//authors with the same name and different role are different authors for us --&gt; they each have their own AuthorOccurrence record
+     
+@@ -112,7 +112,7 @@
+     public AddEdit(DBLayer database, Boolean editMode) {
+         this.database = database;
+         this.editMode = editMode;
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());                
++        logger = Logger.getLogger(this.getClass().getPackage().getName());      
+     }
+  
+     /** Makes the model load data from the parameter ao.
+@@ -269,14 +269,16 @@
+             return;
+         }
+         this.phytName = phytName;
+-        for (int i=0; i &lt; phytCodes.length; i++) {
+-            if (phytCodes[i].getSecond().equals(phytName.getSecond())) {
+-                phytCode = phytCodes[i];
+-                logger.debug(&quot;SetPhytName For &quot;+phytName+&quot; found &quot;+phytCode);
+-                skipUpdate = true;
+-                break;
+-            } 
+-        }
++        if (phytCodes != null)
++            for (int i=0; i &lt; phytCodes.length; i++) {
++                if (phytCodes[i].getSecond().equals(phytName.getSecond())) {
++                    phytCode = phytCodes[i];
++                    logger.debug(&quot;SetPhytName For &quot;+phytName+&quot; found &quot;+phytCode);
++                    skipUpdate = true;
++                    break;
++                } 
++            }
++        else return;
+         logger.debug(&quot;PhytName set to &quot;+phytName);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateCode&quot;,-1));
+@@ -296,14 +298,17 @@
+             return;
+         }
+         this.phytCode = phytCode;
+-        for (int i=0; i &lt; phytNames.length; i++) {
+-            if (phytNames[i].getSecond().equals(phytCode.getSecond())) {
+-                phytName = phytNames[i];
+-                logger.debug(&quot;SetPhytCode For &quot;+phytCode+&quot; found &quot;+phytName);
+-                skipUpdate = true;
+-                break;
++        if (phytNames != null)
++            for (int i=0; i &lt; phytNames.length; i++) {
++                if (phytNames[i].getSecond().equals(phytCode.getSecond())) {
++                    phytName = phytNames[i];
++                    logger.debug(&quot;SetPhytCode For &quot;+phytCode+&quot; found &quot;+phytName);
++                    skipUpdate = true;
++                    break;
++                }
+             }
+-        }
++        else
++            return;
+         logger.debug(&quot;PhytCode set to &quot;+phytCode);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateName&quot;,-1));
+@@ -1009,7 +1014,7 @@
+             //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
+             SelectQuery sq = database.createQuery(AuthorOccurrence.class);        
+             sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
+-            sq.addRestriction(PlantloreConstants.RESTR_NE, AuthorOccurrence.DELETED, null, 1, null);
++            sq.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 0, null);
+             int resultid = database.executeQuery(sq);
+             int resultCount = database.getNumRows(resultid);
+             Object[] results = database.more(resultid, 0, resultCount-1);
+@@ -1102,6 +1107,7 @@
+     public void setPlants(Pair&lt;String, Integer&gt;[] plants) {
+         logger.debug(&quot;&quot;+plants.length+&quot; plants set.&quot;);
+         this.plants = plants;
++        setChanged(); notifyObservers(&quot;PLANTS_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getAuthors() {
+@@ -1111,6 +1117,7 @@
+     public void setAuthors(Pair&lt;String, Integer&gt;[] authors) {
+         logger.debug(&quot;&quot;+authors.length+&quot; authors set.&quot;);
+         this.authors = authors;
++        setChanged(); notifyObservers(&quot;AUTHORS_CHANGED&quot;);
+     }
+ 
+     public String[] getAuthorRoles() {
+@@ -1120,6 +1127,7 @@
+     public void setAuthorRoles(String[] authorRoles) {
+         logger.debug(&quot;&quot;+authorRoles.length+&quot; author roles set.&quot;);
+         this.authorRoles = authorRoles;
++        setChanged(); notifyObservers(&quot;AUTHORROLES_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getVillages() {
+@@ -1129,6 +1137,7 @@
+     public void setVillages(Pair&lt;String, Integer&gt;[] villages) {
+         logger.debug(&quot;&quot;+villages.length+&quot; villages set.&quot;);
+         this.villages = villages;
++        setChanged(); notifyObservers(&quot;VILLAGES_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getTerritories() {
+@@ -1138,6 +1147,7 @@
+     public void setTerritories(Pair&lt;String, Integer&gt;[] territories) {
+         logger.debug(&quot;&quot;+territories.length+&quot; territories set.&quot;);
+         this.territories = territories;
++        setChanged(); notifyObservers(&quot;TERRITORIES_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPhytNames() {
+@@ -1147,6 +1157,7 @@
+     public void setPhytNames(Pair&lt;String, Integer&gt;[] phytNames) {
+         logger.debug(&quot;&quot;+phytNames.length+&quot; phytochorion names set.&quot;);
+         this.phytNames = phytNames;
++        setChanged(); notifyObservers(&quot;PHYTNAMES_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPhytCodes() {
+@@ -1156,6 +1167,7 @@
+     public void setPhytCodes(Pair&lt;String, Integer&gt;[] phytCodes) {
+         logger.debug(&quot;&quot;+phytCodes.length+&quot; phytochorion codes set.&quot;);
+         this.phytCodes = phytCodes;
++        setChanged(); notifyObservers(&quot;PHYTCODES_CHANGED&quot;);
+     }
+ 
+     public String[] getCountries() {
+@@ -1163,8 +1175,9 @@
+     }
+ 
+     public void setCountries(String[] countries) {
+-        logger.debug(&quot;&quot;+countries.length+&quot; set.&quot;);
++        logger.debug(&quot;&quot;+countries.length+&quot; countries set.&quot;);
+         this.countries = countries;
++        setChanged(); notifyObservers(&quot;COUNTRIES_CHANGED&quot;);
+     }
+ 
+     public String[] getSources() {
+@@ -1172,8 +1185,9 @@
+     }
+ 
+     public void setSources(String[] sources) {
+-        logger.debug(&quot;&quot;+sources.length+&quot; set.&quot;);
++        logger.debug(&quot;&quot;+sources.length+&quot; sources set.&quot;);
+         this.sources = sources;
++        setChanged(); notifyObservers(&quot;SOURCES_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPublications() {
+@@ -1181,8 +1195,9 @@
+     }
+ 
+     public void setPublications(Pair&lt;String, Integer&gt;[] publications) {
+-        logger.debug(&quot;&quot;+publications.length+&quot; set.&quot;);
++        logger.debug(&quot;&quot;+publications.length+&quot; publications set.&quot;);
+         this.publications = publications;
++        setChanged(); notifyObservers(&quot;PUBLICATIONS_CHANGED&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getProjects() {
+@@ -1190,8 +1205,9 @@
+     }
+ 
+     public void setProjects(Pair&lt;String, Integer&gt;[] projects) {
+-        logger.debug(&quot;&quot;+projects.length+&quot; set.&quot;);
++        logger.debug(&quot;&quot;+projects.length+&quot; projects set.&quot;);
+         this.projects = projects;
++        setChanged(); notifyObservers(&quot;PROJECTS_CHANGED&quot;);
+     }
+ 
+     //for add mode
+@@ -1216,6 +1232,8 @@
+         month = Calendar.getInstance().get(Calendar.MONTH);
+         day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+         time = null;
++        setChanged();
++        notifyObservers(&quot;CLEAR&quot;);
+     }
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -143,35 +143,37 @@
+             
+             String command = e.getActionCommand();
+             
+-            System.out.println(&quot;command: &quot;+command);
+             
+             //------- ComboBoxes --------            
+ //            if (command.equals(&quot;authorComboBox&quot;))
+ //                model.setAuthor((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+-                
+-            if (command.equals(&quot;townComboBox&quot;))
++             
++            //we have to check whether the selected item is of the right type
++            //because of the possibility that the choices set to the combobox were null
++            //and therefore it by default created only one item with an empty string
++            if (command.equals(&quot;townComboBox&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setVillage((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;territoryNameCombo&quot;))
++            if (command.equals(&quot;territoryNameCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setTerritoryName((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+ 
+-            if (command.equals(&quot;phytNameCombo&quot;))
++            if (command.equals(&quot;phytNameCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setPhytName((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;phytCodeCombo&quot;))
++            if (command.equals(&quot;phytCodeCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 //System.out.println(&quot;c.getSelectedItem(): &quot;+c.getSelectedItem());
+                 model.setPhytCode((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;phytCountryCombo&quot;))
++            if (command.equals(&quot;phytCountryCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof String))
+                 model.setPhytCountry((String) c.getSelectedItem());
+ 
+-            if (command.equals(&quot;sourceCombo&quot;))
++            if (command.equals(&quot;sourceCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof String))
+                 model.setSource((String) c.getSelectedItem());
+            
+-            if (command.equals(&quot;publicationCombo&quot;))
++            if (command.equals(&quot;publicationCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setPublication((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;projectCombo&quot;))
++            if (command.equals(&quot;projectCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setProject((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+             
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-31 17:53:07 UTC (rev 411)
+@@ -140,7 +140,7 @@
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getVillages(), true);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;//items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;townComboBox.setActionCommand(&quot;townComboBox&quot;);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -203,8 +203,8 @@
+                 &lt;Property name=&quot;autoscrolls&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(choices, this);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;Pair&lt;String, Integer&gt;[] plants = model.getPlants();&amp;#xa;String[] choices = new String[plants.length];&amp;#xa;for (int i = 0; i &lt; plants.length; i++) &amp;#xa;    choices[i] = plants[i].getFirst();&amp;#xa;&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(this);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;&amp;#xa;&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -600,7 +600,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getTerritories(), true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -612,7 +612,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getPhytNames(), true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);&amp;#xa;&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -624,7 +624,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getPhytCodes(), true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -636,7 +636,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getCountries(), false); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(false); &quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&amp;#xa;phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -759,7 +759,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getSources(), false); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(false); &quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;sourceCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -771,7 +771,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getPublications(), true);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;publicationCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+@@ -783,7 +783,7 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getProjects(), true);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;projectCombo.setActionCommand(&quot;projectCombo&quot;);&amp;#xa;&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -18,6 +18,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ import javax.swing.DefaultCellEditor;
++import javax.swing.DefaultComboBoxModel;
+ import javax.swing.JButton;
+ import javax.swing.JComboBox;
+ import javax.swing.JDialog;
+@@ -63,8 +64,8 @@
+         
+         setLabels();
+         
+-        if (inEditMode)
+-            loadComponentData();
++        //if (inEditMode)
++        //    loadComponentData();
+         
+         jPanel3.setVisible(visible);
+         jPanel2.setPreferredSize(new Dimension(DIALOG_WIDTH,190));
+@@ -84,19 +85,15 @@
+         jPanel2 = new javax.swing.JPanel();
+         townLabel = new javax.swing.JLabel();
+         //items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};
+-        townComboBox = new AutoComboBoxNG3(model.getVillages(), true);
++        townComboBox = new AutoComboBoxNG3(true);
+         taxonLabel = new javax.swing.JLabel();
+         yearLabel = new javax.swing.JLabel();
+         placeDescriptionLabel = new javax.swing.JLabel();
+         jScrollPane2 = new javax.swing.JScrollPane();
+         descriptionArea = new javax.swing.JTextArea();
+         jScrollPane3 = new javax.swing.JScrollPane();
+-        Pair&lt;String, Integer&gt;[] plants = model.getPlants();
+-        String[] choices = new String[plants.length];
+-        for (int i = 0; i &lt; plants.length; i++)
+-        choices[i] = plants[i].getFirst();
+ 
+-        taxonTextArea = new AutoTextArea(choices, this);
++        taxonTextArea = new AutoTextArea(this);
+         extendedButton = new javax.swing.JToggleButton();
+         checklistButton = new javax.swing.JButton();
+         yearSpinner = new javax.swing.JSpinner();
+@@ -116,10 +113,10 @@
+         territoryNameLabel = new javax.swing.JLabel();
+         phytNameLabel = new javax.swing.JLabel();
+         phytCodeLabel = new javax.swing.JLabel();
+-        territoryNameCombo = new AutoComboBoxNG3(model.getTerritories(), true);
+-        phytNameCombo = new AutoComboBoxNG3(model.getPhytNames(), true);
+-        phytCodeCombo = new AutoComboBoxNG3(model.getPhytCodes(), true);
+-        phytCountryCombo = new AutoComboBoxNG3(model.getCountries(), false);
++        territoryNameCombo = new AutoComboBoxNG3(true);
++        phytNameCombo = new AutoComboBoxNG3(true);
++        phytCodeCombo = new AutoComboBoxNG3(true);
++        phytCountryCombo = new AutoComboBoxNG3(false);
+         quadrantTextField = new javax.swing.JTextField();
+         jPanel6 = new javax.swing.JPanel();
+         publicationLabel = new javax.swing.JLabel();
+@@ -127,9 +124,9 @@
+         projectLabel = new javax.swing.JLabel();
+         herbariumTextField = new javax.swing.JTextField();
+         sourceLabel = new javax.swing.JLabel();
+-        sourceCombo = new AutoComboBoxNG3(model.getSources(), false);
+-        publicationCombo = new AutoComboBoxNG3(model.getPublications(), true);
+-        projectCombo = new AutoComboBoxNG3(model.getProjects(), true);
++        sourceCombo = new AutoComboBoxNG3(false);
++        publicationCombo = new AutoComboBoxNG3(true);
++        projectCombo = new AutoComboBoxNG3(true);
+         jPanel7 = new javax.swing.JPanel();
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+@@ -722,9 +719,19 @@
+         TableColumn tc3 = authorTable.getColumnModel().getColumn(2);
+         TableColumn tc4 = authorTable.getColumnModel().getColumn(3);
+ 
+-        JComboBox cb = new AutoComboBoxNG3(model.getAuthors());
++        JComboBox cb;
++        if (model.getAuthors() == null) 
++            cb = new AutoComboBoxNG3();
++        else
++            cb = new AutoComboBoxNG3(model.getAuthors());
++        
+         tc1.setCellEditor(new DefaultCellEditor(cb));  
+-        cb = new AutoComboBoxNG3(model.getAuthorRoles());
++        
++        if (model.getAuthorRoles() == null) 
++            cb = new AutoComboBoxNG3();
++        else
++            cb = new AutoComboBoxNG3(model.getAuthorRoles());
++        
+         tc2.setCellEditor(new DefaultCellEditor(cb));
+         
+         ButtonEditor be = new ButtonEditor(model);
+@@ -899,7 +906,7 @@
+                 //unfortunately have to set up the editors and renderers again because of the
+                 //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
+                 //initAuthorTable();            
+-            }
++            }            
+         }
+         
+         if (arg instanceof String) {
+@@ -913,6 +920,116 @@
+                 if (model.getMonth() == null)
+                     dayChooser.setEnabled(false);
+             }
++            if (s.equals(&quot;CLEAR&quot;))
++                clearComponentData();
++            
++            if (s.equals(&quot;PLANTS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating plant area&quot;);
++                if (model.getPlants() == null) {
++                    ((AutoTextArea)taxonTextArea).setChoices(new String[] {&quot;&quot;});
++                    return;
++                }
++                Pair&lt;String, Integer&gt;[] plants = model.getPlants();
++                String[] choices = new String[plants.length];
++                for (int i = 0; i &lt; plants.length; i++) 
++                    choices[i] = plants[i].getFirst();
++                
++                ((AutoTextArea)taxonTextArea).setChoices(choices);
++            }
++            
++            if (s.equals(&quot;AUTHORS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating authors combo&quot;);
++                JComboBox cb;
++                
++                if (model.getAuthors() == null) 
++                    cb = new AutoComboBoxNG3();
++                else
++                    cb = new AutoComboBoxNG3(model.getAuthors());
++                    
++                TableColumn tc1 = authorTable.getColumnModel().getColumn(0);
++
++                
++                tc1.setCellEditor(new DefaultCellEditor(cb));  
++            }
++
++            if (s.equals(&quot;AUTHORROLES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating authorroles combobox&quot;);
++                JComboBox cb;
++                
++                if (model.getAuthorRoles() == null)
++                    cb = new AutoComboBoxNG3();
++                else
++                    cb = new AutoComboBoxNG3(model.getAuthorRoles());
++
++                TableColumn tc2 = authorTable.getColumnModel().getColumn(1);
++                
++                tc2.setCellEditor(new DefaultCellEditor(cb));                
++            }
++            
++            if (s.equals(&quot;VILLAGES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating villages combobox&quot;);
++                if (model.getVillages() == null)
++                    townComboBox.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    townComboBox.setModel(new DefaultComboBoxModel(model.getVillages()));;                
++            }
++            
++            if (s.equals(&quot;TERRITORIES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating territories combobox&quot;);
++                if (model.getTerritories() == null)
++                    territoryNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    territoryNameCombo.setModel(new DefaultComboBoxModel(model.getTerritories()));;                                
++            }
++
++            if (s.equals(&quot;PHYTNAMES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating phytnames combobox&quot;);
++                if (model.getPhytNames() == null)
++                    phytNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytNameCombo.setModel(new DefaultComboBoxModel(model.getPhytNames()));;                                
++            }
++
++            if (s.equals(&quot;PHYTCODES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating phytcodes combobox&quot;);
++                if (model.getPhytCodes() == null)
++                    phytCodeCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytCodeCombo.setModel(new DefaultComboBoxModel(model.getPhytCodes()));;                                
++            }
++
++            if (s.equals(&quot;COUNTRIES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating countries combobox&quot;);
++                if (model.getCountries() == null)
++                    phytCountryCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytCountryCombo.setModel(new DefaultComboBoxModel(model.getCountries()));;                                
++            }
++            
++            if (s.equals(&quot;SOURCES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating sources combobox&quot;);
++                if (model.getSources() == null)
++                    sourceCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    sourceCombo.setModel(new DefaultComboBoxModel(model.getSources()));;                                
++            }
++            
++            if (s.equals(&quot;PUBLICATIONS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating publications combobox&quot;);
++                if (model.getPublications() == null)
++                    publicationCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    publicationCombo.setModel(new DefaultComboBoxModel(model.getPublications()));;                                
++            }
++
++            if (s.equals(&quot;PROJECTS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating projects combobox&quot;);
++                if (model.getProjects() == null)
++                    projectCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    projectCombo.setModel(new DefaultComboBoxModel(model.getProjects()));;                                
++            }
++            
+         }
+     }
+         
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -66,6 +66,7 @@
+ import net.sf.plantlore.client.user.UserManager;
+ import net.sf.plantlore.client.user.UserManagerCtrl;
+ import net.sf.plantlore.client.user.UserManagerView;
++import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.ProgressBar;
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.StatusBarManager;
+@@ -183,6 +184,9 @@
+     ImportProgressCtrl importProgressCtrl;
+     DecisionView importDecisionView;
+     DecisionCtrl importDecisionCtrl;
++
++    //Bridges
++    ManagerBridge managerBridge = new ManagerBridge();
+     
+     //Actions
+     AbstractAction settingsAction = new SettingsAction();
+@@ -260,6 +264,8 @@
+         
+         view.setLoginAction(loginAction);
+         
++        constructDialogs();                
++               
+         // This is here in order to skip login procedure and connect to the database automatically
+         // For developement purposes only - so that we don't have to go through login each time we run Plantlore 
+         // view.initOverview();
+@@ -267,6 +273,30 @@
+         setDatabaseDependentCommandsEnabled(false);
+     }
+     
++    private void constructDialogs() {
++        //--- Add ---
++        addModel = new AddEdit(model.getDatabase(),false);
++        addView = new AddEditView(view, true, addModel, false);
++        addView.setTitle(L10n.getString(&quot;AddEdit.AddDialogTitle&quot;));
++        addCtrl = new AddEditCtrl(addModel, addView, false);
++
++        //--- Edit ---
++        editModel = new AddEdit(model.getDatabase(),true);
++        editView = new AddEditView(view, true, editModel, true);
++        editView.setTitle(L10n.getString(&quot;AddEdit.EditDialogTitle&quot;));
++        editCtrl = new AddEditCtrl(editModel, editView, true);
++        
++        
++        //--- Search ---
++        searchModel = new Search(model.getDatabase());
++        StatusBarManager sbm = view.getSBM();
++        searchModel.setColumns(model.getTableModel().getColumns());
++        searchView = new SearchView(view, true, searchModel);
++        searchView.setTitle(L10n.getString(&quot;Search.DialogTitle&quot;));
++        searchCtrl = new SearchCtrl(searchModel, searchView);
++        searchModel.addObserver(new SearchBridge());
++    }
++    
+     private void setDatabaseDependentCommandsEnabled(boolean enabled) {
+         settingsAction.setEnabled(enabled);
+         printAction.setEnabled(enabled);
+@@ -331,10 +361,11 @@
+                 if (s.equals(&quot;COLUMNS&quot;)) {
+                     logger.debug(&quot;User changed columns in settings. Propagating the change to overview and config.&quot;);
+                     ArrayList&lt;Column&gt; columns = settingsModel.getSelectedColumns();
+-                    model.getTableModel().setColumns(columns);
++                    model.getTableSorter().setColumns(columns);
+                     model.getMainConfig().setColumns(columns);
+                     
+                     searchModel.setColumns(columns);
++                    searchModel.clear();
+                     searchModel.constructQuery();
+                 }
+             }
+@@ -507,28 +538,8 @@
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Add&quot;));            
+         } 
+ 
+-        public void actionPerformed(ActionEvent actionEvent) {
+-            if (addView == null) {
+-                addModel = new AddEdit(model.getDatabase(),false);
+-                addModel.setAuthors(model.getAuthors());
+-                addModel.setAuthorRoles(model.getAuthorRoles());
+-                addModel.setPlants(model.getPlants());
+-                addModel.setVillages(model.getVillages());
+-                addModel.setPhytNames(model.getPhytNames());
+-                addModel.setPhytCodes(model.getPhytCodes());
+-                addModel.setCountries(model.getCountries());
+-                addModel.setSources(model.getSources());
+-                addModel.setPublications(model.getPublications());
+-                addModel.setProjects(model.getProjects());
+-                addModel.setTerritories(model.getTerritories());
+-                
+-                addView = new AddEditView(view, true, addModel, false);
+-                addView.setTitle(L10n.getString(&quot;AddEdit.AddDialogTitle&quot;));
+-                addCtrl = new AddEditCtrl(addModel, addView, false);
+-            }
++        public void actionPerformed(ActionEvent actionEvent) {                
+             addModel.clear();
+-            //fixme: should be automatic via observer/observable
+-            addView.clearComponentData();
+             addView.setVisible(true);
+         }
+     }
+@@ -544,50 +555,18 @@
+         } 
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+-            if (editView == null) {
+-                editModel = new AddEdit(model.getDatabase(),true);
+-                editModel.setAuthors(model.getAuthors());
+-                editModel.setAuthorRoles(model.getAuthorRoles());
+-                editModel.setPlants(model.getPlants());
+-                editModel.setVillages(model.getVillages());
+-                editModel.setPhytNames(model.getPhytNames());
+-                editModel.setPhytCodes(model.getPhytCodes());
+-                editModel.setCountries(model.getCountries());
+-                editModel.setSources(model.getSources());
+-                editModel.setPublications(model.getPublications());
+-                editModel.setProjects(model.getProjects());
+-                editModel.setTerritories(model.getTerritories());
+-                
+-                Object[] row = model.getSelectedRow();
+-                try {
+-                    editModel.setRecord((Integer) row[row.length-1]);
+-                } catch (DBLayerException ex) {
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
+-                } catch (RemoteException ex) {
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex);
+-                }
+-                editView = new AddEditView(view, true, editModel, true);
+-                editView.setTitle(L10n.getString(&quot;AddEdit.EditDialogTitle&quot;));
+-                editCtrl = new AddEditCtrl(editModel, editView, true);
+-                editView.loadComponentData();
+-                editView.setVisible(true);                
+-                return;
+-            } else {
+-                Object[] row = model.getSelectedRow();
+-                try {
+-                    editModel.setRecord((Integer) row[row.length-1]);
+-                } catch (DBLayerException ex) {
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
+-                } catch (RemoteException ex) {
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+-                    logger.error(ex);
+-                }
+-                editView.loadComponentData();
+-                editView.setVisible(true);
++            Object[] row = model.getSelectedRow();
++            try {
++                editModel.setRecord((Integer) row[row.length-1]);
++            } catch (DBLayerException ex) {
++                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
++            } catch (RemoteException ex) {
++                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                logger.error(ex);
+             }
++            editView.loadComponentData();
++            editView.setVisible(true);
+         }
+     }
+     
+@@ -684,32 +663,6 @@
+         }
+     }
+ 
+-    private void constructSearchMVC() {
+-            if (searchModel == null) {
+-                searchModel = new Search(model.getDatabase());
+-                StatusBarManager sbm = view.getSBM();
+-                
+-                searchModel.setColumns(model.getTableModel().getColumns());
+-                
+-                searchModel.setAuthors(model.getAuthors());
+-                searchModel.setAuthorRoles(model.getAuthorRoles());
+-                searchModel.setPlants(model.getPlants());
+-                searchModel.setVillages(model.getVillages());
+-                searchModel.setPhytNames(model.getPhytNames());
+-                searchModel.setPhytCodes(model.getPhytCodes());
+-                searchModel.setCountries(model.getCountries());
+-                searchModel.setSources(model.getSources());
+-                searchModel.setPublications(model.getPublications());
+-                searchModel.setProjects(model.getProjects());
+-                searchModel.setTerritories(model.getTerritories());
+-                
+-                searchView = new SearchView(view, true, searchModel);
+-                searchView.setTitle(L10n.getString(&quot;Search.DialogTitle&quot;));
+-                searchCtrl = new SearchCtrl(searchModel, searchView);
+-                searchModel.addObserver(new SearchBridge());
+-            }        
+-    }
+-    
+     class SearchAction extends AbstractAction {
+         public SearchAction() {
+             if (showButtonText)
+@@ -723,7 +676,6 @@
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+             searchModel.clear();
+-            searchView.clearComponentData();
+             searchView.setVisible(true);
+         }
+     }
+@@ -933,6 +885,7 @@
+             historyModel = new History(model.getDatabase(), model.getSelectedOccurrence());
+             historyView = new HistoryView(historyModel, view, true);
+             historyCtrl = new HistoryCtrl(historyModel, historyView);
++            historyModel.addObserver(managerBridge);
+             historyView.setVisible(true);                         
+         }
+         
+@@ -949,6 +902,7 @@
+             wholeHistoryModel = new History(model.getDatabase());
+             wholeHistoryView = new WholeHistoryView(wholeHistoryModel, view, true);
+             wholeHistoryCtrl = new WholeHistoryCtrl(wholeHistoryModel, wholeHistoryView);
++            wholeHistoryModel.addObserver(managerBridge);
+             wholeHistoryView.setVisible(true); 
+         }
+     }    
+@@ -968,6 +922,7 @@
+             metadataManagerModel = new MetadataManager(model.getDatabase());
+             metadataManagerView = new MetadataManagerView(metadataManagerModel, view, true);
+             metadataManagerCtrl = new MetadataManagerCtrl(metadataManagerModel, metadataManagerView);
++            metadataManagerModel.addObserver(managerBridge);
+             metadataManagerView.setVisible(true);
+         }
+     }              
+@@ -1082,6 +1037,50 @@
+     
+     // Update all information about the database layer and inform everyone who has to be informed 
+     class DatabaseChange implements Observer {
++        /** Fetches combobox items from AppCore and stores them to dialog models.
++         *
++         */
++        private void fillDialogModels() {
++            logger.debug(&quot;Filling Add model.&quot;);
++                addModel.setAuthors(model.getAuthors());
++                addModel.setAuthorRoles(model.getAuthorRoles());
++                addModel.setPlants(model.getPlants());
++                addModel.setVillages(model.getVillages());
++                addModel.setPhytNames(model.getPhytNames());
++                addModel.setPhytCodes(model.getPhytCodes());
++                addModel.setCountries(model.getCountries());
++                addModel.setSources(model.getSources());
++                addModel.setPublications(model.getPublications());
++                addModel.setProjects(model.getProjects());
++                addModel.setTerritories(model.getTerritories());            
++
++            logger.debug(&quot;Filling Edit model.&quot;);
++                editModel.setAuthors(model.getAuthors());
++                editModel.setAuthorRoles(model.getAuthorRoles());
++                editModel.setPlants(model.getPlants());
++                editModel.setVillages(model.getVillages());
++                editModel.setPhytNames(model.getPhytNames());
++                editModel.setPhytCodes(model.getPhytCodes());
++                editModel.setCountries(model.getCountries());
++                editModel.setSources(model.getSources());
++                editModel.setPublications(model.getPublications());
++                editModel.setProjects(model.getProjects());
++                editModel.setTerritories(model.getTerritories());
++
++            logger.debug(&quot;Filling Search model.&quot;);
++                searchModel.setAuthors(model.getAuthors());
++                searchModel.setAuthorRoles(model.getAuthorRoles());
++                searchModel.setPlants(model.getPlants());
++                searchModel.setVillages(model.getVillages());
++                searchModel.setPhytNames(model.getPhytNames());
++                searchModel.setPhytCodes(model.getPhytCodes());
++                searchModel.setCountries(model.getCountries());
++                searchModel.setSources(model.getSources());
++                searchModel.setPublications(model.getPublications());
++                searchModel.setProjects(model.getProjects());
++                searchModel.setTerritories(model.getTerritories());
++        }
++
+     	public void update(Observable targer, Object parameter) {
+     		if(parameter != null &amp;&amp; parameter instanceof DBLayer) {
+                         loginAction.setEnabled(false);
+@@ -1101,12 +1100,19 @@
+                             JOptionPane.showMessageDialog(view,&quot;Database problem&quot;,&quot;Some database problem occurred:\n&quot;+ex,JOptionPane.WARNING_MESSAGE);
+                             return;
+                         }
+-    			model.setAccessRights( loginModel.getAccessRights() );
++                        //distribute database to dialogs
++                        addModel.setDatabase(dblayer);
++                        editModel.setDatabase(dblayer);
++                        searchModel.setDatabase(dblayer);
++    			
++                        model.setAccessRights( loginModel.getAccessRights() );
+                         model.login();
+                         
++                        view.getSBM().display(L10n.getString(&quot;Message.FillingDialogs&quot;));
++                        fillDialogModels();
++                        
+                         view.getSBM().display(L10n.getString(&quot;Message.LoadingOverviewData&quot;));
+-                        constructSearchMVC();
+-                        searchModel.setDatabase(model.getDatabase());
++                        searchModel.clear();
+                         searchModel.constructQuery();
+                         view.getSBM().displayDefaultText();
+                         
+@@ -1162,4 +1168,89 @@
+         
+     }
+     
++    /** Propagates changes made in managers to the rest of the application.
++     *
++     */
++    class ManagerBridge implements Observer {
++        public void update(Observable o, Object arg) {
++            if (arg instanceof PlantloreConstants.Table[]) {
++                PlantloreConstants.Table[] tables = (PlantloreConstants.Table[])arg;   
++                try {
++                for (PlantloreConstants.Table table : tables) {
++                    logger.debug(&quot;ManagerBridge received message that &quot;+table+&quot; has been updated.&quot;);
++                    switch (table) {
++                        case AUTHOR:
++                            model.loadAuthors();
++                            addModel.setAuthors(model.getAuthors());
++                            editModel.setAuthors(model.getAuthors());
++                            searchModel.setAuthors(model.getAuthors());
++                            break;
++                        case AUTHOROCCURRENCE:
++                            model.loadAuthorRoles();
++                            addModel.setAuthorRoles(model.getAuthorRoles());
++                            editModel.setAuthorRoles(model.getAuthorRoles());
++                            searchModel.setAuthorRoles(model.getAuthorRoles());                            
++                            break;
++                        case METADATA:
++                            model.loadProjects();
++                            addModel.setProjects(model.getProjects());
++                            editModel.setProjects(model.getProjects());
++                            searchModel.setProjects(model.getProjects());
++                            break;
++                        case OCCURRENCE:
++                            refreshAction.actionPerformed(null);
++                            break;
++                        case PHYTOCHORION:
++                            model.loadPhytCodes();
++                            model.loadPhytNames();
++                            addModel.setPhytCodes(model.getPhytCodes());
++                            addModel.setPhytNames(model.getPhytNames());
++                            editModel.setPhytCodes(model.getPhytCodes());
++                            editModel.setPhytNames(model.getPhytNames());
++                            searchModel.setPhytCodes(model.getPhytCodes());
++                            searchModel.setPhytNames(model.getPhytNames());
++                            break;
++                        case PLANT:
++                            model.loadPlants();
++                            addModel.setPlants(model.getPlants());
++                            editModel.setPlants(model.getPlants());
++                            searchModel.setPlants(model.getPlants());
++                            break;
++                        case PUBLICATION:
++                            model.loadPublications();
++                            addModel.setPublications(model.getPublications());
++                            editModel.setPublications(model.getPublications());
++                            searchModel.setPublications(model.getPublications());
++                            break;
++                        case RIGHT: //???
++                            break;
++                        case TERRITORY:
++                            model.loadTerritories();
++                            addModel.setTerritories(model.getTerritories());
++                            editModel.setTerritories(model.getTerritories());
++                            searchModel.setTerritories(model.getTerritories());
++                            break;
++                        case USER: //???
++                            break;
++                        case VILLAGE:
++                            model.loadVillages();
++                            addModel.setVillages(model.getVillages());
++                            editModel.setVillages(model.getVillages());
++                            searchModel.setVillages(model.getVillages());
++                            break;
++                    }//switch table
++                }//for
++                } catch (DBLayerException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
++                } catch (RemoteException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex);
++                }
++            }//if arg instanceof Table[]
++        }//update()        
++    }//class ManagerBridge
++    
+ }
++
++
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-05-31 17:53:07 UTC (rev 411)
+@@ -153,9 +153,9 @@
+       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+           &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;Component id=&quot;jPanel4&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-          &lt;Component id=&quot;mainToolBar&quot; alignment=&quot;0&quot; pref=&quot;648&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Component id=&quot;mainToolBar&quot; alignment=&quot;0&quot; pref=&quot;679&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;Component id=&quot;jPanel2&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-          &lt;Component id=&quot;pageToolBar&quot; alignment=&quot;0&quot; pref=&quot;648&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Component id=&quot;pageToolBar&quot; alignment=&quot;0&quot; pref=&quot;679&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+@@ -265,7 +265,7 @@
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Component id=&quot;statusLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;EmptySpace pref=&quot;571&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;582&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -325,7 +325,7 @@
+                       &lt;Component id=&quot;recordsPerPage&quot; min=&quot;-2&quot; pref=&quot;45&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;nextPage&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;204&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;216&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -401,12 +401,12 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;648&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;679&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;532&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;496&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -412,6 +412,7 @@
+         setPreferredColumnSizes();
+         recordsPerPage.setValue(new Integer(model.getRecordsPerPage()));  
+         overview.getSelectionModel().setSelectionInterval(0,0);
++        overview.setAutoCreateColumnsFromModel(true);
+     }
+ 
+     /** Returns the main window &lt;code&gt;StatusBarManager&lt;/code&gt;.
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -46,12 +46,12 @@
+         row[3] = &quot;&quot;;
+         data.add(row);
+         loadDataFromModel();
+-        fireTableDataChanged();
+     }
+     
+-    private void loadDataFromModel() {
++    public void loadDataFromModel() {
+         for (int i = 0; i &lt; aemodel.getAuthorCount(); i++)
+             addRow(aemodel.getAuthor(i), aemodel.getAuthorRole(i), aemodel.getResultRevision(i));        
++        fireTableDataChanged();
+     }
+     
+     public void reset() {
+@@ -138,8 +138,11 @@
+             return;
+         Object[] row = data.get(r);
+         row[c] = o;
+-        if (c == 0)
++        if (c == 0) {
++            if (!(o instanceof Pair)) //the combobox could contain only one empty string (new AutoComboBoxNG3())
++                return;
+             aemodel.setAuthor(r, (Pair&lt;String, Integer&gt;) o);
++        }
+         if (c == 1)
+             aemodel.setAuthorRole(r, (String) o);
+         if (c == 3)
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -315,7 +315,6 @@
+         logger.debug(&quot;Setting new overview columns.&quot;);
+         selectionColumnIndex = columns.indexOf(new Column(Column.Type.SELECTION)) - 1; // we don't display the first column which is always Occurrence.ID
+                                                                                        // so the index as JTable sees it is -1
+-        
+         this.columns = columns;
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -54,7 +54,7 @@
+     private DBLayer database;      
+     
+     //list of authors user selects
+-    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList;
++    private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
+     private ArrayList&lt;String&gt; resultRevision;
+     
+     private Pair&lt;String,Integer&gt; village = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
+@@ -198,14 +198,17 @@
+             return;
+         }
+         this.phytName = phytName;
+-        for (int i=0; i &lt; phytCodes.length; i++) {
+-            if (phytCodes[i].getSecond().equals(phytName.getSecond())) {
+-                phytCode = phytCodes[i];
+-                logger.debug(&quot;SetPhytName For &quot;+phytName+&quot; found &quot;+phytCode);
+-                skipUpdate = true;
+-                break;
+-            } 
+-        }
++        if (phytCodes != null)
++            for (int i=0; i &lt; phytCodes.length; i++) {
++                if (phytCodes[i].getSecond().equals(phytName.getSecond())) {
++                    phytCode = phytCodes[i];
++                    logger.debug(&quot;SetPhytName For &quot;+phytName+&quot; found &quot;+phytCode);
++                    skipUpdate = true;
++                    break;
++                } 
++            }
++        else return;
++        
+         logger.debug(&quot;PhytName set to &quot;+phytName);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateCode&quot;,-1));
+@@ -225,14 +228,17 @@
+             return;
+         }
+         this.phytCode = phytCode;
+-        for (int i=0; i &lt; phytNames.length; i++) {
+-            if (phytNames[i].getSecond().equals(phytCode.getSecond())) {
+-                phytName = phytNames[i];
+-                logger.debug(&quot;SetPhytCode For &quot;+phytCode+&quot; found &quot;+phytName);
+-                skipUpdate = true;
+-                break;
++        if (phytNames != null)
++            for (int i=0; i &lt; phytNames.length; i++) {
++                if (phytNames[i].getSecond().equals(phytCode.getSecond())) {
++                    phytName = phytNames[i];
++                    logger.debug(&quot;SetPhytCode For &quot;+phytCode+&quot; found &quot;+phytName);
++                    skipUpdate = true;
++                    break;
++                }
+             }
+-        }
++        else return;
++        
+         logger.debug(&quot;PhytCode set to &quot;+phytCode);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;updateName&quot;,-1));
+@@ -872,6 +878,7 @@
+         month  = null;
+         fromDate = null;
+         toDate = null;
++        setChanged(); notifyObservers(&quot;CLEAR&quot;);
+     }
+     
+     public void clearAuthors() {
+@@ -955,6 +962,8 @@
+ 
+     public void setPlants(Pair&lt;String, Integer&gt;[] plants) {
+         this.plants = plants;
++        setChanged(); notifyObservers(&quot;PLANTS_CHANGED&quot;);
++        logger.debug(&quot;&quot;+plants.length+&quot; plants set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getAuthors() {
+@@ -963,6 +972,8 @@
+ 
+     public void setAuthors(Pair&lt;String, Integer&gt;[] authors) {
+         this.authors = authors;
++        setChanged(); notifyObservers(&quot;AUTHORS_CHANGED&quot;);
++        logger.debug(&quot;&quot;+authors.length+&quot; authors set.&quot;);
+     }
+ 
+     public String[] getAuthorRoles() {
+@@ -971,6 +982,8 @@
+ 
+     public void setAuthorRoles(String[] authorRoles) {
+         this.authorRoles = authorRoles;
++        setChanged(); notifyObservers(&quot;AUTHORROLES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+authorRoles.length+&quot; authorRoles set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getVillages() {
+@@ -979,6 +992,8 @@
+ 
+     public void setVillages(Pair&lt;String, Integer&gt;[] villages) {
+         this.villages = villages;
++        setChanged(); notifyObservers(&quot;VILLAGES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+villages.length+&quot; villages set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getTerritories() {
+@@ -987,6 +1002,8 @@
+ 
+     public void setTerritories(Pair&lt;String, Integer&gt;[] territories) {
+         this.territories = territories;
++        setChanged(); notifyObservers(&quot;TERRITORIES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+territories.length+&quot; territories set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPhytNames() {
+@@ -995,6 +1012,8 @@
+ 
+     public void setPhytNames(Pair&lt;String, Integer&gt;[] phytNames) {
+         this.phytNames = phytNames;
++        setChanged(); notifyObservers(&quot;PHYTNAMES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+phytNames.length+&quot; phytNames set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPhytCodes() {
+@@ -1003,6 +1022,8 @@
+ 
+     public void setPhytCodes(Pair&lt;String, Integer&gt;[] phytCodes) {
+         this.phytCodes = phytCodes;
++        setChanged(); notifyObservers(&quot;PHYTCODES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+phytCodes.length+&quot; phytCodes set.&quot;);
+     }
+ 
+     public String[] getCountries() {
+@@ -1011,6 +1032,8 @@
+ 
+     public void setCountries(String[] countries) {
+         this.countries = countries;
++        setChanged(); notifyObservers(&quot;COUNTRIES_CHANGED&quot;);
++        logger.debug(&quot;&quot;+countries.length+&quot; countries set.&quot;);
+     }
+ 
+     public String[] getSources() {
+@@ -1019,6 +1042,8 @@
+ 
+     public void setSources(String[] sources) {
+         this.sources = sources;
++        setChanged(); notifyObservers(&quot;SOURCES_CHANGED&quot;);        
++        logger.debug(&quot;&quot;+sources.length+&quot; sources set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getPublications() {
+@@ -1027,6 +1052,8 @@
+ 
+     public void setPublications(Pair&lt;String, Integer&gt;[] publications) {
+         this.publications = publications;
++        setChanged(); notifyObservers(&quot;PUBLICATIONS_CHANGED&quot;);
++        logger.debug(&quot;&quot;+publications.length+&quot; publications set.&quot;);
+     }
+ 
+     public Pair&lt;String, Integer&gt;[] getProjects() {
+@@ -1035,6 +1062,8 @@
+ 
+     public void setProjects(Pair&lt;String, Integer&gt;[] projects) {
+         this.projects = projects;
++        setChanged(); notifyObservers(&quot;PROJECTS_CHANGED&quot;);
++        logger.debug(&quot;&quot;+projects.length+&quot; projects set.&quot;);
+     }
+     
+     public SelectQuery getNewSelectQuery() {
+
+Modified: trunk/src/net/sf/plantlore/client/SearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -121,7 +121,7 @@
+             if (command.equals(&quot;phytCodeCombo&quot;) &amp;&amp; !(c.getSelectedItem() instanceof String))
+                 model.setPhytCode((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;phytCountryCombo&quot;) &amp;&amp; !(c.getSelectedItem() instanceof String))
++            if (command.equals(&quot;phytCountryCombo&quot;))
+                 model.setPhytCountry((String) c.getSelectedItem());
+ 
+             if (command.equals(&quot;sourceCombo&quot;))
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-31 17:53:07 UTC (rev 411)
+@@ -120,9 +120,9 @@
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getVillages());&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;//items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};&quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)townComboBox).setStrict(true);&amp;#xa;townComboBox.setActionCommand(&quot;townComboBox&quot;);&amp;#xa;townComboBox.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;townComboBox.setActionCommand(&quot;townComboBox&quot;);&amp;#xa;townComboBox.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+@@ -175,8 +175,8 @@
+                 &lt;Property name=&quot;autoscrolls&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(choices, this);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;Pair&lt;String, Integer&gt;[] plants = model.getPlants();&amp;#xa;String[] choices = new String[plants.length];&amp;#xa;for (int i = 0; i &lt; plants.length; i++) &amp;#xa;    choices[i] = plants[i].getFirst();&amp;#xa;&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(this);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;&amp;#xa;&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -580,8 +580,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getTerritories()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)territoryNameCombo).setStrict(true);&amp;#xa;territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);&amp;#xa;territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);&amp;#xa;territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -592,8 +592,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPhytNames()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytNameCombo).setStrict(true);&amp;#xa;phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);&amp;#xa;phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);&amp;#xa;phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -604,8 +604,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPhytCodes()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCodeCombo).setStrict(true);&amp;#xa;phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);&amp;#xa;phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);&amp;#xa;phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -616,8 +616,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getCountries()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)phytCountryCombo).setStrict(false);&amp;#xa;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&amp;#xa;phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(false); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&amp;#xa;phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -739,8 +739,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getSources()); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)sourceCombo).setStrict(false);&amp;#xa;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;sourceCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(false); &quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;sourceCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -751,8 +751,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getPublications());&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)publicationCombo).setStrict(true);&amp;#xa;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;publicationCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;publicationCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -763,8 +763,8 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBox(model.getProjects());&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((AutoComboBox)projectCombo).setStrict(true);&amp;#xa;projectCombo.setActionCommand(&quot;projectCombo&quot;);&amp;#xa;projectCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(true);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;projectCombo.setActionCommand(&quot;projectCombo&quot;);&amp;#xa;projectCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -7,29 +7,27 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.Dimension;
+-import java.text.DateFormat;
+-import java.text.NumberFormat;
+-import java.util.Calendar;
+-import java.util.Date;
+ import java.util.Observable;
+ import java.util.Observer;
+ import javax.swing.DefaultCellEditor;
++import javax.swing.DefaultComboBoxModel;
+ import javax.swing.JComboBox;
+ import javax.swing.JDialog;
+-import javax.swing.JFormattedTextField;
+-import javax.swing.SpinnerNumberModel;
+ import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.AutoComboBox;
++import net.sf.plantlore.common.AutoComboBoxNG3;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
+ 
+ /**
+  *
+  * @author  reimei
+  */
+ public class SearchView extends javax.swing.JDialog implements Observer {
++    private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+     private static final int DIALOG_WIDTH = 930;
+     private boolean visible=false;
+     private Search model;
+@@ -63,18 +61,14 @@
+         jPanel2 = new javax.swing.JPanel();
+         townLabel = new javax.swing.JLabel();
+         //items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};
+-        townComboBox = new AutoComboBox(model.getVillages());
++        townComboBox = new AutoComboBoxNG3(true);
+         taxonLabel = new javax.swing.JLabel();
+         placeDescriptionLabel = new javax.swing.JLabel();
+         jScrollPane2 = new javax.swing.JScrollPane();
+         descriptionArea = new javax.swing.JTextArea();
+         jScrollPane3 = new javax.swing.JScrollPane();
+-        Pair&lt;String, Integer&gt;[] plants = model.getPlants();
+-        String[] choices = new String[plants.length];
+-        for (int i = 0; i &lt; plants.length; i++)
+-        choices[i] = plants[i].getFirst();
+ 
+-        taxonTextArea = new AutoTextArea(choices, this);
++        taxonTextArea = new AutoTextArea(this);
+         extendedButton = new javax.swing.JToggleButton();
+         jScrollPane1 = new javax.swing.JScrollPane();
+         authorTable = new javax.swing.JTable();
+@@ -94,10 +88,10 @@
+         territoryLabel = new javax.swing.JLabel();
+         phytNameLabel = new javax.swing.JLabel();
+         phytCodeLabel = new javax.swing.JLabel();
+-        territoryNameCombo = new AutoComboBox(model.getTerritories());
+-        phytNameCombo = new AutoComboBox(model.getPhytNames());
+-        phytCodeCombo = new AutoComboBox(model.getPhytCodes());
+-        phytCountryCombo = new AutoComboBox(model.getCountries());
++        territoryNameCombo = new AutoComboBoxNG3(true);
++        phytNameCombo = new AutoComboBoxNG3(true);
++        phytCodeCombo = new AutoComboBoxNG3(true);
++        phytCountryCombo = new AutoComboBoxNG3(false);
+         quadrantTextField = new javax.swing.JTextField();
+         jPanel6 = new javax.swing.JPanel();
+         publicationLabel = new javax.swing.JLabel();
+@@ -105,9 +99,9 @@
+         projectLabel = new javax.swing.JLabel();
+         herbariumTextField = new javax.swing.JTextField();
+         sourceLabel = new javax.swing.JLabel();
+-        sourceCombo = new AutoComboBox(model.getSources());
+-        publicationCombo = new AutoComboBox(model.getPublications());
+-        projectCombo = new AutoComboBox(model.getProjects());
++        sourceCombo = new AutoComboBoxNG3(false);
++        publicationCombo = new AutoComboBoxNG3(true);
++        projectCombo = new AutoComboBoxNG3(true);
+         jPanel7 = new javax.swing.JPanel();
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+@@ -135,7 +129,6 @@
+         jPanel2.setPreferredSize(new java.awt.Dimension(700, 200));
+         townLabel.setText(&quot;Nearest bigger seat:&quot;);
+ 
+-        ((AutoComboBox)townComboBox).setStrict(true);
+         townComboBox.setActionCommand(&quot;townComboBox&quot;);
+         townComboBox.insertItemAt(model.EMPTY_PAIR,0);
+ 
+@@ -313,19 +306,15 @@
+ 
+         phytCodeLabel.setText(&quot;Phytochoria code:&quot;);
+ 
+-        ((AutoComboBox)territoryNameCombo).setStrict(true);
+         territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);
+         territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+-        ((AutoComboBox)phytNameCombo).setStrict(true);
+         phytNameCombo.setActionCommand(&quot;phytNameCombo&quot;);
+         phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+-        ((AutoComboBox)phytCodeCombo).setStrict(true);
+         phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);
+         phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+-        ((AutoComboBox)phytCountryCombo).setStrict(false);
+         phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);
+         phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+@@ -400,15 +389,12 @@
+ 
+         sourceLabel.setText(&quot;Source:&quot;);
+ 
+-        ((AutoComboBox)sourceCombo).setStrict(false);
+         sourceCombo.setActionCommand(&quot;sourceCombo&quot;);
+         sourceCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+-        ((AutoComboBox)publicationCombo).setStrict(true);
+         publicationCombo.setActionCommand(&quot;publicationCombo&quot;);
+         publicationCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+-        ((AutoComboBox)projectCombo).setStrict(true);
+         projectCombo.setActionCommand(&quot;projectCombo&quot;);
+         projectCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+@@ -697,9 +683,18 @@
+         TableColumn tc3 = authorTable.getColumnModel().getColumn(2);
+         TableColumn tc4 = authorTable.getColumnModel().getColumn(3);
+ 
+-        JComboBox cb = new AutoComboBox(model.getAuthors());
++        JComboBox cb;
++        if (model.getAuthors() == null) 
++            cb = new AutoComboBoxNG3();
++        else
++            cb = new AutoComboBoxNG3(model.getAuthors());
++        
+         tc1.setCellEditor(new DefaultCellEditor(cb));  
+-        cb = new AutoComboBox(model.getAuthorRoles());
++
++        if (model.getAuthorRoles() == null) 
++            cb = new AutoComboBoxNG3();
++        else
++            cb = new AutoComboBoxNG3(model.getAuthorRoles());
+         tc2.setCellEditor(new DefaultCellEditor(cb));
+         
+         ButtonEditorSearch be = new ButtonEditorSearch(model);
+@@ -798,7 +793,7 @@
+     public void update(Observable o, Object arg) {
+         if (arg != null &amp;&amp; arg instanceof Pair) {
+             String s = ((Pair&lt;String,Integer&gt;)arg).getFirst();
+-            int i = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
++            int row = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
+             if (s.equals(&quot;updateCode&quot;))
+                 phytCodeCombo.setSelectedItem(model.getPhytCode());
+             if (s.equals(&quot;updateName&quot;))
+@@ -811,12 +806,134 @@
+                  */            
+             }             
+             if (s.equals(&quot;removeAuthorRow&quot;)) {
+-                tableModel.removeRow(i);
++                tableModel.removeRow(row);
+                 //unfortunately have to set up the editors and renderers again because of the
+                 //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
+                 //initAuthorTable();            
++            }            
++        }//instanceof Pair
++        
++        if (arg != null &amp;&amp; arg instanceof String) {
++            String s = (String) arg;
++            
++            if (s.equals(&quot;CLEAR&quot;))
++                clearComponentData();
++            
++            if (s.equals(&quot;PLANTS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating plant area&quot;);
++                if (model.getPlants() == null) {
++                    ((AutoTextArea)taxonTextArea).setChoices(new String[] {&quot;&quot;});
++                    return;
++                }
++                Pair&lt;String, Integer&gt;[] plants = model.getPlants();
++                String[] choices = new String[plants.length];
++                for (int i = 0; i &lt; plants.length; i++) 
++                    choices[i] = plants[i].getFirst();
++                
++                ((AutoTextArea)taxonTextArea).setChoices(choices);
+             }
+-        }
++            
++            if (s.equals(&quot;AUTHORS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating authors combo&quot;);
++                JComboBox cb;
++                
++                if (model.getAuthors() == null) 
++                    cb = new AutoComboBoxNG3();
++                else
++                    cb = new AutoComboBoxNG3(model.getAuthors());
++                    
++                TableColumn tc1 = authorTable.getColumnModel().getColumn(0);
++
++                
++                tc1.setCellEditor(new DefaultCellEditor(cb));  
++            }
++
++            if (s.equals(&quot;AUTHORROLES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating authorroles combobox&quot;);
++                JComboBox cb;
++                
++                if (model.getAuthorRoles() == null)
++                    cb = new AutoComboBoxNG3();
++                else
++                    cb = new AutoComboBoxNG3(model.getAuthorRoles());
++
++                TableColumn tc2 = authorTable.getColumnModel().getColumn(1);
++                
++                tc2.setCellEditor(new DefaultCellEditor(cb));                
++            }
++            
++            if (s.equals(&quot;VILLAGES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating villages combobox&quot;);
++                if (model.getVillages() == null)
++                    townComboBox.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    townComboBox.setModel(new DefaultComboBoxModel(model.getVillages()));
++                townComboBox.insertItemAt(model.EMPTY_PAIR,0);
++            }
++            
++            if (s.equals(&quot;TERRITORIES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating territories combobox&quot;);
++                if (model.getTerritories() == null)
++                    territoryNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    territoryNameCombo.setModel(new DefaultComboBoxModel(model.getTerritories()));
++                territoryNameCombo.insertItemAt(model.EMPTY_PAIR,0);
++            }
++
++            if (s.equals(&quot;PHYTNAMES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating phytnames combobox&quot;);
++                if (model.getPhytNames() == null)
++                    phytNameCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytNameCombo.setModel(new DefaultComboBoxModel(model.getPhytNames()));
++                phytNameCombo.insertItemAt(model.EMPTY_PAIR,0);
++            }
++
++            if (s.equals(&quot;PHYTCODES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating phytcodes combobox&quot;);
++                if (model.getPhytCodes() == null)
++                    phytCodeCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytCodeCombo.setModel(new DefaultComboBoxModel(model.getPhytCodes()));
++                phytCodeCombo.insertItemAt(model.EMPTY_PAIR,0);
++            }
++
++            if (s.equals(&quot;COUNTRIES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating countries combobox&quot;);
++                if (model.getCountries() == null)
++                    phytCountryCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    phytCountryCombo.setModel(new DefaultComboBoxModel(model.getCountries()));
++                phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);
++            }
++            
++            if (s.equals(&quot;SOURCES_CHANGED&quot;)) {
++                logger.debug(&quot;Updating sources combobox&quot;);
++                if (model.getSources() == null)
++                    sourceCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    sourceCombo.setModel(new DefaultComboBoxModel(model.getSources()));
++                sourceCombo.insertItemAt(model.EMPTY_STRING,0);
++            }
++            
++            if (s.equals(&quot;PUBLICATIONS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating publications combobox&quot;);
++                if (model.getPublications() == null)
++                    publicationCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    publicationCombo.setModel(new DefaultComboBoxModel(model.getPublications()));
++                publicationCombo.insertItemAt(model.EMPTY_PAIR,0);
++            }
++
++            if (s.equals(&quot;PROJECTS_CHANGED&quot;)) {
++                logger.debug(&quot;Updating projects combobox&quot;);
++                if (model.getProjects() == null)
++                    projectCombo.setModel(new DefaultComboBoxModel(new String[] {&quot;&quot;}));
++                else
++                    projectCombo.setModel(new DefaultComboBoxModel(model.getProjects()));
++                projectCombo.insertItemAt(model.EMPTY_PAIR,0);
++            }                       
++        }//instanceof String
+     }
+         
+     
+
+Modified: trunk/src/net/sf/plantlore/client/TableSorter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/TableSorter.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/client/TableSorter.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -550,6 +550,11 @@
+     public void setDatabase(DBLayer db) {
+         tableModel.setDatabase(db);
+     }
++    
++    public void setColumns(ArrayList&lt;Column&gt; columns) {
++        tableModel.setColumns(columns);
++        fireTableStructureChanged();
++    }
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/common/Assistant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Assistant.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/common/Assistant.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -55,6 +55,19 @@
+ 		list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+ 		list.setFocusable(false);
+ 	}
++        
++        public Assistant(Container container) {
++		super(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
++				JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
++		setVisible(false); setSize(200,100); setLocation(0, 0);
++		container.add(this, JLayeredPane.POPUP_LAYER);            
++        }
++        
++        public void setChoices(Object[] choices) {
++            setList(new JList(choices));
++            list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
++            list.setFocusable(false);
++        }
+ 	
+ 	/** Get the list of choices. */
+ 	public JList getList() { 
+
+Modified: trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/common/AutoComboBoxNG3.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -1,5 +1,6 @@
+ package net.sf.plantlore.common;
+ 
++import java.awt.Color;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
+@@ -7,10 +8,13 @@
+ import java.util.Arrays;
+ import java.util.HashSet;
+ import java.util.Set;
++import javax.swing.BorderFactory;
+ 
+ import javax.swing.JComboBox;
+ import javax.swing.JTextField;
++import javax.swing.border.Border;
+ import javax.swing.plaf.basic.BasicComboBoxEditor;
++import javax.swing.plaf.metal.MetalComboBoxEditor;
+ import javax.swing.text.AttributeSet;
+ import javax.swing.text.BadLocationException;
+ import javax.swing.text.PlainDocument;
+@@ -84,6 +88,8 @@
+ 		JTextField e = (JTextField)(editor.getEditorComponent());
+ 		AutoDocument a = new AutoDocument(); // change the model ~~&gt; AutoDocument 
+ 		e.setDocument(a); e.addKeyListener(a); e.addFocusListener(a);
++                //setBorder(BorderFactory.createLineBorder(Color.BLUE));
++                //updateUI();
+ 	}
+ 	
+ 	/**
+@@ -109,9 +115,13 @@
+ 	
+ 	
+ 	public AutoComboBoxNG3() {
+-		this(new String[] { null });		
++		this(new String[] { &quot;&quot; });		
+ 	} 
+ 	
++	public AutoComboBoxNG3(boolean strict) {
++		this(new String[] { &quot;&quot; });
++                this.strict = strict;
++	} 
+ 	
+ 	public void addItems(Object[] items) {
+ 		for(Object item : items)
+@@ -126,7 +136,7 @@
+ 	 * 
+ 	 * @author Erik Kratochv&#237;l
+ 	 */
+-	private class EnhancedEditor extends BasicComboBoxEditor {
++	private class EnhancedEditor extends MetalComboBoxEditor {
+ 		@Override
+ 		public Object getItem() {
+ 			String prefix = editor.getText();
+@@ -137,9 +147,9 @@
+ 					return value;
+ 			}
+ 			return (strict ? null : prefix);
+-		} 
+-	}
+-	
++		}               
++        }
++        
+ 	/**
+ 	 * @return
+ 	 * The return value is based on the mode. 
+
+Modified: trunk/src/net/sf/plantlore/common/AutoTextArea.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-31 17:53:07 UTC (rev 411)
+@@ -333,6 +333,29 @@
+ 			this.values.add(obj);
+ 	}
+ 	
++        public AutoTextArea(Container container) {
++                this(new String[] {&quot;&quot;}, container);
++        }
++        
++        public AutoTextArea(JDialog dialog) {
++            this(new String[] {&quot;&quot;}, dialog.getLayeredPane());
++        }
++        
++        public AutoTextArea(JFrame frame) {
++            this(new String[] {&quot;&quot;}, frame.getLayeredPane());
++        }
++        
++        public void setChoices(Object[] choices) {
++            if (choices == null)
++                choices = new String[] {&quot;&quot;};
++            assistant.setChoices(choices);
++            assistant.getList().addMouseListener(this);
++            this.choices = choices;
++            this.values = new HashSet&lt;Object&gt;(choices.length);
++            for(Object obj : choices)
++                    this.values.add(obj);            
++        }
++        
+ 	/**
+ 	 * The list of choices, or &quot;allowed values&quot; - for fast searching.
+ 	 */
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 17:53:07 UTC (rev 411)
+@@ -1126,3 +1126,5 @@
+ Overview.Refresh.ProgressTitle=Loading data
+ 
+ Overview.MenuFileLogin=&amp;Login
++
++Message.FillingDialogs=Storing data into dialogs
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-31 17:53:07 UTC (rev 411)
+@@ -763,3 +763,5 @@
+ Overview.Refresh.ProgressTitle=Nahr\u00E1v\u00E1m data
+ 
+ Overview.MenuFileLogin=&amp;P\u0159ihl\u00E1\u0161en\u00ED
++
++Message.FillingDialogs=Ukl\u00E1d\u00E1m data do dialog\u016F
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-31 17:44:26 UTC (rev 410)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-31 17:53:07 UTC (rev 411)
+@@ -831,3 +831,5 @@
+ Scheda.ProgressTitle=Creating schedas
+ 
+ Overview.Refresh.ProgressTitle=Loading data
++
++Message.FillingDialogs=Constructing dialogs
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000498.html">[Plantlore-dev] r410 - in trunk: analysis/database src/net/sf/plantlore/common/record
+</A></li>
+	<LI>Next message: <A HREF="000500.html">[Plantlore-dev] [Bug #7667] Column choosing doesn't always work
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#499">[ date ]</a>
+              <a href="thread.html#499">[ thread ]</a>
+              <a href="subject.html#499">[ subject ]</a>
+              <a href="author.html#499">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

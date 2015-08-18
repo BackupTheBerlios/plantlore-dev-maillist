@@ -1,0 +1,466 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r372 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r372%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605272125.k4RLP8xv017920%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000425.html">
+   <LINK REL="Next"  HREF="000427.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r372 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r372%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605272125.k4RLP8xv017920%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r372 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Sat May 27 23:25:08 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000425.html">[Plantlore-dev] r371 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+        <LI>Next message: <A HREF="000427.html">[Plantlore-dev] r373 - in trunk: lib src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#426">[ date ]</a>
+              <a href="thread.html#426">[ thread ]</a>
+              <a href="subject.html#426">[ subject ]</a>
+              <a href="author.html#426">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-27 23:25:07 +0200 (Sat, 27 May 2006)
+New Revision: 372
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/common/StatusBarManager.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Informing user about loading data after login implemented. Messages are displayed in the status bar.
+StatusBarManager now implements Observer interface and is registered straight as AppCore's observer.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-27 21:25:07 UTC (rev 372)
+@@ -336,7 +336,10 @@
+         int resultsCount;
+         Object[] records;
+         Object[] row;
+-
++        
++        setChanged();
++        notifyObservers(&quot;LOADING_PLANTS&quot;);
++                
+         sq = database.createQuery(Plant.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Plant.TAXON);
+@@ -350,6 +353,8 @@
+             row = (Object[])records[i];
+             plants[i] = new Pair((String)row[0], (Integer)row[1]);
+         }
++        setChanged();
++        notifyObservers(&quot;LOADED&quot;);
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; plants.&quot;);
+         return plants;
+     }
+@@ -361,6 +366,8 @@
+         Object[] records;
+         Object[] row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_AUTHORS&quot;);
++        
+         sq = database.createQuery(Author.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Author.WHOLENAME);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Author.WHOLENAME);
+@@ -376,6 +383,7 @@
+             authors[i] = new Pair&lt;String, Integer&gt;((String)row[0], (Integer)row[1]);
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; authors.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return authors;
+     }
+     
+@@ -385,6 +393,8 @@
+         int resultsCount;
+         Object[] records;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_AUTHOR_ROLES&quot;);
++        
+         sq = database.createQuery(AuthorOccurrence.class);
+         sq.addProjection(PlantloreConstants.PROJ_DISTINCT,AuthorOccurrence.ROLE);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, AuthorOccurrence.ROLE);
+@@ -399,6 +409,7 @@
+             authorRoles[i] = r;
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; author roles.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return authorRoles;
+     }
+ 
+@@ -409,6 +420,7 @@
+         Object[] records;
+         Object[] row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_VILLAGES&quot;);
+         sq = database.createQuery(Village.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Village.NAME);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Village.NAME);
+@@ -423,6 +435,7 @@
+             villages[i] = new Pair&lt;String, Integer&gt;((String)row[0],(Integer)row[1]);
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; villages.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return villages;
+     }
+ 
+@@ -433,6 +446,7 @@
+         Object[] records;
+         Object[] row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_TERRITORIES&quot;);
+         sq = database.createQuery(Territory.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Territory.NAME);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Territory.NAME);
+@@ -447,6 +461,7 @@
+             territories[i] = new Pair&lt;String,Integer&gt;((String)row[0],(Integer)row[1]);
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; territories.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return territories;
+     }
+     
+@@ -456,6 +471,7 @@
+         int resultsCount;
+         Object[] records, row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_PHYTOCHORIA&quot;);
+         sq = database.createQuery(Phytochorion.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Phytochorion.NAME);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.NAME);
+@@ -473,6 +489,7 @@
+             phytCodes[i] = new Pair&lt;String,Integer&gt;((String)row[1], (Integer)row[2]);
+         }
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; phytochoria.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return phytNames;
+     }
+     
+@@ -489,6 +506,7 @@
+         Object[] records;
+         String country;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_COUNTRIES&quot;);
+         sq = database.createQuery(Habitat.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Habitat.COUNTRY);
+         sq.addProjection(PlantloreConstants.PROJ_DISTINCT, Habitat.COUNTRY);
+@@ -503,6 +521,7 @@
+         }
+ 
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; countries.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return countries;
+     }
+     
+@@ -512,6 +531,7 @@
+         int resultsCount;
+         Object[] records;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_SOURCES&quot;);
+         sq = database.createQuery(Occurrence.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.DATASOURCE);
+         sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Occurrence.DATASOURCE);
+@@ -523,6 +543,7 @@
+             sources[i] = (String)((Object[])records[i])[0];
+ 
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; sources.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return sources;
+     }
+     
+@@ -533,6 +554,7 @@
+         Object[] records;
+         Object[] row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_PUBLICATIONS&quot;);
+         sq = database.createQuery(Publication.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Publication.REFERENCECITATION);
+         sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Publication.REFERENCECITATION);
+@@ -549,6 +571,7 @@
+         }
+ 
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; publications.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return publications;
+     }
+ 
+@@ -558,6 +581,7 @@
+         int resultsCount;
+         Object[] records,row;
+ 
++        setChanged(); notifyObservers(&quot;LOADING_PROJECTS&quot;);
+         sq = database.createQuery(Metadata.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Metadata.DATASETTITLE);
+         sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Metadata.DATASETTITLE);
+@@ -573,6 +597,7 @@
+         }
+ 
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; projects.&quot;);
++        setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return projects;
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-27 21:25:07 UTC (rev 372)
+@@ -61,6 +61,7 @@
+ import net.sf.plantlore.client.user.UserManagerCtrl;
+ import net.sf.plantlore.client.user.UserManagerView;
+ import net.sf.plantlore.common.Selection;
++import net.sf.plantlore.common.StatusBarManager;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+@@ -618,7 +619,10 @@
+     private void constructSearchMVC() {
+             if (searchModel == null) {
+                 searchModel = new Search(model.getDatabase());
++                StatusBarManager sbm = view.getSBM();
++                
+                 searchModel.setColumns(model.getTableModel().getColumns());
++                
+                 searchModel.setAuthors(model.getAuthors());
+                 searchModel.setAuthorRoles(model.getAuthorRoles());
+                 searchModel.setPlants(model.getPlants());
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-27 21:25:07 UTC (rev 372)
+@@ -43,6 +43,7 @@
+         initOverview();
+         
+         model.addObserver(this); 
++        model.addObserver(sbm);
+     }
+     
+     /** This method is called from within the constructor to
+
+Modified: trunk/src/net/sf/plantlore/common/StatusBarManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/StatusBarManager.java	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/common/StatusBarManager.java	2006-05-27 21:25:07 UTC (rev 372)
+@@ -12,8 +12,11 @@
+ import java.awt.event.MouseEvent;
+ import java.awt.event.MouseListener;
+ import java.util.Map;
++import java.util.Observable;
++import java.util.Observer;
+ import java.util.WeakHashMap;
+ import javax.swing.JLabel;
++import net.sf.plantlore.l10n.L10n;
+ 
+ /** Status bar convenience class.
+  *
+@@ -26,7 +29,7 @@
+  *
+  * @author Jakub
+  */
+-public class StatusBarManager implements MouseListener
++public class StatusBarManager implements MouseListener, Observer
+ {
+     private JLabel statusLabel;
+     private Map&lt;Component, String&gt; map;
+@@ -60,6 +63,14 @@
+         defaultText = text;
+     }
+     
++    /** Displays given text immediately on the status bar. In case it is rewritten thanks to mouse over some component, it won't be restored.
++     *
++     * @param text The text to be displayed.
++     */
++    public void display(String text) {
++        this.statusLabel.setText(text);
++    }
++    
+     public void mouseClicked(MouseEvent mouseEvent)
+     {
+     }
+@@ -89,5 +100,55 @@
+     {
+         statusLabel.setText(defaultText);
+     }
++
++    /** Processes messages from observables to that this is registered and updates status bar accordingly.
++     *
++     */
++    public void update(Observable o, Object arg) {
++        if (arg instanceof String) {
++            String msg = (String)arg;
++            
++            if (msg.equals(&quot;LOADING_PLANTS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPlants&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_AUTHORS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingAuthors&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_AUTHOR_ROLES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingAuthorRoles&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_VILLAGES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingVillages&quot;));
++            }
++
++            if (msg.equals(&quot;LOADING_TERRITORIES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingTerritories&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PHYTOCHORIA&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPhytochoria&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_SOURCES&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingSources&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PUBLICATIONS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingPublications&quot;));
++            }
++            
++            if (msg.equals(&quot;LOADING_PROJECTS&quot;)) {
++                display(L10n.getString(&quot;Message.LoadingProjects&quot;));
++            }
++            
++            
++            if (msg.equals(&quot;LOADED&quot;)) {
++                display(defaultText);
++            }
++        }
++    }
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-27 21:25:07 UTC (rev 372)
+@@ -867,3 +867,21 @@
+ AddEdit.OkQuestion=Habitat of this occurrence is shared by {0} other occurrences.\\nDo you want to edit all occurrences or just this one?
+ 
+ AddEdit.QuestionDialogTitle=Habitat of this occurrence is shared
++
++Message.LoadingPlants=Loading plants
++
++Message.LoadingAuthors=Loading authors
++
++Message.LoadingAuthorRoles=Loading author roles
++
++Message.LoadingVillages=Loading villages
++
++Message.LoadingPhytochoria=Loading phytochoria
++
++Message.LoadingProjects=Loading projects
++
++Message.LoadingPublications=Loading publications
++
++Message.LoadingTerritories=Loading territories
++
++Message.LoadingSources=Loading sources
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-27 21:25:07 UTC (rev 372)
+@@ -380,3 +380,21 @@
+ Overview.PageStatus=Strana\: 
+ 
+ Overview.PageStatusTT=Aktu\u00E1ln\u00ED strana / Celkov\u00FD po\u010Det stran
++
++Message.LoadingPlants=Nahr\u00E1v\u00E1m rostliny
++
++Message.LoadingAuthors=Nahr\u00E1v\u00E1m autory
++
++Message.LoadingAuthorRoles=Nahr\u00E1v\u00E1m role autor\u016F
++
++Message.LoadingVillages=Nahr\u00E1v\u00E1m m\u011Bsta a vesnice
++
++Message.LoadingPhytochoria=Nahr\u00E1v\u00E1m fytochoriony
++
++Message.LoadingProjects=Nahr\u00E1v\u00E1m projekty
++
++Message.LoadingPublications=Nahr\u00E1v\u00E1m publikace
++
++Message.LoadingTerritories=Nahr\u00E1v\u00E1m teritoria
++
++Message.LoadingSources=Nahr\u00E1v\u00E1m zdroje
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-27 19:39:15 UTC (rev 371)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-27 21:25:07 UTC (rev 372)
+@@ -685,3 +685,21 @@
+ AddEdit.OkQuestion=Habitat of this occurrence is shared by {0} other occurrences.\\nDo you want to edit all occurrences or just this one?
+ 
+ AddEdit.QuestionDialogTitle=Habitat of this occurrence is shared
++
++Message.LoadingPlants=Loading plants...
++
++Message.LoadingAuthors=Loading authors...
++
++Message.LoadingAuthorRoles=Loading author roles...
++
++Message.LoadingVillages=Loading villages...
++
++Message.LoadingPhytochoria=Loading phytochoria...
++
++Message.LoadingProjects=Loading projects...
++
++Message.LoadingPublications=Loading publications...
++
++Message.LoadingTerritories=Loading territories
++
++Message.LoadingSources=Loading sources...
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000425.html">[Plantlore-dev] r371 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+	<LI>Next message: <A HREF="000427.html">[Plantlore-dev] r373 - in trunk: lib src/net/sf/plantlore/config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#426">[ date ]</a>
+              <a href="thread.html#426">[ thread ]</a>
+              <a href="subject.html#426">[ subject ]</a>
+              <a href="author.html#426">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

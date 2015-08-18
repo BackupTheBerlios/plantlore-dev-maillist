@@ -1,0 +1,786 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r103 - in trunk/src/net/sf/plantlore: client client/login l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r103%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/login%20l10n&In-Reply-To=%3C200604032139.k33LdLe5014251%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000102.html">
+   <LINK REL="Next"  HREF="000104.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r103 - in trunk/src/net/sf/plantlore: client client/login l10n</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r103%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/login%20l10n&In-Reply-To=%3C200604032139.k33LdLe5014251%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r103 - in trunk/src/net/sf/plantlore: client client/login l10n">krater at berlios.de
+       </A><BR>
+    <I>Mon Apr  3 23:39:21 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000102.html">[Plantlore-dev] r102 - trunk/documentation
+</A></li>
+        <LI>Next message: <A HREF="000104.html">[Plantlore-dev] r104 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#103">[ date ]</a>
+              <a href="thread.html#103">[ thread ]</a>
+              <a href="subject.html#103">[ subject ]</a>
+              <a href="author.html#103">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-03 23:39:20 +0200 (Mon, 03 Apr 2006)
+New Revision: 103
+
+Added:
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+   trunk/src/net/sf/plantlore/client/login/ItemView.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/login/DBInfo.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+Login added -&gt; Appcore View and Control updated.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -39,6 +39,7 @@
+         
+ //        database = new FirebirdDBLayer(&quot;localhost&quot;, &quot;3050&quot;, &quot;/mnt/data/temp/plantloreHIB.fdb&quot;, &quot;sysdba&quot;, &quot;masterkey&quot;);
+         database = new HibernateDBLayer();
++      
+         try {
+             database.initialize(null, null, null); // FIXME sem prijdou samosebou rozumne hodnoty
+         } catch (DBLayerException e) {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -32,9 +32,13 @@
+ import net.sf.plantlore.client.history.History;
+ import net.sf.plantlore.client.history.HistoryCtrl;
+ import net.sf.plantlore.client.history.HistoryView;
++import net.sf.plantlore.client.login.Login;
++import net.sf.plantlore.client.login.LoginCtrl;
++import net.sf.plantlore.client.login.LoginView;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.HibernateDBLayer;
++import net.sf.plantlore.middleware.RMIDBLayerFactory;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -58,6 +62,10 @@
+     HistoryView historyView;
+     HistoryCtrl historyCtrl;
+     
++    Login loginModel;
++    LoginView loginView;
++    LoginCtrl loginCtrl;
++    
+     /** Creates a new instance of AppCoreCtrl */
+     public AppCoreCtrl(AppCore model, AppCoreView view)
+     {
+@@ -90,6 +98,17 @@
+ 
+         view.addWindowListener(new AppWindowListener());
+         view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
++        
++        // TODO: Comb the code here <A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">KR at TER</A>
++        view.setLoginAction(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				// Reuse the existing dialogs, hide'em when they're no longer needed.
++				if(loginModel == null) loginModel = new Login(new RMIDBLayerFactory());
++				if(loginView == null) loginView = new LoginView(loginModel);
++				if(loginCtrl == null) loginCtrl = new LoginCtrl(loginModel, loginView);
++				loginView.setVisible(true);				
++			}
++        });
+     }
+     
+     /** Handles click to menu item Settings.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -21,6 +21,7 @@
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
++import javax.swing.Action;
+ import javax.swing.BorderFactory;
+ import javax.swing.JButton;
+ import javax.swing.JFormattedTextField;
+@@ -74,6 +75,7 @@
+     private JMenuItem dataImport = new JMenuItem(L10n.getString(&quot;dataImport&quot;));
+     private JMenuItem dataExport = new JMenuItem(L10n.getString(&quot;dataExport&quot;));
+     private JMenuItem dataSearch = new JMenuItem(L10n.getString(&quot;dataSearch&quot;));
++    private JMenuItem login = new JMenuItem(L10n.getString(&quot;Login&quot;));
+     
+     private JButton 
+             importButton = new JButton(),
+@@ -148,6 +150,7 @@
+     private void initMenu()
+     {
+         fileMenu.setMnemonic(L10n.getMnemonic(&quot;File&quot;));
++        fileMenu.add(login);
+         fileMenu.add(settings);
+         fileMenu.add(print);
+         fileMenu.addSeparator();
+@@ -278,6 +281,16 @@
+         return sbm;
+     }
+     
++    
++    /**
++     * Set an action to the login menu item.
++     * 
++     * @param a The action that should be called when clicked on this menuitem.
++     */
++    public void setLoginAction(Action a) {
++    	login.setAction(a);
++    }
++    
+     /** Sets an action to the settings menu item.
+      *
+      */
+
+Added: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -0,0 +1,96 @@
++package net.sf.plantlore.client.login;
++
++import java.awt.*;
++import java.awt.event.ActionListener;
++
++import javax.swing.*;
++
++
++public class AuthView extends JDialog {
++	
++	private Login model;
++	
++	public AuthView(Login model) {
++		this.model = model;
++		setTitle(&quot;Authorization&quot;);
++		setSize(300, 200);
++		setModal(true);
++		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++		initComponents();
++		setLocationRelativeTo(null); // center of the screen
++	}
++	
++	
++	protected void initComponents() {
++		setTitle(&quot;Authentification&quot;);
++		setModal(true);
++
++		next = new JButton(&quot;next&quot;);
++		user = new JComboBox(); user.setEditable(true); 
++		user.setPreferredSize(new Dimension(50, 23));
++		password = new JPasswordField(32); password.setPreferredSize(new Dimension(50, 23));
++
++		
++		JPanel p1 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
++		p1.add(next);
++		add(p1, BorderLayout.SOUTH);
++		
++		JLabel l1 = new JLabel(&quot;Username&quot;), l2 = new JLabel(&quot;Password&quot;);
++		l1.setLabelFor(user); l2.setLabelFor(password);
++		JPanel p2 = new JPanel(new GridBagLayout());
++		GridBagConstraints c = new GridBagConstraints();
++		
++		// CHANGE HERE
++		c.gridx = 0; c.gridy = 0; c.fill =  GridBagConstraints.NONE; 
++		c.insets = new Insets(2, 4, 0, 0);
++		p2.add(l1, c);
++		
++		c.gridy = 1; c.insets = new Insets(1, 4, 0, 0);
++		p2.add(l2, c); 
++		
++		c.gridx = 1 ; c.gridy = 0; c.fill = GridBagConstraints.HORIZONTAL;
++		c.insets = new Insets(2, 3, 0, 4);
++		p2.add(user, c); 
++	
++		c.gridy = 1; c.insets = new Insets(2, 3, 0, 4);
++		p2.add(password, c);
++		
++		
++		add(p2, BorderLayout.CENTER);
++		
++		pack();
++		
++		setResizable(false);
++	}
++	
++	@Override
++	public void setVisible(boolean visible) {
++		if(visible) {
++			user.removeAllItems();
++			String[] u = model.getSelected().users;
++			int i = 0;
++			for(; i &lt; u.length &amp;&amp; u[i] != null; i++) user.addItem(u[i]);
++			if(i &gt; 0) user.setSelectedIndex(0);
++		}
++		super.setVisible(visible);
++	}
++	
++	protected String getUserName() {
++		return (String) user.getSelectedItem();
++	}
++	
++	protected String getPassword() {
++		return new String( password.getPassword() );
++	}
++	
++	public void nextAddActionListener(ActionListener a) {
++		next.addActionListener(a);
++	}
++	
++	
++	protected JButton next;
++	protected JComboBox user;
++	protected JPasswordField password;
++
++	
++}
+
+Modified: trunk/src/net/sf/plantlore/client/login/DBInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -17,7 +17,7 @@
+ 	protected String alias;
+ 	protected String host;
+ 	protected String db;
+-	protected String[] user;	
++	protected String[] users;	
+ 	protected int port;
+ 	
+ 	/**
+@@ -30,30 +30,30 @@
+ 	 * @param users The list of user names used lately.
+ 	 */
+ 	public DBInfo(String alias, String host, int port, String db, String[] users) {
+-		this.alias = alias; this.host = host; this.port = (port &lt;= 0) ? 1099 : port; this.db = db; this.user = users;
++		this.alias = alias; this.host = host; this.port = (port &lt;= 0) ? 1099 : port; this.db = db; this.users = users;
+ 	}
+ 	
++
+ 	/**
+-	 * Add a new user name into the list of users. The least used username will be lost.
+-	 * The list of users will start with the newly added username. 
++	 * Pick a user. The selected name will be moved to the start of the list.
++	 * The selected user will be at the top of the list next time.
+ 	 * 
+-	 * @param name The name to be added.
++	 * @param name	The chosen user.
+ 	 */
+-	public void addUser(String name) {
+-		for(int i = 1; i &lt; user.length; i++) user[i] = user[i - 1];
+-		user[0] = name;
++	public void promoteUser(String name) {
++		int id = users.length - 1;
++		for(int i = 0; i &lt; users.length &amp;&amp; users[i] != null; i++) 
++			if(users[i].equals(name)) id = i; 
++		for(int i = id; i &gt; 0; i--) users[i] = users[i - 1];
++		users[0] = name;
+ 	}
+ 	
+ 	/**
+-	 * Pick a user. The selected name will be moved to the start of the list.
+-	 * The selected user will be at the top of the list next time.
+-	 * 
+-	 * @param id	The chosen user.
++	 * How the DBInfo should appear to the User in the list of databases.
+ 	 */
+-	public void selectUser(int id) {
+-		String name = user[id];
+-		for(int i = id; i &gt; 0; i--) user[i] = user[i - 1];
+-		user[0] = name;
++	@Override
++	public String toString() {
++		return alias;
+ 	}
+ 		
+ }
+
+Added: trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -0,0 +1,38 @@
++package net.sf.plantlore.client.login;
++
++import java.awt.event.ActionEvent;
++
++import javax.swing.AbstractAction;
++
++public class ItemCtrl {
++	
++	private Login model;
++	private ItemView view;
++	
++	public enum Mode { ADD, EDIT };
++	
++	private Mode mode = Mode.ADD;
++	
++	
++	public void setMode(Mode m) { this.mode = m; }
++	
++	
++	public ItemCtrl(Login login, ItemView itemview) {
++		this.model = login; this.view = itemview;
++		
++		view.nextAddActionListener(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				int t = view.getHost().indexOf(':');
++				if(mode == Mode.ADD)
++					if(t &lt; 0) model.createRecord(view.getAlias(), view.getHost(), 1099, view.getDB());
++					else model.createRecord(view.getAlias(), view.getHost().substring(0, t - 1), Integer.parseInt(view.getHost().substring(t)), view.getDB());
++				else if(mode == Mode.EDIT)
++					if(t &lt; 0) model.updateSelectedRecord(view.getAlias(), view.getHost(), 1099, view.getDB());
++					else model.updateSelectedRecord(view.getAlias(), view.getHost().substring(0, t - 1), Integer.parseInt(view.getHost().substring(t)), view.getDB());
++				view.setVisible(false);
++			}
++		});
++		
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/client/login/ItemView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -0,0 +1,98 @@
++package net.sf.plantlore.client.login;
++
++import java.awt.BorderLayout;
++import java.awt.FlowLayout;
++import java.awt.GridBagConstraints;
++import java.awt.GridBagLayout;
++import java.awt.Insets;
++import java.awt.event.ActionListener;
++
++import javax.swing.JButton;
++import javax.swing.JDialog;
++import javax.swing.JLabel;
++import javax.swing.JPanel;
++
++import javax.swing.JTextField;
++
++public class ItemView extends JDialog {
++		
++	private Login model;
++	
++
++	public ItemView(Login model) {
++		this.model = model;
++		setTitle(&quot;ItemEditor&quot;);
++		setModal(true);
++		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++		initComponents();
++		setResizable(false);
++		setLocationRelativeTo(null);
++	}
++	
++	
++	public void fillWithSelected() {
++		DBInfo info = model.getSelected();
++		if(info == null) return;
++		alias.setText(info.alias); host.setText(info.host + ((info.port != 1099) ? &quot; : &quot; + info.port : &quot;&quot;));
++		db.setText(info.db);
++	}
++	
++	
++	protected void initComponents() {
++		next = new JButton(&quot;change/add&quot;);
++		alias = new JTextField(20); 
++		host = new JTextField(20);
++		db = new JTextField(20);
++		 
++		
++		JPanel p1 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
++		p1.add(next);
++		add(p1, BorderLayout.SOUTH);
++		
++		JLabel l1 = new JLabel(&quot;Alias&quot;), l2 = new JLabel(&quot;Hostname&quot;), l3 = new JLabel(&quot;DB ID&quot;);
++		l1.setLabelFor(alias); l2.setLabelFor(host); l3.setLabelFor(db);
++		JPanel p2 = new JPanel(new GridBagLayout());
++		GridBagConstraints c = new GridBagConstraints();
++		
++		// CHANGE HERE
++		c.gridx = 0; c.gridy = 0; c.fill =  GridBagConstraints.NONE; 
++		c.insets = new Insets(2, 4, 0, 0);
++		p2.add(l1, c);
++		
++		c.gridy = 1; c.insets = new Insets(1, 4, 0, 0);
++		p2.add(l2, c); 
++		
++		c.gridy = 2; c.insets = new Insets(1, 4, 0, 0);
++		p2.add(l3, c);
++		
++		c.gridx = 1 ; c.gridy = 0; c.fill = GridBagConstraints.HORIZONTAL;
++		c.insets = new Insets(2, 3, 0, 4);
++		p2.add(alias, c); 
++	
++		c.gridy = 1; c.insets = new Insets(2, 3, 0, 4);
++		p2.add(host, c);
++		
++		c.gridy = 2; c.insets = new Insets(2, 3, 0, 4);
++		p2.add(db, c);
++		
++		
++		add(p2, BorderLayout.CENTER);
++		
++		pack();
++	}
++	
++	
++	public void nextAddActionListener(ActionListener a) {
++		next.addActionListener(a);
++	}
++	
++	
++	public String getAlias() { return alias.getText(); }
++	public String getHost() { return host.getText(); }
++	public String getDB() { return db.getText(); }
++	
++	
++	protected JButton next;
++	protected JTextField alias, host, db;
++
++}
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -28,12 +28,11 @@
+ 	private Vector&lt;DBInfo&gt; dbinfo = new Vector&lt;DBInfo&gt;(10);
+ 	private DBInfo selected = null;
+ 	
+-	private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
++	//private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
+ 	
+ 	private DBLayerFactory factory = null;
+-	private DBLayer dblayer = null;
++	private DBLayer dblayer;
+ 	
+-	
+ 	public Login(DBLayerFactory factory) {
+ 		this.factory = factory;
+ 	}
+@@ -43,7 +42,7 @@
+ 	protected void load() {
+ 		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
+ 		
+-		this.hasChanged(); this.notifyObservers();
++		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+ 	protected void save() {
+@@ -52,26 +51,27 @@
+ 	
+ 	
+ 	public void createRecord(String alias, String host, int port, String db) {
++		System.out.println(&quot;Creating record &quot; + alias);
+ 		DBInfo r = new DBInfo(alias, host, port, db, new String[5]);
+ 		dbinfo.add(r);
+ 		save();
+-		this.hasChanged(); this.notifyObservers();
++		setChanged(); notifyObservers();
+ 	}
+ 	
+-	public void deleteRecord(DBInfo info) {
+-		dbinfo.remove(info);
++	public void deleteSelected() {
++		dbinfo.remove(selected);
+ 		save();
+-		this.hasChanged(); this.notifyObservers();
++		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+-	public void updateSelectedRecord(DBInfo info) {
+-		int index = dbinfo.indexOf(selected);
+-		dbinfo.setElementAt(info, index); // info.clone()?
+-		selected = info; 
+-		this.hasChanged(); this.notifyObservers();
++	public void updateSelectedRecord(String alias, String host, int port, String db) {
++		selected.alias = alias;
++		selected.host = host;
++		selected.port = port;
++		selected.db = db;
++		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+-	/** Subject to change.. */
+ 	public DBInfo[] getRecords() {
+ 		// Well, this sucks! The ugliest way to do things... is to have a Cloneable interface and don't use it.
+ 		// Seeing is believing: <A HREF="http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[">http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[</A>])
+@@ -79,18 +79,26 @@
+ 	}
+ 	
+ 	public void setSelected(int index) {
+-		selected = dbinfo.elementAt(index);		
++		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;		
+ 	}
+ 	
++	public DBInfo getSelected() {
++		return selected;
++	}
++	
+ 	public DBLayer connectToSelected(String name, String password) throws NotBoundException, RemoteException, DBLayerException {
+-		DBLayer dblayer = factory.create(selected.host, selected.port);
++		if(selected == null) return null;
++		dblayer = factory.create(selected.host, selected.port);
+ 		dblayer.initialize(name, password, selected.db);
++		selected.promoteUser(name);
+ 		return dblayer;
+ 	}
+ 	
+-	public DBLayer getDBLayer() {
+-		return dblayer;
+-	}
++	public DBLayer getDBLayer() { return dblayer; }
+ 	
+ 	
++	
++	
++
++
+ }
+
+Added: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -0,0 +1,65 @@
++package net.sf.plantlore.client.login;
++
++import java.awt.event.ActionEvent;
++
++import javax.swing.AbstractAction;
++import javax.swing.event.ListSelectionEvent;
++import javax.swing.event.ListSelectionListener;
++
++
++public class LoginCtrl {
++	
++	private Login model;
++	private LoginView view;
++	
++	
++	public LoginCtrl(Login login, LoginView loginview) {
++		this.view = loginview; this.model = login;
++		
++		view.listAddListSelectionListener(new ListSelectionListener() {
++			public void valueChanged(ListSelectionEvent e) {
++				model.setSelected(e.getFirstIndex());
++			}
++		});
++		
++		view.addAddActionListener(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				ItemView i = new ItemView(model);
++				i.setTitle(&quot;Add&quot;);
++				ItemCtrl c = new ItemCtrl(model, i);
++				c.setMode(ItemCtrl.Mode.ADD);
++				i.setVisible(true);
++				System.out.println(&quot;Adding dialog opened.&quot;);
++			}
++		});
++		
++		view.editAddActionListener(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				if(model.getSelected() == null) return;
++				ItemView i = new ItemView(model);
++				i.setTitle(&quot;Edit&quot;);
++				i.fillWithSelected();
++				ItemCtrl c = new ItemCtrl(model, i);
++				c.setMode(ItemCtrl.Mode.EDIT);
++				i.setVisible(true);
++			}
++		});
++				
++		view.removeAddActionListener(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				model.deleteSelected();				
++			}
++		});
++		
++		view.nextAddActionListener(new AbstractAction() {
++			public void actionPerformed(ActionEvent arg0) {
++				if(model.getSelected() == null) return; // Must select somethin'								
++				AuthView a = new AuthView(model);
++				/*AuthCtrl c = */new AuthCtrl(model, a);
++				a.setVisible(true);
++			}
++		});
++		
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-03 21:39:20 UTC (rev 103)
+@@ -0,0 +1,99 @@
++package net.sf.plantlore.client.login;
++
++import java.awt.*;
++import java.awt.event.ActionListener;
++import java.awt.event.MouseAdapter;
++import java.awt.event.MouseEvent;
++import java.util.Observable;
++import java.util.Observer;
++
++import javax.swing.*;
++import javax.swing.event.ListSelectionListener;
++
++public class LoginView extends JDialog implements Observer {
++	
++	private Login model;
++	
++	
++	public LoginView(Login model) {
++		this.model = model;
++		model.addObserver(this);
++		setTitle(&quot;Login&quot;);
++		setSize(300,200);
++		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++		initComponents();
++		setLocationRelativeTo(null); // center of the screen
++	}
++	
++	
++	
++	protected void initComponents() {
++		
++		choice = new JList();
++		choice.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
++		
++		next = new JButton(&quot;next&quot;);
++		
++		JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
++        panel.add(next);
++        
++		add(choice, BorderLayout.CENTER);
++		add(panel, BorderLayout.SOUTH);
++		
++		popup = new JPopupMenu();
++		add = new JMenuItem(&quot;Add a new item.&quot;);
++		edit = new JMenuItem(&quot;Edit this item.&quot;);
++		remove = new JMenuItem(&quot;Remove this item.&quot;);
++		popup.add(add);
++		popup.add(edit);
++		popup.add(remove);
++		
++		choice.addMouseListener(
++				new MouseAdapter() {
++					@Override
++					public void mouseReleased(MouseEvent e) {
++						if(e.isPopupTrigger()) popup.show(e.getComponent(), e.getX(), e.getY());						
++					}
++				});
++	}
++	
++	
++	
++	
++
++
++
++
++	public void update(Observable arg0, Object arg1) {
++		System.out.println(&quot;Updating&quot;);
++		choice.setListData(model.getRecords());		
++	}
++	
++	
++	public void nextAddActionListener(ActionListener a) {
++		next.addActionListener(a);
++	}
++	
++	public void addAddActionListener(ActionListener a) {
++		add.addActionListener(a);
++	}
++	
++	public void editAddActionListener(ActionListener a) {
++		edit.addActionListener(a);
++	}
++	
++	public void removeAddActionListener(ActionListener a) {
++		remove.addActionListener(a);
++	}
++	
++	public void listAddListSelectionListener(ListSelectionListener a) {
++		choice.addListSelectionListener(a);
++	}
++	
++	
++	protected JList choice;
++	protected JButton next;
++	protected JMenuItem add, edit, remove;
++	protected JPopupMenu popup;
++
++}
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-03 20:44:21 UTC (rev 102)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-03 21:39:20 UTC (rev 103)
+@@ -6,6 +6,7 @@
+ Print = &amp;Print
+ PrintTooltip = Prints selected records
+ Exit = &amp;Exit
++Login = Logi&amp;n
+ helpContents = &amp;Help contents
+ helpAbout = &amp;About
+ Languages = &amp;Languages
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000102.html">[Plantlore-dev] r102 - trunk/documentation
+</A></li>
+	<LI>Next message: <A HREF="000104.html">[Plantlore-dev] r104 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#103">[ date ]</a>
+              <a href="thread.html#103">[ thread ]</a>
+              <a href="subject.html#103">[ subject ]</a>
+              <a href="author.html#103">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

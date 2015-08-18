@@ -1,0 +1,299 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r394 - in trunk/src/net/sf/plantlore/client: imports login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r394%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20imports%20login&In-Reply-To=%3C200605301159.k4UBxRms014606%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000451.html">
+   <LINK REL="Next"  HREF="000453.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r394 - in trunk/src/net/sf/plantlore/client: imports login</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r394%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20imports%20login&In-Reply-To=%3C200605301159.k4UBxRms014606%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r394 - in trunk/src/net/sf/plantlore/client: imports login">krater at berlios.de
+       </A><BR>
+    <I>Tue May 30 13:59:27 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000451.html">[Plantlore-dev] Kurzor
+</A></li>
+        <LI>Next message: <A HREF="000453.html">[Plantlore-dev] r395 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#452">[ date ]</a>
+              <a href="thread.html#452">[ thread ]</a>
+              <a href="subject.html#452">[ subject ]</a>
+              <a href="author.html#452">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-30 13:59:23 +0200 (Tue, 30 May 2006)
+New Revision: 394
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/ImportMngCtrl.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/client/login/AuthView.form
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+Log:
+LOGIN: Authorization Dialog prevents the User from clicking the &quot;Authorize&quot; button twice (by disabling it). The dialog also displays WAIT_CURSOR during Login.
+
+ImportProgressView fixed: the info textarea is deleted when new import starts (the results of the previous import lingered in the textarea).
+
+import.DefaulDirector improved: it makes sure queries are closed.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-30 11:59:23 UTC (rev 394)
+@@ -464,9 +464,7 @@
+ 						
+ 						// Check if that AuthorOccurrence is already in the database.
+ 						AuthorOccurrence aoInDB = null;
+-						System.out.println(&quot;INFI ~ &quot; + ao);
+ 						for( AuthorOccurrence alpha : sharers ) {
+-							System.out.println(&quot;INDB ~ &quot; + alpha);
+ 							if( alpha.equalsUpTo( ao, AuthorOccurrence.DELETED ) ) {
+ 								aoInDB = alpha;
+ 								break;
+@@ -589,12 +587,20 @@
+ 	 * @return	The number of records in from the &lt;code&gt;father&lt;/code&gt; table that share the &lt;code&gt;record&lt;/code&gt;. 
+ 	 */
+ 	public int sharedBy(Record record, Class father, String column) 
+-	throws RemoteException, DBLayerException {
+-		SelectQuery q = db.createQuery(father);
+-		q.addRestriction(RESTR_EQ, column, null, record, null);
+-		int resultset = db.executeQuery(q), 
+-		rows = db.getNumRows(resultset);
+-		db.closeQuery(q);
++	throws RemoteException {
++		SelectQuery q = null;
++		int rows = 0;
++		try {
++			q = db.createQuery(father);
++			q.addRestriction(RESTR_EQ, column, null, record, null);
++			int resultset = db.executeQuery(q); 
++			rows = db.getNumRows(resultset);
++		} catch (DBLayerException e) {
++			e.printStackTrace();
++		} finally {
++			if(q != null)
++				db.closeQuery(q);
++		}
+ 		return rows;
+ 	}
+ 	
+@@ -608,21 +614,26 @@
+ 	 * @return	All sharers. 
+ 	 */
+ 	protected AuthorOccurrence[] findAllSharers(Record shared) 
+-	throws RemoteException, DBLayerException {
+-		SelectQuery q = db.createQuery(AuthorOccurrence.class);
+-		q.addRestriction(RESTR_EQ, AuthorOccurrence.OCCURRENCE, null, shared, null);
+-		int resultset = db.executeQuery(q),
+-		rows = db.getNumRows(resultset);
+-		AuthorOccurrence[] sharers;
+-		if(rows &gt; 0) {
+-			sharers = new AuthorOccurrence[rows];
+-			Object[] pulp = db.more(resultset, 0, rows - 1);
+-			for( int i = 0; i &lt; rows; i++ )
+-				sharers[i] = ( (AuthorOccurrence)(  (Object[])pulp[i]  )[0] );
++	throws RemoteException {
++		SelectQuery q = null;
++		AuthorOccurrence[] sharers = new AuthorOccurrence[0];
++		try {
++			q = db.createQuery(AuthorOccurrence.class);
++			q.addRestriction(RESTR_EQ, AuthorOccurrence.OCCURRENCE, null, shared, null);
++			int resultset = db.executeQuery(q),
++			rows = db.getNumRows(resultset);
++			if(rows &gt; 0) {
++				sharers = new AuthorOccurrence[rows];
++				Object[] pulp = db.more(resultset, 0, rows - 1);
++				for( int i = 0; i &lt; rows; i++ )
++					sharers[i] = ( (AuthorOccurrence)(  (Object[])pulp[i]  )[0] );
++			}
++		} catch (DBLayerException e) {
++			e.printStackTrace();			
++		} finally {
++			if(q != null)
++				db.closeQuery(q);
+ 		}
+-		else
+-			sharers = new AuthorOccurrence[0];
+-		db.closeQuery(q);
+ 		return sharers;
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMngCtrl.java	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMngCtrl.java	2006-05-30 11:59:23 UTC (rev 394)
+@@ -33,6 +33,7 @@
+ 				model.setSelectedFile( view.choice.getSelectedFile().getAbsolutePath() );
+ 				try {
+ 					model.start();
++					progressView.reset();
+ 					progressView.setVisible(true);
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-30 11:59:23 UTC (rev 394)
+@@ -3,6 +3,8 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
++import javax.swing.text.PlainDocument;
++
+ import net.sf.plantlore.l10n.L10n;
+ 
+ 
+@@ -114,6 +116,7 @@
+     public void reset() {
+     	processed =  rejected =  total =  updated =  deleted =  inserted = 0;
+     	exceptionOccured = false;
++    	info.setDocument(new PlainDocument());
+     }
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-05-30 11:59:23 UTC (rev 394)
+@@ -1,5 +1,6 @@
+ package net.sf.plantlore.client.login;
+ 
++import java.awt.Cursor;
+ import java.awt.event.ActionEvent;
+ 
+ import javax.swing.AbstractAction;
+@@ -25,6 +26,8 @@
+ 			putValue(NAME, L10n.getString(&quot;Login.Authorize&quot;));
+ 		}
+ 		public void actionPerformed(ActionEvent arg0) {
++			view.next.setEnabled(false);
++			view.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+ 			String user = (view.user.getSelectedItem() != null) ? view.user.getSelectedItem().toString() : null;
+ 			if(user != null)
+ 				model.connectToSelected(user, new String(view.password.getPassword()));
+@@ -34,7 +37,6 @@
+ 						L10n.getString(&quot;Error.Missing&quot;),
+ 						JOptionPane.WARNING_MESSAGE);
+ 			
+-			view.password.setText(&quot;&quot;);
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.form	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.form	2006-05-30 11:59:23 UTC (rev 394)
+@@ -91,9 +91,6 @@
+       &lt;/AuxValues&gt;
+     &lt;/Component&gt;
+     &lt;Component class=&quot;javax.swing.JPasswordField&quot; name=&quot;password&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;echoChar&quot; type=&quot;char&quot; value=&quot;&amp;#x2022;&quot;/&gt;
+-      &lt;/Properties&gt;
+       &lt;AuxValues&gt;
+         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+       &lt;/AuxValues&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-05-30 03:13:04 UTC (rev 393)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-05-30 11:59:23 UTC (rev 394)
+@@ -6,6 +6,7 @@
+ 
+ package net.sf.plantlore.client.login;
+ 
++import java.awt.Cursor;
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+@@ -55,8 +56,6 @@
+ 
+         user.setEditable(true);
+ 
+-        password.setEchoChar('\u2022');
+-
+         next.setText(L10n.getString(&quot;Login.Authorize&quot;));
+ 
+         status.setText(&quot; ...&quot;);
+@@ -101,6 +100,14 @@
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+     
+     
++    
++    @Override
++    public void setVisible(boolean arg0) {
++    	next.setEnabled(true);
++    	setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++    	super.setVisible(arg0);
++    }
++    
+     /**
+      * Reload the list of usernames according to the currently selected record.
+      */
+@@ -110,12 +117,19 @@
+     		if(selected == null) return;
+     		user.removeAllItems();
+     		((AutoComboBox)user).addItems(selected.users);
++    		password.setText(&quot;&quot;);
+     		setTitle(L10n.getString(&quot;Login.ConnectingTo&quot;) + &quot; &quot; + selected.toString());
+     	}
+     	// Exception! We must display the exception to the user.
+     	else if(arg instanceof Exception) {
+     		status.setText(L10n.getString(&quot;Login.Failed&quot;));
+-    		JOptionPane.showMessageDialog(this, arg, L10n.getString(&quot;Error.LoginFailed&quot;), JOptionPane.ERROR_MESSAGE);
++    		next.setEnabled(true);
++    		setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++    		JOptionPane.showMessageDialog(
++    				this, 
++    				((Exception)arg).getMessage(), 
++    				L10n.getString(&quot;Error.LoginFailed&quot;), 
++    				JOptionPane.ERROR_MESSAGE);
+     	}
+     	// The database layer has been created, we are no longer neccessary
+ 		else if(arg instanceof DBLayer)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000451.html">[Plantlore-dev] Kurzor
+</A></li>
+	<LI>Next message: <A HREF="000453.html">[Plantlore-dev] r395 - trunk/src/net/sf/plantlore/client/login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#452">[ date ]</a>
+              <a href="thread.html#452">[ thread ]</a>
+              <a href="subject.html#452">[ subject ]</a>
+              <a href="author.html#452">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

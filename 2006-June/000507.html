@@ -1,0 +1,596 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r415 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r415%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605312259.k4VMxvbf010668%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000505.html">
+   <LINK REL="Next"  HREF="000508.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r415 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r415%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605312259.k4VMxvbf010668%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r415 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 00:59:57 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000505.html">[Plantlore-dev] r414 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+        <LI>Next message: <A HREF="000508.html">[Plantlore-dev] [Bug #7704] History doesn't revive deleted AuthorOccs for restored Occs
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#507">[ date ]</a>
+              <a href="thread.html#507">[ thread ]</a>
+              <a href="subject.html#507">[ subject ]</a>
+              <a href="author.html#507">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-01 00:59:48 +0200 (Thu, 01 Jun 2006)
+New Revision: 415
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/SearchView.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.form
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Added default buttons for Add, Edit, Search.
+Fixed a minor bug in ProgressBar (the WAITING_CURSOR wasn't changed back to defaultCursor() after a thrown exception and getTask().stop()).
+A few queries had to be fixed a little to conform to the new history-friendly delete.
+
+Added a new file menu Occurrences for Add,Edit,Search,Delete,History,Scheda,Refresh and assigned accelerators to these actions (Ctrl+X for Scheda doesn't work yet, I don't know why, Ctrl+A for Add also stops working after you click into the Overview table :-/ will try to fix that tomorrow...).
+
+Also exceptionHandlers for Delete,Refresh and Scheda Tasks missed task stopping, fixed now.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -62,6 +62,8 @@
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
+         
++        getRootPane().setDefaultButton(okButton);
++        
+         setLabels();
+         
+         //if (inEditMode)
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -256,6 +256,7 @@
+         view.setSelectedRowListener(new OverviewSelectionListener());
+         view.overview.addMouseListener(new OverviewMouseListener());
+         view.refreshButton.setAction(refreshAction);
++        view.occurrencesRefresh.setAction(refreshAction);
+         
+         view.overview.addKeyListener(new OverviewKeyListener());
+ 
+@@ -534,7 +535,7 @@
+                 putValue(NAME, L10n.getString(&quot;Overview.Add&quot;));
+             putValue(SMALL_ICON,Resource.createIcon(&quot;/toolbarButtonGraphics/general/Add24.gif&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.AddTT&quot;));
+-            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_N, ActionEvent.CTRL_MASK));
++            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_A, ActionEvent.CTRL_MASK));
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Add&quot;));            
+         } 
+ 
+@@ -576,6 +577,8 @@
+                 putValue(NAME, L10n.getString(&quot;Overview.Delete&quot;));
+             putValue(SMALL_ICON,Resource.createIcon(&quot;/toolbarButtonGraphics/general/Delete24.gif&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.DeleteTT&quot;));
++            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE,0));
++
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Delete&quot;));            
+         } 
+ 
+@@ -603,12 +606,14 @@
+                                 DBLayerException e = (DBLayerException)ex;
+                                 JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+e.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+                                 logger.error(e+&quot;: &quot;+e.getErrorInfo());
++                                getTask().stop();
+                                 return;
+                             }
+                             if (ex instanceof RemoteException) {
+                                 RemoteException e = (RemoteException)ex;
+                                 JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+e.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+                                 logger.error(e);
++                                getTask().stop();
+                                 return;
+                             }
+                             JOptionPane.showMessageDialog(view,L10n.getString(&quot;Delete.Message.UnknownException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Delete.Message.UnkownExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+@@ -704,6 +709,7 @@
+         public SchedaAction() {
+             putValue(NAME, L10n.getString(&quot;Overview.Scheda&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.SchedaTT&quot;));
++            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_X, ActionEvent.CTRL_MASK));
+ //            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Scheda&quot;));            
+             putValue(SMALL_ICON,Resource.createIcon(&quot;/toolbarButtonGraphics/general/ComposeMail24.gif&quot;));
+         } 
+@@ -762,6 +768,7 @@
+                                 JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);            
+                             }
+                         });
++                        getTask().stop();
+                     }                    
+                     public void afterStopped(final Object value) {
+                         SwingUtilities.invokeLater(new Runnable() {
+@@ -873,6 +880,7 @@
+                 putValue(NAME, L10n.getString(&quot;Overview.History&quot;));
+             putValue(SMALL_ICON,Resource.createIcon(&quot;/toolbarButtonGraphics/general/History24.gif&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.HistoryTT&quot;));
++//            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.CTRL_MASK));
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.History&quot;));                        
+         }
+         
+@@ -1159,6 +1167,7 @@
+                 public void exceptionHandler(Exception ex) {   
+                     //FIXME
+                     ex.printStackTrace();
++                    getTask().stop();
+                 }                    
+             };
+             progressBar.setTitle(L10n.getString(&quot;Overview.Refresh.ProgressTitle&quot;));
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-05-31 22:59:48 UTC (rev 415)
+@@ -6,7 +6,12 @@
+       &lt;SubComponents&gt;
+         &lt;Menu class=&quot;javax.swing.JMenu&quot; name=&quot;fileMenu&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;File&quot;/&gt;
++            &lt;Property name=&quot;mnemonic&quot; type=&quot;int&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getMnemonic(&quot;Overview.MenuFile&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Overview.MenuFile&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -52,7 +57,12 @@
+         &lt;/Menu&gt;
+         &lt;Menu class=&quot;javax.swing.JMenu&quot; name=&quot;dataMenu&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Data&quot;/&gt;
++            &lt;Property name=&quot;mnemonic&quot; type=&quot;int&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getMnemonic(&quot;Overview.MenuData&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Overview.MenuData&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -100,9 +110,67 @@
+             &lt;/MenuItem&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Menu&gt;
++        &lt;Menu class=&quot;javax.swing.JMenu&quot; name=&quot;occurrencesMenu&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;mnemonic&quot; type=&quot;int&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getMnemonic(&quot;Overview.MenuOccurrences&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Overview.MenuOccurrences&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
++          &lt;Events&gt;
++            &lt;EventHandler event=&quot;actionPerformed&quot; listener=&quot;java.awt.event.ActionListener&quot; parameters=&quot;java.awt.event.ActionEvent&quot; handler=&quot;occurrencesMenuActionPerformed&quot;/&gt;
++          &lt;/Events&gt;
++          &lt;SubComponents&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesAdd&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesEdit&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesDelete&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesScheda&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesHistory&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesSearch&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++            &lt;/MenuItem&gt;
++            &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;occurrencesRefresh&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++              &lt;/Properties&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/MenuItem&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Menu&gt;
+         &lt;Menu class=&quot;javax.swing.JMenu&quot; name=&quot;helpMenu&quot;&gt;
+           &lt;Properties&gt;
+-            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Help&quot;/&gt;
++            &lt;Property name=&quot;mnemonic&quot; type=&quot;int&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;L10n.getMnemonic(&quot;Overview.MenuHelp&quot;)&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++              &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Overview.MenuHelp&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++            &lt;/Property&gt;
+           &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -406,7 +474,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;496&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;1&quot; pref=&quot;424&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -96,6 +96,14 @@
+         dataMetadata = new javax.swing.JMenuItem();
+         dataUser = new javax.swing.JMenuItem();
+         dataWholeHistory = new javax.swing.JMenuItem();
++        occurrencesMenu = new javax.swing.JMenu();
++        occurrencesAdd = new javax.swing.JMenuItem();
++        occurrencesEdit = new javax.swing.JMenuItem();
++        occurrencesDelete = new javax.swing.JMenuItem();
++        occurrencesScheda = new javax.swing.JMenuItem();
++        occurrencesHistory = new javax.swing.JMenuItem();
++        occurrencesSearch = new javax.swing.JMenuItem();
++        occurrencesRefresh = new javax.swing.JMenuItem();
+         helpMenu = new javax.swing.JMenu();
+         helpContents = new javax.swing.JMenuItem();
+         jSeparator4 = new javax.swing.JSeparator();
+@@ -133,7 +141,7 @@
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1Layout.createSequentialGroup()
+                 .add(statusLabel)
+-                .addContainerGap(571, Short.MAX_VALUE))
++                .addContainerGap(582, Short.MAX_VALUE))
+         );
+         jPanel1Layout.setVerticalGroup(
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -175,7 +183,7 @@
+                 .add(recordsPerPage, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 45, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(nextPage, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(204, Short.MAX_VALUE))
++                .addContainerGap(216, Short.MAX_VALUE))
+         );
+         jPanel3Layout.setVerticalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -212,11 +220,11 @@
+         jPanel2.setLayout(jPanel2Layout);
+         jPanel2Layout.setHorizontalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 648, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 679, Short.MAX_VALUE)
+         );
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 532, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 424, Short.MAX_VALUE)
+         );
+ 
+         recordsCount.setText(&quot;-&quot;);
+@@ -254,7 +262,8 @@
+                 .addContainerGap())
+         );
+ 
+-        fileMenu.setText(&quot;File&quot;);
++        fileMenu.setMnemonic(L10n.getMnemonic(&quot;Overview.MenuFile&quot;));
++        fileMenu.setText(L10n.getString(&quot;Overview.MenuFile&quot;));
+         fileLogin.setText(&quot;Item&quot;);
+         fileMenu.add(fileLogin);
+ 
+@@ -281,7 +290,8 @@
+ 
+         jMenuBar1.add(fileMenu);
+ 
+-        dataMenu.setText(&quot;Data&quot;);
++        dataMenu.setMnemonic(L10n.getMnemonic(&quot;Overview.MenuData&quot;));
++        dataMenu.setText(L10n.getString(&quot;Overview.MenuData&quot;));
+         dataAuthors.setText(&quot;Item&quot;);
+         dataMenu.add(dataAuthors);
+ 
+@@ -299,7 +309,39 @@
+ 
+         jMenuBar1.add(dataMenu);
+ 
+-        helpMenu.setText(&quot;Help&quot;);
++        occurrencesMenu.setMnemonic(L10n.getMnemonic(&quot;Overview.MenuOccurrences&quot;));
++        occurrencesMenu.setText(L10n.getString(&quot;Overview.MenuOccurrences&quot;));
++        occurrencesMenu.addActionListener(new java.awt.event.ActionListener() {
++            public void actionPerformed(java.awt.event.ActionEvent evt) {
++                occurrencesMenuActionPerformed(evt);
++            }
++        });
++
++        occurrencesAdd.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesAdd);
++
++        occurrencesEdit.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesEdit);
++
++        occurrencesDelete.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesDelete);
++
++        occurrencesScheda.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesScheda);
++
++        occurrencesHistory.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesHistory);
++
++        occurrencesSearch.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesSearch);
++
++        occurrencesRefresh.setText(&quot;Item&quot;);
++        occurrencesMenu.add(occurrencesRefresh);
++
++        jMenuBar1.add(occurrencesMenu);
++
++        helpMenu.setMnemonic(L10n.getMnemonic(&quot;Overview.MenuHelp&quot;));
++        helpMenu.setText(L10n.getString(&quot;Overview.MenuHelp&quot;));
+         helpContents.setText(&quot;Item&quot;);
+         helpMenu.add(helpContents);
+ 
+@@ -318,9 +360,9 @@
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+             .add(jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-            .add(mainToolBar, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 648, Short.MAX_VALUE)
++            .add(mainToolBar, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 679, Short.MAX_VALUE)
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-            .add(pageToolBar, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 648, Short.MAX_VALUE)
++            .add(pageToolBar, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 679, Short.MAX_VALUE)
+         );
+         layout.setVerticalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -337,6 +379,10 @@
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
++
++    private void occurrencesMenuActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_occurrencesMenuActionPerformed
++// TODO add your handling code here:
++    }//GEN-LAST:event_occurrencesMenuActionPerformed
+     
+     /**
+      * @param args the command line arguments
+@@ -469,6 +515,7 @@
+      */
+     public void setAddAction(AbstractAction a) {
+         addButton.setAction(a);
++        occurrencesAdd.setAction(a);
+     }
+     
+     /** Sets an action to the editButton.
+@@ -476,6 +523,7 @@
+      */
+     public void setEditAction(AbstractAction a) {
+         editButton.setAction(a);
++        occurrencesEdit.setAction(a);
+     }
+     
+     /** Sets an action to the deleteButton.
+@@ -483,6 +531,7 @@
+      */
+     public void setDeleteAction(AbstractAction a) {
+         deleteButton.setAction(a);
++        occurrencesDelete.setAction(a);
+     }
+     
+     
+@@ -491,6 +540,7 @@
+      */
+     public void setSearchAction(AbstractAction a) {
+         searchButton.setAction(a);
++        occurrencesSearch.setAction(a);
+     }
+ 
+     /** Sets an action to the Data-&gt;Search menu item and to the Search toolbar button.
+@@ -498,6 +548,7 @@
+      */
+     public void setSchedaAction(AbstractAction a) {
+         schedaButton.setAction(a);
++        occurrencesScheda.setAction(a);
+     }
+ 
+      /** Sets an action to the History toolbar button.
+@@ -505,6 +556,7 @@
+      */
+     public void setHistoryRecordAction(AbstractAction a) {
+         historyButton.setAction(a);
++        occurrencesHistory.setAction(a);
+     }
+     
+     /** Sets an action to the selectAll button.
+@@ -649,6 +701,14 @@
+     protected javax.swing.JSeparator jSeparator4;
+     private javax.swing.JToolBar mainToolBar;
+     private javax.swing.JButton nextPage;
++    private javax.swing.JMenuItem occurrencesAdd;
++    private javax.swing.JMenuItem occurrencesDelete;
++    private javax.swing.JMenuItem occurrencesEdit;
++    private javax.swing.JMenuItem occurrencesHistory;
++    private javax.swing.JMenu occurrencesMenu;
++    protected javax.swing.JMenuItem occurrencesRefresh;
++    private javax.swing.JMenuItem occurrencesScheda;
++    private javax.swing.JMenuItem occurrencesSearch;
+     protected javax.swing.JTable overview;
+     private javax.swing.JScrollPane overviewScrollPane;
+     private javax.swing.JLabel pageStatus;
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -41,6 +41,8 @@
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
+         
++        getRootPane().setDefaultButton(okButton);
++        
+         setLabels();
+         
+         jPanel3.setVisible(visible);
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -61,7 +61,7 @@
+         AuthorOccurrence[] authorResults = null;
+         SelectQuery sq = db.createQuery(AuthorOccurrence.class);        
+         sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
+-        sq.addRestriction(PlantloreConstants.RESTR_NE,AuthorOccurrence.DELETED,null,1,null);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.DELETED,null,0,null);
+         int resultid = db.executeQuery(sq);
+         int resultCount = db.getNumRows(resultid);
+         authorResults = new AuthorOccurrence[resultCount];
+@@ -85,7 +85,7 @@
+     public void deleteHabitat(Habitat h) throws DBLayerException, RemoteException {
+         SelectQuery sq = db.createQuery(Occurrence.class);        
+         sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
+-        sq.addRestriction(PlantloreConstants.RESTR_NE,Occurrence.DELETED, null, 1, null);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.DELETED, null, 0, null);
+         int resultid = db.executeQuery(sq);
+         int resultCount = db.getNumRows(resultid);
+         if (resultCount == 0) {
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.form
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.form	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.form	2006-05-31 22:59:48 UTC (rev 415)
+@@ -4,6 +4,7 @@
+   &lt;Properties&gt;
+     &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;0&quot;/&gt;
+     &lt;Property name=&quot;resizable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;Property name=&quot;undecorated&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
+   &lt;/Properties&gt;
+   &lt;SyntheticProperties&gt;
+     &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-31 22:59:48 UTC (rev 415)
+@@ -80,6 +80,7 @@
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+         setResizable(false);
++        setUndecorated(true);
+         jPanel1.setBorder(javax.swing.BorderFactory.createCompoundBorder(new javax.swing.border.SoftBevelBorder(javax.swing.border.BevelBorder.RAISED), javax.swing.BorderFactory.createEtchedBorder()));
+ 
+         statusField.setBackground(javax.swing.UIManager.getDefaults().getColor(&quot;Panel.background&quot;));
+@@ -204,9 +205,9 @@
+                     case STOPPING:
+                         setVisible(false);
+                         dispose();                    
++                        parent.setCursor(Cursor.getDefaultCursor());
+                         break;
+                     case STOPPED:
+-                        parent.setCursor(Cursor.getDefaultCursor());
+                         afterStopped(value);
+                         break;                    
+                 }//switch
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-31 22:59:48 UTC (rev 415)
+@@ -1132,3 +1132,4 @@
+ Overview.MenuFileLogin=&amp;Login
+ 
+ Message.FillingDialogs=Storing data into dialogs
++Overview.MenuOccurrences=Occurrences
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-31 22:59:48 UTC (rev 415)
+@@ -765,3 +765,5 @@
+ Overview.MenuFileLogin=&amp;P\u0159ihl\u00E1\u0161en\u00ED
+ 
+ Message.FillingDialogs=Ukl\u00E1d\u00E1m data do dialog\u016F
++
++Overview.MenuOccurrences=&amp;N\u00E1lezy
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-31 22:32:29 UTC (rev 414)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-31 22:59:48 UTC (rev 415)
+@@ -833,3 +833,5 @@
+ Overview.Refresh.ProgressTitle=Loading data
+ 
+ Message.FillingDialogs=Constructing dialogs
++
++Overview.MenuOccurrences=Occurrences
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000505.html">[Plantlore-dev] r414 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+	<LI>Next message: <A HREF="000508.html">[Plantlore-dev] [Bug #7704] History doesn't revive deleted AuthorOccs for restored Occs
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#507">[ date ]</a>
+              <a href="thread.html#507">[ thread ]</a>
+              <a href="subject.html#507">[ subject ]</a>
+              <a href="author.html#507">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

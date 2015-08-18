@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r593 - in trunk/src/net/sf/plantlore:	client/checklist common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r593%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20common&In-Reply-To=%3C200608291059.k7TAxpot004889%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000827.html">
+   <LINK REL="Next"  HREF="000829.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r593 - in trunk/src/net/sf/plantlore:	client/checklist common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r593%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20common&In-Reply-To=%3C200608291059.k7TAxpot004889%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r593 - in trunk/src/net/sf/plantlore:	client/checklist common">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug 29 12:59:51 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000827.html">[Plantlore-dev] Fw: Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+        <LI>Next message: <A HREF="000829.html">[Plantlore-dev] r594 - in	trunk/src/net/sf/plantlore/client/overview: . search
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#828">[ date ]</a>
+              <a href="thread.html#828">[ thread ]</a>
+              <a href="subject.html#828">[ subject ]</a>
+              <a href="author.html#828">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-29 12:59:48 +0200 (Tue, 29 Aug 2006)
+New Revision: 593
+
+Modified:
+   trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+   trunk/src/net/sf/plantlore/common/Assistant.java
+   trunk/src/net/sf/plantlore/common/AutoTextArea.java
+Log:
+Probably a fix of Bug #8607 - every time a new list of allowed values is supplied to the &quot;underlying&quot; AutoTextArea, Checklist updates its own list  accordingly. Remains to be tested.
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-08-29 09:45:43 UTC (rev 592)
++++ trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-08-29 10:59:48 UTC (rev 593)
+@@ -45,13 +45,7 @@
+ 	 * Each object of the field is converted to a String (using the toString() method). 
+ 	 */
+ 	public Checklist(Object[] values) {
+-		if( !(values instanceof String[]) ) 
+-			for(int i = 0; i &lt; values.length; i++) 
+-				values[i] = values[i].toString();
+-		// Insert the values to the list.
+-		setListData( values );
+-		// Remember the list.
+-		original = (String[])values;
++		setListData(values);
+ 		// Specify the default looks.
+ 		setCellRenderer( new CheckCellRenderer() );
+ 		setSelectionModel( new ToggleSelectionModel() );
+@@ -71,6 +65,17 @@
+ 		addKeyListener(new KeyHelper());	
+ 	}
+ 	
++	@Override
++	public void setListData(Object[] values) {
++		if( !(values instanceof String[]) ) 
++			for(int i = 0; i &lt; values.length; i++) 
++				values[i] = values[i].toString();
++		// Insert the values to the list.
++		super.setListData( values );
++		// Remember the list.
++		original = (String[])values;
++	}
++	
+ 	/**
+ 	 * Reset the list of items.
+ 	 *
+@@ -79,7 +84,7 @@
+ 		Object[] selected = getSelectedValues();
+ 		clearSelection();
+ 		
+-		setListData( original );
++		super.setListData( original );
+ 		
+ 		for(Object r : selected)
+ 			setSelectedValue(r, false);
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-08-29 09:45:43 UTC (rev 592)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-08-29 10:59:48 UTC (rev 593)
+@@ -1,6 +1,8 @@
+ package net.sf.plantlore.client.checklist;
+ 
+ import java.awt.event.ActionEvent;
++import java.beans.PropertyChangeEvent;
++import java.beans.PropertyChangeListener;
+ 
+ import javax.swing.AbstractAction;
+ import javax.swing.ImageIcon;
+@@ -28,14 +30,22 @@
+ 	 * @param view	Actions will be bound to this ChecklistView's buttons.
+ 	 * @param model	The AutoTextArea that will receive the selected plants.
+ 	 */
+-	public ChecklistCtrl(ChecklistView view, AutoTextArea model) {
+-		this.view = view;
+-		this.model = model;
++	public ChecklistCtrl(ChecklistView checklistView, AutoTextArea autoTextArea) {
++		this.view = checklistView;
++		this.model = autoTextArea;
+ 		view.load.setAction(new LoadCreate(0));
+ 		view.save.setAction(new LoadCreate(1));
+ 		view.clear.setAction(new ClearSelection());
+ 		view.submit.setAction(new Submit());
+ 		view.restore.setAction(new Restore());
++		
++		model.addPropertyChangeListener(
++				AutoTextArea.ALLOWED_VALUES_CHANGED,
++				new PropertyChangeListener() {
++					public void propertyChange(PropertyChangeEvent arg0) {
++						view.checklist.setListData( model.getAllowedValues() );
++					}
++				});
+ 	}
+ 	
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/common/Assistant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Assistant.java	2006-08-29 09:45:43 UTC (rev 592)
++++ trunk/src/net/sf/plantlore/common/Assistant.java	2006-08-29 10:59:48 UTC (rev 593)
+@@ -10,6 +10,7 @@
+ import javax.swing.JRootPane;
+ import javax.swing.JScrollPane;
+ import javax.swing.ListSelectionModel;
++import javax.swing.ScrollPaneConstants;
+ import javax.swing.text.Position;
+ 
+ 
+@@ -38,8 +39,8 @@
+ 	 * @param container	The container to which the assistant will be added. 
+ 	 */
+ 	public Assistant(JList l, Container container) {
+-		super(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+-				JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
++		super(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
++				ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+ 		setList(l); setVisible(false); setSize(200,100); setLocation(0, 0);
+ 		container.add(this, JLayeredPane.POPUP_LAYER);
+ 	}
+@@ -57,8 +58,8 @@
+ 	}
+         
+         public Assistant(Container container) {
+-		super(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+-				JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
++		super(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
++				ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+ 		setVisible(false); setSize(200,100); setLocation(0, 0);
+ 		container.add(this, JLayeredPane.POPUP_LAYER);            
+         }
+
+Modified: trunk/src/net/sf/plantlore/common/AutoTextArea.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-08-29 09:45:43 UTC (rev 592)
++++ trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-08-29 10:59:48 UTC (rev 593)
+@@ -80,6 +80,7 @@
+ 	
+ 	
+ 	public final static String UPDATE_LIST_OF_PLANTS = &quot;ListOfPlants&quot;;
++	public final static String ALLOWED_VALUES_CHANGED = &quot;ListOfAllowedValuesChanged&quot;;
+ 	
+ 	/*======================================================================
+ 	 	Members
+@@ -106,8 +107,8 @@
+ 	 	Keyboard behaviour
+ 	  ======================================================================*/
+ 	
+-	private KeyEvent enterEmulator = new KeyEvent(this, KeyEvent.KEY_PRESSED, (long)0, 0, KeyEvent.VK_ENTER, (char)KeyEvent.VK_ENTER);
+-	private KeyEvent escapeEmulator = new KeyEvent(this, KeyEvent.KEY_PRESSED, (long)0, 0, KeyEvent.VK_ESCAPE, (char)KeyEvent.VK_ESCAPE);
++	private KeyEvent enterEmulator = new KeyEvent(this, KeyEvent.KEY_PRESSED, 0, 0, KeyEvent.VK_ENTER, (char)KeyEvent.VK_ENTER);
++	private KeyEvent escapeEmulator = new KeyEvent(this, KeyEvent.KEY_PRESSED, 0, 0, KeyEvent.VK_ESCAPE, (char)KeyEvent.VK_ESCAPE);
+ 		
+ 	/** Keyboard unleashed - see the JavaDoc of the AutoTextArea class for detailed description. */
+ 	public void keyPressed(KeyEvent e) {
+@@ -123,7 +124,7 @@
+ 		if (mode == Mode.FREE_ROAM) {
+ 			switch (key) {
+ 			case KeyEvent.VK_TAB: // transfer the focus to another component
+-				if((e.getModifiers() &amp; KeyEvent.SHIFT_DOWN_MASK) &gt; 0) transferFocusBackward();
++				if((e.getModifiers() &amp; InputEvent.SHIFT_DOWN_MASK) &gt; 0) transferFocusBackward();
+ 				else transferFocus();				
+ 			case KeyEvent.VK_ESCAPE:
+ 				e.consume(); // no further processing of this event
+@@ -353,7 +354,9 @@
+             this.choices = choices;
+             this.values = new HashSet&lt;Object&gt;(choices.length);
+             for(Object obj : choices)
+-                    this.values.add(obj);            
++                    this.values.add(obj);
++            
++            firePropertyChange(ALLOWED_VALUES_CHANGED, null, null);
+         }
+         
+ 	/**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000827.html">[Plantlore-dev] Fw: Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+	<LI>Next message: <A HREF="000829.html">[Plantlore-dev] r594 - in	trunk/src/net/sf/plantlore/client/overview: . search
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#828">[ date ]</a>
+              <a href="thread.html#828">[ thread ]</a>
+              <a href="subject.html#828">[ subject ]</a>
+              <a href="author.html#828">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,157 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r279%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605151401.k4FE1rPk019411%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000330.html">
+   <LINK REL="Next"  HREF="000332.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r279%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605151401.k4FE1rPk019411%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export">krater at berlios.de
+       </A><BR>
+    <I>Mon May 15 16:01:53 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000330.html">[Plantlore-dev] r278 - in trunk/src/net/sf/plantlore/client: . history metadata publication user
+</A></li>
+        <LI>Next message: <A HREF="000332.html">[Plantlore-dev] r280 - in trunk/src/net/sf/plantlore: client client/checklist client/resources common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#331">[ date ]</a>
+              <a href="thread.html#331">[ thread ]</a>
+              <a href="subject.html#331">[ subject ]</a>
+              <a href="author.html#331">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-15 16:01:45 +0200 (Mon, 15 May 2006)
+New Revision: 279
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+Log:
+ExportManager prevents its users from changing its fields while an export is currently in progress.
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-15 13:15:57 UTC (rev 278)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-15 14:01:45 UTC (rev 279)
+@@ -224,6 +224,10 @@
+ 	 */
+ 	synchronized public void setDBLayer(DBLayer dblayer)
+ 	throws ExportException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change DBLayer while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
+ 		if(dblayer == null) { 
+ 			logger.error(&quot;The database layer is null!&quot;);
+ 			throw new ExportException(L10n.getString(&quot;error.InvalidDBLayer&quot;));
+@@ -235,8 +239,14 @@
+ 	/**
+ 	 * Store a copy of the &lt;code&gt;template&lt;/code&gt;.
+ 	 * &lt;b&gt;Null means everything is selected!&lt;/b&gt;
++	 * @throws ExportException 
+ 	 */
+-	synchronized public void setTemplate(Template template) {
++	synchronized public void setTemplate(Template template) 
++	throws ExportException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change the Template while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
+ 		if(template == null) {
+ 			logger.info(&quot;The list of selected columns is empty! Creating a new Template where every column is selected.&quot;);
+ 			this.template = new Template();
+@@ -248,7 +258,12 @@
+ 	/**
+ 	 * Store a copy of the &lt;code&gt;selection&lt;/code&gt;.
+ 	 */
+-	synchronized public void setSelection(Selection selection) {
++	synchronized public void setSelection(Selection selection)
++	throws ExportException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change the Selection while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
+ 		if(selection == null || selection.isEmpty()) {
+ 			logger.info(&quot;The list of selected records is empty! Creating a new Selection where everything is selected.&quot;);
+ 			select = new Selection();
+@@ -286,7 +301,12 @@
+ 	/**
+ 	 * Set another result identificator of a Result Set. 
+ 	 */
+-	synchronized public void setResultId(Integer result) { 
++	synchronized public void setResultId(Integer result)
++	throws ExportException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change Resultset Identifier while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
+ 		if(result &lt; 0) 
+ 			logger.warn(&quot;The result set identificator is a negative integer!&quot;);
+ 
+@@ -302,6 +322,10 @@
+ 	 */
+ 	synchronized public void setSelectQuery(SelectQuery query) 
+ 	throws ExportException, DBLayerException, RemoteException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change the SelectQuery while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
+ 		if(query == null)
+ 			logger.warn(&quot;The select query is not valid - it is null!&quot;);
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-15 13:15:57 UTC (rev 278)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-15 14:01:45 UTC (rev 279)
+@@ -32,8 +32,8 @@
+ 				    JOptionPane.WARNING_MESSAGE);
+ 			else {
+ 				view.setVisible(false);
+-				model.setTemplate( t ); // Set the new template.
+ 				try {
++					model.setTemplate( t ); // Set the new template.
+ 					model.start();
+ 					progressView.setVisible(true);
+ 				}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000330.html">[Plantlore-dev] r278 - in trunk/src/net/sf/plantlore/client: . history metadata publication user
+</A></li>
+	<LI>Next message: <A HREF="000332.html">[Plantlore-dev] r280 - in trunk/src/net/sf/plantlore: client client/checklist client/resources common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#331">[ date ]</a>
+              <a href="thread.html#331">[ thread ]</a>
+              <a href="subject.html#331">[ subject ]</a>
+              <a href="author.html#331">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

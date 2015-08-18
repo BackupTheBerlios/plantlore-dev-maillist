@@ -1,0 +1,1615 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r502 - in trunk/src/net/sf/plantlore: client	client/imports client/login middleware server/tools
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r502%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/imports%20client/login%20middleware%20server/tools&In-Reply-To=%3C200608131430.k7DEULmf018333%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000684.html">
+   <LINK REL="Next"  HREF="000686.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r502 - in trunk/src/net/sf/plantlore: client	client/imports client/login middleware server/tools</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r502%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/imports%20client/login%20middleware%20server/tools&In-Reply-To=%3C200608131430.k7DEULmf018333%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r502 - in trunk/src/net/sf/plantlore: client	client/imports client/login middleware server/tools">krater at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 13 16:30:21 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000684.html">[Plantlore-dev] Dulezite upozorneni tykajici se pripojovani k	databazi
+</A></li>
+        <LI>Next message: <A HREF="000686.html">[Plantlore-dev] Otestovani serveru
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#685">[ date ]</a>
+              <a href="thread.html#685">[ thread ]</a>
+              <a href="subject.html#685">[ subject ]</a>
+              <a href="author.html#685">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-13 16:30:17 +0200 (Sun, 13 Aug 2006)
+New Revision: 502
+
+Removed:
+   trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+   trunk/src/net/sf/plantlore/client/login/ItemView.form
+   trunk/src/net/sf/plantlore/client/login/ItemView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/MainConfig.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+   trunk/src/net/sf/plantlore/client/login/DBInfo.java
+   trunk/src/net/sf/plantlore/client/login/ItemCtrl2.java
+   trunk/src/net/sf/plantlore/client/login/ItemView2.form
+   trunk/src/net/sf/plantlore/client/login/ItemView2.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/tools/RMI.java
+Log:
+Obsolete ItemView and ItemCtrl removed from the repository. They are replaced by ItemView2 and ItemCtrl2.
+
+AppCoreCtrl: Fixed DBLayerFactory creation (the codebase should be specified at that time).
+
+
+Login: Dialogs and Models re-programmed to conform the new (more secure) DBInfo (no masterkey and masterpassword neither stored nor required).
+MainConfig: Updated to reflect the new DBInfo and to be able to obtain Codebase from the configuration file.
+
+RMIDBLayerFactory: Sets the codebase properly when the Factory is created for the first time, so that the remote connections don't fail.
+
+tools.RMI: The codebase is set more carefully.
+
+====================================================================
+In order to make remote connections work, you have to modify the configuration file &quot;plantlore.xml&quot; to contain the &lt;codebase&gt; tag and set it properly. It should look like this:
+
+&lt;config&gt;
+..
+  &lt;codebase&gt;c:\Documents and Settings\yaa\workspace\Plantlore\bin/&lt;/codebase&gt; 
+..
+&lt;/config&gt;
+
+Make sure that you do not forget the trailing slash (in case the classes are in a directory). The path the tag contains should be the directory from which the fully qualified names such as net.sf.plantlore.server.HibernateDBLayer_Stub.class are valid.
+
+If this setting is lost, it is highly likely it will no longer be possible to create remote connections - Plantlore cannot guess the position of its stubs!
+====================================================================
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -608,9 +608,8 @@
+ 			if (tableImportModel == null) {
+ 				try {
+ 					tableImportModel = new TableImportMng(model.getDatabase());
+-					tableImportCtrl = new TableImportMngCtrl(tableImportModel,
+-							view);
+-				} catch (ImportException e) {
++					tableImportCtrl = new TableImportMngCtrl(tableImportModel, view);
++				} catch (Exception e) {
+ 					logger.error(&quot;Import MVC cannot be created. &quot;
+ 							+ e.getMessage());
+ 					return;
+@@ -1495,7 +1494,9 @@
+ 			// Reuse the existing dialogs, hide'em when they're no longer
+ 			// needed.
+ 			if (loginModel == null) {
+-				loginModel = new Login(new RMIDBLayerFactory(), model.getMainConfig());
++				loginModel = new Login(
++						new RMIDBLayerFactory( model.getMainConfig().getCodebase() ), 
++						model.getMainConfig());
+ 				loginModel.addObserver(new DatabaseChange());
+ 				loginView = new LoginView(view, loginModel);
+ 				loginCtrl = new LoginCtrl(loginModel, loginView);
+
+Modified: trunk/src/net/sf/plantlore/client/MainConfig.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/MainConfig.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/MainConfig.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -43,7 +43,8 @@
+     private ArrayList&lt;Column&gt; columns = null;
+     private ArrayList&lt;DBInfo&gt; dbinfos = null;
+     private DBInfo selected = null;
+-    private boolean selectAutomatically = false; 
++    private boolean selectAutomatically = false;
++    private String codebase;
+     
+     /** Creates a new instance of MainConfigParser */
+     public MainConfig(String file) throws DocumentException {
+@@ -100,11 +101,24 @@
+         return columns;
+     }
+     
++    public String getCodebase() {
++    	Node codebaseNode = document.selectSingleNode(&quot;//config/codebase&quot;);
++    	if(codebaseNode == null)
++    		codebase = null;
++    	else
++    		codebase = codebaseNode.getText();
++    	return codebase;
++    }
++    
++    
++    private boolean isEmpty(String s) {
++    	return s == null || s.length() &lt;= 0;
++    }
++    
+     public ArrayList&lt;DBInfo&gt; getDBinfos() {
+     	ArrayList&lt;DBInfo&gt; result = new ArrayList&lt;DBInfo&gt;();
+     	
+-    	String alias, host, databaseType, databaseIdentifier, 
+-    	databaseParameter, masterUser, masterPassword;
++    	String alias, host, databaseType, databaseIdentifier, databaseParameter;
+     	String[] users;
+     	int port, databasePort;
+     	
+@@ -122,8 +136,7 @@
+     	Iterator it = columnList.iterator();
+     	while (it.hasNext()) {
+     		
+-    		alias = host = databaseType = databaseIdentifier = 
+-    			databaseParameter = masterUser = masterPassword = &quot;&quot;;
++    		alias = host = databaseType = databaseIdentifier = databaseParameter = &quot;&quot;;
+     		port = RMIServer.DEFAULT_PORT; databasePort = -1;
+     		
+     		Node n = (Node)it.next();
+@@ -143,23 +156,28 @@
+     			Number databasePortNumber = database.numberValueOf(&quot;port&quot;);
+     			databasePort = ( databasePortNumber == null ? -1 : databasePortNumber.intValue() );
+     			databaseParameter = database.valueOf(&quot;parameter&quot;);
+-    			masterUser = database.valueOf(&quot;masteruser&quot;);
+-    			masterPassword = database.valueOf(&quot;masterpassword&quot;);
+     		}
+     		else
+-    			continue; // incomplete record (databaseType, databasePort, databaseIdentifier are obligatory).
++    			continue; // incomplete record
+     		
+-    		if(databasePort &lt; 0)
+-    			continue; // corrupted record (databasePort is obligatory).
++    		// Ommit corrupted records (records that miss some parts).
++    		if( host == null || host.length() &lt;= 0 ) {
++    			if(isEmpty(databaseType) || isEmpty(databaseIdentifier) || databasePort &lt;= 0) 
++    				continue;
++    		} // This { } block is necessary! The condition would mean something else otherwise!!!
++    		else {
++    			if(isEmpty(host) || isEmpty(databaseIdentifier) || port &lt;= 0)
++    				continue;
++    		}
+     		
+-    		if(alias == null || alias.length() == 0) {
++    		if( isEmpty(alias) ) {
+     			unnamedDatabase++;
+-    			alias = &quot;Database &quot; + unnamedDatabase;
++    			alias = &quot;DB &quot; + unnamedDatabase;
+     		}
+     		
+     		// The list of stored users. 
+     		List userList = n.selectNodes(&quot;user&quot;);
+-    		users = new String[ Login.MAX_NAMES /*userList.size()*/ ];
++    		users = new String[ Login.MAX_NAMES ];
+     		Node user = null;
+     		Iterator it2 = userList.iterator(); 
+     		int i = 0;
+@@ -173,13 +191,12 @@
+     		DBInfo dbi = new DBInfo(
+     				alias, host, port, 
+     				databaseType, databasePort, databaseIdentifier, databaseParameter, 
+-    				users, masterUser, masterPassword );
++    				users );
+     		
+     		if( n instanceof Element ) {
+     			Attribute attr = ((Element)n).attribute(&quot;selected&quot;);
+     			if(attr != null &amp;&amp; &quot;true&quot;.equalsIgnoreCase(attr.getValue()) ) {
+     				selected = dbi;
+-    				System.out.println(&quot;SELECTED = &quot; + dbi);
+     			}
+     		}
+     		
+@@ -245,32 +262,30 @@
+             
+             // Server settings.
+             Element triplet = login.addElement(&quot;triplet&quot;);
+-            
+             if(dbi == selected)
+             	triplet.addAttribute(&quot;selected&quot;, &quot;true&quot;);
+             
+-            if (dbi.getAlias() != null)
+-                triplet.addElement(&quot;alias&quot;).setText(dbi.getAlias());
+-            if (dbi.getHost() != null)
+-                triplet.addElement(&quot;host&quot;).setText(dbi.getHost());
+-            if(dbi.getPort() &gt; 0)
+-            	triplet.addElement(&quot;port&quot;).setText(&quot;&quot; + dbi.getPort());
+-            
+-            // Database settings.
+-            Element database = triplet.addElement(&quot;database&quot;);
+-            if (dbi.getDatabaseType() != null)
+-                database.addElement(&quot;engine&quot;).setText(dbi.getDatabaseType());
+-            if(dbi.getDatabaseIdentifier() != null)
++            if( dbi.getHost() == null || dbi.getHost().length() &lt;= 0) {
++            	// Local database - direct connection
++            	triplet.addElement(&quot;alias&quot;).setText(dbi.getAlias());
++            	
++            	Element database = triplet.addElement(&quot;database&quot;);
++            	database.addElement(&quot;engine&quot;).setText(dbi.getDatabaseType());
+             	database.addElement(&quot;identifier&quot;).setText(dbi.getDatabaseIdentifier());
+-            if(dbi.getDatabasePort() &gt; 0)
+             	database.addElement(&quot;port&quot;).setText(&quot;&quot; + dbi.getDatabasePort());
+-            if(dbi.getDatabaseParameter() != null)
+-            	database.addElement(&quot;parameter&quot;).setText(dbi.getDatabaseParameter());
+-            if(dbi.getMasterUser() != null)
+-            	database.addElement(&quot;masteruser&quot;).setText(dbi.getMasterUser());
+-            if(dbi.getMasterPassword() != null)
+-            	database.addElement(&quot;masterpassword&quot;).setText(dbi.getMasterPassword());
+-            
++            	if(dbi.getDatabaseParameter() != null)
++                	database.addElement(&quot;parameter&quot;).setText(dbi.getDatabaseParameter());
++            }
++            else {
++            	// Remote database - connection via the server
++            	triplet.addElement(&quot;alias&quot;).setText(dbi.getAlias());
++                triplet.addElement(&quot;host&quot;).setText(dbi.getHost());
++                triplet.addElement(&quot;port&quot;).setText(&quot;&quot; + dbi.getPort());
++                
++                Element database = triplet.addElement(&quot;database&quot;);
++                database.addElement(&quot;identifier&quot;).setText(dbi.getDatabaseIdentifier());
++            }
++            	
+             // Regular users of the database.
+             String[] usrs = dbi.getUsers();
+             for (int u = 0; u &lt; usrs.length; u++) {
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -142,6 +142,8 @@
+     	if(rejected &gt; 0)
+     		sigma.append(rejected).append(' ').append(L10n.getString(&quot;Import.RecordsRejected&quot;));
+     	
++    	sigma.append(&quot;  [&quot; + Runtime.getRuntime().freeMemory() / (1024*1024) + &quot; MB free]&quot;);
++    	
+     	return sigma.toString();
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/login/DBInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -22,8 +22,6 @@
+ 	protected String databaseIdentifier;
+ 	protected String databaseParameter;
+ 	protected String[] users;
+-	protected String masterUser;
+-	protected String masterPassword;
+ 	
+ 	/**
+ 	 * Pick a user. The selected name will be moved to the start of the list.
+@@ -50,11 +48,10 @@
+ 	
+ 	public DBInfo clone() {
+ 		return new DBInfo(
+-				alias, host, port, databaseType, databasePort, databaseIdentifier, databaseParameter,
+-				users, masterUser, masterPassword );
++				alias, host, port, databaseType, databasePort, databaseIdentifier, databaseParameter, users );
+ 	}
+ 
+-	public DBInfo(String alias, String host, int port, String databaseType, int databasePort, String databaseIdentifier, String databaseParameter, String[] users, String masterUser, String masterPassword) {
++	public DBInfo(String alias, String host, int port, String databaseType, int databasePort, String databaseIdentifier, String databaseParameter, String[] users) {
+ 		this.alias = alias;
+ 		this.host = host;
+ 		this.port = port;
+@@ -63,8 +60,6 @@
+ 		this.databaseIdentifier = databaseIdentifier;
+ 		this.databaseParameter = databaseParameter;
+ 		this.users = users;
+-		this.masterUser = masterUser;
+-		this.masterPassword = masterPassword;
+ 	}
+ 
+ 	
+@@ -92,14 +87,6 @@
+ 		return host;
+ 	}
+ 
+-	public String getMasterPassword() {
+-		return masterPassword;
+-	}
+-
+-	public String getMasterUser() {
+-		return masterUser;
+-	}
+-
+ 	public int getPort() {
+ 		return port;
+ 	}
+
+Deleted: trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -1,151 +0,0 @@
+-package net.sf.plantlore.client.login;
+-
+-import java.awt.event.ActionEvent;
+-
+-import javax.swing.AbstractAction;
+-
+-
+-import net.sf.plantlore.l10n.L10n;
+-
+<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">- at Deprecated</A>
+-public class ItemCtrl {
+-	
+-	private Login model;
+-	private ItemView view;
+-	
+-	public enum Mode { ADD, EDIT };
+-	
+-	private Mode mode = Mode.ADD;
+-	
+-	
+-	// Switch between the ADD/EDIT behaviour
+-	public void setMode(Mode m) {
+-		this.mode = m;
+-		switch(m) {
+-		case ADD:
+-			view.alias.setText(&quot;&quot;); 
+-			view.host.setText(&quot;&quot;);
+-			view.port.setText(&quot;&quot;);
+-			((javax.swing.JTextField)view.database.getEditor().getEditorComponent()).setText(&quot;&quot;);
+-			view.databaseIdentifier.setText(&quot;&quot;);
+-			view.databasePort.setText(&quot;&quot;);
+-			view.databaseParameter.setText(&quot;&quot;);
+-			view.databaseMasterUser.setText(&quot;&quot;);
+-			view.databaseMasterPassword.setText(&quot;&quot;);
+-			
+-			view.setTitle(L10n.getString(&quot;Login.AddTitle&quot;));
+-			view.next.setText(L10n.getString(&quot;Login.Add&quot;));
+-			view.next.setToolTipText(L10n.getString(&quot;Login.AddTT&quot;));
+-//			view.next.setEnabled(false);
+-			break;
+-		case EDIT:
+-			view.setTitle(L10n.getString(&quot;Login.EditTitle&quot;));
+-			view.next.setText(L10n.getString(&quot;Login.Change&quot;));
+-			view.next.setToolTipText(L10n.getString(&quot;Login.ChangeTT&quot;));
+-			view.next.setEnabled(true);
+-			break;
+-		}
+-	}
+-	
+-	
+-	public ItemCtrl(Login login, ItemView itemview) {
+-		this.model = login; this.view = itemview;
+-		view.next.setAction(new NextAction());
+-		view.discard.setAction(new DiscardAction());
+-		
+-//		Action validator = new ObligatoryItemsListener();
+-//		view.alias.addActionListener(validator);
+-//		((javax.swing.JTextField)view.database.getEditor().getEditorComponent()).addActionListener(validator);
+-//		view.databasePort.addActionListener(validator);
+-//		view.databaseIdentifier.addActionListener(validator);
+-	}
+-	
+-	
+-	
+-	class ObligatoryItemsListener extends AbstractAction {
+-		public void actionPerformed(ActionEvent arg0) {
+-			boolean newState = 
+-				view.alias.getText().length() &gt; 0
+-				&amp;&amp;
+-				((javax.swing.JTextField)view.database.getEditor().getEditorComponent()).getText().length() &gt; 0
+-				&amp;&amp;
+-				view.databaseIdentifier.getText().length() &gt; 0;
+-				
+-			if(newState)
+-				try {
+-					if( Integer.parseInt(view.databasePort.getText()) &lt;= 0 )
+-						newState = false;
+-				} catch(Exception e) { 
+-					newState = false; 
+-				}
+-			
+-			if( view.next.isEnabled() != newState )
+-				view.next.setEnabled(newState);
+-		}
+-	}
+-	
+-	
+-	class NextAction extends AbstractAction {
+-		public NextAction() {
+-			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Login.ChangeTT&quot;));
+-			putValue(NAME, L10n.getString(&quot;Login.Change&quot;));
+-		}
+-		public void actionPerformed(ActionEvent arg0) {
+-			int port = 1099, databasePort = 0;
+-			try {
+-				port = Integer.parseInt(view.port.getText());
+-			} catch(NumberFormatException e) {
+-				// Never mind, use the default port.
+-			}
+-			try {
+-				databasePort = Integer.parseInt(view.databasePort.getText());
+-			} catch(NumberFormatException e) {
+-				// Nothing we can do.
+-			}
+-			
+-			switch(mode) {
+-			case ADD:
+-				model.createRecord(
+-						view.alias.getText(),
+-						view.host.getText(),
+-						port,
+-						((javax.swing.JTextField)view.database.getEditor().getEditorComponent()).getText(),
+-						databasePort,
+-						view.databaseIdentifier.getText(),
+-						view.databaseParameter.getText(),
+-						view.databaseMasterUser.getText(),
+-						new String(view.databaseMasterPassword.getPassword())
+-				);
+-				break;
+-			case EDIT:
+-				model.updateSelectedRecord(
+-						view.alias.getText(),
+-						view.host.getText(),
+-						port,
+-						((javax.swing.JTextField)view.database.getEditor().getEditorComponent()).getText(),
+-						databasePort,
+-						view.databaseIdentifier.getText(),
+-						view.databaseParameter.getText(),
+-						view.databaseMasterUser.getText(),
+-						new String(view.databaseMasterPassword.getPassword())
+-				);
+-				break;
+-			}
+-			
+-			view.setVisible(false);
+-			
+-			setMode(Mode.EDIT);
+-		}
+-	}
+-	
+-	class DiscardAction extends AbstractAction {
+-		public DiscardAction() {
+-			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Login.DiscardTT&quot;));
+-			putValue(NAME, L10n.getString(&quot;Login.Discard&quot;));
+-		}
+-		public void actionPerformed(ActionEvent arg0) {
+-			view.setVisible(false);
+-		}
+-	}
+-
+-}
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemCtrl2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemCtrl2.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemCtrl2.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -30,8 +30,6 @@
+ 			view.databaseIdentifier.setText(&quot;&quot;);
+ 			view.databasePort.setText(&quot;&quot;);
+ 			view.databaseParameter.setText(&quot;&quot;);
+-			view.databaseMasterUser.setText(&quot;&quot;);
+-			view.databaseMasterPassword.setText(&quot;&quot;);
+ 			
+ 			view.remoteDatabaseIdentifier.setText(&quot;&quot;);
+ 			
+@@ -79,8 +77,7 @@
+ 			//-------------------------------------------------
+ 			case 0:
+ 				// Validity check...
+-				String dbEngine = ((javax.swing.JTextField)view.databaseEngine.getEditor().getEditorComponent()).getText(),
+-				masterPassword = new String(view.databaseMasterPassword.getPassword());
++				String dbEngine = ((javax.swing.JTextField)view.databaseEngine.getEditor().getEditorComponent()).getText();
+ 				int dbPort = -1;
+ 				try {
+ 					dbPort = Integer.parseInt(view.databasePort.getText());
+@@ -91,8 +88,6 @@
+ 				if( dbEngine.length() == 0 || 
+ 						view.databaseIdentifier.getText().length() == 0 ||
+ 						dbPort &lt; 0 ||
+-						view.databaseMasterUser.getText().length() == 0 ||
+-						masterPassword.length() == 0 ||
+ 						view.aliasLocal.getText().length() == 0 ) {
+ 					// Announce the problem.
+ 					JOptionPane.showMessageDialog(
+@@ -113,9 +108,7 @@
+ 							dbEngine,
+ 							dbPort,
+ 							view.databaseIdentifier.getText(),
+-							view.databaseParameter.getText(),
+-							view.databaseMasterUser.getText(),
+-							masterPassword
++							view.databaseParameter.getText()
+ 					);
+ 					break;
+ 				case EDIT:
+@@ -126,9 +119,7 @@
+ 							dbEngine,
+ 							dbPort,
+ 							view.databaseIdentifier.getText(),
+-							view.databaseParameter.getText(),
+-							view.databaseMasterUser.getText(),
+-							masterPassword
++							view.databaseParameter.getText()
+ 					);
+ 					break;
+ 				}
+@@ -167,7 +158,7 @@
+ 							view.aliasRemote.getText(),
+ 							view.host.getText(),
+ 							port,
+-							null, 0, view.remoteDatabaseIdentifier.getText(), null, null, null
++							null, 0, view.remoteDatabaseIdentifier.getText(), null
+ 					);
+ 					break;
+ 				case EDIT:
+@@ -175,7 +166,7 @@
+ 							view.aliasRemote.getText(),
+ 							view.host.getText(),
+ 							port,
+-							null, 0, view.remoteDatabaseIdentifier.getText(), null, null, null
++							null, 0, view.remoteDatabaseIdentifier.getText(), null
+ 					);
+ 					break;
+ 				}
+
+Deleted: trunk/src/net/sf/plantlore/client/login/ItemView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.form	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.form	2006-08-13 14:30:17 UTC (rev 502)
+@@ -1,342 +0,0 @@
+-&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
+-
+-&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
+-  &lt;Properties&gt;
+-    &lt;Property name=&quot;title&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot; postCode=&quot;setTitle(L10n.getString(&quot;Login.Add&quot;));&quot;&gt;
+-      &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Change&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-    &lt;/Property&gt;
+-    &lt;Property name=&quot;modal&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
+-    &lt;Property name=&quot;resizable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
+-  &lt;/Properties&gt;
+-  &lt;SyntheticProperties&gt;
+-    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
+-  &lt;/SyntheticProperties&gt;
+-  &lt;AuxValues&gt;
+-    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+-    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+-    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+-    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+-  &lt;/AuxValues&gt;
+-
+-  &lt;Layout&gt;
+-    &lt;DimensionLayout dim=&quot;0&quot;&gt;
+-      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;alias&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;host&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel8&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;port&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;database&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel9&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;databaseIdentifier&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;databasePort&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;databaseParameter&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;databaseMasterUser&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel7&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;2&quot;/&gt;
+-                              &lt;Component id=&quot;databaseMasterPassword&quot; linkSize=&quot;2&quot; min=&quot;-2&quot; pref=&quot;231&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                      &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;1&quot;&gt;
+-                      &lt;Component id=&quot;help&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;80&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;discard&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;next&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace min=&quot;10&quot; pref=&quot;10&quot; max=&quot;10&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;/Group&gt;
+-              &lt;/Group&gt;
+-          &lt;/Group&gt;
+-      &lt;/Group&gt;
+-    &lt;/DimensionLayout&gt;
+-    &lt;DimensionLayout dim=&quot;1&quot;&gt;
+-      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;alias&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;host&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel8&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;port&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel3&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;database&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel9&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel4&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databasePort&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel5&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseParameter&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel6&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseMasterUser&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;jLabel7&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;databaseMasterPassword&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;next&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;discard&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;help&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;/Group&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-          &lt;/Group&gt;
+-      &lt;/Group&gt;
+-    &lt;/DimensionLayout&gt;
+-  &lt;/Layout&gt;
+-  &lt;SubComponents&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Alias&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.HostName&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel3&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Database&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;alias&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.AliasTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;host&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.HostNameTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;next&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Change&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JComboBox&quot; name=&quot;database&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
+-        &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ComboBoxModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ComboBoxModelEditor&quot;&gt;
+-          &lt;StringArray count=&quot;4&quot;&gt;
+-            &lt;StringItem index=&quot;0&quot; value=&quot;postgresql&quot;/&gt;
+-            &lt;StringItem index=&quot;1&quot; value=&quot;firebirdsql&quot;/&gt;
+-            &lt;StringItem index=&quot;2&quot; value=&quot;mysql&quot;/&gt;
+-            &lt;StringItem index=&quot;3&quot; value=&quot;oraclesql&quot;/&gt;
+-          &lt;/StringArray&gt;
+-        &lt;/Property&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabaseTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel4&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabasePort&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databasePort&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabasePortTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel5&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Parameter&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databaseParameter&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.ParameterTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel6&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterUser&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databaseMasterUser&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterUserTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel7&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterPassword&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JPasswordField&quot; name=&quot;databaseMasterPassword&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterPasswordTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;discard&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Discard&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel8&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.Port&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;port&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.PortTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel9&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabaseIdentifier&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databaseIdentifier&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.DatabaseIdentifierTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;help&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Common.Help&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-        &lt;/Property&gt;
+-      &lt;/Properties&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+-  &lt;/SubComponents&gt;
+-&lt;/Form&gt;
+
+Deleted: trunk/src/net/sf/plantlore/client/login/ItemView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -1,268 +0,0 @@
+-/*
+- * ItemView.java
+- *
+- * Created on 9. duben 2006, 17:55
+- */
+-
+-package net.sf.plantlore.client.login;
+-
+-import java.awt.Dialog;
+-import java.util.Observable;
+-import java.util.Observer;
+-
+-
+-import net.sf.plantlore.l10n.L10n;
+-
+-/**
+- *
+- * @author  yaa
+- */
+<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">- at Deprecated</A>
+-public class ItemView extends javax.swing.JDialog implements Observer {
+-	
+-	private Login model;
+-    
+-    /** Creates new form ItemView */
+-    public ItemView(Dialog parent, Login model) {
+-    	super(parent, true);
+-    	
+-		this.model = model;
+-		model.addObserver(this);
+-		initComponents();
+-		getRootPane().setDefaultButton(next);
+-		setLocationRelativeTo(null);
+-    }
+-    
+-    /** This method is called from within the constructor to
+-     * initialize the form.
+-     * WARNING: Do NOT modify this code. The content of this method is
+-     * always regenerated by the Form Editor.
+-     */
+-    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+-    private void initComponents() {
+-        jLabel1 = new javax.swing.JLabel();
+-        jLabel2 = new javax.swing.JLabel();
+-        jLabel3 = new javax.swing.JLabel();
+-        alias = new javax.swing.JTextField();
+-        host = new javax.swing.JTextField();
+-        next = new javax.swing.JButton();
+-        database = new javax.swing.JComboBox();
+-        jLabel4 = new javax.swing.JLabel();
+-        databasePort = new javax.swing.JTextField();
+-        jLabel5 = new javax.swing.JLabel();
+-        databaseParameter = new javax.swing.JTextField();
+-        jLabel6 = new javax.swing.JLabel();
+-        databaseMasterUser = new javax.swing.JTextField();
+-        jLabel7 = new javax.swing.JLabel();
+-        databaseMasterPassword = new javax.swing.JPasswordField();
+-        discard = new javax.swing.JButton();
+-        jLabel8 = new javax.swing.JLabel();
+-        port = new javax.swing.JTextField();
+-        jLabel9 = new javax.swing.JLabel();
+-        databaseIdentifier = new javax.swing.JTextField();
+-        help = new javax.swing.JButton();
+-
+-        setTitle(L10n.getString(&quot;Login.Change&quot;));
+-        setTitle(L10n.getString(&quot;Login.Add&quot;));
+-        setModal(true);
+-        setResizable(false);
+-        jLabel1.setText(L10n.getString(&quot;Login.Alias&quot;));
+-
+-        jLabel2.setText(L10n.getString(&quot;Login.HostName&quot;));
+-
+-        jLabel3.setText(L10n.getString(&quot;Login.Database&quot;));
+-
+-        alias.setToolTipText(L10n.getString(&quot;Login.AliasTT&quot;));
+-
+-        host.setToolTipText(L10n.getString(&quot;Login.HostNameTT&quot;));
+-
+-        next.setText(L10n.getString(&quot;Login.Change&quot;));
+-
+-        database.setEditable(true);
+-        database.setModel(new javax.swing.DefaultComboBoxModel(new String[] { &quot;postgresql&quot;, &quot;firebirdsql&quot;, &quot;mysql&quot;, &quot;oraclesql&quot; }));
+-        database.setToolTipText(L10n.getString(&quot;Login.DatabaseTT&quot;));
+-
+-        jLabel4.setText(L10n.getString(&quot;Login.DatabasePort&quot;));
+-
+-        databasePort.setToolTipText(L10n.getString(&quot;Login.DatabasePortTT&quot;));
+-
+-        jLabel5.setText(L10n.getString(&quot;Login.Parameter&quot;));
+-
+-        databaseParameter.setToolTipText(L10n.getString(&quot;Login.ParameterTT&quot;));
+-
+-        jLabel6.setText(L10n.getString(&quot;Login.MasterUser&quot;));
+-
+-        databaseMasterUser.setToolTipText(L10n.getString(&quot;Login.MasterUserTT&quot;));
+-
+-        jLabel7.setText(L10n.getString(&quot;Login.MasterPassword&quot;));
+-
+-        databaseMasterPassword.setToolTipText(L10n.getString(&quot;Login.MasterPasswordTT&quot;));
+-
+-        discard.setText(L10n.getString(&quot;Login.Discard&quot;));
+-
+-        jLabel8.setText(L10n.getString(&quot;Login.Port&quot;));
+-
+-        port.setToolTipText(L10n.getString(&quot;Login.PortTT&quot;));
+-
+-        jLabel9.setText(L10n.getString(&quot;Login.DatabaseIdentifier&quot;));
+-
+-        databaseIdentifier.setToolTipText(L10n.getString(&quot;Login.DatabaseIdentifierTT&quot;));
+-
+-        help.setText(L10n.getString(&quot;Common.Help&quot;));
+-
+-        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+-        getContentPane().setLayout(layout);
+-        layout.setHorizontalGroup(
+-            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
+-                .addContainerGap()
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel1)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(alias, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel2)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(host, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel8)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(port, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel3)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(database, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel9)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel4)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(databasePort, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel5)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(databaseParameter, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel6)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(databaseMasterUser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                                .add(jLabel7)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(databaseMasterPassword, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 231, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+-                        .addContainerGap())
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+-                        .add(help)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 80, Short.MAX_VALUE)
+-                        .add(discard)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(next)
+-                        .add(10, 10, 10))))
+-        );
+-
+-        layout.linkSize(new java.awt.Component[] {alias, database, databaseIdentifier, databaseMasterPassword, databaseMasterUser, databaseParameter, databasePort, host, port}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+-
+-        layout.linkSize(new java.awt.Component[] {discard, next}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+-
+-        layout.setVerticalGroup(
+-            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
+-                .addContainerGap()
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel1)
+-                    .add(alias, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel2)
+-                    .add(host, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel8)
+-                    .add(port, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel3)
+-                    .add(database, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel9)
+-                    .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel4)
+-                    .add(databasePort, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel5)
+-                    .add(databaseParameter, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel6)
+-                    .add(databaseMasterUser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel7)
+-                    .add(databaseMasterPassword, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(next)
+-                    .add(discard)
+-                    .add(help))
+-                .addContainerGap())
+-        );
+-        pack();
+-    }// &lt;/editor-fold&gt;//GEN-END:initComponents
+-    
+-    
+-    /**
+-     * Fill all fields with information obtained from the currently selected record.
+-     */
+-    public void update(Observable arg0, Object arg1) {
+-		java.awt.EventQueue.invokeLater(new Runnable() {
+-			public void run() {
+-				DBInfo info = model.getSelected();
+-				if(info != null) {
+-					alias.setText(info.alias); 
+-					host.setText(info.host);
+-					port.setText( Integer.toString(info.port) );
+-					((javax.swing.JTextField)database.getEditor().getEditorComponent()).setText(info.databaseType);
+-					databaseIdentifier.setText(info.getDatabaseIdentifier());
+-					databasePort.setText( Integer.toString(info.getDatabasePort()) );
+-					databaseParameter.setText(info.getDatabaseParameter());
+-					databaseMasterUser.setText(info.getMasterUser());
+-					databaseMasterPassword.setText(info.getMasterPassword());
+-				}
+-			}
+-		});
+-	}
+-    
+-    // Variables declaration - do not modify//GEN-BEGIN:variables
+-    protected javax.swing.JTextField alias;
+-    protected javax.swing.JComboBox database;
+-    protected javax.swing.JTextField databaseIdentifier;
+-    protected javax.swing.JPasswordField databaseMasterPassword;
+-    protected javax.swing.JTextField databaseMasterUser;
+-    protected javax.swing.JTextField databaseParameter;
+-    protected javax.swing.JTextField databasePort;
+-    protected javax.swing.JButton discard;
+-    protected javax.swing.JButton help;
+-    protected javax.swing.JTextField host;
+-    private javax.swing.JLabel jLabel1;
+-    private javax.swing.JLabel jLabel2;
+-    private javax.swing.JLabel jLabel3;
+-    private javax.swing.JLabel jLabel4;
+-    private javax.swing.JLabel jLabel5;
+-    private javax.swing.JLabel jLabel6;
+-    private javax.swing.JLabel jLabel7;
+-    private javax.swing.JLabel jLabel8;
+-    private javax.swing.JLabel jLabel9;
+-    protected javax.swing.JButton next;
+-    protected javax.swing.JTextField port;
+-    // End of variables declaration//GEN-END:variables
+-    
+-}
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemView2.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView2.form	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemView2.form	2006-08-13 14:30:17 UTC (rev 502)
+@@ -78,22 +78,15 @@
+                           &lt;Component id=&quot;jLabel3&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jLabel4&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jLabel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel6&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel7&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;databaseMasterUser&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;databaseParameter&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;databasePort&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;databaseIdentifier&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;databaseEngine&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;aliasLocal&quot; alignment=&quot;0&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;databaseMasterPassword&quot; pref=&quot;270&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+@@ -127,17 +120,7 @@
+                           &lt;Component id=&quot;jLabel5&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;databaseParameter&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel6&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;databaseMasterUser&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel7&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;databaseMasterPassword&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;16&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -178,20 +161,6 @@
+                 &lt;/Property&gt;
+               &lt;/Properties&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel6&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterUser&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel7&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterPassword&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;aliasLocal&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+@@ -232,16 +201,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;databaseMasterUser&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterUserTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JComboBox&quot; name=&quot;databaseEngine&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
+@@ -261,16 +220,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JPasswordField&quot; name=&quot;databaseMasterPassword&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;toolTipText&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
+-                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Login.MasterPasswordTT&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel2&quot;&gt;
+@@ -332,7 +281,7 @@
+                           &lt;Component id=&quot;jLabel11&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;remoteDatabaseIdentifier&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;92&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;39&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemView2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView2.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/ItemView2.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -45,15 +45,11 @@
+         jLabel3 = new javax.swing.JLabel();
+         jLabel4 = new javax.swing.JLabel();
+         jLabel5 = new javax.swing.JLabel();
+-        jLabel6 = new javax.swing.JLabel();
+-        jLabel7 = new javax.swing.JLabel();
+         aliasLocal = new javax.swing.JTextField();
+         databaseIdentifier = new javax.swing.JTextField();
+         databasePort = new javax.swing.JTextField();
+         databaseParameter = new javax.swing.JTextField();
+-        databaseMasterUser = new javax.swing.JTextField();
+         databaseEngine = new javax.swing.JComboBox();
+-        databaseMasterPassword = new javax.swing.JPasswordField();
+         jPanel2 = new javax.swing.JPanel();
+         jLabel8 = new javax.swing.JLabel();
+         jLabel9 = new javax.swing.JLabel();
+@@ -78,10 +74,6 @@
+ 
+         jLabel5.setText(L10n.getString(&quot;Login.DatabaseParameter&quot;));
+ 
+-        jLabel6.setText(L10n.getString(&quot;Login.MasterUser&quot;));
+-
+-        jLabel7.setText(L10n.getString(&quot;Login.MasterPassword&quot;));
+-
+         aliasLocal.setToolTipText(L10n.getString(&quot;Login.AliasTT&quot;));
+ 
+         databaseIdentifier.setToolTipText(L10n.getString(&quot;Login.DatabaseIdentifierTT&quot;));
+@@ -90,14 +82,10 @@
+ 
+         databaseParameter.setToolTipText(L10n.getString(&quot;Login.DatabaseParameterTT&quot;));
+ 
+-        databaseMasterUser.setToolTipText(L10n.getString(&quot;Login.MasterUserTT&quot;));
+-
+         databaseEngine.setEditable(true);
+         databaseEngine.setModel(new javax.swing.DefaultComboBoxModel(new String[] { &quot;postgresql&quot;, &quot;firebirdsql&quot;, &quot;mysql&quot;, &quot;oraclesql&quot; }));
+         databaseEngine.setToolTipText(L10n.getString(&quot;Login.DatabaseEngineTT&quot;));
+ 
+-        databaseMasterPassword.setToolTipText(L10n.getString(&quot;Login.MasterPasswordTT&quot;));
+-
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+         jPanel1.setLayout(jPanel1Layout);
+         jPanel1Layout.setHorizontalGroup(
+@@ -109,20 +97,14 @@
+                     .add(jLabel3)
+                     .add(jLabel4)
+                     .add(jLabel5)
+-                    .add(jLabel6)
+-                    .add(jLabel7)
+                     .add(jLabel2))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(databaseMasterUser, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)
+                     .add(databaseParameter, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)
+                     .add(databasePort, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)
+                     .add(databaseIdentifier, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)
+                     .add(databaseEngine, 0, 270, Short.MAX_VALUE)
+-                    .add(aliasLocal, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1Layout.createSequentialGroup()
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(databaseMasterPassword, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE)))
++                    .add(aliasLocal, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 270, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+         jPanel1Layout.setVerticalGroup(
+@@ -148,15 +130,7 @@
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(jLabel5)
+                     .add(databaseParameter, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel6)
+-                    .add(databaseMasterUser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel7)
+-                    .add(databaseMasterPassword, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(16, Short.MAX_VALUE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+         jTabbedPane1.addTab(L10n.getString(&quot;Login.LocalDatabase&quot;), jPanel1);
+ 
+@@ -214,7 +188,7 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(jLabel11)
+                     .add(remoteDatabaseIdentifier, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(92, Short.MAX_VALUE))
++                .addContainerGap(39, Short.MAX_VALUE))
+         );
+         jTabbedPane1.addTab(L10n.getString(&quot;Login.RemoteDabatase&quot;), jPanel2);
+ 
+@@ -278,8 +252,6 @@
+ 						if(info.databasePort &gt; 0)
+ 							databasePort.setText( Integer.toString(info.getDatabasePort()) );
+ 						databaseParameter.setText(info.getDatabaseParameter());
+-						databaseMasterUser.setText(info.getMasterUser());
+-						databaseMasterPassword.setText(info.getMasterPassword());
+ 						
+ 						// Neutralize other fields
+ 						aliasRemote.setText(&quot;&quot;);
+@@ -303,8 +275,6 @@
+ 						databaseIdentifier.setText(&quot;&quot;);
+ 						databasePort.setText(&quot;&quot;);
+ 						databaseParameter.setText(&quot;&quot;);
+-						databaseMasterUser.setText(&quot;&quot;);
+-						databaseMasterPassword.setText(&quot;&quot;);
+ 					}
+ 				}
+ 			}
+@@ -317,8 +287,6 @@
+     protected javax.swing.JTextField aliasRemote;
+     protected javax.swing.JComboBox databaseEngine;
+     protected javax.swing.JTextField databaseIdentifier;
+-    protected javax.swing.JPasswordField databaseMasterPassword;
+-    protected javax.swing.JTextField databaseMasterUser;
+     protected javax.swing.JTextField databaseParameter;
+     protected javax.swing.JTextField databasePort;
+     protected javax.swing.JButton discard;
+@@ -331,8 +299,6 @@
+     private javax.swing.JLabel jLabel3;
+     private javax.swing.JLabel jLabel4;
+     private javax.swing.JLabel jLabel5;
+-    private javax.swing.JLabel jLabel6;
+-    private javax.swing.JLabel jLabel7;
+     private javax.swing.JLabel jLabel8;
+     private javax.swing.JLabel jLabel9;
+     private javax.swing.JPanel jPanel1;
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -117,13 +117,11 @@
+ 			String databaseType, 
+ 			int databasePort, 
+ 			String databaseIdentifier, 
+-			String databaseParameter, 
+-			String masterUser, 
+-			String masterPassword ) {
++			String databaseParameter) {
+ 
+ 		DBInfo r = new DBInfo(
+ 				alias, host, port, databaseType, databasePort, databaseIdentifier, databaseParameter,
+-				new String[MAX_NAMES], masterUser, masterPassword );
++				new String[MAX_NAMES] );
+ 		dbinfos.add(r);
+ 		logger.debug(&quot;New database record has been created &quot; + r);
+ 		save();
+@@ -158,9 +156,7 @@
+ 			String databaseType, 
+ 			int databasePort, 
+ 			String databaseIdentifier, 
+-			String databaseParameter, 
+-			String masterUser, 
+-			String masterPassword ) {
++			String databaseParameter ) {
+ 
+ 		if(selected == null) return;
+ 		
+@@ -171,8 +167,6 @@
+ 		selected.databasePort = databasePort ;
+ 		selected.databaseIdentifier = databaseIdentifier ;
+ 		selected.databaseParameter = databaseParameter; 
+-		selected.masterUser = masterUser;
+-		selected.masterPassword = masterPassword;
+ 		
+ 		save();
+ 		logger.debug(&quot;The selected record has been updated &quot; + selected);
+@@ -380,6 +374,9 @@
+ 			} 
+ 			catch (Exception e) {
+ 				logger.error(&quot;The initialization of the DBLayer failed! &quot; + e.getMessage());
++				
++				e.printStackTrace();
++                                
+ 				// If the initialization of the DBLayer failed, the uninitialized DBLayer must be destroyed!
+ 				// Otherwise, the server's policy may not allow another connection from this client!
+ 				if(dblayer != null)
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -13,6 +13,7 @@
+ import net.sf.plantlore.client.login.DBInfo;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
++import net.sf.plantlore.server.tools.RMI;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ 
+@@ -49,8 +50,10 @@
+ 	
+ 	
+ 	/** Create a new instance of DBLayerFactory. */
+-	public RMIDBLayerFactory() {
+-		// Empty constructor
++	public RMIDBLayerFactory(String codebase) {
++		if(codebase == null)
++			logger.warn(&quot;The codebase may not have been set! This may cause serious problems when trying to connect to a remote database! It is imperative you make sure the codebase is set properly!!&quot;);
++		net.sf.plantlore.server.tools.RMI.addToCodebase( codebase );
+ 	}
+ 	
+ 	
+@@ -73,7 +76,8 @@
+ 		// Some exceptional cases are handled specially.
+ 		String host = settings.getHost();
+ 		
+-		if(host == null || host.equals(&quot;&quot;) || host.equalsIgnoreCase(&quot;localhost&quot;)) {
++		// ~~~ LOCAL CONNECTION ~~~
++		if(host == null || host.equals(&quot;&quot;) /*|| host.equalsIgnoreCase(&quot;localhost&quot;)*/) {
+ 			
+ 			DatabaseSettings dbSettings = new DatabaseSettings(
+ 					settings.getDatabaseType(),
+@@ -89,24 +93,30 @@
+ 			
+ 			return db;
+ 		}
++
++		// Perform a simple check.
++		String codebase = System.getProperty(RMI.PROPERTY_CODEBASE); 
++		if( codebase  == null || codebase.length() == 0)
++			logger.warn(&quot;The codebase is not set! It is highly likely it will be impossible obtain the remote DBLayer factory or the DBLayer!&quot;);
+ 		
++		// ~~~ FULL REMOTE CONNECTION ~~~
+ 		int port = settings.getPort();
+ 		
+ 		logger.debug(&quot;Creating a new DBLayer using the RMI:&quot;);
+ 		
+ 		// Connect to the remote server and obtain the RemoteDBLayerFactory
+-		logger.debug(&quot;  connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
++		logger.debug(&quot;1. Connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
+ 		Registry registry = LocateRegistry.getRegistry(host, port);
+-		logger.debug(&quot;  completed&quot;);
++		logger.debug(&quot;Connected.&quot;);
+ 		
+-		logger.debug(&quot;  obtaining the remote dblayer factory ...&quot;);
++		logger.debug(&quot;2. Obtaining the remote dblayer factory ...&quot;);
+ 		RemoteDBLayerFactory remoteFactory = (RemoteDBLayerFactory) registry.lookup(RemoteDBLayerFactory.ID);
+-		logger.debug(&quot;  completed&quot;);
++		logger.debug(&quot;Obtained!&quot;);
+ 		
+ 		// Get the stub from the remote factory and save the information about the connection
+-		logger.debug(&quot;  creating a new dblayer...&quot;);
++		logger.debug(&quot;3. Creating a new dblayer...&quot;);
+ 		DBLayer stub = remoteFactory.create(); // DBLayerException can spawn here (too many users!)
+-		logger.debug(&quot;  completed! :)&quot;);
++		logger.debug(&quot;Created! :)&quot;);
+ 		
+ 		ConnectionInfo info = new ConnectionInfo(remoteFactory, null, stub, &quot;localhost -&gt; &quot; + host + &quot;:&quot; + port);
+ 		client.put(stub, info);
+@@ -146,24 +156,5 @@
+ 		// Terminate all processes within the DBLayer otherwise
+ 		else db.shutdown(); 
+ 	}
+-	
+-	
+-	/** 
+-	 * Initialize the codebase java.rmi.server.property to the specified directory or the
+-	 * current working directory if the specified directory is null.
+-	 * 
+-	 *  @param directory	The directory that shall serve as a codebase. */
+-	public static void initialize(String directory) {
+-		String codebase = &quot;file:/&quot; + ((directory != null) ? directory : System.getProperty(&quot;user.dir&quot;)) + &quot;/&quot;;
+-		codebase = codebase.replaceAll(&quot; &quot;, &quot;%20&quot;); // to prevent the MalformedURLException
+-		System.setProperty(&quot;java.rmi.server.codebase&quot;, codebase);
+-		System.out.println(&quot;java.rmi.server.codebase = &quot; + codebase);
+-	}
+-	
+-	
+-	/** Static initialization. */
+-	static {
+-		initialize(null);
+-	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/tools/RMI.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-08-13 12:30:24 UTC (rev 501)
++++ trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-08-13 14:30:17 UTC (rev 502)
+@@ -63,6 +63,9 @@
+ 	 * 
+ 	 *  @param directory	The directory that shall serve as a codebase. */
+ 	public static void addToCodebase(String directory) {
++		if( directory == null  || directory.length() &lt;= 0 )
++			return;
++		
+ 		String codebase = System.getProperty(PROPERTY_CODEBASE);
+ 		directory = &quot;file:/&quot; + directory.replaceAll(&quot; &quot;, &quot;%20&quot;); // to prevent the MalformedURLException
+ 		
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000684.html">[Plantlore-dev] Dulezite upozorneni tykajici se pripojovani k	databazi
+</A></li>
+	<LI>Next message: <A HREF="000686.html">[Plantlore-dev] Otestovani serveru
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#685">[ date ]</a>
+              <a href="thread.html#685">[ thread ]</a>
+              <a href="subject.html#685">[ subject ]</a>
+              <a href="author.html#685">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,468 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r378 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r378%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/imports/parsers%20common/record%20server&In-Reply-To=%3C200605281934.k4SJYNjI028336%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000431.html">
+   <LINK REL="Next"  HREF="000433.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r378 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r378%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/imports/parsers%20common/record%20server&In-Reply-To=%3C200605281934.k4SJYNjI028336%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r378 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record server">krater at berlios.de
+       </A><BR>
+    <I>Sun May 28 21:34:23 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000431.html">[Plantlore-dev] r377 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports client/imports/parsers common/record
+</A></li>
+        <LI>Next message: <A HREF="000433.html">[Plantlore-dev] Firebird je na ****
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#432">[ date ]</a>
+              <a href="thread.html#432">[ thread ]</a>
+              <a href="subject.html#432">[ subject ]</a>
+              <a href="author.html#432">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-28 21:34:04 +0200 (Sun, 28 May 2006)
+New Revision: 378
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+HibernateDBLayer.executeInsertInHistory() and executeUpdateInHistory() fixed: they can add the CREATEDWHO, CREATEDWHEN, UPDATEDWHO, UPDATEDWHEN.
+
+Holder objects can handle Integers coming as strings.
+
+XMLParser fixed: for an unknown reason the Habitat.Country was not parsed properly. After a slight change everything went fine.
+
+DefaultDirector fixed: used to throw NullPointerException because `sharers` was null.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -392,7 +392,7 @@
+ 				 *----------------------------------------------------------*/
+ 				
+ 				// Is the record in the database?
+-				AuthorOccurrence[] sharers = null;
++				AuthorOccurrence[] sharers = new AuthorOccurrence[0];
+ 				if( isInDB ) 
+ 					sharers = findAllSharers(occInDB);
+ 				// If the Occurrence record should have been DELETED, all associated AuthorOccurrences should be deleted as well.
+@@ -619,7 +619,7 @@
+ 		for(String property : record.getProperties()) {
+ 			Object value = record.getValue(property);
+ 			
+-			System.out.println(&quot; + &quot;+table.getSimpleName()+&quot;.&quot;+property+&quot;=&quot;+value);
++//			System.out.println(&quot; + &quot;+table.getSimpleName()+&quot;.&quot;+property+&quot;=&quot;+value);
+ 			
+ //			String newValue = null;
+ //			try {
+@@ -627,7 +627,7 @@
+ //			}catch(Exception e) {}
+ 			
+ 			if( value == null ) // use the database null
+-				query.addRestriction(RESTR_IS_NULL, property, null, null, null);
++				/*query.addRestriction(RESTR_IS_NULL, property, null, null, null)*/;
+ 			else
+ 				query.addRestriction(RESTR_EQ, property, null, value, null);
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -84,8 +84,10 @@
+     		return;
+     	// Retrieve properties.
+     	for(String property : part.getProperties()) {
+-//    		System.out.println(&quot; &gt; &quot;+part.getClass().getSimpleName()+&quot;.&quot;+property+&quot; = &quot;+node.valueOf(property.toLowerCase()));
+-    		part.setValue(property, node.valueOf(property.toLowerCase()));
++    		String value = node.valueOf(property.toLowerCase());
++    		if(&quot;&quot;.equals(value)) value = null;
++    		System.out.println(&quot; &gt; &quot;+part.getClass().getSimpleName()+&quot;.&quot;+property+&quot; = &quot;+value);
++    		part.setValue(property, value);
+     	}
+     	
+     	// Reconstruct subrecords as well.
+@@ -124,27 +126,27 @@
+     }
+     
+     
+-//    public static void main(String[] args) 
+-//    throws java.io.IOException, ParserException {
+-//    	
+-//    	XMLParser p = new XMLParser(
+-//    			new BufferedReader(
+-//    					new InputStreamReader(new FileInputStream(&quot;c:/documents and settings/yaa/dokumenty/plantlore/this.xml&quot;),
+-//    					&quot;UTF-8&quot;))
+-//    	);
+-//    	p.initialize();
+-//    	while(p.hasNextRecord()) {
+-//    		System.out.println(&quot;=============&quot;);
+-//    		p.fetchNextRecord();
+-//    		Record r = p.getNextPart(Occurrence.class);
+-//    		System.out.println(r.areAllNNSet());
+-//    		for(int i = 0; p.hasNextPart(AuthorOccurrence.class); i++) {
+-//    			r = p.getNextPart(AuthorOccurrence.class);
+-//    			System.out.print(&quot;(&quot;+i+&quot;)&quot;);
+-//    		}
+-//    		System.out.println(&quot;&quot;);
+-//    	}
+-//    	p.cleanup();
+-//    }
++    public static void main(String[] args) 
++    throws java.io.IOException, ParserException {
++    	
++    	XMLParser p = new XMLParser(
++    			new java.io.BufferedReader(
++    					new java.io.InputStreamReader(new java.io.FileInputStream(&quot;c:/documents and settings/yaa/dokumenty/plantlore/this.xml&quot;),
++    					&quot;UTF-8&quot;))
++    	);
++    	p.initialize();
++    	while(p.hasNextRecord()) {
++    		System.out.println(&quot;=============&quot;);
++    		p.fetchNextRecord();
++    		Record r = p.getNextPart(Occurrence.class);
++    		System.out.println(r.areAllNNSet());
++    		for(int i = 0; p.hasNextPart(AuthorOccurrence.class); i++) {
++    			r = p.getNextPart(AuthorOccurrence.class);
++    			System.out.print(&quot;(&quot;+i+&quot;)&quot;);
++    		}
++    		System.out.println(&quot;&quot;);
++    	}
++    	p.cleanup();
++    }
+    
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -62,7 +62,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-    	if(column.equals(ID)) setId((Integer)value);
++    	if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+     	else if(column.equals(WHOLENAME)) setWholeName((String)value);
+     	else if(column.equals(ORGANIZATION)) setOrganization((String)value);
+     	else if(column.equals(ROLE)) setRole((String)value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -51,7 +51,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(AUTHOR)) setAuthor((Author)value);
+ 		else if(column.equals(OCCURRENCE)) setOccurrence((Occurrence)value);
+ 		else if(column.equals(ROLE)) setRole((String)value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -78,7 +78,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(TERRITORY)) setTerritory((Territory)value);
+ 		else if(column.equals(PHYTOCHORION)) setPhytochorion((Phytochorion)value);
+ 		else if(column.equals(NEARESTVILLAGE) || column.equals(VILLAGE)) setNearestVillage((Village)value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -85,7 +85,12 @@
+         if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(TECHNICALCONTACTADDRESS)) setTechnicalContactAddress((String)value);
+ 		else if(column.equals(TECHNICALCONTACTEMAIL)) setTechnicalContactEmail((String)value);
+ 		else if(column.equals(TECHNICALCONTACTNAME)) setTechnicalContactName((String)value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -79,8 +79,8 @@
+     public List&lt;String&gt; getColumns() {
+     	return asList( UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED,
+     			MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, ISODATETIMEBEGIN,
+-    			DATASOURCE, PUBLICATION, HERBARIUM, /*CREATEDWHEN,*/ 
+-    			/*UPDATEDWHEN,*/ METADATA, NOTE );
++    			DATASOURCE, PUBLICATION, HERBARIUM,  
++    			METADATA, NOTE, DELETED );
+     }
+     
+     public List&lt;String&gt; getHistoryColumns() {
+@@ -100,7 +100,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(UNITIDDB)) setUnitIdDb((String)value);
+ 		else if(column.equals(UNITVALUE)) setUnitValue((String)value);
+ 		else if(column.equals(HABITAT)) setHabitat((Habitat)value);
+@@ -132,7 +137,12 @@
+ 		else if(column.equals(UPDATEDWHEN)) setUpdatedWhen(checkDate(value));
+ 		else if(column.equals(METADATA)) setMetadata((Metadata)value);
+ 		else if(column.equals(NOTE)) setNote((String)value);
+-		else if(column.equals(DELETED)) setDeleted((Integer)value);
++		else if(column.equals(DELETED)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setDeleted(Integer.parseInt((String)value));
++			else
++				setDeleted((Integer)value);
++		}
+     }
+     
+     @Override 
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -52,7 +52,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(CODE)) setCode((String)value);
+ 		else if(column.equals(NAME)) setName((String)value);
+     }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -63,7 +63,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(SURVEYTAXID)) setSurveyTaxId((String)value);
+ 		else if(column.equals(TAXON)) setTaxon((String)value);
+ 		else if(column.equals(GENUS)) setGenus((String)value);
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -67,7 +67,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(COLLECTIONNAME)) setCollectionName((String)value);
+ 		else if(column.equals(COLLECTIONYEARPUBLICATION)) { 
+ 			if (value != null &amp;&amp; value instanceof String)
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -336,8 +336,8 @@
+ 	public String toString() {
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+-			sigma.append(getClass().getSimpleName()).
+-			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;; &quot;);
++			sigma.append(getClass().getSimpleName()).append('.').
++			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;\n &quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+ 			if(subrecord != null)	sigma.append( subrecord.toString() );
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -34,7 +34,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(NAME)) setName((String)value);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -34,7 +34,12 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) setId((Integer)value);
++		if(column.equals(ID)) {
++			if(value != null &amp;&amp; value instanceof String)
++				setId(Integer.parseInt((String)value));
++			else
++				setId((Integer)value);
++		}
+ 		else if(column.equals(NAME)) setName((String)value);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-28 16:56:23 UTC (rev 377)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-28 19:34:04 UTC (rev 378)
+@@ -857,6 +857,26 @@
+         }
+         // Check whether we have rights for this operation
+         checkRights(data, INSERT);
++        
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setCreatedWhen(new java.util.Date());
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setCreatedWho(this.plantloreUser);
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }
++        if (data instanceof Publication) {
++            Publication pub = (Publication)data;
++            pub.setCreatedWho(this.plantloreUser);
++            data = pub;
++        }
++        if (data instanceof Author) {
++            Author aut = (Author)data;
++            aut.setCreatedWho(this.plantloreUser);
++            data = aut;
++        }
++
+         // Save item into the database
+         recordId = (Integer)this.txSession.save(data);            
+         // Save data to history tables - only for selected tables
+@@ -875,6 +895,15 @@
+         }
+         // Check whether we have rights for this operation
+         checkRights(data, UPDATE);
++        
++        // Modify the input data - UPDATEWHEN and UPDATEWHO where applicable
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }
++        
+         // Save history record for this change
+         saveHistory(txSession, data, UPDATE, null);
+         // Save item into the database
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000431.html">[Plantlore-dev] r377 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/imports client/imports/parsers common/record
+</A></li>
+	<LI>Next message: <A HREF="000433.html">[Plantlore-dev] Firebird je na ****
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#432">[ date ]</a>
+              <a href="thread.html#432">[ thread ]</a>
+              <a href="subject.html#432">[ subject ]</a>
+              <a href="author.html#432">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

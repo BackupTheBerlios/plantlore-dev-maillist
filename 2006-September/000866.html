@@ -1,0 +1,836 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r619 - in trunk/src/net/sf/plantlore: client/export	client/export/builders client/export/component common common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r619%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%0A%09client/export/builders%20client/export/component%20common%20common/record&In-Reply-To=%3C200609012111.k81LBgu6030406%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000865.html">
+   <LINK REL="Next"  HREF="000867.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r619 - in trunk/src/net/sf/plantlore: client/export	client/export/builders client/export/component common common/record</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r619%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%0A%09client/export/builders%20client/export/component%20common%20common/record&In-Reply-To=%3C200609012111.k81LBgu6030406%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r619 - in trunk/src/net/sf/plantlore: client/export	client/export/builders client/export/component common common/record">krater at mail.berlios.de
+       </A><BR>
+    <I>Fri Sep  1 23:11:42 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000865.html">[Plantlore-dev] r618 - in trunk: . src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000867.html">[Plantlore-dev] mensi problem s vytuhavanim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#866">[ date ]</a>
+              <a href="thread.html#866">[ thread ]</a>
+              <a href="subject.html#866">[ subject ]</a>
+              <a href="author.html#866">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-01 23:11:41 +0200 (Fri, 01 Sep 2006)
+New Revision: 619
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngViewB.java
+   trunk/src/net/sf/plantlore/client/export/ExportTask2.java
+   trunk/src/net/sf/plantlore/client/export/Projection.java
+   trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder2.java
+   trunk/src/net/sf/plantlore/client/export/component/ExtendedTree.java
+   trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+DefaultExceptionHandler returned to its initial state.
+
+Projections applies the list of selected columns to a query (addProjections()) a little bit more carefully. In order to process the record properly - namely to recognize, whether the record is marked for export or not - the Record.ID (= &quot;id&quot;) must be add to the list of projections and *processed*, too.
+The problem was that ID was not included in the list of properties of the record (as it is in fact an internal number of the database that hosts the record), therefore the ID was neither projected nor reconstructed which is why the record got always rejected. The Occurrence.ID is also required so as to be able to find all author-occurrences referring to that occurrence.
+
+Export: Some final tuning of the *code*. Export will use projections for every format that allows the User to specify which columns should be exported, and it will use the record fetching (Hibernate is an object wrapper of a database - it return fully reconstructed records) otherwise. It may speed up a little bit the Export procedure (it is in fact the Import that has much greater need for speed up than Export).
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -19,8 +19,21 @@
+ import org.apache.log4j.Logger;
+ 
+ /**
++ * ExportManager serves as a Export Task factory. The Export Manager gathers all information
++ * needed for the creation of a new Export Task.
++ * &lt;br/&gt;
++ * In order to create a new Export task these information must be supplied:
++ * &lt;ul&gt;   
++ * &lt;li&gt;dblayer	The database layer mediating the access to the database.&lt;/li&gt;
++ * &lt;li&gt;query	The query defining the result set which is to be iterated over.&lt;/li&gt;
++ * &lt;li&gt;selection	The list of selected records. Null means all records from the query should be exported.&lt;/li&gt;
++ * &lt;li&gt;projections	The list of selected columns. Null means all columns are selected.&lt;/li&gt;
++ * &lt;li&gt;format	The format which will be used to determine the appropriate builder of the output.&lt;/li&gt;
++ * &lt;li&gt;file	The name of the file where the output will be written.&lt;/li&gt;
++ * &lt;li&gt;useProjections		Should projections be used (projections may reduce the amount of time required by export).&lt;/li&gt;
++ * &lt;li&gt;rootTable	The root table (only if projections are used).&lt;/li&gt;
++ * &lt;/ul&gt;
+  * 
+- * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-29 
+  * @version 2.0
+@@ -48,9 +61,9 @@
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	private DBLayer db ;
+-	private Projection template;
++	private Projection projections;
+ 	private Selection selection;
+-	private FileFormat filter;
++	private FileFormat format;
+ 	private String filename;
+ 	private SelectQuery query = null;
+ 	private boolean useProjections = false;
+@@ -62,11 +75,11 @@
+ 	 * 
+ 	 * @param dblayer The database layer mediating the access to the database.
+ 	 * @param query	The query defining the result set which is to be iterated over.
+-	 * @param selection	The list of selected records. 
+-	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
++	 * @param selection	The list of selected records. Null means all records from the query should be exported.
++	 * @param projection	The list of selected columns. Null means all columns are selected.
+ 	 */
+-	public ExportMng2(DBLayer dblayer, SelectQuery query, Selection selection, Projection template) {
+-		this(dblayer, query, selection, template, null, null, false, null);
++	public ExportMng2(DBLayer dblayer, SelectQuery query, Selection selection, Projection projection) {
++		this(dblayer, query, selection, projection, null, null, false, null);
+ 	}
+ 
+ 	
+@@ -99,9 +112,9 @@
+ 	 * 
+ 	 * @param dblayer	The database layer mediating the access to the database. Shouldn't be empty.
+ 	 * @param query	The query defining the result set which is to be iterated over. Shouldn't be empty.
+-	 * @param selection	The list of selected records. Shouldn't be empty.
+-	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+-	 * @param filter	The filter which will be used to determine the appropriate builder of the output.
++	 * @param selection	The list of selected records. Null means all records from the query should be exported.
++	 * @param projections	The list of selected columns. Null means all columns are selected.
++	 * @param format	The format which will be used to determine the appropriate builder of the output.
+ 	 * @param file	The name of the file where the output will be written.
+ 	 * @param useProjections	Should projections be used.
+ 	 * @param rootTable	The root table (only if projections are used).
+@@ -121,14 +134,15 @@
+ 		setDBLayer(dblayer);
+ 		setSelectQuery(query);
+ 		setSelection(selection);
+-		setTemplate(template);
++		setProjections(template);
+ 		setSelectedFile(filename);
+-		setActiveFileFilter(filter);
++		setFileFormat(filter);
+ 	}
+ 	
+ 	
+ 	/**
+ 	 * @param useProjections	True if the Export manager shall use projections instead of regular records.
++	 * Projections may save some time if the number of exported columns is small.
+ 	 */
+ 	synchronized public void useProjections(boolean useProjections) {
+ 		this.useProjections = useProjections;
+@@ -146,25 +160,30 @@
+ 	
+ 	/**
+ 	 * Set a new DBLayer.
++	 * 
++	 * @param dblayer The database layer mediating the access to the database. Shouldn't be empty.
+ 	 */
+ 	synchronized public void setDBLayer(DBLayer dblayer) {
+ 		db = dblayer;
+ 	}
+ 	
+ 	/**
+-	 * Store a copy of the &lt;code&gt;template&lt;/code&gt;. 
+-	 * Null means all columns are selected.
++	 * Store a copy of the list of &lt;code&gt;projections&lt;/code&gt;. 
++	 * 
++	 * @param projections The list of columns the User wants to export. 
++	 * Null means that all columns should be sellected.
+ 	 */
+-	synchronized public void setTemplate(Projection template) {
+-		if(template == null)
+-			this.template = null;
++	synchronized public void setProjections(Projection projections) {
++		if(projections == null)
++			this.projections = null;
+ 		else 
+-			this.template = template.clone();
++			this.projections = projections.clone();
+ 	}
+ 	
+ 	/**
+-	 * Store a copy of the &lt;code&gt;selection&lt;/code&gt;.
+-	 * Null means all rows are selected.
++	 * Store a copy of the list of selected rows (records).
++	 * 
++	 * @param selection	The list of records that should be exported. Null means that all records are selected.
+ 	 */
+ 	synchronized public void setSelection(Selection selection) {
+ 		if(selection == null)
+@@ -173,14 +192,32 @@
+ 			this.selection = selection.clone();
+ 	}
+ 	
+-	synchronized public void setActiveFileFilter(FileFormat filter) {
+-		this.filter = filter; 
++	/**
++	 * Set the file format that should be Used to store the exported records. 
++	 * 
++	 * @param format	The file format that will be used to store the selected records.
++	 */
++	synchronized public void setFileFormat(FileFormat format) {
++		this.format = format; 
+ 	}
+ 	
++	/**
++	 * Set the name of the file into which the records will be exported.
++	 * 
++	 * @param filename	The name of the file where the records will be written.
++	 */
+ 	synchronized public void setSelectedFile(String filename) { 
+ 		this.filename = filename; 
+ 	}
+ 	
++	/**
++	 * Set the query that defines the superset of records from which some
++	 * (those that are marked in the Selection) records will be exported.
++	 * The query must not be executed! The Export Task will execute it itself.
++	 * 
++	 * @param query	The query that defines the superset of records from which some
++	 * will be exported.
++	 */
+ 	synchronized public void setSelectQuery(SelectQuery query) { 
+ 		// Close the previous query!
+ 		if(this.query != null) try {
+@@ -191,10 +228,15 @@
+ 		this.query = query;
+ 	}
+ 	
+-	
+-	
+-	
+-
++	/**
++	 *	Create a new Export Task. The task is ready to be started.
++	 * &lt;br/&gt;
++	 * All previously supplied information will be reset to default values
++	 * (except the database layer) - in order to create a new Export task,
++	 * all information must be supplied again.
++	 * 
++	 * @return	The new Export Task ready to be started.
++	 */
+ 	synchronized public ExportTask2 createExportTask() 
+ 	throws ExportException, IOException, DBLayerException {
+ 		// Check if all necessary components are valid.
+@@ -202,33 +244,35 @@
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidDBLayer&quot;));
+ 		if( query == null)
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidQuery&quot;));
+-		if( filter == null ) 
++		if( format == null ) 
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidFilter&quot;));
+ 		if( filename == null || filename.length() == 0 ) 
+ 			throw new ExportException(L10n.getString(&quot;Error.MissingFileName&quot;));
+ 		if( useProjections &amp;&amp; rootTable == null)
+ 			throw new ExportException(L10n.getString(&quot;Error.InvalidRootTable&quot;));
+-		if(template == null || template.isEmpty())
+-			template = new Projection().setEverything();
++		if(projections == null || projections.isEmpty())
++			projections = new Projection().setEverything();
+ 		if(selection == null || selection.isEmpty())
+ 			selection = new Selection().all();
+ 			
++		//useProjections = true;
+ 		
+-		logger.debug(&quot;Initializing the export environment.&quot;);
++		logger.debug(&quot;Creating necessary participants.&quot;);
++		projections.set(Occurrence.class, Occurrence.ID);
+ 		
+ 		// Prepare the query for projections.
+ 		if(useProjections) {
+ 			if( rootTable == AuthorOccurrence.class || rootTable == Author.class )
+-				template.addProjections( query, AuthorOccurrence.class, Author.class );
++				projections.addProjections( query, AuthorOccurrence.class, Author.class );
+ 			else
+-				template.addProjections( query, 
++				projections.addProjections( query, 
+ 					Occurrence.class, Plant.class, Metadata.class, Publication.class, 
+ 					Habitat.class, Territory.class, NearestVillage.class, Phytochorion.class );
+ 		}
+ 		
+ 		// Create a new file and writer (wrapper).
+ 		Writer writer = new BufferedWriter(
+-					new OutputStreamWriter(new FileOutputStream(filter.suggestName(filename)),
++					new OutputStreamWriter(new FileOutputStream(format.suggestName(filename)),
+ 					ENCODING));
+ 		if(writer == null) {
+ 			logger.fatal(&quot;Unable to create a new Writer.&quot;);
+@@ -239,29 +283,35 @@
+ 		
+ 		// Create a new builder according to the selected format. 
+ 		Builder builder;
+-		if(filter.getDescription().equals(L10n.getString(&quot;Format.CSV&quot;)))
+-			builder = new CSVBuilder(writer, template);
+-		else if(filter.getDescription().equals(L10n.getString(&quot;Format.DC&quot;)))                        
++		if(format.getDescription().equals(L10n.getString(&quot;Format.CSV&quot;)))
++			builder = new CSVBuilder(writer, projections);
++		else if(format.getDescription().equals(L10n.getString(&quot;Format.DC&quot;)))                        
+ 			builder = new DarwinCoreBuilder(writer);
+-		else if(filter.getDescription().equals(L10n.getString(&quot;Format.ABCD&quot;))) 
++		else if(format.getDescription().equals(L10n.getString(&quot;Format.ABCD&quot;))) 
+ 			builder = new ABCDBuilder(writer);
+-		else if(filter.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
+-			builder = new XMLBuilder2(template, writer);                       
+-		else if(filter.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)))                        
++		else if(format.getDescription().equals(L10n.getString(&quot;Format.XML&quot;)))                        
++			builder = new XMLBuilder2(projections, writer);                       
++		else if(format.getDescription().equals(L10n.getString(&quot;Format.PlantloreNative&quot;)))                        
+ 			builder = new XMLBuilder2(writer);                       
+ 		else {
+-			builder = new TrainingBuilder(template);
++			builder = new TrainingBuilder(projections);
++			writer.close();
++			(new java.io.File(filename)).delete();
+ 		}
+ 
++		// Create the task!
++		ExportTask2 t;
++		if( useProjections )
++			t =new ExportTask2(db, query, writer, builder, selection, projections, rootTable);
++		else
++			t = new ExportTask2(db, query, writer, builder, selection);
++		t.ignoreDead( format.ignoreDead() );
+ 		
+-		ExportTask2 t = new ExportTask2(db, query, writer, builder, selection);
+-		t.ignoreDead( filter.ignoreDead() );
+-		
+ 		// Reset variables.
+ 		query = null;
+-		template = null;
++		projections = null;
+ 		selection = null;
+-		filter = null;
++		format = null;
+ 		filename = null;
+ 		useProjections = false;
+ 		rootTable = Occurrence.class;
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -2,28 +2,37 @@
+ 
+ import java.awt.event.ActionEvent;
+ 
+-import javax.swing.AbstractAction;
+ import javax.swing.JFileChooser;
++import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.filechooser.FileFilter;
+ 
+-import net.sf.plantlore.client.AppCoreView;
+ import net.sf.plantlore.client.export.component.FileFormat;
+ import net.sf.plantlore.common.DefaultProgressBarEx;
++import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.l10n.L10n;
+ 
++/**
++ * The mapping of the button in the view to action
++ * that opens the second part of the dialog - the Column Selection -
++ * or Creates and starts the Export task.
++ * 
++ * Also the field validity check is performed.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ */
+ public class ExportMngCtrl2 {
+ 	
+ 	
+ 	private ExportMng2 model;
+-	private AppCoreView parentView;
++	private JFrame parentView;
+ 	private JFileChooser choice;
+ 	
+ 	private ExportMngViewB viewB;
+ 	
+ 
+ 	
+-	public ExportMngCtrl2(ExportMng2 model, AppCoreView view) {
++	public ExportMngCtrl2(ExportMng2 model, JFrame view) {
+ 		this.model = model; 
+ 		this.parentView = view;
+ 		
+@@ -35,40 +44,57 @@
+ 			choice.addChoosableFileFilter(filter);
+ 	}
+ 	
+-	
++	/**
++	 * Let the User choose the name and format of the file and
++	 * then either proceed to the column selection, or create and start the new Export task.
++	 * 
++	 * @param visible	True if the dialog should be opened.
++	 */
+ 	public void setVisible(boolean visible) {
+ 		if(visible) {
+ 			// The dialog must have a parent so that it is displayed correctly after ALT+TAB is pressed.
+ 			int result = choice.showDialog(parentView, L10n.getString(&quot;Export.Title&quot;));
+ 			if( result == JFileChooser.APPROVE_OPTION ) {
+ 				model.setSelectedFile( choice.getSelectedFile().getAbsolutePath() );
+-				FileFormat filter = (FileFormat) choice.getFileFilter();
+-				model.setActiveFileFilter( filter );
++				FileFormat format = (FileFormat) choice.getFileFilter();
++				model.setFileFormat( format );
+ 				
+-				if( filter.isColumnSelectionEnabled() )
++				if( format.isColumnSelectionEnabled() ) {
++					// Reset the the tree to the initial state.
++					((net.sf.plantlore.client.export.component.ExtendedTree)(viewB.tree)).collapseAll();
+ 					viewB.setVisible(true);
++				}
+ 				else 
+ 					performExport();
+ 			}
+ 		}
+ 	}
+ 	
+-	
+-	private class NextAction extends AbstractAction {
++	/**
++	 * Proceed to the column selection dialog or createa and start the Export task, 
++	 * if the format doesn't support column selection. 
++	 *
++	 */
++	private class NextAction extends StandardAction {
+ 		public NextAction() {
+-			putValue(NAME, L10n.getString(&quot;Export.Title&quot;));
++			super(&quot;Export.Title&quot;);
+ 		}
+ 		public void actionPerformed(ActionEvent arg0) {
++			// Get the list of projections.
+ 			Projection t = viewB.tsm.getProjections();
+ 			viewB.setVisible(false);
+-			model.setTemplate( t ); // Set the new template.
++			// Supply the list of projections to the ExportManager (Export task factory).
++			model.setProjections( t );
++			model.useProjections(true);
+ 			viewB.tsm.clearSelection();
+ 			
+ 			performExport();
+ 		}
+ 	}
+ 
+-	
++	/**
++	 * Create the Export task and start it.
++	 */
+ 	private void performExport() {
+ 		try {
+ 			ExportTask2 export = model.createExportTask();
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngViewB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngViewB.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngViewB.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -13,8 +13,9 @@
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+- *
+- * @author  yaa
++ * Allows the User to select columns (i.e. properties of the records) that should be exported.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  */
+ public class ExportMngViewB extends javax.swing.JDialog {
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportTask2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportTask2.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/ExportTask2.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -13,6 +13,7 @@
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ExportException;
++import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+@@ -20,6 +21,39 @@
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ 
++/**
++ * The Export task serves as a Director for the selected Builder.
++ * It takes the supplied query, executes it, and hands over every
++ * record, that is selected to be exported, to the Builder.
++ * &lt;br/&gt;
++ * The database layer is capable of retrieving whole records (objects)
++ * from the database. 
++ * Sometimes it may cost a lot of time to reconstruct the whole record and if we want
++ * to export just a few columns, we would not use the rest of the record anyway.
++ * This may lead to a great overhead. In order to reduce this overhead, projections can be used.
++ * Projections is a list of columns the User wants to export; the list is typically very small.
++ * The database layer is instructed to return only the values of those columns.
++ * &lt;br/&gt;
++ * Let's see an example:
++ * &lt;br/&gt;
++ * The User exports Occurrences and is interrested in three columns only:
++ * Occurrence.UnitID, Occurrence.Plant.Taxon, Occurrence.Habitat.NearestVillage.Name.
++ * It would not be wise to retrieve the whole record that comprises dozens of columns
++ * some of which may contain a lot of data. We set those three projections and
++ * instruct the Task to use them. The database layer will then return just those three values
++ * for every record, then it will reconstruct the record from those values, 
++ * and finally it will pass it to the Builder. This can speed up the Export enormously, 
++ * especially when a remote connection is used.
++ * &lt;br/&gt;
++ * However, the usual use of Export is to export the whole record, 
++ * therefore it is much more convenient to have the database layer 
++ * reconstructed the object for us. 
++ * 
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-08-01
++ * @version 2.0
++ */
+ public class ExportTask2 extends Task {
+ 	
+ private Logger logger = Logger.getLogger(getClass().getPackage().getName());
+@@ -30,13 +64,22 @@
+ 	private Integer resultId;
+ 	private boolean ignoreDead = true;
+ 	private boolean useProjections = false;
++	private Projection projections;
+ 	private List&lt;Pair&lt;Class, String&gt;&gt; description;
+ 	private SelectQuery query;
+ 	private Writer writer;
+ 	private Record torso;
+ 	
+ 	
+-	
++	/**
++	 * Create a new Export task. 
++	 * 
++	 * @param dblayer	The database layer that mediates the connection with the database. 
++	 * @param query	The query defining the result set which is to be iterated over.
++	 * @param writer	The writer that will be used for the output.
++	 * @param builder	The builder that will construct the output from records the Director supplies.
++	 * @param selection	The list of selected records - only the selected records will be exported.
++	 */
+ 	public ExportTask2(
+ 			DBLayer dblayer, 
+ 			SelectQuery query, 
+@@ -51,20 +94,31 @@
+ 		this.build = builder;
+ 	}
+ 	
+-	// Pro pouziti s projekcema
++	/**
++	 * Create a new Export task. This Export task is set to use projections.
++	 * 
++	 * @param dblayer	The database layer that mediates the connection with the database. 
++	 * @param query	The query defining the result set which is to be iterated over.
++	 * @param writer	The writer that will be used for the output.
++	 * @param builder	The builder that will construct the output from records the Director supplies.
++	 * @param selection	The list of selected records - only the selected records will be exported.
++	 * @param projections	The list of columns that should be exported.
++	 * @param rootTable	The root table (only if projections are used).
++	 */
+ 	public ExportTask2(
+ 			DBLayer dblayer, 
+ 			SelectQuery query, 
+ 			Writer writer, 
+ 			Builder builder, 
+ 			Selection selection,
+-			List&lt;Pair&lt;Class, String&gt;&gt; description, 
++			Projection projections,
+ 			Class rootTable) 
+ 	throws ExportException {
+ 		
+ 		this(dblayer, query, writer, builder, selection);
+ 		this.useProjections = true;
+-		this.description = description;
++		this.projections = projections;
++		this.description = projections.getDescription();
+ 		try { 
+ 			torso = (Record)rootTable.newInstance();
+ 			torso.createTorso();
+@@ -73,6 +127,14 @@
+ 		}
+ 	}
+ 	
++	/**
++	 * Some records may be marked as deleted (so that Plantlore can revive them
++	 * it the User tells him to). Some formats may wish to skip such records, others
++	 * may make use of them.
++	 * 
++	 * @param ignore	True if the dead records should be skipped.
++	 * @return	The Export task itself.
++	 */
+ 	public ExportTask2 ignoreDead(boolean ignore) {
+ 		this.ignoreDead = ignore;
+ 		return this;
+@@ -102,12 +164,12 @@
+ 				
+ 				Record record;
+ 				if(useProjections) 
+-					record = reconstruct( (Object[])database.more( resultId, i, i )[0] );
++					record = reconstruct( torso, (Object[])database.more( resultId, i, i )[0], description );
+ 				else
+ 					record = (Record)((Object[])database.more( resultId, i, i )[0])[0];
+ 				
+ 				
+-				logger.debug(&quot;New record No. &quot;+i+&quot; fetched: &quot;+record);
++				logger.debug(&quot;New record No. &quot;+i+&quot; fetched: &quot;+record.toFullString());
+ 				if( !selection.contains( record ) || (ignoreDead &amp;&amp; record.isDead()) ) 
+ 					continue; // Is the record selected?
+ 				
+@@ -145,8 +207,9 @@
+ 		return null;
+ 	}
+ 	
+-	
+-	
++	/**
++	 * Perform the final cleanup - close the file and the query. 
++	 */
+ 	private void cleanup() {
+ 		try {
+ 			writer.close();
+@@ -162,36 +225,61 @@
+ 	 * Find all AuthorOccurrences associated with the &lt;code&gt;Occurrence&lt;/code&gt;
+ 	 * and send them to the Builder, too.
+ 	 * 
+-	 * @param occurrence	The currently processed occurrence data.
++	 * @param occurrence	The currently processed occurrence record.
+ 	 */
+ 	private void loadAssociatedAuthors(Occurrence occurrence) 
+ 	throws RemoteException, IOException, DBLayerException {
+ 		
+ 		logger.debug(&quot;Processing the associated information about Authors.&quot;);
+ 		
+-		SelectQuery query = database.createQuery(AuthorOccurrence.class);
+-		query.createAlias(AuthorOccurrence.OCCURRENCE, &quot;OCC&quot;);
+-
+-		// AuthorOccurrence.OCCURRENCE = Occurrence.ID  &amp;&amp;  Occurrence.ID = occ.getId()
+-		query.addRestriction(PlantloreConstants.RESTR_EQ_PROPERTY, AuthorOccurrence.OCCURRENCE, &quot;OCC.&quot;+Occurrence.ID, null, null);
+-		query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;OCC.&quot;+Occurrence.ID, null, occurrence.getId(), null);
+-		int resultId = database.executeQuery( query );
+-		
+-		// Take all results and spit'em out.
+-		int rows = database.getNumRows( resultId );
+-		for(int i = 0; i &lt; rows; i++) {
+-			logger.debug(&quot;Fetching associated data (Author, AuthorOccurrence).&quot;);
++		SelectQuery query = null;
++		try {
++			query = database.createQuery(AuthorOccurrence.class);
+ 			
+-			Object[] pulp = database.more( resultId, i, i );
+-			AuthorOccurrence ao = (AuthorOccurrence) ((Object[])pulp[0])[0];
+-			ao.setOccurrence( null ); // cut off the way back to the occurrence
+-			if(ao.isDead() &amp;&amp; ignoreDead) continue;
++			query.createAlias(AuthorOccurrence.OCCURRENCE, &quot;OCC&quot;);
++			/* 6 lines of new code */
++			query.createAlias(AuthorOccurrence.AUTHOR, Record.alias(Author.class));
++			List&lt;Pair&lt;Class, String&gt;&gt; description = null;
++			if( useProjections )
++				description = projections.addProjections(query, AuthorOccurrence.class, Author.class);
+ 			
+-			logger.debug(&quot;New author-occurence record: &quot; + ao.toFullString());
++			AuthorOccurrence ao = new AuthorOccurrence();
++			ao.setAuthor(new Author());
+ 			
+-			build.part( ao );
++			// AuthorOccurrence.OCCURRENCE = Occurrence.ID  &amp;&amp;  Occurrence.ID = occ.getId()
++			query.addRestriction(PlantloreConstants.RESTR_EQ_PROPERTY, AuthorOccurrence.OCCURRENCE, &quot;OCC.&quot;+Occurrence.ID, null, null);
++			query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;OCC.&quot;+Occurrence.ID, null, occurrence.getId(), null);
++			int resultId = database.executeQuery( query );
++			
++			// Take all results and send them to the Builder as well.
++			int rows = database.getNumRows( resultId );
++			for(int i = 0; i &lt; rows; i++) {
++				logger.debug(&quot;Fetching associated data (Author, AuthorOccurrence).&quot;);
++				
++				/* 4 lines of new code */
++				if(useProjections) 
++					ao = (AuthorOccurrence) reconstruct( ao, (Object[])database.more( resultId, i, i )[0], description );
++				else
++					ao = (AuthorOccurrence) ((Object[])database.more( resultId, i, i )[0])[0];
++				
++//				Object[] pulp = database.more( resultId, i, i );
++//				AuthorOccurrence ao = (AuthorOccurrence) ((Object[])pulp[0])[0];
++				ao.setOccurrence( null ); // cut off the way back to the occurrence
++				if(ao.isDead() &amp;&amp; ignoreDead) continue;
++				
++				logger.debug(&quot;New author-occurence record: &quot; + ao.toFullString());
++				
++				build.part( ao );
++			}
+ 		}
+-		database.closeQuery( query );
++		finally {
++			if( query != null) 
++				try {
++					database.closeQuery( query );
++				} catch(Exception e) {
++					// Nothing we can do.
++				}
++		}
+ 		
+ 		logger.debug(&quot;Author-occurence processed.&quot;);
+ 	}
+@@ -205,7 +293,7 @@
+ 	 * &lt;code&gt;Occurrence.ID&lt;/code&gt; and &lt;code&gt;Plant.TAXON&lt;code&gt; and
+ 	 * &lt;code&gt;NearestVillage.NAME&lt;/code&gt;. Database layer returns
+ 	 * [3292, &quot;Rubus sp.&quot;, &quot;&#268;esk&#233; Bud&#283;jovice&quot;]. The `description` is the key to
+-	 * those values, as it says:
++	 * identificaton of those values, as it says:
+ 	 * &lt;code&gt;Occurrence.ID = 3292&lt;/code&gt;,
+ 	 * &lt;code&gt;Plant.TAXON = Rubus sp.&lt;/code&gt; and
+ 	 * &lt;code&gt;NearestVillage = &#268;esk&#233; Bud&#283;jovice&lt;/code&gt;.
+@@ -213,9 +301,11 @@
+ 	 * Without the description we would not know what value belongs to which column.
+ 	 * 
+ 	 * @param values	Values of columns (in the same order as in the Description).
++	 * @param torso	The record that should be filled with values.
++	 * @param description The description of columns.
+ 	 * @return	The reconstructed record.
+ 	 */
+-	private Record reconstruct(Object[] values) {
++	private Record reconstruct(Record torso, Object[] values, List&lt;Pair&lt;Class, String&gt;&gt; description) {
+ 		for(int i = 0; i &lt; description.size(); i++ ) {
+ 			Pair&lt;Class, String&gt; d = description.get(i);
+ 			torso.setValue(d.getFirst(), d.getSecond(), values[i]);
+
+Modified: trunk/src/net/sf/plantlore/client/export/Projection.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Projection.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/Projection.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -205,7 +205,10 @@
+ 	private void addProjections(SelectQuery q, Class table, boolean omitAlias) {
+ 		try {
+ 			Record r = (Record)table.newInstance();
+-			for(String property : r.getProperties())
++			List&lt;String&gt; properties = r.getProperties();
++			properties.add(Occurrence.ID);
++
++			for(String property : properties)
+ 				if( isSet(table, property) ) {
+ 					q.addProjection(PROJ_PROPERTY, (omitAlias ? property : Record.alias(table)+&quot;.&quot;+property));
+ 					plan.add(new Pair&lt;Class, String&gt;(table, property));
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder2.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/builders/XMLBuilder2.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -96,7 +96,7 @@
+      */
+     public void footer() 
+     throws IOException {
+-    	outputWriter.write(&quot;&lt;/occurrences&gt;\n&quot;);
++    	outputWriter.write(&quot;\n\n&lt;/occurrences&gt;\n&quot;);
+         xmlWriter.close();
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/export/component/ExtendedTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/component/ExtendedTree.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/client/export/component/ExtendedTree.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -313,7 +313,7 @@
+ 	
+ 	
+ 	/**
+-	 * Collapse all nodes.
++	 * Collapse all nodes (i.e. restore the tree to its initial state).
+ 	 *
+ 	 */
+ 	public void collapseAll() {
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -1,6 +1,5 @@
+ package net.sf.plantlore.common;
+ 
+-import java.awt.Component;
+ import java.rmi.*;
+ import java.rmi.server.ExportException;
+ 
+@@ -21,9 +20,6 @@
+  */
+ public class DefaultExceptionHandler {
+ 	
+-	private static DefaultExceptionHandler D = new DefaultExceptionHandler();
+-
+-
+ 	private DefaultExceptionHandler() {}
+ 
+ 
+@@ -157,9 +153,6 @@
+ 					title, 
+ 					JOptionPane.ERROR_MESSAGE );
+ 		
+-		System.out.println(&quot;~~DefaultExceptionHandler~~&quot;);
+-		System.out.println(problemDescription);
+-		
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-09-01 18:45:22 UTC (rev 618)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-09-01 21:11:41 UTC (rev 619)
+@@ -490,7 +490,7 @@
+ 			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;; &quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+-			if(subrecord != null)	sigma.append( subrecord.toString() );
++			if(subrecord != null)	sigma.append( subrecord.toFullString() );
+ 		}
+ 		return sigma.toString();
+ 	}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000865.html">[Plantlore-dev] r618 - in trunk: . src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000867.html">[Plantlore-dev] mensi problem s vytuhavanim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#866">[ date ]</a>
+              <a href="thread.html#866">[ thread ]</a>
+              <a href="subject.html#866">[ subject ]</a>
+              <a href="author.html#866">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

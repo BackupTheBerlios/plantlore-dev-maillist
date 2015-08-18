@@ -1,0 +1,1090 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r577 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r577%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20l10n&In-Reply-To=%3C200608262112.k7QLCk7f026262%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000787.html">
+   <LINK REL="Next"  HREF="000789.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r577 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r577%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20l10n&In-Reply-To=%3C200608262112.k7QLCk7f026262%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r577 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 26 23:12:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000787.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+        <LI>Next message: <A HREF="000789.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#788">[ date ]</a>
+              <a href="thread.html#788">[ thread ]</a>
+              <a href="subject.html#788">[ subject ]</a>
+              <a href="author.html#788">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-26 23:12:44 +0200 (Sat, 26 Aug 2006)
+New Revision: 577
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditorSearch.java
+   trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/overview/search/Search.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.form
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Improved Search dialog in similar way as AddEdit dialog - it now watches the lenght of user entered data and also indicates invalid values.
+Fixed AddEdit behaviour in edit mode in case of editing an occurrence with shared habitats - we now ask the user whether he wants to make the change really only when needed (that is when the habitat changed).
+
+Hopefully fixed Bug # 008467	Throws exception on resize while loading data - the overview resize component listener is now installed after the first search query is created and removed after logout. Other tweaks made as well to prevent similar problems (OverviewTableModel.loadData is now synchronized, setResultId() method checks whether there already some search query has been created...).
+
+Added the IDENTIFIED role as requested by Lada (see AppCore.loadAuthorRoles() ).
+
+Hopefully fixed the Bug # 008480	The Select Query is wrong!! - too... added additional restriction to select only live AuthorOccurrences in both the query and it's subquery. This seems to solve this problem as well as the Bug # 008581	Overview does`t update author after editting of occurrence. It seems that the cause was the same but it needs further testing.
+
+Also fixed (patched:-/) an unpleasant issue with the author table in AddEdit dialog - I filed it as Bug # 008588	Author table breaks sometimes.
+This commit contains a patch of the method that throws the index out of bounds exception in the AppCore.setAuthor() method. This makes further work possible although it doesn't fix the cause of the problem...
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -423,7 +423,7 @@
+     }
+     
+     public String[] loadAuthorRoles() throws DBLayerException, RemoteException {
+-        authorRoles = new String[] {&quot;collected&quot;,&quot;revised&quot;,&quot;other&quot;};
++        authorRoles = new String[] {&quot;collected&quot;,&quot;identified&quot;,&quot;revised&quot;,&quot;other&quot;};
+         return authorRoles;
+         /*SelectQuery sq;
+         int resultid;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -297,6 +297,7 @@
+ 	ReconnectAction reconnectAction = new ReconnectAction();
+ 	
+ 	ActionListener silentFinalAction = new ExitListener();
++        OverviewResizeListener overviewResizeListener = new OverviewResizeListener();
+ 
+ 	/** Creates a new instance of AppCoreCtrl */
+ 	public AppCoreCtrl(AppCore model, AppCoreView view) {
+@@ -341,8 +342,6 @@
+ 		view.occurrencesRefresh.setAction(refreshAction);
+ 
+ 		view.overview.addKeyListener(new OverviewKeyListener());
+-		view.overviewScrollPane
+-				.addComponentListener(new OverviewResizeListener());
+ 
+ 		view.addWindowListener(new AppWindowListener());
+ 		view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+@@ -1506,6 +1505,11 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent arg0) {
++                        //must be done to prevent problems when this listener would send commands to load data for a query
++                        //that doesn't exist, or when the dblayer doesn't exist..
++                        //it's again installed in the DatabaseChange bridge
++                        view.overviewScrollPane.removeComponentListener(overviewResizeListener);
++
+                         model.logout();
+                     
+ 			if (loginModel != null)
+@@ -1651,6 +1655,12 @@
+ 				view.setCursor(Cursor.getDefaultCursor());
+ 				setDatabaseDependentCommandsEnabled(true);
+ 				
++                                
++                                //this can't be done earlier. must be done after the query is created
++                                //otherwise this listener would give the overview table model commands to load data
++                                //for a query that doesn't exist yet
++                                view.overviewScrollPane.addComponentListener(overviewResizeListener);
++
+ 				/*-------------------------------------------------------------------
+ 				     Distribute the database layer among existing models.
+ 				  -------------------------------------------------------------------*/
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -93,6 +93,20 @@
+     private Date time = null;    
+     private Occurrence[] habitatSharingOccurrences = null;
+     
++    //---variables for old habitat values---
++    private String habitatDescriptionOld;
++    private String habitatNoteOld = null;
++    private Pair&lt;String, Integer&gt; territoryNameOld;
++    private Pair&lt;String, Integer&gt; phytNameOld;
++    private Pair&lt;String, Integer&gt; phytCodeOld;
++    private String phytCountryOld;
++    private String quadrantOld = null;
++    private Double altitudeOld = null;
++    private Double longitudeOld = null;
++    private Double latitudeOld = null;
++    private Pair&lt;String,Integer&gt; villageOld;
++    //--------------------------------------
++    
+     private boolean dayValid = true;
+     private boolean timeValid = true;
+     
+@@ -119,7 +133,6 @@
+     
+     private OccurrenceTableModel occurrenceTableModel;
+     
+-    
+     /** Creates a new instance of AddEdit */
+     public AddEdit(DBLayer database, Boolean editMode) {
+         this.database = database;
+@@ -128,9 +141,9 @@
+         occurrenceTableModel = new OccurrenceTableModel();
+     }
+  
+-    /** Makes the model load data from the parameter ao.
++    /** Makes the model load data from for the occurrence with id occurrenceId.
+      *
+-     * @param ao Assumes it is from database and therefore assumes WGS84 coordinate system.
++     * @param occurrenceId id of the occurrence to load
+      *
+      * @throws DBLayerException
+      * @throws RemoteException
+@@ -162,12 +175,14 @@
+         }
+                 
+         village = new Pair(o.getHabitat().getNearestVillage().getName(), o.getHabitat().getNearestVillage().getId());
++        villageOld = new Pair(o.getHabitat().getNearestVillage().getName(), o.getHabitat().getNearestVillage().getId());
+         
+         taxonList = new ArrayList();
+         taxonOriginal = o.getPlant().getTaxon();
+         taxonList.add(taxonOriginal);
+         
+         habitatDescription = o.getHabitat().getDescription();
++        habitatDescriptionOld = o.getHabitat().getDescription();
+         year = o.getYearCollected();
+         
+         occurrenceNote = o.getNote();
+@@ -180,6 +195,17 @@
+         altitude = o.getHabitat().getAltitude();
+         longitude = o.getHabitat().getLongitude();
+         latitude = o.getHabitat().getLatitude();
++//--
++        habitatNoteOld = o.getHabitat().getNote();
++        territoryNameOld = new Pair(o.getHabitat().getTerritory().getName(),o.getHabitat().getTerritory().getId());
++        phytNameOld = new Pair(o.getHabitat().getPhytochorion().getName(), o.getHabitat().getPhytochorion().getId());
++        phytCodeOld = new Pair(o.getHabitat().getPhytochorion().getCode(), o.getHabitat().getPhytochorion().getId());
++        phytCountryOld = o.getHabitat().getCountry();
++        quadrantOld = o.getHabitat().getQuadrant();
++        altitudeOld = o.getHabitat().getAltitude();
++        longitudeOld = o.getHabitat().getLongitude();
++        latitudeOld = o.getHabitat().getLatitude();
++//--        
+         source = o.getDataSource();
+         if (o.getPublication() != null)
+             publication = new Pair(o.getPublication().getReferenceCitation(), o.getPublication().getId());
+@@ -232,6 +258,36 @@
+             return 0;        
+     }//setHabitat
+ 
++    /** Convenience method for {@link hasHabitatChanged()}.
++     *
++     */
++    private boolean equal(Object o1, Object o2) {
++        if (o1 == null &amp;&amp; o2 != null)
++            return false;
++        return (o1 == null &amp;&amp; o2 == null) || o1.equals(o2);
++    }
++    
++    /** Determines whether the habitat changed from the last call to {@link setRecord()} method.
++     *
++     * We need to keep track of changes to habitat for the case that it is shared by two and more occurrences. 
++     * In that case we have to ask user whether he wants to divide this habitat or change it for all occurrences.
++     */
++    public boolean hasHabitatChanged() {
++    return !( 
++            equal(habitatDescriptionOld,habitatDescription) &amp;&amp;
++            equal(habitatNoteOld,habitatNote)  &amp;&amp;
++            equal(territoryNameOld,territoryName) &amp;&amp;
++            equal(phytNameOld,phytNameOld) &amp;&amp;
++            equal(phytCodeOld,phytCode) &amp;&amp;
++            equal(phytCountryOld,phytCountry) &amp;&amp;
++            equal(quadrantOld,quadrant) &amp;&amp;
++            equal(altitudeOld,altitude) &amp;&amp;
++            equal(longitudeOld,longitude) &amp;&amp;
++            equal(latitudeOld,latitude) &amp;&amp;
++            equal(villageOld,village)
++            );
++    }
++    
+     public Pair&lt;String, Integer&gt; getAuthor(int i) {
+         return ((Pair&lt;Pair&lt;String,Integer&gt;,String&gt;)authorList.get(i)).getFirst();
+     }
+@@ -333,6 +389,8 @@
+             return;
+         }
+         this.phytName = phytName;
++
++        
+         if (phytCodes != null)
+             for (int i=0; i &lt; phytCodes.length; i++) {
+                 if (phytCodes[i].getSecond().equals(phytName.getSecond())) {
+@@ -362,6 +420,8 @@
+             return;
+         }
+         this.phytCode = phytCode;
++
++
+         if (phytNames != null)
+             for (int i=0; i &lt; phytNames.length; i++) {
+                 if (phytNames[i].getSecond().equals(phytCode.getSecond())) {
+@@ -1299,6 +1359,10 @@
+     }
+     
+     public void setAuthor(int i, Pair&lt;String,Integer&gt; author) {
++        if (i &gt;= authorList.size()) {
++            logger.error(&quot;AddEdit: trying to add an author to a non-existent row!&quot;);
++            return;
++        }
+         authorList.get(i).setFirst(author);
+         logger.debug(&quot;Author name in row &quot;+i+&quot; set to &quot;+author);
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -92,6 +92,8 @@
+         
+         logger = Logger.getLogger(this.getClass().getPackage().getName());                
+ 
++        new DefaultEscapeKeyPressed(view, new CancelButtonAction());
++        
+         //------- ComboBoxes --------
+         view.townComboBox.addActionListener(new CommonActionListener());
+         view.territoryNameCombo.addActionListener(new CommonActionListener());
+@@ -126,8 +128,8 @@
+ //        view.SJTSKButton.addActionListener(new CoordinateSystemListener());
+         
+         //------- Buttons --------
+-        view.okButton.addMouseListener(new OkButtonListener());
+-        view.cancelButton.addMouseListener(new CancelButtonListener());
++        view.okButton.setAction(new OkButtonAction());
++        view.cancelButton.setAction(new CancelButtonAction());
+         view.checklistButton.setAction(new ChecklistAction());
+         
+         view.clearLocationButton.setAction(new ClearLocationAction());
+@@ -594,13 +596,18 @@
+         } 
+     }
+     
+-    class OkButtonListener extends MouseAdapter {
++    class OkButtonAction extends AbstractAction {
+         private String ALL = L10n.getString(&quot;AddEdit.All&quot;);
+         private String JUST_THIS = L10n.getString(&quot;AddEdit.JustThis&quot;);
+         private String CANCEL = L10n.getString(&quot;Common.Cancel&quot;);
+         private String TITLE = L10n.getString(&quot;AddEdit.QuestionDialogTitle&quot;);
+         
+-        public void mouseClicked(MouseEvent e) {
++        public OkButtonAction() {
++            putValue(NAME, L10n.getString(&quot;Common.Ok&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Common.Ok&quot;));
++        }
++        
++        public void actionPerformed(ActionEvent e) {
+             int choice=-1;
+             try {
+                 Pair&lt;Boolean,String&gt; check = model.checkData();
+@@ -610,7 +617,10 @@
+                 } 
+                 if (inEditMode) {
+                     Occurrence[] sharedOcc = model.getHabitatSharingOccurrences();
+-                    if (sharedOcc.length &gt; 1) {
++                    if (sharedOcc.length &gt; 1 &amp;&amp; model.hasHabitatChanged()) //the habitat has changed and is shared by at least two occurrences
++                                                                           //we have to ask the user whether he wants to make the change for all occurrences
++                                                                           //or to create a new habitat
++                    {
+                         Object[] arg = {&quot;&quot;+(sharedOcc.length-1)};
+                         String formattedQuestion = L10n.getFormattedString(&quot;AddEdit.OkQuestion&quot;,arg);
+ 
+@@ -658,8 +668,13 @@
+             
+     }//OkButtonListener
+     
+-    class CancelButtonListener extends MouseAdapter {
+-        public void mouseClicked(MouseEvent e) {
++    class CancelButtonAction extends AbstractAction {
++        public CancelButtonAction() {
++            putValue(NAME, L10n.getString(&quot;Common.Cancel&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Common.Cancel&quot;));            
++        }
++        
++        public void actionPerformed(ActionEvent e) {
+             logger.info(&quot;AddEdit dialog cancelled&quot;);
+             view.setVisible(false);
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -91,7 +91,6 @@
+         extendedPanel.setVisible(visible);
+         setLocationRelativeTo(parent);
+         this.pack();
+-        new DefaultEscapeKeyPressed(this);
+     }
+     
+            
+@@ -963,10 +962,10 @@
+     
+     private void setSizeRestrictions() {
+         PlainDocument pd = (PlainDocument) herbariumTextField.getDocument();
+-        pd.setDocumentFilter(new DocumentSizeFilter(20));
++        pd.setDocumentFilter(new DocumentSizeFilter(Occurrence.getColumnSize(Occurrence.HERBARIUM)));
+ 
+         pd = (PlainDocument) quadrantTextField.getDocument();
+-        pd.setDocumentFilter(new DocumentSizeFilter(10));
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.QUADRANT)));
+         
+         ((AutoComboBoxNG3)phytCountryCombo).setCapacity(Habitat.getColumnSize(Habitat.COUNTRY));
+         
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditorSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditorSearch.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditorSearch.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -11,17 +11,22 @@
+ 
+ import java.awt.Component;
+ import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import javax.swing.AbstractAction;
+ import javax.swing.AbstractCellEditor;
+ import javax.swing.JButton;
++import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
+ import javax.swing.JTable;
+ import javax.swing.table.TableCellEditor;
+ import javax.swing.table.TableModel;
++import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.client.overview.search.Search;
++import net.sf.plantlore.common.DocumentSizeFilter;
++import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+@@ -33,21 +38,41 @@
+     HashMap&lt;JButton,Integer&gt; buttonMapInverted = new HashMap&lt;JButton,Integer&gt;();
+     Search aemodel;
+     String value = &quot;&quot;;
++    RoleEditDialog red;
+     
+     class RevisionAction extends AbstractAction {
+         public RevisionAction() {
+             putValue(NAME, L10n.getString(&quot;AddEdit.Revision&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.RevisionTT&quot;));
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;AddEdit.Revision&quot;));            
++            red = new RoleEditDialog(null,true);
++            red.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++            red.okButton.addActionListener(new ActionListener() {
++                public void actionPerformed(ActionEvent e) {
++                    value = red.roleArea.getText();
++                    red.setVisible(false);
++                }  });
++            red.okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
++            red.cancelButton.addActionListener(new ActionListener() {
++                public void actionPerformed(ActionEvent e) {
++                    value = null;
++                    red.setVisible(false);
++                }                
++             }); 
++            red.cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++            ((PlainDocument)red.roleArea.getDocument()).setDocumentFilter(new DocumentSizeFilter(AuthorOccurrence.getColumnSize(AuthorOccurrence.NOTE)));                
++            red.setTitle(L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;));
+         } 
+ 
+         public void actionPerformed(ActionEvent e) {
+             JButton button = (JButton)e.getSource();
+             int row = buttonMapInverted.get(button);
+-            String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
+-            value = s;
+-            if (s != null) {
+-                aemodel.setResultRevision(row,s);
++            //String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
++            //value = s;
++            red.roleArea.setText(e.getActionCommand());
++            red.setVisible(true);
++            if (value != null) {
++                aemodel.setResultRevision(row,value);
+             } else { // user pressed cancel
+                 value = e.getActionCommand();
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -77,7 +77,10 @@
+         this.db = db;
+     }
+         
+-    private void loadData() throws DBLayerException, RemoteException {
++    private synchronized void loadData() throws DBLayerException, RemoteException {
++        if (oldSelectQuery == null) //the query hasn't been created yet
++            return;
++        
+         resultsCount = db.getNumRows(getResultId());
+         logger.debug(&quot;resultsCount=&quot;+resultsCount);
+         Object[] records;
+@@ -123,7 +126,6 @@
+             this.data = data;
+         } else
+             this.data = null;
+-        
+     }
+             
+     public Integer getOccurrence(int i) throws DBLayerException, RemoteException {
+@@ -247,6 +249,7 @@
+             from = 0;
+         
+         currentPage = from / pageSize + 1;
++        
+         loadData();
+         fireTableDataChanged();
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -84,6 +84,9 @@
+     private Integer month;
+     private Date fromDate, toDate;
+         
++    private boolean altitudeValid = true;
++    private boolean latitudeValid = true;
++    private boolean longitudeValid = true;
+     
+     private Pair&lt;String, Integer&gt;[] plants = null;
+     private Pair&lt;String, Integer&gt;[] authors = null;
+@@ -277,8 +280,13 @@
+ 
+     public void setAltitude(Double altitude) {
+         this.altitude = altitude;
++        altitudeValid = true;
+         logger.debug(&quot;Altitude set to &quot;+altitude);
+     }
++    
++    public void setAltitudeValid(boolean valid) {
++        this.altitudeValid = valid;
++    }
+ 
+     public Double getLongitude() {
+         return longitude;
+@@ -286,18 +294,28 @@
+ 
+     public void setLongitude(Double longitude) {
+         this.longitude = longitude;
++        longitudeValid = true;
+         logger.debug(&quot;Longitude set to &quot;+longitude);
+     }
+ 
++    public void setLongitudeValid(boolean valid) {
++        this.longitudeValid = valid;
++    }
++
+     public Double getLatitude() {
+         return latitude;
+     }
+ 
+     public void setLatitude(Double latitude) {
+         this.latitude = latitude;
++        latitudeValid = true;
+         logger.debug(&quot;Latitude set to &quot;+latitude);
+     }
+ 
++    public void setLatitudeValid(boolean valid) {
++        this.latitudeValid = valid;
++    }
++
+     public String getSource() {
+         return source;
+     }
+@@ -511,7 +529,20 @@
+         if (timeChoice == MONTH)
+             if (isNotEmpty(month) &amp;&amp; !month.equals(12)) //12 is the index of the empty String in the MonthChooser's ComboBox, the empty String is added in Post-init code in SearchView
+                 allNull = false;
++
++        if (!altitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidAltitude&quot;));            
++        }
+         
++        if (!longitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidLongitude&quot;));            
++        }
++        
++        if (!latitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidLatitude&quot;));            
++        }
++        
++        
+        /* if (allNull)
+             return new Pair&lt;Boolean,String&gt;(false,&quot;You have to fill in at least one field.&quot;);
+         else */
+@@ -586,6 +617,7 @@
+                 SelectQuery subQuery = database.createSubQuery(AuthorOccurrence.class, &quot;ao&quot;);
+                 // In the subquery select authors for the given occurrence (occurrence comes from the main query)
+                 subQuery.addRestriction(PlantloreConstants.RESTR_EQ_PROPERTY, &quot;ao.&quot;+AuthorOccurrence.OCCURRENCE, &quot;occ.&quot;+Occurrence.ID, null, null);
++                subQuery.addRestriction(PlantloreConstants.RESTR_EQ, &quot;ao.&quot;+AuthorOccurrence.DELETED, null, 0, null);
+                 subQuery.addProjection(PlantloreConstants.PROJ_PROPERTY, AuthorOccurrence.AUTHOR);
+                 // create the main query
+                 sq = database.createQuery(AuthorOccurrence.class);
+@@ -600,7 +632,8 @@
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.NEARESTVILLAGE,&quot;vill&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.TERRITORY,&quot;territory&quot;);
+                 // Add subquery to the query. Compare authoroccurrence.authorid with the result of a subquery (LEALL: &lt;= all(...))
+-                sq.addRestriction(PlantloreConstants.SUBQUERY_LEALL, AuthorOccurrence.AUTHOR, null, subQuery, null);                
++                sq.addRestriction(PlantloreConstants.SUBQUERY_LEALL, AuthorOccurrence.AUTHOR, null, subQuery, null);    
++                sq.addRestriction(PlantloreConstants.RESTR_EQ, AuthorOccurrence.DELETED, null, 0, null);
+                 sq.addOrder(PlantloreConstants.DIRECT_DESC, &quot;occ.&quot;+Occurrence.YEARCOLLECTED); //setridit podle roku
+                 sq.addRestriction(PlantloreConstants.RESTR_EQ, &quot;occ.&quot;+Occurrence.DELETED, null, 0, null);
+                 for (Column column : columns) {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchCtrl.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -11,6 +11,7 @@
+ 
+ import com.toedter.calendar.JDateChooser;
+ import com.toedter.calendar.JTextFieldDateEditor;
++import java.awt.Color;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+@@ -25,6 +26,7 @@
+ import java.util.ArrayList;
+ import java.util.Date;
+ import java.util.Locale;
++import javax.swing.AbstractAction;
+ import javax.swing.JComboBox;
+ import javax.swing.JOptionPane;
+ import javax.swing.JSpinner;
+@@ -32,6 +34,9 @@
+ import javax.swing.JTextField;
+ import javax.swing.event.ChangeEvent;
+ import javax.swing.event.ChangeListener;
++import javax.swing.event.DocumentEvent;
++import javax.swing.event.DocumentListener;
++import javax.swing.text.BadLocationException;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.client.overview.*;
+ import net.sf.plantlore.common.AutoTextArea;
+@@ -54,6 +59,9 @@
+     private Logger logger;
+     private Search model;
+     private SearchView view;
++    private final static int MAXIMUM_FRACTION_DIGITS = 5;
++    private final static int MAXIMUM_INTEGER_DIGITS = 4;
++    private final static Color COLOR_INVALID = Color.RED;
+     
+     /** Creates a new instance of AddEditCtrl */
+     public SearchCtrl(Search model, SearchView view) {
+@@ -74,9 +82,9 @@
+         //------- TextFields --------        
+         view.herbariumTextField.addFocusListener(new HerbariumListener());
+         view.quadrantTextField.addFocusListener(new QuadrantListener());
+-        view.altitudeTextField.addFocusListener(new AltitudeListener());
+-        view.longitudeTextField.addFocusListener(new LongitudeListener());
+-        view.latitudeTextField.addFocusListener(new LatitudeListener());
++        view.altitudeTextField.getDocument().addDocumentListener(new AltitudeListener());
++        view.longitudeTextField.getDocument().addDocumentListener(new LongitudeListener());
++        view.latitudeTextField.getDocument().addDocumentListener(new LatitudeListener());
+         
+         //------- TextAreas --------        
+         view.taxonTextArea.addFocusListener(new TaxonAreaListener());
+@@ -85,9 +93,9 @@
+         view.occurrenceNoteArea.addFocusListener(new OccurrenceAreaListener());
+                
+         //------- Buttons --------
+-        view.extendedButton.addMouseListener(new ExtendedButtonListener());
+-        view.okButton.addMouseListener(new OkButtonListener());
+-        view.cancelButton.addMouseListener(new CancelButtonListener());
++        view.extendedButton.setAction(new ExtendedButtonAction());
++        view.okButton.setAction(new OkButtonAction());
++        view.cancelButton.setAction(new CancelButtonAction());
+         
+         //------- Time
+         view.monthChooser.addPropertyChangeListener(&quot;month&quot;,new MonthChangeListener());
+@@ -275,126 +283,190 @@
+             model.setQuadrant(tf.getText());
+         }
+     }//QuadrantListener
+-    
+-    class AltitudeListener implements FocusListener {
++    class AltitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        Color oldColor;
+ 
+-        public void focusGained(FocusEvent e) {
++        public AltitudeListener() {
++            oldColor = view.altitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
+                 model.setAltitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;AltitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setAltitude(null);
++                return;
++            }
++
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setAltitude(value);
++                view.altitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    model.setAltitude(value);
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                } catch (ParseException ex2) {
+-                    if (model.getAltitude() != null) {
+-                        tf.setText(&quot;&quot;+nf.format(model.getAltitude()));
+-                    } else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                    view.altitudeTextField.setForeground(COLOR_INVALID);
++                    model.setAltitudeValid(false);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//AltitudeListener
+ 
+-    class LatitudeListener implements FocusListener {
++    class LatitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        Color oldColor;
+ 
+-        public void focusGained(FocusEvent e) {
++        public LatitudeListener() {
++            oldColor = view.latitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            System.out.println(&quot;LATITUDE old COLOR = &quot;+oldColor);
++            if (e.getDocument().getLength() == 0) {
+                 model.setLatitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;LatitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setLatitude(null);
++                return;
++            }
++            
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setLatitude(value);
++                view.latitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                    model.setLatitude(value);                    
+-                } catch (ParseException ex2) {
+-                    if (model.getLatitude() != null)
+-                        tf.setText(&quot;&quot;+model.getLatitude());
+-                    else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                view.latitudeTextField.setForeground(COLOR_INVALID);
++                model.setLatitudeValid(false);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//LatitudeListener
+ 
+-    class LongitudeListener implements FocusListener {
++    class LongitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
+-        
+-        public void focusGained(FocusEvent e) {
++        Color oldColor;
++
++        public LongitudeListener() {
++            oldColor = view.longitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
+                 model.setLongitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;LongitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setLongitude(null);
++                return;
++            }
++            
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setLongitude(value);
++                view.longitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                    model.setLongitude(value);                    
+-                } catch (ParseException ex2) {
+-                    if (model.getLongitude() != null)
+-                        tf.setText(&quot;&quot;+model.getLongitude());
+-                    else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                model.setLongitudeValid(false);
++                view.longitudeTextField.setForeground(COLOR_INVALID);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//LongitudeListener
++
+     
+-    class ExtendedButtonListener extends MouseAdapter {
+-        public void mouseClicked(MouseEvent e) {
++    class ExtendedButtonAction extends AbstractAction {
++        public ExtendedButtonAction() {
++            putValue(NAME, L10n.getString(&quot;Search.Extended&quot;));
++            //putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.SchedaTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Search.Extended&quot;));
++        }
++        
++        public void actionPerformed(ActionEvent e) {
+             view.switchExtended();
+         }
+     }//ExtendedButtonListener
+     
+-    class OkButtonListener extends MouseAdapter {
+-        public void mouseClicked(MouseEvent e) {
++    class OkButtonAction extends AbstractAction {
++        public OkButtonAction() {
++            putValue(NAME, L10n.getString(&quot;Common.Ok&quot;));
++            //putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.SchedaTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Common.Ok&quot;));
++        }
++        
++        public void actionPerformed(ActionEvent e) {
+             Pair&lt;Boolean,String&gt; check = model.checkData();
+             if (!check.getFirst()) {
+                 JOptionPane.showMessageDialog(view,check.getSecond());
+@@ -406,8 +478,14 @@
+         }
+     }//OkButtonListener
+     
+-    class CancelButtonListener extends MouseAdapter {
+-        public void mouseClicked(MouseEvent e) {
++    class CancelButtonAction extends AbstractAction {
++        public CancelButtonAction() {
++            putValue(NAME, L10n.getString(&quot;Common.Cancel&quot;));
++            //putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.SchedaTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Common.Cancel&quot;));
++        }
++        
++        public void actionPerformed(ActionEvent e) {
+             view.setVisible(false);
+         }
+     }//CancelButtonListener
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.form	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.form	2006-08-26 21:12:44 UTC (rev 577)
+@@ -16,6 +16,7 @@
+   &lt;/SyntheticProperties&gt;
+   &lt;AuxValues&gt;
+     &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_layoutCodeTarget&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-08-26 21:12:44 UTC (rev 577)
+@@ -14,14 +14,19 @@
+ import javax.swing.JComboBox;
+ import javax.swing.JDialog;
+ import javax.swing.table.TableColumn;
++import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.client.overview.*;
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoComboBoxNG3;
+ import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DocumentSizeFilter;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.TabTransfersFocus;
++import net.sf.plantlore.common.record.Habitat;
++import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+@@ -50,6 +55,10 @@
+         
+         setLabels();
+         
++        setSizeRestrictions();
++        
++        new DefaultEscapeKeyPressed(this);
++        
+         jPanel3.setVisible(visible);
+         jPanel2.setPreferredSize(new Dimension(DIALOG_WIDTH,210));
+         jPanel8.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+@@ -779,13 +788,29 @@
+         
+         helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
+         helpButton.setMnemonic(L10n.getMnemonic(&quot;Common.Help&quot;));
+-        okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
+-        okButton.setMnemonic(L10n.getMnemonic(&quot;Common.Ok&quot;));
+-        cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
+-        cancelButton.setMnemonic(L10n.getMnemonic(&quot;Common.Cancel&quot;));
++    }
++
++    private void setSizeRestrictions() {
++        PlainDocument pd = (PlainDocument) herbariumTextField.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Occurrence.getColumnSize(Occurrence.HERBARIUM)));
++
++        pd = (PlainDocument) quadrantTextField.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.QUADRANT)));
+         
++        ((AutoComboBoxNG3)phytCountryCombo).setCapacity(Habitat.getColumnSize(Habitat.COUNTRY));
++        
++        pd = (PlainDocument) descriptionArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.DESCRIPTION)));
++        
++        pd = (PlainDocument) locationNoteArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.NOTE)));
++        
++        ((AutoComboBoxNG3)sourceCombo).setCapacity(Occurrence.getColumnSize(Occurrence.DATASOURCE));
++
++        pd = (PlainDocument) occurrenceNoteArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Occurrence.getColumnSize(Occurrence.NOTE)));
+     }
+-    
++   
+     /**
+      * @param args the command line arguments
+      */
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-26 21:12:44 UTC (rev 577)
+@@ -1343,3 +1343,15 @@
+ AddEdit.Settings.Disabled=Disabled
+ 
+ AddEdit.Settings.Enabled=Enabled
++
++Overview.MenuFileLogout=Logout
++
++Overview.MenuFileReconnect=Reconnect
++
++Overview.MenuFileLogoutTT=Logs out current session
++
++Overview.MenuFileReconnectTT=Tries to renew lost connection
++
++Overview.MenuFileExitTT=Exits the application
++
++Search.Extended=&amp;Extended
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-26 21:12:44 UTC (rev 577)
+@@ -1522,4 +1522,14 @@
+ 
+ Information.UserCannotEditTitle=Editace u\u017Eivatele
+ 
++Overview.MenuFileReconnect=Znovu p\u0159ipojit
++
++Overview.MenuFileLogoutTT=Odhl\u00E1\u0161en\u00ED od datab\u00E1ze
++
++Overview.MenuFileReconnectTT=Pokus\u00ED se obnovit ztracen\u00E9 spojen\u00ED
++
++Overview.MenuFileExitTT=Ukon\u010D\u00ED aplikaci
++
++Search.Extended=&amp;Roz\u0161\u00ED\u0159en\u00E9
++
+ Information.UserCannotEdit=U\u017Eivatel byl ji\u017E zru\u0161en, proto v\u00E1m nem\u016F\u017Ee b\u00FDt povolena jeho editace. 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-26 20:55:32 UTC (rev 576)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-26 21:12:44 UTC (rev 577)
+@@ -1057,3 +1057,15 @@
+ AddEdit.Settings.Disabled=Disabled
+ 
+ AddEdit.Settings.Enabled=Enabled
++
++Overview.MenuFileLogout=Logout
++
++Overview.MenuFileReconnect=Reconnect
++
++Overview.MenuFileLogoutTT=Logs out current session
++
++Overview.MenuFileReconnectTT=Tries to renew lost connection
++
++Overview.MenuFileExitTT=Exits the application
++
++Search.Extended=&amp;Extended
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000787.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+	<LI>Next message: <A HREF="000789.html">[Plantlore-dev] [Bug #8588] Author table breaks sometimes
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#788">[ date ]</a>
+              <a href="thread.html#788">[ thread ]</a>
+              <a href="subject.html#788">[ subject ]</a>
+              <a href="author.html#788">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,380 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r126 - trunk/src/net/sf/plantlore/client
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r126%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200604102141.k3ALfGM2014616%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000128.html">
+   <LINK REL="Next"  HREF="000130.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r126 - trunk/src/net/sf/plantlore/client</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r126%20-%20trunk/src/net/sf/plantlore/client&In-Reply-To=%3C200604102141.k3ALfGM2014616%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r126 - trunk/src/net/sf/plantlore/client">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon Apr 10 23:41:16 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000128.html">[Plantlore-dev] r125 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000130.html">[Plantlore-dev] r127 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#129">[ date ]</a>
+              <a href="thread.html#129">[ thread ]</a>
+              <a href="subject.html#129">[ subject ]</a>
+              <a href="author.html#129">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-04-10 23:41:16 +0200 (Mon, 10 Apr 2006)
+New Revision: 126
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+Log:
+Removed moved initialization of Overview from constructors to
+AppCoreView.initOverview(). Whata nice little change...:)))
+Now data from database are loaded after a click on the Login menu item.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-10 20:14:34 UTC (rev 125)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-10 21:41:16 UTC (rev 126)
+@@ -61,18 +61,6 @@
+         
+         
+         
+-        //FIXME:
+-        try {
+-            
+-            tableModel = new OverviewTableModel(database, prefs.getInt(&quot;recordsPerPage&quot;, 30));
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
+-        logger.debug(&quot;tableModel created&quot;);
+-        setChanged();
+-        notifyObservers();
+         logger.debug(&quot;AppCore observers notified&quot;);
+     }
+     
+@@ -92,79 +80,132 @@
+         return this.database;
+     }    
+     
++    /** Returns table model for the main Overview.
++     *
++     * Should be called only after the user logs in to a database.
++     *
++     * @return null if the database connection wasn't created yet or an exception was thrown while working with it...
++     * @return OverviewTableModel otherwise - creates a new one if it hasn't been created yet
++     */
+     public OverviewTableModel getTableModel() {
+-        return this.tableModel;
++        if (database != null)
++            if (tableModel == null) 
++            {
++            //FIXME:
++                try {
++                    tableModel = new OverviewTableModel(database, prefs.getInt(&quot;recordsPerPage&quot;, 30));
++                } catch (RemoteException ex) {
++                    ex.printStackTrace();
++                } catch (DBLayerException ex) {
++                    ex.printStackTrace();
++                }
++                logger.debug(&quot;tableModel created&quot;);
++                //FIXME: we should first return the model and *then* notifyObservers... :-/
++                setChanged();
++                notifyObservers();
++                return tableModel;
++            } else 
++                return tableModel;
++        else 
++            return null;
+     }
+         
+     public void selectAll() {
+-        tableModel.selectAll();
++        if (tableModel != null)
++            tableModel.selectAll();
+         //setChanged();
+         //notifyObservers();
+     }
+ 
+     public void selectNone() {
+-        tableModel.selectNone();
++        if (tableModel != null)
++            tableModel.selectNone();
+         //setChanged();
+         //notifyObservers();
+     }
+     public void invertSelected() {
+-        tableModel.invertSelected();
++        if (tableModel != null)
++            tableModel.invertSelected();
+         //setChanged();
+         //notifyObservers();
+     }
+ 
+     public int getRecordsPerPage() {
+-        return tableModel.getPageSize();
++        if (tableModel != null)
++            return tableModel.getPageSize();
++        else 
++            return 0;
+     }
+ 
+     public void setRecordsPerPage(int recordsPerPage) {
+-        tableModel.setPageSize(recordsPerPage);
+-        setChanged();
+-        notifyObservers();        
++        if (tableModel != null)
++        {
++            tableModel.setPageSize(recordsPerPage);
++            setChanged();
++            notifyObservers();        
++        }
+     }
+ 
+     public void nextPage() {
+-        //FIXME:
+-        try {
+-            tableModel.nextPage();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
++        if (tableModel != null)
++        {
++            //FIXME:
++            try {
++                tableModel.nextPage();
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++            }
++            setChanged();
++            notifyObservers();        
+         }
+-        setChanged();
+-        notifyObservers();        
+     }
+     
+     public void prevPage() {
+-        //FIXME:
+-        try {
+-            tableModel.prevPage();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
++        if (tableModel != null)
++        {
++            //FIXME:
++            try {
++                tableModel.prevPage();
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++            }
++            setChanged();
++            notifyObservers();
+         }
+-        setChanged();
+-        notifyObservers();
+     }
+ 
+     public int getCurrentPage() {
+-        return tableModel.getCurrentPage();
++        if (tableModel != null)
++            return tableModel.getCurrentPage();
++        else
++            return 0;
+     }
+ 
+     public void setCurrentPage(int currentPage) {
+-        tableModel.setCurrentPage(currentPage);
+-        setChanged();
+-        notifyObservers();
++        if (tableModel != null)
++        {
++            tableModel.setCurrentPage(currentPage);
++            setChanged();
++            notifyObservers();
++        }
+     }
+     
+     public int getResultsCount() {
+-        return tableModel.getResultsCount();
++        if (tableModel != null)        
++            return tableModel.getResultsCount();
++        else
++            return 0;
+     }
+     
+     public int getPagesCount() {
+-        return tableModel.getPagesCount();
++        if (tableModel != null)
++            return tableModel.getPagesCount();
++        else
++            return 0;
+     }
+     
+     public void setSelectedRow(int i) 
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-10 20:14:34 UTC (rev 125)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-10 21:41:16 UTC (rev 126)
+@@ -393,7 +393,11 @@
+                 int i = ((Number)tf.getValue()).intValue(); 
+                 if (i &lt; 1)
+                 {
+-                    tf.setValue(e.getOldValue());
++                    Object obj = e.getOldValue();
++                    if (obj != null)
++                        tf.setValue(obj);
++                    else // either multiple properties changed or there was no previous value - the value should better be at least 1 anyway...
++                        tf.setValue(1);
+                 } else {
+                     model.setRecordsPerPage(i);                    
+                 }
+@@ -425,6 +429,7 @@
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Login&quot;));                        
+         }
+         public void actionPerformed(ActionEvent arg0) {
++                view.initOverview();
+                 // Reuse the existing dialogs, hide'em when they're no longer needed.
+                 if(loginModel == null) loginModel = new Login(new RMIDBLayerFactory());
+                 if(loginView == null) loginView = new LoginView(loginModel);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-10 20:14:34 UTC (rev 125)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-10 21:41:16 UTC (rev 126)
+@@ -92,6 +92,7 @@
+             prevPage = new JButton(),
+             nextPage = new JButton();
+     
++    private JScrollPane overviewScrollPane;
+     private JLabel statusLabel;
+     
+     private JTable overview = new JTable();
+@@ -124,7 +125,7 @@
+         initFrame();
+         initStatusBar();
+         initMenu();
+-        initOverview();
++        constructOverview();
+         initMainToolBar();
+         this.pack();
+     }
+@@ -210,23 +211,15 @@
+     /** Constructs the data overview and adds it to the &lt;code&gt;mainPane&lt;/code&gt;.
+      *
+      */
+-    private void initOverview()
++    private void constructOverview()
+     {
+-        OverviewTableModel otm = model.getTableModel();
+-        overview.setModel(otm);
+         overview.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+-        TableColumn tc;
+-        for (int i = 0; i &lt; otm.getColumnCount(); i++) {
+-            tc = overview.getColumnModel().getColumn(i);
+-            tc.setPreferredWidth(otm.getColumnSize(i));
+-        }
+         JPanel tablePanel = new JPanel();
+         tablePanel.setLayout(new BorderLayout());
+-        JScrollPane sp = new JScrollPane(tablePanel);
++        overviewScrollPane = new JScrollPane(tablePanel);
+         tablePanel.add(overview.getTableHeader(), BorderLayout.PAGE_START);
+         tablePanel.add(overview, BorderLayout.CENTER);
+-        sp.setPreferredSize(new Dimension(800, (otm.getRowCount()+1)*25));
+-        mainPane.add(sp, BorderLayout.CENTER);
++        mainPane.add(overviewScrollPane, BorderLayout.CENTER);
+         
+         pageToolBar = new JToolBar();
+         recordsPerPage.setValue(new Integer(model.getRecordsPerPage()));
+@@ -276,6 +269,24 @@
+         sbm.add(recordsPerPage, &quot;Number of records per page&quot;);
+     }
+     
++    /** This method should be called right after the user logs into some database.
++     *
++     */
++    public void initOverview()
++    {
++        TableColumn tc;
++        OverviewTableModel otm = model.getTableModel();
++        //FIXME: what if otm == null ????????????
++        overview.setModel(otm);
++        overviewScrollPane.setPreferredSize(new Dimension(800, (otm.getRowCount()+1)*25));
++       
++        for (int i = 0; i &lt; otm.getColumnCount(); i++) {
++            tc = overview.getColumnModel().getColumn(i);
++            tc.setPreferredWidth(otm.getColumnSize(i));
++        }
++        pack();
++    }
++    
+     /** Returns the main window &lt;code&gt;StatusBarManager&lt;/code&gt;.
+      *
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-10 20:14:34 UTC (rev 125)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-10 21:41:16 UTC (rev 126)
+@@ -295,7 +295,7 @@
+             from = 1;
+         
+         currentPage = from / pageSize + 1;
+-        //FIXME: - taky musi umet prepocitat from a to
++        //FIXME: 
+         try {
+             loadData();
+         } catch (RemoteException ex) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000128.html">[Plantlore-dev] r125 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000130.html">[Plantlore-dev] r127 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#129">[ date ]</a>
+              <a href="thread.html#129">[ thread ]</a>
+              <a href="subject.html#129">[ subject ]</a>
+              <a href="author.html#129">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

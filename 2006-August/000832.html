@@ -1,0 +1,143 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r597 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r597%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200608292007.k7TK78nf031042%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000831.html">
+   <LINK REL="Next"  HREF="000833.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r597 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r597%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200608292007.k7TK78nf031042%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r597 - trunk/src/net/sf/plantlore/server">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug 29 22:07:08 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000831.html">[Plantlore-dev] r596 - in trunk/src/biocase/DataproBioCASE:	configuration/datasources/plantLore	configuration/datasources/plantLorePSWD	configuration/querytool/skins/plantlore	configuration/querytool/skins/plantlorePSWD www/querytool
+</A></li>
+        <LI>Next message: <A HREF="000833.html">[Plantlore-dev] Uvodni bitva prohrana
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#832">[ date ]</a>
+              <a href="thread.html#832">[ thread ]</a>
+              <a href="subject.html#832">[ subject ]</a>
+              <a href="author.html#832">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-29 22:07:08 +0200 (Tue, 29 Aug 2006)
+New Revision: 597
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Spit more debug information in the database layer during initialization.
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-29 16:19:58 UTC (rev 596)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-29 20:07:08 UTC (rev 597)
+@@ -136,6 +136,8 @@
+         sessions = new Hashtable&lt;SelectQuery, Session&gt;(INITIAL_POOL_SIZE);
+         
+         this.undertaker = undertaker;
++        
++        logger.debug(&quot;Construction of the HibernateDBLayer successful.&quot;);
+     }
+     
+     /**
+@@ -145,7 +147,9 @@
+     public void setLanguage(String locale) 
+     throws DBLayerException, RemoteException {
+     	try {
++    		logger.debug(&quot;Setting language according to &quot; + locale);
+     		L10n.load(locale);
++    		logger.debug(&quot;Language set successfully.&quot;);
+     	} catch(IOException e) {}
+     }
+     
+@@ -191,28 +195,45 @@
+         // Build session factory &amp; create a new session.
+         Session sess = null;
+         // Authenticate user
++        logger.debug(&quot;DBLayer Initialization - about to authenticate the user.&quot;);
+         try {
++        	logger.debug(&quot;DBLayer Initialization - building session factory.&quot;);
+         	sessionFactory = cfg.buildSessionFactory();
++        	logger.debug(&quot;DBLayer Initialization - opening new session.&quot;);
+             sess = sessionFactory.openSession();
+         	
++            logger.debug(&quot;DBLayer Initialization - verifying existence of the user, part 1.&quot;);
+             ScrollableResults sr = sess.createCriteria(User.class)
+                 .add(Restrictions.eq(User.LOGIN, user))
+                 .add(Restrictions.isNull(User.DROPWHEN))
+                 .scroll();
+             
++            logger.debug(&quot;DBLayer Initialization - verifying existence of the user, part 2.&quot;);
+             sr.next();
+-            if(sr.get() == null)
++            if(sr.get() == null) {
++            	logger.debug(&quot;DBLayer Initialization - things are not going well. sr.get() returned null!&quot;);
+             	throw new DBLayerException(L10n.getString(&quot;Error.MissingUserAccount&quot;), DBLayerException.ERROR_USERNAME);
++            }
+             plantloreUser = (User)(sr.get())[0];
+             rights = plantloreUser.getRight();
++            logger.debug(&quot;DBLayer Initialization - finished!&quot;);
+         } 
+         catch (JDBCException e) {
+-            sessionFactory.close();
+-            sessionFactory = null;
++        	if(sessionFactory != null)
++        		sessionFactory.close(); 
++        	sessionFactory = null;
+             logger.fatal(&quot;Cannot connect to the database. Details: &quot;+e.getMessage());
+             throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), e);
+         }
++        catch(DBLayerException e) {
++        	if(sessionFactory != null)
++        		sessionFactory.close();
++        	sessionFactory = null;
++            logger.fatal(&quot;Cannot connect to the database. Details: &quot;+e.getMessage());
++            throw e;
++        }
+         finally {
++        	
+         	if(sess != null) sess.close();
+         }
+         
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000831.html">[Plantlore-dev] r596 - in trunk/src/biocase/DataproBioCASE:	configuration/datasources/plantLore	configuration/datasources/plantLorePSWD	configuration/querytool/skins/plantlore	configuration/querytool/skins/plantlorePSWD www/querytool
+</A></li>
+	<LI>Next message: <A HREF="000833.html">[Plantlore-dev] Uvodni bitva prohrana
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#832">[ date ]</a>
+              <a href="thread.html#832">[ thread ]</a>
+              <a href="subject.html#832">[ subject ]</a>
+              <a href="author.html#832">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

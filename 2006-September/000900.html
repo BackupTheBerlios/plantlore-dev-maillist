@@ -1,0 +1,775 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r643 - in trunk/src/net/sf/plantlore: common server	server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r643%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200609031135.k83BZtBQ032356%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000899.html">
+   <LINK REL="Next"  HREF="000901.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r643 - in trunk/src/net/sf/plantlore: common server	server/manager</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r643%20-%20in%20trunk/src/net/sf/plantlore%3A%20common%20server%0A%09server/manager&In-Reply-To=%3C200609031135.k83BZtBQ032356%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r643 - in trunk/src/net/sf/plantlore: common server	server/manager">krater at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep  3 13:35:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000899.html">[Plantlore-dev] r642 - in trunk/installer: . postgresql
+</A></li>
+        <LI>Next message: <A HREF="000901.html">[Plantlore-dev] r644 - in trunk/src/net/sf/plantlore/server: .	manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#900">[ date ]</a>
+              <a href="thread.html#900">[ thread ]</a>
+              <a href="subject.html#900">[ subject ]</a>
+              <a href="author.html#900">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-03 13:35:42 +0200 (Sun, 03 Sep 2006)
+New Revision: 643
+
+Modified:
+   trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+   trunk/src/net/sf/plantlore/server/CertificationException.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/RMIServerControl.java
+   trunk/src/net/sf/plantlore/server/Server.java
+   trunk/src/net/sf/plantlore/server/ServerSettings.java
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+Log:
+Server: Tested the creation/administration, JavaDoc added, Improved &quot;Hide&quot; behaviour, proper exception handling (do not offer reconnect, it does not make any sense within the server).
+Bug: If A creates the server, B connects to it, B shuts the server down, A hides the manager =&gt; the server will stay there (although it should stop!). I don't know why. Even if someone else shuts the server down (remotely or so), the server won't terminate... :(
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/common/DefaultExceptionHandler.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -128,11 +128,19 @@
+ 			// Could be thrown while unmarshalling the parameters or results of a remote method call.
+ 			else if( e instanceof UnmarshalException )
+ 				problemDescription = L10n.getString(&quot;Error.Server.UnmarshallingFailed&quot;);
+-
+-			
+ 		}
+ 		
+ 		/*
++		 *	OTHER EXCEPTIONS CONNECTED WITH THE RMI 
++		 * (those exceptions that are not subclasses of the RemoteException) 
++		 */
++		else if( e instanceof AlreadyBoundException )
++			problemDescription = L10n.getString(&quot;Error.Server.AlreadyBound&quot;);
++		
++		else if( e instanceof NotBoundException )
++			problemDescription = L10n.getString(&quot;Error.Server.NotBound&quot;);
++		
++		/*
+ 		 * DBLAYER EXCEPTION HANDLER
+ 		 */
+ 		else if( e instanceof DBLayerException ) {
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -3,6 +3,8 @@
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+ 
++import net.sf.plantlore.l10n.L10n;
++
+ /**
+  * A simple and convenient
+  * implementation of the abstract ProgressBar with the default exception handler.
+@@ -14,6 +16,8 @@
+  */
+ public class DefaultProgressBar extends ProgressBar {
+ 	
++	private boolean doNotOfferReconnect = false;
++	
+ 	/**
+ 	 * Create a new Default ProgressBar that will monitor the state 
+ 	 * of the supplied task.
+@@ -33,12 +37,42 @@
+ 	 * @param task	The task this ProgressBar should monitor.
+ 	 * @param parent	The parent window in order to maintain the Swing window hierarchy.
+ 	 * @param modal	True if the ProgressBar should be modal.
++	 * @param doNotOfferReconnect True if the Default Exception Handler should not offer
++	 * the Reconnect under any circumstances (convenient for the Server or Login).
+ 	 */
++	public DefaultProgressBar(Task task, JFrame parent, boolean modal, boolean doNotOfferReconnet) {
++		super(task, parent, modal);
++		this.doNotOfferReconnect = doNotOfferReconnet;
++	}
++	
++	/**
++	 * Create a new Default ProgressBar that will monitor the state 
++	 * of the supplied task.
++	 * 
++	 * @param task	The task this ProgressBar should monitor.
++	 * @param parent	The parent window in order to maintain the Swing window hierarchy.
++	 * @param modal	True if the ProgressBar should be modal.
++	 */
+ 	public DefaultProgressBar(Task task, JDialog parent, boolean modal) {
+ 		super(task, parent, modal);
+ 	}
+ 	
+ 	/**
++	 * Create a new Default ProgressBar that will monitor the state 
++	 * of the supplied task.
++	 * 
++	 * @param task	The task this ProgressBar should monitor.
++	 * @param parent	The parent window in order to maintain the Swing window hierarchy.
++	 * @param modal	True if the ProgressBar should be modal.
++	 * @param doNotOfferReconnect True if the Default Exception Handler should not offer
++	 * the Reconnect under any circumstances (convenient for the Server or Login).
++	 */
++	public DefaultProgressBar(Task task, JDialog parent, boolean modal, boolean doNotOfferReconnet) {
++		super(task, parent, modal);
++		this.doNotOfferReconnect = doNotOfferReconnet;
++	}
++	
++	/**
+ 	 * Stop the task and handle the exception with the DefaultExceptionHandler.
+ 	 * 
+ 	 * @see DefaultExceptionHandler
+@@ -46,7 +80,7 @@
+ 	@Override
+ 	public void exceptionHandler(Exception ex) {
+ 		getTask().stop();
+-		DefaultExceptionHandler.handle(parent, ex);
++		DefaultExceptionHandler.handle(parent, ex, L10n.getString(&quot;Error.General&quot;), doNotOfferReconnect);
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/CertificationException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/CertificationException.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/CertificationException.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -1,7 +1,7 @@
+ package net.sf.plantlore.server;
+ 
+ /**
+- * The Certification exception states that the access to the Administration
++ * The Certification exception is thrown if the access to the Administration
+  * of the Server was denied, usually due to the incorrect authorization key.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+@@ -11,9 +11,11 @@
+ public class CertificationException extends Exception {
+ 	
+ 	private static final long serialVersionUID = 2006060411064L;
+-	
+-	public CertificationException() { super(); }
+-	
++
++	/**
++	 * @param msg	The message describing the reason why the Authorization
++	 * failed.
++	 */
+ 	public CertificationException(String msg) { super(msg); }
+ 	
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -17,7 +17,7 @@
+ 
+ 
+ /**
+- * The entry point when starting the Server. 
++ * The entry point when starting the Plantlore Server. 
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-03-30
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -15,7 +15,7 @@
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ /**
+- * RMIRemoteDBLayerFactory is responsible for management of Database Layers
++ * RMIRemoteDBLayerFactory is responsible for the management of Database Layers
+  * on the remote machine. It can create and destroy them, it stores the list of
+  * all created Database Layers (i.e. list of connected clients) and can disconnect the
+  * selected client.
+@@ -128,7 +128,6 @@
+ 		try {
+ 			logger.debug(&quot;Exporting the database layer...&quot;);
+ 			stub = (DBLayer) UnicastRemoteObject.exportObject(database);
+-			logger.debug(&quot;DBLayer exported.&quot;);
+ 		} catch(RemoteException e) {
+ 			logger.error(&quot;Unable to export the DBLayer. Is the `codebase` set properly? Are stubs generated properly? &quot; + e.getMessage());
+ 			throw e;
+@@ -150,7 +149,7 @@
+ 	 * 
+ 	 * @param db	The DBLayer object (not stub!) that should be disconnected.
+ 	 */	
+-	void disconnect(DBLayer db)  
++	protected void disconnect(DBLayer db)  
+ 	throws RemoteException {
+ 		if(db == null)
+ 			return;
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -5,6 +5,7 @@
+ import java.rmi.RemoteException;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
++import java.rmi.server.RemoteObject;
+ import java.rmi.server.UnicastRemoteObject;
+ 
+ 
+@@ -57,7 +58,7 @@
+ 		this.settings = settings;
+ 		
+ 		// Control object that will return the server after the client passed a valid certif. information
+-		guard = new RMIServerControl(this, password);
++		guard = new RMIServerControl( (Server) RemoteObject.toStub(this), password);
+ 		RMI.bind(settings.getPort(), guard, Guard.ID);
+ 	}
+ 	
+@@ -163,5 +164,13 @@
+ 			logger.error(&quot;Unable to stop the server. &quot; + e.getMessage());
+ 		}
+ 	}
++	
++	/**
++	 * Test, whether the Server is still alive.
++	 */
++	public void ping() 
++	throws RemoteException {
++		logger.debug(&quot;Pinged!&quot;);
++	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServerControl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -9,7 +9,7 @@
+  * The Server Control guards the access to the Server 
+  * and prevents unauthorized Users from shutting it down.
+  * In order to manage the Server (terminate the Server, view
+- * the list of connected clients, disconnecting the clients)
++ * the list of connected clients, disconnecting the clients, etc.)
+  * the User must pass the authorization procedure and
+  * supply valid authorization key (password).
+  * 
+
+Modified: trunk/src/net/sf/plantlore/server/Server.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Server.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/Server.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -10,7 +10,6 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-03-29
+- * @version 1.0
+  */
+ public interface Server extends Remote, Serializable {
+ 	
+@@ -40,4 +39,11 @@
+ 	 */
+ 	void stop() throws RemoteException;
+ 	
++	
++	/**
++	 *	Test whether the server is alive.
++	 * 
++	 */
++	void ping() throws RemoteException;
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/ServerSettings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/ServerSettings.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -19,8 +19,8 @@
+ 	/**
+ 	 * Create new Server Settings.
+ 	 * 
+-	 * @param port	The port number where the listens.
+-	 * @param timeout	The ammount of time after which the crashed client's database layer
++	 * @param port	The port number where the server listens.
++	 * @param timeout	The ammount of time in minutes after which the crashed client's database layer
+ 	 * is automatically destroyed. 
+ 	 * @param connectionsTotal	The maximum number of clients connected to the server simultaneously.
+ 	 * @param connectionsPerIP	The maximum number of clients connected to the server 
+@@ -62,7 +62,7 @@
+ 	
+ 	/**
+ 	 * 
+-	 * @return		The port number where the listens.
++	 * @return		The port number where the server listens.
+ 	 */
+ 	public int getPort() {
+ 		return port;
+@@ -70,7 +70,7 @@
+ 	
+ 	/**
+ 	 * 
+-	 * @return	The ammount of time after which the crashed client's database layer
++	 * @return	The ammount of time in minutes after which the crashed client's database layer
+ 	 * is automatically destroyed. 
+ 	 */
+ 	public int getTimeout() {
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateCtrl.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -11,6 +11,14 @@
+ import net.sf.plantlore.server.RMIServer;
+ import net.sf.plantlore.server.ServerSettings;
+ 
++/**
++ * Gather the information from the dialog and
++ * perform the requested action - either conect to an already running
++ * Plantlore Server or create a new Plantlore Server.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-05-30
++  */
+ public class ServerCreateCtrl {
+ 
+ 	private ServerMngView mngView;
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/manager/ServerCreateView.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -14,13 +14,18 @@
+ import net.sf.plantlore.server.ServerSettings;
+ 
+ /**
++ * Open a dialog where the User can either create a new server (and specify the
++ * server's settings) or connect to an existing server (to administrate it).
+  *
+- * @author  yaa
++ * @author  Erik Kratochv&#237;l
+  */
+ public class ServerCreateView extends javax.swing.JFrame implements Observer {
+ 	
++	private ServerMng model;
++	
+     /** Creates new form ServerCreateView */
+     public ServerCreateView(ServerMng model) {
++    	this.model = model; 
+     	model.addObserver(this);
+     	
+         initComponents();
+@@ -52,7 +57,8 @@
+      * always regenerated by the Form Editor.
+      */
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+-    private void initComponents() {
++    @SuppressWarnings(&quot;static-access&quot;)
++	private void initComponents() {
+         plantloreLogo = new javax.swing.JPanel();
+         next = new javax.swing.JButton();
+         help = new javax.swing.JButton();
+@@ -330,14 +336,19 @@
+     protected javax.swing.JTextField serverPort;
+     // End of variables declaration//GEN-END:variables
+     
+-    
++    /**
++     * Hide the dialog if the connection or creation was successful.
++     */
+ 	public void update(Observable source, Object parameter) {
+-		if(parameter == ServerMng.CONNECTED)
++		
++		if(parameter == ServerMng.CONNECTED) {
++			model.deleteObserver(this);
+ 			java.awt.EventQueue.invokeLater(new Runnable() {
+ 				public void run() {
+ 					setVisible(false);
+ 				}
+ 			});
++		}
+ 	}
+           
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -23,35 +23,47 @@
+ import org.dom4j.io.XMLWriter;
+ 
+ import net.sf.plantlore.common.Task;
++import net.sf.plantlore.common.Utils;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.server.*;
+ import net.sf.plantlore.server.tools.RMI;
+ 
+ /**
+- * The server manager can
+- * either create a new server or connect to an existing server.
++ * The server manager can create the following tasks:
++ * &lt;ul&gt;
++ * &lt;li&gt;the Create a New Server task,&lt;/li&gt;
++ * &lt;li&gt;the Connect to an Existing Server task,&lt;/li&gt;
++ * &lt;li&gt;and the Terminate the Server task.&lt;/li&gt;
++ * &lt;/ol&gt;
+  * &lt;br/&gt;
+  * After the Server Administrator is logged in, he can control the server:
+  * &lt;ul&gt;
+- * &lt;li&gt;see the connected clients,&lt;/li&gt;
++ * &lt;li&gt;see the list of connected clients,&lt;/li&gt;
+  * &lt;li&gt;kick some of the connected clients,&lt;/li&gt;
+  * &lt;li&gt;terminate the server.&lt;/li&gt;
+  * &lt;/ul&gt;
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- * @version 1.0 final
++ * @version 1.0
+  */
+ public class ServerMng extends Observable {
+ 	
+-	public static final Object UPDATE_LIST = new Object();
+-	public static final Object CONNECTED = new Object();
++	/**
++	 * The message that is sent in case the list of connected clients
++	 * shall be refreshed.
++	 */
++	public static final Object UPDATE_LIST = &quot;UpdateTheListOfConnectedUsers&quot;;
+ 	
++	/**
++	 * The message that is sent in case the connection to the server
++	 * (or the server's creation) was successful.
++	 */
++	public static final Object CONNECTED = &quot;TheConnectionToTheServerIsAvailable&quot;;
++	
+ 	private static final String SERVER_CONFIG_NAME = &quot;plantlore.server.xml&quot;;
+ 	private static final String PLANTLORE = &quot;plantlore&quot;;
+ 	
+-	private String codebase;
+-	
+ 	/** The server control interface. */
+ 	private Server server;
+ 	private ServerSettings settings;
+@@ -59,6 +71,8 @@
+ 	/** List of connected clients. */
+ 	private ConnectionInfo[] clients;
+ 	
++	private boolean didWeCreateTheServer = false;
++	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	private String settingsFileName; {
+ 		String userHome = System.getProperty(&quot;user.home&quot;),
+@@ -73,14 +87,20 @@
+ 		settingsFileName = plantloreConfDir + File.separator + SERVER_CONFIG_NAME;
+ 	}
+ 	
+-	
++	/**
++	 * Create a new Server Manager.
++	 */
+ 	public ServerMng() {
+ 		getSettings(true);
+-		if(codebase != null &amp;&amp; codebase.length() &gt; 0)
+-			RMI.addToCodebase( codebase );
++		RMI.addToCodebase( Utils.getCodeBasePath() );
+ 	}
+ 	
+-	
++	/**
++	 * Obtain the settings of the server.
++	 * 
++	 * @param refresh	True if the settings shoud be reloaded from the configuration file.
++	 * @return	The settings of the server.
++	 */
+ 	public ServerSettings getSettings(boolean refresh) {
+ 		if( !refresh )
+ 			return settings;
+@@ -114,9 +134,6 @@
+             settings = new ServerSettings(port, 3, connections, perip, 
+             		new DatabaseSettings(databaseType, databasePort, databaseParameter));
+             
+-            // Load the codebase
+-            Node path = document.selectSingleNode(&quot;/config/codebase&quot;);
+-            codebase = path.getText();
+             
+ 		} catch(Exception e) {
+ 			logger.error(&quot;Unable to load settings. &quot; + e.getMessage());
+@@ -125,7 +142,11 @@
+ 	}
+ 	
+ 	
+-	
++	/**
++	 * Store the settings of the server into the file.
++	 * 
++	 * @param settings	The server's settings that shall be stored to the configuration file.
++	 */
+ 	public void setSettings(ServerSettings settings) {
+ 		this.settings = settings;
+ 		
+@@ -141,8 +162,6 @@
+ 		db.addElement(&quot;port&quot;).setText( &quot;&quot; + settings.getDatabaseSettings().getPort() );
+ 		db.addElement(&quot;parameter&quot;).setText(settings.getDatabaseSettings().getConnectionStringSuffix());
+ 		
+-		// Store the current codebase
+-		config.addElement(&quot;codebase&quot;).setText(codebase);
+ 
+ 		try {
+ 			Writer outputWriter = new BufferedWriter(
+@@ -163,9 +182,11 @@
+ 		
+ 	
+ 	/**
+-	 * Try to create and start a new server on the specified &lt;code&gt;port&lt;/code&gt;.
++	 * Create a new task, that will
++	 * try to create and start a new server on the specified &lt;code&gt;port&lt;/code&gt;.
+ 	 * The server will be protected with a &lt;code&gt;password&lt;/code&gt; so that 
+-	 * anyone who will try to connect to the server will have use that password.
++	 * anyone who will try to connect to the server (to administrate it) 
++	 * will have to use that password.
+ 	 * &lt;br/&gt;
+ 	 * It is &lt;b&gt;not&lt;/b&gt; possible to create a server on a remote machine
+ 	 * (because of security reasons).
+@@ -187,6 +208,8 @@
+ 				logger.info(&quot;Server up and running (port &quot; + settings.getPort() + &quot;).&quot;);
+ 				setStatusMessage(L10n.getString(&quot;Server.Info.ServerUpAndRunning&quot;));
+ 				
++				didWeCreateTheServer = true;
++				
+ 				announce(CONNECTED);
+ 				
+ 				fireStopped(null);
+@@ -196,7 +219,8 @@
+ 	}
+ 
+ 	/**
+-	 * Connect to an existing server on the selected &lt;code&gt;host&lt;/code&gt;
++	 * Create a new task, that will
++	 * connect to an existing server on the selected &lt;code&gt;host&lt;/code&gt;
+ 	 * listening on the selected &lt;code&gt;port&lt;/code&gt; using the &lt;code&gt;password&lt;/code&gt;.
+ 	 * 
+ 	 * @param host The hostname of the computer where the server is running.
+@@ -222,7 +246,11 @@
+ 		};
+ 	}
+ 	
+-	
++	/**
++	 * The notification of observers. 
++	 * 
++	 * @param event	The event that must be announced to the observers.
++	 */
+ 	private void announce(Object event) {
+ 		setChanged();
+ 		notifyObservers(event);
+@@ -230,9 +258,10 @@
+ 	
+ 
+ 	/**
+-	 * Get the list of connected clients.
+-	 * @return The updated list of connected clients so that you can see whom you can kick, 
+-	 * 	or null if we are not connected to some server.   
++	 * Crate a task, that will
++	 * update the list of currently connected clients; you should use
++	 * &lt;code&gt;getConnectedUsers()&lt;/code&gt; to obtain the updated list.
++	 * 
+ 	 */
+ 	public Task createUpdateConnectedUsersTask() {
+ 		return new Task() {
+@@ -256,7 +285,7 @@
+ 	}
+ 	
+ 	/**
+-	 * Get the list of connected clients.
++	 * Obtain the list of connected clients.
+ 	 * 
+ 	 * @return The (possibly outdated) list of connected clients so that you can see whom you can kick, 
+ 	 * 	or null if we are not connected to some server.   
+@@ -266,9 +295,10 @@
+ 	}
+ 	
+ 	/**
+-	 * Disconnect the selected client from the server.
++	 * Create a task, that will
++	 * disconnect the selected client from the server.
+ 	 * 
+-	 * @param client The client to be kicked out of the server.
++	 * @param client The client to be kicked from the server.
+ 	 */
+ 	public Task createKickTask(final ConnectionInfo client) {
+ 		return new Task() {
+@@ -295,8 +325,10 @@
+ 	}
+ 	
+ 	/**
+-	 * Terminate the server.
+-	 * &lt;b&gt;Warning:&lt;/b&gt; This will also kick all users as well.
++	 * Create a new task, that will
++	 * terminate the server and this application.
++	 * &lt;br/&gt;
++	 * &lt;b&gt;Warning:&lt;/b&gt; This will immediately kick all connected clients.
+ 	 */
+ 	public Task createTerminateServerTask()  {
+ 		return new Task() {
+@@ -319,5 +351,28 @@
+ 		};
+ 	}
+ 	
++	/**
++	 * 
++	 * @return	True if this model indeed created the server (i.e. it did not just connect to it). 
++	 */
++	public boolean didWeCreateTheServer() {
++		return didWeCreateTheServer;
++	}
+ 	
++	/**
++	 * 
++	 * @return	True if the server is alive.
++	 */
++	public boolean isServerAlive() {
++		boolean alive = true;
++		try {
++			server.ping();
++		} 
++		catch(Exception e) {
++			alive = false;
++		}
++		return alive;
++	}
++	
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -8,6 +8,7 @@
+ import net.sf.plantlore.server.ConnectionInfo;
+ 
+ /**
++ * Perform the requested operation from the view.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+@@ -20,7 +21,7 @@
+ 		view.kick.setAction(new StandardAction(&quot;Server.KickUser&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createKickTask( (ConnectionInfo)view.users.getSelectedValue() );
+-				new DefaultProgressBar(t, view, true);
++				new DefaultProgressBar(t, view, true, true);
+ 				t.start();			
+ 			}
+ 		});
+@@ -28,7 +29,7 @@
+ 		view.terminate.setAction(new StandardAction(&quot;Server.Terminate&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createTerminateServerTask();
+-				new DefaultProgressBar(t, view, true);
++				new DefaultProgressBar(t, view, true, true);
+ 				t.start();	
+ 			}
+ 		});
+@@ -36,15 +37,19 @@
+ 		view.refresh.setAction(new StandardAction(&quot;Server.Refresh&quot;) {
+ 			public void actionPerformed(ActionEvent arg0) {
+ 				Task t = model.createUpdateConnectedUsersTask();
+-				new DefaultProgressBar(t, view, true);
++				new DefaultProgressBar(t, view, true, true);
+ 				t.start();
+ 			}
+ 		});
+ 		
+ 		view.hide.setAction(new StandardAction(&quot;Server.Hide&quot;) {
+ 			public void actionPerformed(ActionEvent ae) {
++				model.deleteObserver( view );
+ 				view.setVisible(false);
+ 				view.dispose();
++				if( !model.didWeCreateTheServer() || !model.isServerAlive() ) {
++					System.exit(0);
++				}
+ 			}
+ 		});
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-09-03 06:24:27 UTC (rev 642)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-09-03 11:35:42 UTC (rev 643)
+@@ -13,7 +13,9 @@
+ import net.sf.plantlore.server.ConnectionInfo;
+ 
+ /**
+- * Server control dialog.
++ * The GUI for the Plantlore Server management.
++ * The User can see the list of currently connected clients,
++ * refresh it, kick some clients and terminate the Server.
+  *
+  * @author  Erik Kratochv&#237;l
+  */
+@@ -118,7 +120,8 @@
+ 
+ 
+     /**
+-     * Reload the list of the connected clients.
++     * Reload the list of the connected clients and
++     * show the dialog when the connection or the creation was successful.
+      */
+ 	public void update(Observable source, final Object parameter) {
+ 		if(parameter == ServerMng.UPDATE_LIST){
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000899.html">[Plantlore-dev] r642 - in trunk/installer: . postgresql
+</A></li>
+	<LI>Next message: <A HREF="000901.html">[Plantlore-dev] r644 - in trunk/src/net/sf/plantlore/server: .	manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#900">[ date ]</a>
+              <a href="thread.html#900">[ thread ]</a>
+              <a href="subject.html#900">[ subject ]</a>
+              <a href="author.html#900">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

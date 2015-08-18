@@ -1,0 +1,1019 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r159 - in trunk/src/net/sf/plantlore: client server server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r159%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20server%20server/manager&In-Reply-To=%3C200604201639.k3KGdnvu032408%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000162.html">
+   <LINK REL="Next"  HREF="000164.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r159 - in trunk/src/net/sf/plantlore: client server server/manager</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r159%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20server%20server/manager&In-Reply-To=%3C200604201639.k3KGdnvu032408%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r159 - in trunk/src/net/sf/plantlore: client server server/manager">krater at berlios.de
+       </A><BR>
+    <I>Thu Apr 20 18:39:49 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000162.html">[Plantlore-dev] r157 - trunk/analysis/biocase
+</A></li>
+        <LI>Next message: <A HREF="000164.html">[Plantlore-dev] r160 - in trunk/src/net/sf/plantlore: middleware server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#163">[ date ]</a>
+              <a href="thread.html#163">[ thread ]</a>
+              <a href="subject.html#163">[ subject ]</a>
+              <a href="author.html#163">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-20 18:39:31 +0200 (Thu, 20 Apr 2006)
+New Revision: 159
+
+Added:
+   trunk/src/net/sf/plantlore/server/manager/
+   trunk/src/net/sf/plantlore/server/manager/ServerLoginCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerLoginView.form
+   trunk/src/net/sf/plantlore/server/manager/ServerLoginView.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+   trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/RMIServerControl.java
+   trunk/src/net/sf/plantlore/server/Server.java
+Log:
+Server Manager (with GUI).
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -91,7 +91,7 @@
+         EventQueue.invokeLater( new SplashScreenCloser() );
+         logger.info(&quot;AppCore MVC constructed. Plantlore client should be visible now.&quot;);
+         } catch(RuntimeException e) {
+-            new ExceptionDialog(view,&quot;Some exception was thrown: &quot;+e);
++            //new ExceptionDialog(view,&quot;Some exception was thrown: &quot;+e);
+         }
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -1,11 +1,18 @@
+ package net.sf.plantlore.server;
+ 
+ 
++import java.io.IOException;
++import java.io.InputStream;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+ import java.util.Collection;
++import java.util.Properties;
+ 
++import org.apache.log4j.PropertyConfigurator;
+ 
++import net.sf.plantlore.server.manager.*;
++
++
+ /**
+  * Temporary solution.
+  * 
+@@ -15,10 +22,30 @@
+  */
+ public class Plantlore {
+ 	
+-	// Probably some more sophisticated method for obtaining a password from the user :)
+-	public static String getPassword() {
+-		return &quot;poweroverwhelming&quot;;
++	private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
++	
++	
++	public void run() {
++		// Load log4j settings
++        ClassLoader cl = this.getClass().getClassLoader();
++        InputStream is = cl.getResourceAsStream(LOGGER_PROPS);
++        Properties props = new Properties();
++        //FIXME:
++        try {
++            props.load(is);
++        } catch (IOException ex) {
++            ex.printStackTrace();
++        }
++        //maybe CHANGE to configureAndWatch()
++        PropertyConfigurator.configure(props);
++			
++		ServerMng model = new ServerMng();
++        ServerLoginView view = new ServerLoginView(model);
++        /*ServerMngChooseCtrl ctrl = */new ServerLoginCtrl(model, view);
++       	
++        view.setVisible(true);
+ 	}
++	
+ 
+ 	/**
+ 	 * 
+@@ -27,6 +54,9 @@
+ 	 */
+ 	public static void main(String[] args) {
+ 		
++		new Plantlore().run();
++		
++		/*
+ 		int m = args.length, port = RMIServer.DEFAULT_PORT, id = -1;
+ 		String command = &quot;start&quot;, host = null;
+ 		
+@@ -73,7 +103,7 @@
+ 					
+ 			}
+ 		} catch(Exception e) { System.err.println(e); }
+-		
++		*/
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -33,8 +33,8 @@
+ 	/** The default port where the rmiregistry listens. To that rmiregistry the RemoteDBLayerFactory will be bound to. */
+ 	public static final int DEFAULT_PORT = Registry.REGISTRY_PORT;
+ 	
+-	private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
+ 	
++	
+ 	private RMIRemoteDBLayerFactory remoteFactory = null;
+ 	private int port = DEFAULT_PORT;
+ 	private Guard guard = null;
+@@ -42,32 +42,18 @@
+ 	private Logger logger;
+ 
+ 	/** Create a new instance of RMIServer running on the default port. */
+-	public RMIServer() throws RemoteException, AlreadyBoundException {
+-		this(DEFAULT_PORT);
++	public RMIServer(String password) throws RemoteException, AlreadyBoundException {
++		this(DEFAULT_PORT, password);
+ 	}
+ 	
+ 	/** Create a new instance of RMIServer running on the specified port. */
+-	public RMIServer(int port) throws RemoteException, AlreadyBoundException {
+-		// Load log4j settings
+-        ClassLoader cl = this.getClass().getClassLoader();
+-        InputStream is = cl.getResourceAsStream(LOGGER_PROPS);
+-        Properties props = new Properties();
+-        //FIXME:
+-        try {
+-            props.load(is);
+-        } catch (IOException ex) {
+-            ex.printStackTrace();
+-        }
+-        //maybe CHANGE to configureAndWatch()
+-        PropertyConfigurator.configure(props);
+-        
+-        
++	public RMIServer(int port, String password) throws RemoteException, AlreadyBoundException {
+ 		this.port = port;
+ 		
+ 		logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 		
+ 		// Control object that will return the server after the client passed a valid certif. information
+-		guard = new RMIServerControl(this);
++		guard = new RMIServerControl(this, password);
+ 		RMI.bind(port, guard, Guard.ID);
+ 	}
+ 	
+@@ -156,7 +142,7 @@
+ 		String codebase = &quot;file:/&quot; + ((directory != null) ? directory : System.getProperty(&quot;user.dir&quot;)) + &quot;/&quot;;
+ 		codebase = codebase.replaceAll(&quot; &quot;, &quot;%20&quot;); // to prevent the MalformedURLException
+ 		System.setProperty(&quot;java.rmi.server.codebase&quot;, codebase);
+-		System.out.println(&quot;java.rmi.server.codebase = &quot; + codebase);
++		//System.out.println(&quot;java.rmi.server.codebase = &quot; + codebase);
+ 		
+ 		System.setProperty(&quot;java.rmi.dgc.leaseValue&quot;, &quot;30000&quot;); // 30 seconds, just for DEBUG.REASONS
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServerControl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/RMIServerControl.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -6,13 +6,15 @@
+ public class RMIServerControl extends UnicastRemoteObject implements Guard {
+ 	
+ 	private Server server;
++	private String password;
+ 
+-	public RMIServerControl(Server server) throws RemoteException {
++	public RMIServerControl(Server server, String password) throws RemoteException {
+ 		this.server = server;
++		this.password = password;
+ 	}
+ 	
+ 	public Server certify(String authorizationInfo) throws RemoteException {
+-		if(authorizationInfo.equals(&quot;poweroverwhelming&quot;)) return server;
++		if(authorizationInfo.equals(password)) return server;
+ 		return null;
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/Server.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Server.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/Server.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -23,7 +23,7 @@
+ 	 * @return Currently connected clients.
+ 	 * @throws RemoteException	if the RMI encounters an error (network/server).
+ 	 */
+-	Collection&lt;? extends E&gt;	getClients() throws RemoteException;
++	Collection&lt;/*? extends */E&gt;	getClients() throws RemoteException;
+ 	
+ 	/**
+ 	 * &quot;Kick&quot; the specified client. The client is disconnected immediately.
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerLoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerLoginCtrl.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerLoginCtrl.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,81 @@
++package net.sf.plantlore.server.manager;
++
++import java.awt.event.ActionEvent;
++import java.rmi.AlreadyBoundException;
++import java.rmi.NotBoundException;
++import java.rmi.RemoteException;
++
++import javax.swing.AbstractAction;
++import javax.swing.JOptionPane;
++
++
++public class ServerLoginCtrl {
++	
++	private ServerMng model;
++	private ServerLoginView view;
++	
++	private ServerMngView serverView;
++	private ServerMngCtrl serverCtrl;
++	
++	
++	
++	
++	public ServerLoginCtrl(ServerMng model, ServerLoginView view) {
++		this.view = view;
++		this.model = model;
++		
++		view.next.addActionListener(new ConnectCreate());
++		view.connectExisting.addActionListener(new SelectExisting());
++		view.createNew.addActionListener(new SelectNew());
++		
++		serverView = new ServerMngView(model);
++		serverCtrl = new ServerMngCtrl(model, serverView);
++	}
++	
++	
++	class ConnectCreate extends AbstractAction {
++		public void actionPerformed(ActionEvent e) {
++			String hp = view.host.getText(), host;
++			int t = hp.indexOf(':'), port = 1099;
++			if(t &lt; 0) host = hp;
++			else { host = hp.substring(0, t); port = Integer.parseInt(hp.substring(t + 1)); }
++			try {
++				model.actAsInstructed(host, port, new String(view.password.getPassword()));
++			} catch(RemoteException re) { 
++				JOptionPane.showMessageDialog(view,
++					    &quot;Unable to connect to the server.\n The server is either not running,\n or there is a network problem.&quot;,
++					    &quot;Remoting problem...&quot;,
++					    JOptionPane.WARNING_MESSAGE);
++				return;
++			} catch(AlreadyBoundException abe) {
++				JOptionPane.showMessageDialog(view,
++					    &quot;Another server is already running on the selected port (&quot; + abe + &quot;). Didn't you want to connect to it?&quot;,
++					    &quot;Server collision problem...&quot;,
++					    JOptionPane.WARNING_MESSAGE);
++				return;
++			} catch(NotBoundException nbe) {
++				JOptionPane.showMessageDialog(view,
++					    &quot;There is no server running on the specified host and port (&quot; + nbe + &quot;).&quot;,
++					    &quot;Server connection problem...&quot;,
++					    JOptionPane.WARNING_MESSAGE);
++				return;
++			}
++			
++			view.setVisible(false);
++			serverView.setVisible(true);
++		}
++	}
++	
++	class SelectNew extends AbstractAction {
++		public void actionPerformed(ActionEvent e) {
++			model.setMode(ServerMng.Mode.CREATE_NEW);
++		}
++	}
++	
++	class SelectExisting extends AbstractAction {
++		public void actionPerformed(ActionEvent e) {
++			model.setMode(ServerMng.Mode.CONNECT_EXISTING);
++		}
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerLoginView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerLoginView.form	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerLoginView.form	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,150 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;NonVisualComponents&gt;
++    &lt;Component class=&quot;javax.swing.ButtonGroup&quot; name=&quot;buttonGroup1&quot;&gt;
++    &lt;/Component&gt;
++  &lt;/NonVisualComponents&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;imageHere&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;createNew&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;connectExisting&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jLabel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;host&quot; alignment=&quot;0&quot; pref=&quot;347&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;password&quot; alignment=&quot;0&quot; pref=&quot;347&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;next&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;imageHere&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;createNew&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;connectExisting&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;host&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;password&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;next&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Host:port&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Password&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;host&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;localhost:1099&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JPasswordField&quot; name=&quot;password&quot;&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;next&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;next&quot;/&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;imageHere&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;background&quot; type=&quot;java.awt.Color&quot; editor=&quot;org.netbeans.beaninfo.editors.ColorEditor&quot;&gt;
++          &lt;Color blue=&quot;0&quot; green=&quot;0&quot; red=&quot;0&quot; type=&quot;rgb&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;0&quot; pref=&quot;397&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;0&quot; pref=&quot;198&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;createNew&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;buttonGroup&quot; type=&quot;javax.swing.ButtonGroup&quot; editor=&quot;org.netbeans.modules.form.RADComponent$ButtonGroupPropertyEditor&quot;&gt;
++          &lt;ComponentRef name=&quot;buttonGroup1&quot;/&gt;
++        &lt;/Property&gt;
++        &lt;Property name=&quot;selected&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Create and start a new server&quot;/&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
++            &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
++          &lt;/Border&gt;
++        &lt;/Property&gt;
++        &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
++          &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;connectExisting&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;buttonGroup&quot; type=&quot;javax.swing.ButtonGroup&quot; editor=&quot;org.netbeans.modules.form.RADComponent$ButtonGroupPropertyEditor&quot;&gt;
++          &lt;ComponentRef name=&quot;buttonGroup1&quot;/&gt;
++        &lt;/Property&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Connect to a running server&quot;/&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
++            &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
++          &lt;/Border&gt;
++        &lt;/Property&gt;
++        &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
++          &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerLoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerLoginView.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerLoginView.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,136 @@
++/*
++ * ServerLoginView.java
++ *
++ * Created on 20. duben 2006, 10:30
++ */
++
++package net.sf.plantlore.server.manager;
++
++import javax.swing.JDialog;
++
++/**
++ *
++ * @author  yaa
++ */
++public class ServerLoginView extends javax.swing.JDialog {
++	
++	ServerMng model;
++    
++    /** Creates new form ServerLoginView */
++    public ServerLoginView(ServerMng model) {
++    	this.model = model;
++        initComponents();
++        setLocationRelativeTo(null); // center of the screen
++        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++        setModal(true);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        buttonGroup1 = new javax.swing.ButtonGroup();
++        jLabel1 = new javax.swing.JLabel();
++        jLabel2 = new javax.swing.JLabel();
++        host = new javax.swing.JTextField();
++        password = new javax.swing.JPasswordField();
++        next = new javax.swing.JButton();
++        imageHere = new javax.swing.JPanel();
++        createNew = new javax.swing.JRadioButton();
++        connectExisting = new javax.swing.JRadioButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
++        jLabel1.setText(&quot;Host:port&quot;);
++
++        jLabel2.setText(&quot;Password&quot;);
++
++        host.setText(&quot;localhost:1099&quot;);
++
++        next.setText(&quot;next&quot;);
++
++        imageHere.setBackground(new java.awt.Color(0, 0, 0));
++        org.jdesktop.layout.GroupLayout imageHereLayout = new org.jdesktop.layout.GroupLayout(imageHere);
++        imageHere.setLayout(imageHereLayout);
++        imageHereLayout.setHorizontalGroup(
++            imageHereLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(0, 397, Short.MAX_VALUE)
++        );
++        imageHereLayout.setVerticalGroup(
++            imageHereLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(0, 198, Short.MAX_VALUE)
++        );
++
++        buttonGroup1.add(createNew);
++        createNew.setSelected(true);
++        createNew.setText(&quot;Create and start a new server&quot;);
++        createNew.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        createNew.setMargin(new java.awt.Insets(0, 0, 0, 0));
++
++        buttonGroup1.add(connectExisting);
++        connectExisting.setText(&quot;Connect to a running server&quot;);
++        connectExisting.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        connectExisting.setMargin(new java.awt.Insets(0, 0, 0, 0));
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(imageHere, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(createNew)
++                    .add(connectExisting)
++                    .add(layout.createSequentialGroup()
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jLabel1)
++                            .add(jLabel2))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(host, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 347, Short.MAX_VALUE)
++                            .add(password, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 347, Short.MAX_VALUE)))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, next))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(imageHere, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(createNew)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(connectExisting)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel1)
++                    .add(host, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel2)
++                    .add(password, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(next)
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    private javax.swing.ButtonGroup buttonGroup1;
++    protected javax.swing.JRadioButton connectExisting;
++    protected javax.swing.JRadioButton createNew;
++    protected javax.swing.JTextField host;
++    protected javax.swing.JPanel imageHere;
++    private javax.swing.JLabel jLabel1;
++    private javax.swing.JLabel jLabel2;
++    protected javax.swing.JButton next;
++    protected javax.swing.JPasswordField password;
++    // End of variables declaration//GEN-END:variables
++    
++}
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,102 @@
++package net.sf.plantlore.server.manager;
++
++import java.rmi.AlreadyBoundException;
++import java.rmi.NotBoundException;
++import java.rmi.RemoteException;
++import java.rmi.registry.LocateRegistry;
++import java.rmi.registry.Registry;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Observable;
++
++import org.apache.log4j.Logger;
++
++
++import net.sf.plantlore.server.*;
++
++
++public class ServerMng extends Observable {
++	
++	private Server&lt;ConnectionInfo&gt; server;
++	private Collection&lt;ConnectionInfo&gt; clients, selected;
++	
++	public enum Mode { CREATE_NEW, CONNECT_EXISTING };
++	
++	private Mode mode = Mode.CREATE_NEW;
++	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
++		
++	
++	public void startNewServer(int port, String password) throws AlreadyBoundException, RemoteException {
++		logger.info(&quot;Creating a new server at localhost:&quot; + port);
++		server = new RMIServer(port, password);
++		logger.info(&quot;Starting the server ...&quot;);
++		server.start();
++		logger.info(&quot;Server up and running&quot;);
++	}
++
++	
++	public void connectToRunningServer(String host, int port, String password) throws RemoteException, NotBoundException {
++		logger.info(&quot;Connecting to a running server at &quot; +host+&quot;:&quot;+port);
++		Registry registry = LocateRegistry.getRegistry(host, port);
++		Guard guard = (Guard) registry.lookup(Guard.ID);
++		server = guard.certify(password);
++	}
++	
++	
++	public void actAsInstructed(String host, int port, String password) throws RemoteException, NotBoundException, AlreadyBoundException {
++		if(mode == Mode.CREATE_NEW) startNewServer(port, password);
++		else connectToRunningServer(host, port, password);
++	}
++	
++	
++	public ConnectionInfo[] getConnectedUsers() {
++		if(server == null) return null;
++		try {
++			clients = /*(Collection&lt;ConnectionInfo&gt;)*/server.getClients();
++			logger.debug(&quot;Clients connected to the server received.&quot;);
++			setChanged(); notifyObservers(&quot;PH&quot;);
++		} catch( RemoteException e) { logger.warn(&quot;Unable to obtain the list of connected users - network error?&quot;); }
++		return clients.toArray(new ConnectionInfo[0]);
++	}
++	
++	
++	public void setSelectedClients(ConnectionInfo[] selected) {
++		this.selected = new ArrayList&lt;ConnectionInfo&gt;(selected.length + 2);
++		for(ConnectionInfo client : selected) this.selected.add(client);
++		logger.debug(&quot;Selected clients stored.&quot;);
++	}
++	
++	
++	public void kickSelectedClients() throws RemoteException {
++		if(server == null) return;
++		for(ConnectionInfo client : selected) {
++			logger.info(&quot;Kicking &quot; + client);
++			server.disconnect(client);
++		}
++		logger.debug(&quot;All selected clients have been kicked.&quot;);
++		getConnectedUsers();
++	}
++	
++	
++	public void terminateServer() throws RemoteException {
++		if(server != null) server.stop(true);
++		logger.info(&quot;Server terminated - all clients disconnected.&quot;);
++	}
++	
++	public void stopServer() throws RemoteException {
++		if(server !=null) server.stop(false);
++		logger.debug(&quot;Server stopped - the server will terminate after the last client finishes his work.&quot;);
++	}
++	
++	
++	public void setMode(Mode m) {
++		this.mode = m;
++		logger.debug(&quot;Server mode &quot; + mode);
++		setChanged(); notifyObservers(this.mode);
++	}
++	
++	public Mode getMode() { 
++		return this.mode; 
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngCtrl.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,63 @@
++package net.sf.plantlore.server.manager;
++
++import java.awt.event.ActionEvent;
++import java.rmi.RemoteException;
++
++import javax.swing.AbstractAction;
++import javax.swing.event.ListSelectionEvent;
++import javax.swing.event.ListSelectionListener;
++
++import net.sf.plantlore.server.ConnectionInfo;
++
++public class ServerMngCtrl {
++	
++	private ServerMngView view;
++	private ServerMng model;
++	
++	public ServerMngCtrl(ServerMng model, ServerMngView view) {
++		this.model = model; this. view = view;
++		
++		view.users.addListSelectionListener(new SelectionChange());
++		view.kick.addActionListener(new KickUsers());
++		view.startstop.addActionListener(new StopServer());
++		view.terminate.addActionListener(new TerminateServer());
++	}
++	
++	class SelectionChange implements ListSelectionListener {
++		public void valueChanged(ListSelectionEvent lse) {
++			ConnectionInfo[] selected = (ConnectionInfo[])view.users.getSelectedValues();
++			model.setSelectedClients(selected);			
++		}
++	}
++	
++	class KickUsers extends AbstractAction {
++		public void actionPerformed(ActionEvent ae) {
++			try {
++				model.kickSelectedClients();
++			} catch(RemoteException re) { }
++		}
++	}
++	
++	class StopServer extends AbstractAction {
++		public void actionPerformed(ActionEvent ae) {
++			try {
++				model.stopServer();
++			} catch(RemoteException re) { }
++		}
++	}
++	
++	class TerminateServer extends AbstractAction {
++		public void actionPerformed(ActionEvent ae) {
++			try {
++				model.terminateServer();
++			} catch(RemoteException re) { }
++		}
++	}
++	
++	class Refresh extends AbstractAction {
++		public void actionPerformed(ActionEvent ae) {
++				model.getConnectedUsers();
++		}
++	}
++
++}
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerMngView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.form	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,78 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Component id=&quot;jToolBar1&quot; alignment=&quot;0&quot; pref=&quot;523&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;10&quot; pref=&quot;10&quot; max=&quot;10&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;503&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Component id=&quot;jToolBar1&quot; min=&quot;-2&quot; pref=&quot;25&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;258&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Container class=&quot;javax.swing.JToolBar&quot; name=&quot;jToolBar1&quot;&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.DesignBoxLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;kick&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Kick users&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;startstop&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Stop server&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;terminate&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Terminate server&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JList&quot; name=&quot;users&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ListModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ListModelEditor&quot;&gt;
++              &lt;StringArray count=&quot;0&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/server/manager/ServerMngView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-04-19 23:51:34 UTC (rev 158)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMngView.java	2006-04-20 16:39:31 UTC (rev 159)
+@@ -0,0 +1,95 @@
++/*
++ * ServerView2.java
++ *
++ * Created on 20. duben 2006, 10:16
++ */
++
++package net.sf.plantlore.server.manager;
++
++import java.util.Observable;
++import java.util.Observer;
++
++/**
++ *
++ * @author  yaa
++ */
++public class ServerMngView extends javax.swing.JFrame implements Observer {
++	
++	private ServerMng model;
++	
++    
++    /** Creates new form ServerView2 */
++    public ServerMngView(ServerMng model) {
++    	this.model = model;
++    	model.addObserver(this);
++    	
++        initComponents();
++        setLocationRelativeTo(null); // center of the screen
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jToolBar1 = new javax.swing.JToolBar();
++        kick = new javax.swing.JButton();
++        startstop = new javax.swing.JButton();
++        terminate = new javax.swing.JButton();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        users = new javax.swing.JList();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        kick.setText(&quot;Kick users&quot;);
++        jToolBar1.add(kick);
++
++        startstop.setText(&quot;Stop server&quot;);
++        jToolBar1.add(startstop);
++
++        terminate.setText(&quot;Terminate server&quot;);
++        jToolBar1.add(terminate);
++
++        jScrollPane1.setViewportView(users);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jToolBar1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 523, Short.MAX_VALUE)
++            .add(layout.createSequentialGroup()
++                .add(10, 10, 10)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 503, Short.MAX_VALUE)
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .add(jToolBar1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 25, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 258, Short.MAX_VALUE)
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    private javax.swing.JScrollPane jScrollPane1;
++    private javax.swing.JToolBar jToolBar1;
++    protected javax.swing.JButton kick;
++    protected javax.swing.JButton startstop;
++    protected javax.swing.JButton terminate;
++    protected javax.swing.JList users;
++    // End of variables declaration//GEN-END:variables
++
++
++    
++	public void update(Observable source, Object parameter) {
++		if(parameter != null &amp;&amp; parameter.toString().startsWith(&quot;PH&quot;))
++			users.setListData(model.getConnectedUsers());
++	}
++    
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000162.html">[Plantlore-dev] r157 - trunk/analysis/biocase
+</A></li>
+	<LI>Next message: <A HREF="000164.html">[Plantlore-dev] r160 - in trunk/src/net/sf/plantlore: middleware server server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#163">[ date ]</a>
+              <a href="thread.html#163">[ thread ]</a>
+              <a href="subject.html#163">[ subject ]</a>
+              <a href="author.html#163">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

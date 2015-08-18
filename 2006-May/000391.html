@@ -1,0 +1,1413 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r341 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r341%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605241639.k4OGdVK0010604%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000390.html">
+   <LINK REL="Next"  HREF="000392.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r341 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r341%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605241639.k4OGdVK0010604%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r341 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Wed May 24 18:39:31 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000390.html">[Plantlore-dev] r340 - in trunk/src/net/sf/plantlore: client/export client/imports l10n
+</A></li>
+        <LI>Next message: <A HREF="000392.html">[Plantlore-dev] r342 - in trunk/src/net/sf/plantlore: client/export help/cs/html help/cs/html/picture help/en/html help/en/html/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#391">[ date ]</a>
+              <a href="thread.html#391">[ thread ]</a>
+              <a href="subject.html#391">[ subject ]</a>
+              <a href="author.html#391">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-24 18:39:21 +0200 (Wed, 24 May 2006)
+New Revision: 341
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/SettingsCtrl.java
+   trunk/src/net/sf/plantlore/client/SettingsView.form
+   trunk/src/net/sf/plantlore/client/SettingsView.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Thorough localization of Settings.
+Better loading of dialog data + proper exception handling. Maybe it still needs tuning in AppCoreCtrl.
+Fixed a minor bug in Settings Columns tab - if you pressed the Down button without previously selecting an item it threw and exception.
+Added some logging to DBLayerUtils.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -487,7 +487,7 @@
+             plant = (Plant)dlu.getObjectFor(id,Plant.class);
+ 
+         publ = new Publication();
+-        if (publication != null)
++        if (publication != null &amp;&amp; !publication.getSecond().equals(-1))
+             publ = (Publication)dlu.getObjectFor(publication.getSecond(),Publication.class);
+             
+         occ.setDayCollected(day);
+@@ -509,7 +509,8 @@
+         occ.setMonthCollected(month);
+         occ.setNote(occurrenceNote);
+         occ.setPlant(plant);
+-        occ.setPublication(publ);
++        if (publication != null)
++            occ.setPublication(publ);
+         occ.setTimeCollected(time);
+         occ.setYearCollected(year);
+         
+@@ -1191,6 +1192,7 @@
+     //we need to clear, create default values for all values that can be null
+     //the not null values are forced by calling checkData before store()
+     public void clear() {
++        logger.debug(&quot;Clearing add model&quot;);
+         clearAuthors();
+         habitatDescription = &quot;&quot;;
+         year = Calendar.getInstance().get(Calendar.YEAR);
+@@ -1203,7 +1205,6 @@
+         latitude = 0.0;
+         source = &quot;&quot;;
+         publication = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
+-        
+         herbarium = &quot;&quot;;
+         
+         month = Calendar.getInstance().get(Calendar.MONTH);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -130,23 +130,23 @@
+         return this.database;
+     }    
+     
+-    protected void setDatabase(DBLayer dblayer) {
++    protected void setDatabase(DBLayer dblayer) throws RemoteException, DBLayerException {
+     	this.database = dblayer;
+         loadDialogData();
+     }
+     
+-    public void loadDialogData() {
++    public void loadDialogData() throws RemoteException, DBLayerException {
+         logger.info(&quot;Loading dialog data ...&quot;);
+-        plants = null; getPlants();
+-        authors = null; getAuthors();
+-        authorRoles = null; getAuthorRoles();
+-        villages = null; getVillages();
+-        phytNames = null; getPhytNames(); //loads phytCodes too
+-        territories = null; getTerritories();
+-        countries = null; getCountries();
+-        sources = null; getSources();
+-        publications = null; getPublications();
+-        projects = null; getProjects();
++        loadPlants();
++        loadAuthors();
++        loadAuthorRoles();
++        loadVillages();
++        loadPhytNames(); //loads phytCodes too
++        loadTerritories();
++        loadCountries();
++        loadSources();
++        loadPublications();
++        loadProjects();
+         logger.debug(&quot;Dialog data loaded.&quot;);
+     }
+     
+@@ -330,353 +330,250 @@
+     	return usingProjections;
+     }
+     
+-    public Pair&lt;String, Integer&gt;[] getPlants() {
+-        if (plants == null)
++    public Pair&lt;String, Integer&gt;[] loadPlants() throws RemoteException, DBLayerException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++        Object[] row;
++
++        sq = database.createQuery(Plant.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Plant.TAXON);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Plant.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        plants = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            Object[] row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Plant.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Plant.TAXON);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Plant.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                System.out.println(&quot;getPlants(): we got &quot;+resultsCount+&quot; results.&quot;);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                plants = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    plants[i] = new Pair((String)row[0], (Integer)row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return plants;
+-        } else
+-            return plants;
++            row = (Object[])records[i];
++            plants[i] = new Pair((String)row[0], (Integer)row[1]);
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; plants.&quot;);
++        return plants;
+     }
+     
+-    public Pair&lt;String, Integer&gt;[] getAuthors() {
+-        if (authors == null)
+-        {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            Object[] row;
++    public Pair&lt;String, Integer&gt;[] loadAuthors() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++        Object[] row;
+ 
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Author.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Author.WHOLENAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Author.WHOLENAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Author.ID);
+-                
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                authors = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    authors[i] = new Pair&lt;String, Integer&gt;((String)row[0], (Integer)row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return authors;
+-        } else
+-            return authors;
++        sq = database.createQuery(Author.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Author.WHOLENAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Author.WHOLENAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Author.ID);
++
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        authors = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
++        {
++            row = (Object[])records[i];
++            authors[i] = new Pair&lt;String, Integer&gt;((String)row[0], (Integer)row[1]);
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; authors.&quot;);
++        return authors;
+     }
+     
+-    public String[] getAuthorRoles() {
+-        if (authorRoles == null)
+-        {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
++    public String[] loadAuthorRoles() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
+ 
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(AuthorOccurrence.class);
+-                sq.addProjection(PlantloreConstants.PROJ_DISTINCT,AuthorOccurrence.ROLE);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, AuthorOccurrence.ROLE);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                authorRoles = new String[resultsCount];
+-                String r;
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    r = (String)((Object[])records[i])[0];
+-                    authorRoles[i] = r;
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return authorRoles;
+-        } else
+-            return authorRoles;
++        sq = database.createQuery(AuthorOccurrence.class);
++        sq.addProjection(PlantloreConstants.PROJ_DISTINCT,AuthorOccurrence.ROLE);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, AuthorOccurrence.ROLE);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        authorRoles = new String[resultsCount];
++        String r;
++        for (int i = 0; i &lt; resultsCount; i++)
++        {
++            r = (String)((Object[])records[i])[0];
++            authorRoles[i] = r;
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; author roles.&quot;);
++        return authorRoles;
+     }
+ 
+-    public Pair&lt;String, Integer&gt;[] getVillages() {
+-        if (villages == null)
++    public Pair&lt;String, Integer&gt;[] loadVillages() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++        Object[] row;
++
++        sq = database.createQuery(Village.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Village.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Village.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Village.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        villages = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            Object[] row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Village.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Village.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Village.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Village.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                villages = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    villages[i] = new Pair&lt;String, Integer&gt;((String)row[0],(Integer)row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return villages;
+-        } else
+-            return villages;
++            row = (Object[])records[i];
++            villages[i] = new Pair&lt;String, Integer&gt;((String)row[0],(Integer)row[1]);
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; villages.&quot;);
++        return villages;
+     }
+ 
+-    public Pair&lt;String, Integer&gt;[] getTerritories() {
+-        if (territories == null)
++    public Pair&lt;String, Integer&gt;[] loadTerritories() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++        Object[] row;
++
++        sq = database.createQuery(Territory.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Territory.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Territory.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Territory.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        territories = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            Object[] row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Territory.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Territory.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Territory.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Territory.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                territories = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    territories[i] = new Pair&lt;String,Integer&gt;((String)row[0],(Integer)row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return territories;
+-        } else
+-            return territories;
++            row = (Object[])records[i];
++            territories[i] = new Pair&lt;String,Integer&gt;((String)row[0],(Integer)row[1]);
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; territories.&quot;);
++        return territories;
+     }
+     
+-    public Pair&lt;String, Integer&gt;[] getPhytNames() {
+-        if (phytNames == null)
++    public Pair&lt;String, Integer&gt;[] loadPhytNames() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records, row;
++
++        sq = database.createQuery(Phytochorion.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Phytochorion.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.NAME);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.CODE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        phytNames = new Pair[resultsCount];
++        phytCodes = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records, row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Phytochorion.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Phytochorion.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.NAME);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.CODE);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, Phytochorion.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                phytNames = new Pair[resultsCount];
+-                phytCodes = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    phytNames[i] = new Pair&lt;String,Integer&gt;((String)row[0], (Integer)row[2]);
+-                    phytCodes[i] = new Pair&lt;String,Integer&gt;((String)row[1], (Integer)row[2]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return phytNames;
+-        } else
+-            return phytNames;
++            row = (Object[])records[i];
++            phytNames[i] = new Pair&lt;String,Integer&gt;((String)row[0], (Integer)row[2]);
++            phytCodes[i] = new Pair&lt;String,Integer&gt;((String)row[1], (Integer)row[2]);
++        }
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; phytochoria.&quot;);
++        return phytNames;
+     }
+     
+-    public Pair&lt;String, Integer&gt;[] getPhytCodes() {
+-        if (phytCodes == null)
+-        {
+-            getPhytNames();
+-            return phytCodes;
+-        } else
+-            return phytCodes;
++    public Pair&lt;String, Integer&gt;[] loadPhytCodes() throws DBLayerException, RemoteException {
++        loadPhytNames();
++        return phytCodes;
+     }
+     
+-    public String[] getCountries() {
+-        if (countries == null)
++    public String[] loadCountries() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        int uniqueCount = 0;
++        Object[] records;
++        String country;
++
++        sq = database.createQuery(Habitat.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Habitat.COUNTRY);
++        sq.addProjection(PlantloreConstants.PROJ_DISTINCT, Habitat.COUNTRY);
++        resultid = database.executeQuery(sq); // the values can be doubled, we need to filter them 
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        countries = new String[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            int uniqueCount = 0;
+-            Object[] records;
+-            String country;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Habitat.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Habitat.COUNTRY);
+-                sq.addProjection(PlantloreConstants.PROJ_DISTINCT, Habitat.COUNTRY);
+-                resultid = database.executeQuery(sq); // the values can be doubled, we need to filter them 
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                countries = new String[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    country = (String)((Object[])records[i])[0];
+-                    countries[i] = country;
+-                }
+-                
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return countries;
+-        } else
+-            return countries;        
++            country = (String)((Object[])records[i])[0];
++            countries[i] = country;
++        }
++
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; countries.&quot;);
++        return countries;
+     }
+     
+-    public String[] getSources() {
+-        if (sources == null)
+-        {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Occurrence.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.DATASOURCE);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Occurrence.DATASOURCE);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                sources = new String[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    sources[i] = (String)((Object[])records[i])[0];
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return sources;
+-        } else
+-            return sources;
++    public String[] loadSources() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++
++        sq = database.createQuery(Occurrence.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.DATASOURCE);
++        sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Occurrence.DATASOURCE);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        sources = new String[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
++            sources[i] = (String)((Object[])records[i])[0];
++
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; sources.&quot;);
++        return sources;
+     }
+     
+-    public Pair&lt;String, Integer&gt;[] getPublications() {
+-        if (publications == null)
++    public Pair&lt;String, Integer&gt;[] loadPublications() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records;
++        Object[] row;
++
++        sq = database.createQuery(Publication.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Publication.REFERENCECITATION);
++        sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Publication.REFERENCECITATION);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Publication.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        publications = new Pair[resultsCount+1];
++        publications[0] = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1); //allow the user to enter a null value
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records;
+-            Object[] row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Publication.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Publication.REFERENCECITATION);
+-                sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Publication.REFERENCECITATION);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Publication.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                publications = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    publications[i] = new Pair(row[0], row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return publications;
+-        } else
+-            return publications;
++            row = (Object[])records[i];
++            publications[i] = new Pair(row[0], row[1]);
++        }
++
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; publications.&quot;);
++        return publications;
+     }
+ 
+-    public Pair&lt;String, Integer&gt;[] getProjects() {
+-        if (projects == null)
++    public Pair&lt;String, Integer&gt;[] loadProjects() throws DBLayerException, RemoteException {
++        SelectQuery sq;
++        int resultid;
++        int resultsCount;
++        Object[] records,row;
++
++        sq = database.createQuery(Metadata.class);
++        sq.addOrder(PlantloreConstants.DIRECT_ASC, Metadata.DATASETTITLE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Metadata.DATASETTITLE);
++        sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Metadata.ID);
++        resultid = database.executeQuery(sq);
++        resultsCount = database.getNumRows(resultid);
++        records = database.more(resultid, 0, resultsCount-1);
++        projects = new Pair[resultsCount];
++        for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            SelectQuery sq;
+-            int resultid;
+-            int resultsCount;
+-            Object[] records,row;
+-            
+-            //FIXME:
+-            try {
+-                sq = database.createQuery(Metadata.class);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, Metadata.DATASETTITLE);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Metadata.DATASETTITLE);
+-                sq.addProjection(PlantloreConstants.PROJ_PROPERTY,Metadata.ID);
+-                resultid = database.executeQuery(sq);
+-                resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 0, resultsCount-1);
+-                projects = new Pair[resultsCount];
+-                for (int i = 0; i &lt; resultsCount; i++)
+-                {
+-                    row = (Object[])records[i];
+-                    projects[i] = new Pair(row[0], row[1]);
+-                }
+-            } catch (RemoteException ex) {
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                ex.printStackTrace();
+-            }            
+-            return projects;
+-        } else
+-            return projects;
++            row = (Object[])records[i];
++            projects[i] = new Pair(row[0], row[1]);
++        }
++
++        logger.info(&quot;Loaded: &quot;+resultsCount+&quot; projects.&quot;);
++        return projects;
+     }
+     
+     public MainConfig getMainConfig() {
+@@ -687,11 +584,94 @@
+         assert database != null;
+         
+         tableSorter.setDatabase(database);
+-        /*Search search = new Search(getDatabase());
+-        search.setColumns(columns);
+-        search.constructQuery();
+-        setResultId(search.getNewResultId()); */
+-        //setExportQuery(search.getExportQuery(), false, null);
+     }
++
++    public Pair&lt;String, Integer&gt;[] getPlants() {
++        return plants;
++    }
++
++    public void setPlants(Pair&lt;String, Integer&gt;[] plants) {
++        this.plants = plants;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getAuthors() {
++        return authors;
++    }
++
++    public void setAuthors(Pair&lt;String, Integer&gt;[] authors) {
++        this.authors = authors;
++    }
++
++    public String[] getAuthorRoles() {
++        return authorRoles;
++    }
++
++    public void setAuthorRoles(String[] authorRoles) {
++        this.authorRoles = authorRoles;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getVillages() {
++        return villages;
++    }
++
++    public void setVillages(Pair&lt;String, Integer&gt;[] villages) {
++        this.villages = villages;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getTerritories() {
++        return territories;
++    }
++
++    public void setTerritories(Pair&lt;String, Integer&gt;[] territories) {
++        this.territories = territories;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getPhytNames() {
++        return phytNames;
++    }
++
++    public void setPhytNames(Pair&lt;String, Integer&gt;[] phytNames) {
++        this.phytNames = phytNames;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getPhytCodes() {
++        return phytCodes;
++    }
++
++    public void setPhytCodes(Pair&lt;String, Integer&gt;[] phytCodes) {
++        this.phytCodes = phytCodes;
++    }
++
++    public String[] getCountries() {
++        return countries;
++    }
++
++    public void setCountries(String[] countries) {
++        this.countries = countries;
++    }
++
++    public String[] getSources() {
++        return sources;
++    }
++
++    public void setSources(String[] sources) {
++        this.sources = sources;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getPublications() {
++        return publications;
++    }
++
++    public void setPublications(Pair&lt;String, Integer&gt;[] publications) {
++        this.publications = publications;
++    }
++
++    public Pair&lt;String, Integer&gt;[] getProjects() {
++        return projects;
++    }
++
++    public void setProjects(Pair&lt;String, Integer&gt;[] projects) {
++        this.projects = projects;
++    }
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -920,7 +920,17 @@
+     		if(parameter != null &amp;&amp; parameter instanceof DBLayer) {
+     			System.out.println(&quot;[!] DBLayer retrieval.&quot;);
+     			DBLayer dblayer = loginModel.getDBLayer();
+-    			model.setDatabase(dblayer);
++
++                        //FIXME: neni potreba zresetovat stav treba loginModelu, pokdu neco takhle selze? pripadne stav jinyho objektu?
++                        try {
++                            model.setDatabase(dblayer);
++                        } catch (RemoteException ex) {
++                            JOptionPane.showMessageDialog(view,&quot;Remote problem&quot;,&quot;Some remote problem occurred:\n&quot;+ex,JOptionPane.WARNING_MESSAGE);
++                            return;
++                        } catch (DBLayerException ex) {
++                            JOptionPane.showMessageDialog(view,&quot;Database problem&quot;,&quot;Some database problem occurred:\n&quot;+ex,JOptionPane.WARNING_MESSAGE);
++                            return;
++                        }
+     			model.setAccessRights( loginModel.getAccessRights() );
+                         model.login();
+                         
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsCtrl.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/SettingsCtrl.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -155,7 +155,7 @@
+                 int min = view.selectedList.getMinSelectionIndex();
+                 int max = view.selectedList.getMaxSelectionIndex();
+                 
+-                if (max &lt; selectedModel.getSize() - 1) {
++                if (max &lt; selectedModel.getSize() - 1 &amp;&amp; max != -1) {
+                     Object o = selectedModel.getElementAt(max+1);
+                     
+                     for (int i = max; i &gt;= min; i--) {
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsView.form	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/SettingsView.form	2006-05-24 16:39:21 UTC (rev 341)
+@@ -21,13 +21,13 @@
+           &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Component id=&quot;helpButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace pref=&quot;332&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace pref=&quot;367&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Component id=&quot;okButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+-          &lt;Component id=&quot;jTabbedPane1&quot; alignment=&quot;0&quot; pref=&quot;587&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Component id=&quot;jTabbedPane1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+@@ -53,8 +53,10 @@
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel1&quot;&gt;
+           &lt;Constraints&gt;
+             &lt;Constraint layoutClass=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout&quot; value=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription&quot;&gt;
+-              &lt;JTabbedPaneConstraints tabName=&quot;tab1&quot;&gt;
+-                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; value=&quot;tab1&quot;/&gt;
++              &lt;JTabbedPaneConstraints tabName=&quot;Languages&quot;&gt;
++                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.LanguagesTab&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/JTabbedPaneConstraints&gt;
+             &lt;/Constraint&gt;
+           &lt;/Constraints&gt;
+@@ -74,7 +76,7 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jPanel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;146&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;145&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -101,7 +103,7 @@
+                               &lt;Component id=&quot;czechRadioButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;defaultRadioButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;EmptySpace pref=&quot;473&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;508&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+@@ -114,7 +116,7 @@
+                           &lt;Component id=&quot;czechRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;defaultRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;47&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;48&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+@@ -187,8 +189,10 @@
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel3&quot;&gt;
+           &lt;Constraints&gt;
+             &lt;Constraint layoutClass=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout&quot; value=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription&quot;&gt;
+-              &lt;JTabbedPaneConstraints tabName=&quot;tab2&quot;&gt;
+-                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; value=&quot;tab2&quot;/&gt;
++              &lt;JTabbedPaneConstraints tabName=&quot;Columns&quot;&gt;
++                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.ColumnsTab&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/JTabbedPaneConstraints&gt;
+             &lt;/Constraint&gt;
+           &lt;/Constraints&gt;
+@@ -198,7 +202,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jPanel4&quot; pref=&quot;558&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel4&quot; pref=&quot;593&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -389,8 +393,10 @@
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel5&quot;&gt;
+           &lt;Constraints&gt;
+             &lt;Constraint layoutClass=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout&quot; value=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription&quot;&gt;
+-              &lt;JTabbedPaneConstraints tabName=&quot;tab3&quot;&gt;
+-                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; value=&quot;tab3&quot;/&gt;
++              &lt;JTabbedPaneConstraints tabName=&quot;Scheda&quot;&gt;
++                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.SchedaTab&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/JTabbedPaneConstraints&gt;
+             &lt;/Constraint&gt;
+           &lt;/Constraints&gt;
+@@ -400,18 +406,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;headerOneLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;headerOneField&quot; pref=&quot;473&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;headerTwoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;headerTwoField&quot; pref=&quot;472&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                      &lt;/Group&gt;
++                      &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -420,49 +415,91 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;headerOneLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;headerOneField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;headerTwoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;headerTwoField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;240&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;160&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+           &lt;/Layout&gt;
+           &lt;SubComponents&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;headerOneLabel&quot;&gt;
++            &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel6&quot;&gt;
+               &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Header one:&quot;/&gt;
++                &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++                  &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++                    &lt;TitledBorder title=&quot;Headers&quot;&gt;
++                      &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.SchedaTabHeaders&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                    &lt;/TitledBorder&gt;
++                  &lt;/Border&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;headerTwoLabel&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Header two:&quot;/&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;headerOneField&quot;&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;headerOneField.setName(&quot;HEADER_ONE&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;headerTwoField&quot;&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;headerTwoField.setName(&quot;HEADER_TWO&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
++
++              &lt;Layout&gt;
++                &lt;DimensionLayout dim=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;headerTwoLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;headerOneLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;headerOneField&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;472&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;headerTwoField&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;473&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                &lt;/DimensionLayout&gt;
++                &lt;DimensionLayout dim=&quot;1&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;headerOneLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;headerOneField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;headerTwoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;headerTwoField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace pref=&quot;44&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                &lt;/DimensionLayout&gt;
++              &lt;/Layout&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;headerOneField&quot;&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;headerOneField.setName(&quot;HEADER_ONE&quot;);&quot;/&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;headerOneLabel&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Header one:&quot;/&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;headerTwoLabel&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Header two:&quot;/&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;headerTwoField&quot;&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;headerTwoField.setName(&quot;HEADER_TWO&quot;);&quot;/&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsView.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/client/SettingsView.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -27,6 +27,7 @@
+         super(parent, modal);
+         this.model = model;
+         initComponents();
++        setLabels();
+         loadValues();
+     }
+     
+@@ -72,8 +73,11 @@
+     
+     private void setLabels() {
+         okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
++        okButton.setMnemonic(L10n.getMnemonic(&quot;Common.Ok&quot;));
+         cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++        cancelButton.setMnemonic(L10n.getMnemonic(&quot;Common.Cancel&quot;));
+         helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
++        helpButton.setMnemonic(L10n.getMnemonic(&quot;Common.Help&quot;));
+         
+         englishRadioButton.setText(L10n.getString(&quot;Settings.English&quot;));
+         czechRadioButton.setText(L10n.getString(&quot;Settings.Czech&quot;));
+@@ -82,9 +86,16 @@
+         availableLabel.setText(L10n.getString(&quot;Settings.Available&quot;));
+         selectedLabel.setText(L10n.getString(&quot;Settings.Selected&quot;));
+         addButton.setText(L10n.getString(&quot;Common.Add&quot;));
++        addButton.setMnemonic(L10n.getMnemonic(&quot;Common.Add&quot;));
+         removeButton.setText(L10n.getString(&quot;Common.Remove&quot;));
++        removeButton.setMnemonic(L10n.getMnemonic(&quot;Common.Remove&quot;));
+         upButton.setText(L10n.getString(&quot;Common.Up&quot;));
++        upButton.setMnemonic(L10n.getMnemonic(&quot;Common.Up&quot;));
+         downButton.setText(L10n.getString(&quot;Common.Down&quot;));
++        downButton.setMnemonic(L10n.getMnemonic(&quot;Common.Down&quot;));
++        
++        headerOneLabel.setText(L10n.getString(&quot;Settings.HeaderOne&quot;));
++        headerTwoLabel.setText(L10n.getString(&quot;Settings.HeaderTwo&quot;));
+     }
+     
+     /** This method is called from within the constructor to
+@@ -114,9 +125,10 @@
+         upButton = new javax.swing.JButton();
+         downButton = new javax.swing.JButton();
+         jPanel5 = new javax.swing.JPanel();
++        jPanel6 = new javax.swing.JPanel();
++        headerOneField = new javax.swing.JTextField();
+         headerOneLabel = new javax.swing.JLabel();
+         headerTwoLabel = new javax.swing.JLabel();
+-        headerOneField = new javax.swing.JTextField();
+         headerTwoField = new javax.swing.JTextField();
+         cancelButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+@@ -151,7 +163,7 @@
+                     .add(englishRadioButton)
+                     .add(czechRadioButton)
+                     .add(defaultRadioButton))
+-                .addContainerGap(473, Short.MAX_VALUE))
++                .addContainerGap(508, Short.MAX_VALUE))
+         );
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -162,7 +174,7 @@
+                 .add(czechRadioButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(defaultRadioButton)
+-                .addContainerGap(47, Short.MAX_VALUE))
++                .addContainerGap(48, Short.MAX_VALUE))
+         );
+ 
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+@@ -179,9 +191,9 @@
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(146, Short.MAX_VALUE))
++                .addContainerGap(145, Short.MAX_VALUE))
+         );
+-        jTabbedPane1.addTab(&quot;tab1&quot;, jPanel1);
++        jTabbedPane1.addTab(L10n.getString(&quot;Settings.LanguagesTab&quot;), jPanel1);
+ 
+         jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Settings.Columns&quot;)));
+         jScrollPane1.setViewportView(availableList);
+@@ -274,7 +286,7 @@
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 558, Short.MAX_VALUE)
++                .add(jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 593, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel3Layout.setVerticalGroup(
+@@ -284,47 +296,63 @@
+                 .add(jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 272, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+-        jTabbedPane1.addTab(&quot;tab2&quot;, jPanel3);
++        jTabbedPane1.addTab(L10n.getString(&quot;Settings.ColumnsTab&quot;), jPanel3);
+ 
++        jPanel6.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Settings.SchedaTabHeaders&quot;)));
++        headerOneField.setName(&quot;HEADER_ONE&quot;);
++
+         headerOneLabel.setText(&quot;Header one:&quot;);
+ 
+         headerTwoLabel.setText(&quot;Header two:&quot;);
+ 
+-        headerOneField.setName(&quot;HEADER_ONE&quot;);
+-
+         headerTwoField.setName(&quot;HEADER_TWO&quot;);
+ 
++        org.jdesktop.layout.GroupLayout jPanel6Layout = new org.jdesktop.layout.GroupLayout(jPanel6);
++        jPanel6.setLayout(jPanel6Layout);
++        jPanel6Layout.setHorizontalGroup(
++            jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel6Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(headerTwoLabel)
++                    .add(headerOneLabel))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(headerOneField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 472, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(headerTwoField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 473, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++        jPanel6Layout.setVerticalGroup(
++            jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel6Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(headerOneLabel)
++                    .add(headerOneField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(headerTwoLabel)
++                    .add(headerTwoField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(44, Short.MAX_VALUE))
++        );
++
+         org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
+         jPanel5.setLayout(jPanel5Layout);
+         jPanel5Layout.setHorizontalGroup(
+             jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel5Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel5Layout.createSequentialGroup()
+-                        .add(headerOneLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(headerOneField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 473, Short.MAX_VALUE))
+-                    .add(jPanel5Layout.createSequentialGroup()
+-                        .add(headerTwoLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(headerTwoField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 472, Short.MAX_VALUE)))
++                .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel5Layout.setVerticalGroup(
+             jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel5Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(headerOneLabel)
+-                    .add(headerOneField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(headerTwoLabel)
+-                    .add(headerTwoField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(240, Short.MAX_VALUE))
++                .add(jPanel6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap(160, Short.MAX_VALUE))
+         );
+-        jTabbedPane1.addTab(&quot;tab3&quot;, jPanel5);
++        jTabbedPane1.addTab(L10n.getString(&quot;Settings.SchedaTab&quot;), jPanel5);
+ 
+         cancelButton.setText(&quot;Cancel&quot;);
+         cancelButton.setActionCommand(&quot;CANCEL&quot;);
+@@ -342,12 +370,12 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(helpButton)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 332, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 367, Short.MAX_VALUE)
+                 .add(cancelButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(okButton)
+                 .addContainerGap())
+-            .add(jTabbedPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 587, Short.MAX_VALUE)
++            .add(jTabbedPane1)
+         );
+ 
+         layout.linkSize(new java.awt.Component[] {cancelButton, helpButton, okButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+@@ -403,6 +431,7 @@
+     private javax.swing.JPanel jPanel3;
+     private javax.swing.JPanel jPanel4;
+     private javax.swing.JPanel jPanel5;
++    private javax.swing.JPanel jPanel6;
+     private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JScrollPane jScrollPane2;
+     private javax.swing.JTabbedPane jTabbedPane1;
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-24 16:39:21 UTC (rev 341)
+@@ -18,6 +18,7 @@
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
++import org.apache.log4j.Logger;
+ 
+ /** Class offering convenience methods for DBLayer.
+  *
+@@ -25,9 +26,12 @@
+  */
+ public class DBLayerUtils {
+     DBLayer db;
++    Logger logger;
+     
+     /** Creates a new instance of TempClass */
+     public DBLayerUtils(DBLayer db) {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());
++        
+         this.db = db;
+     }
+     
+@@ -39,6 +43,7 @@
+      * @return null in case an exception is thrown or no row with that id exists
+      */
+     public Record getObjectFor(int id, Class c) {
++        logger.debug(&quot;Looking up &quot;+c.getName()+&quot; object in the database for id &quot;+id);
+         //FIXME:
+         try {
+             SelectQuery sq = db.createQuery(c);
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-24 16:39:21 UTC (rev 341)
+@@ -794,3 +794,11 @@
+ Settings.HeaderOne=First header\: 
+ 
+ Settings.HeaderTwo=Second header\: 
++
++Settings.LanguagesTab=Languages
++
++Settings.ColumnsTab=Columns
++
++Settings.SchedaTab=Scheda
++
++Settings.SchedaTabHeaders=Headers
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-24 16:39:21 UTC (rev 341)
+@@ -297,7 +297,7 @@
+ 
+ Common.Cancel=&amp;Zru\u0161
+ 
+-Close=&amp;Pomoc
++Close=
+ 
+ Settings.Czech=\u010Cesk\u00FD
+ 
+@@ -324,3 +324,13 @@
+ Settings.HeaderOne=Prvn\u00ED nadpis\: 
+ 
+ Settings.HeaderTwo=Druh\u00FD nadpis\: 
++
++Common.Help=&amp;Pomoc
++
++Settings.LanguagesTab=Jazyky
++
++Settings.ColumnsTab=Sloupky
++
++Settings.SchedaTab=Scheda
++
++Settings.SchedaTabHeaders=Nadpisy
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-24 13:30:21 UTC (rev 340)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-24 16:39:21 UTC (rev 341)
+@@ -644,3 +644,11 @@
+ Settings.HeaderOne=First header\: 
+ 
+ Settings.HeaderTwo=Second header\: 
++
++Settings.LanguagesTab=Languages
++
++Settings.ColumnsTab=Columns
++
++Settings.SchedaTab=Scheda
++
++Settings.SchedaTabHeaders=Headers
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000390.html">[Plantlore-dev] r340 - in trunk/src/net/sf/plantlore: client/export client/imports l10n
+</A></li>
+	<LI>Next message: <A HREF="000392.html">[Plantlore-dev] r342 - in trunk/src/net/sf/plantlore: client/export help/cs/html help/cs/html/picture help/en/html help/en/html/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#391">[ date ]</a>
+              <a href="thread.html#391">[ thread ]</a>
+              <a href="subject.html#391">[ subject ]</a>
+              <a href="author.html#391">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

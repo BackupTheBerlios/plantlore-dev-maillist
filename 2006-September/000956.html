@@ -1,0 +1,479 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r694 - in trunk/src/net/sf/plantlore/client:	history user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r694%20-%20in%20trunk/src/net/sf/plantlore/client%3A%0A%09history%20user&In-Reply-To=%3C200609051927.k85JRkAS022002%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000955.html">
+   <LINK REL="Next"  HREF="000957.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r694 - in trunk/src/net/sf/plantlore/client:	history user</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r694%20-%20in%20trunk/src/net/sf/plantlore/client%3A%0A%09history%20user&In-Reply-To=%3C200609051927.k85JRkAS022002%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r694 - in trunk/src/net/sf/plantlore/client:	history user">lada at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 21:27:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000955.html">[Plantlore-dev] r693 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+        <LI>Next message: <A HREF="000957.html">[Plantlore-dev] r695 - in trunk/src/net/sf/plantlore:	client/tableimport common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#956">[ date ]</a>
+              <a href="thread.html#956">[ thread ]</a>
+              <a href="subject.html#956">[ subject ]</a>
+              <a href="author.html#956">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-09-05 21:27:43 +0200 (Tue, 05 Sep 2006)
+New Revision: 694
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.form
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+Log:
+UserManager - use new executeInsert.
+History is bigger now.
+Fix bug in History: UNDO to date - call update record only once.
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-09-05 19:22:41 UTC (rev 693)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-09-05 19:27:43 UTC (rev 694)
+@@ -41,6 +41,7 @@
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import org.apache.log4j.Logger;
+ 
++
+ /**
+  * History model. Contains bussines logic and data fields of the History. Implements
+  * operations including search history data, undo, cleare database.
+@@ -116,7 +117,9 @@
+     /** Name of author for specific occurrence*/
+     private String nameAuthor;
+     /** Informaciton about location for specific occurrence*/
+-    private String location;    
++    private String location;  
++    /**Model of history*/
++    final History model = this;    
+     
+     /** Instances of Record */
+     private Object data;   
+@@ -435,8 +438,8 @@
+     		historyRecord = (HistoryRecord)historyDataList.get(i);    		
+     		historyChange = historyRecord.getHistoryChange();
+     		tableName = historyRecord.getHistoryColumn().getTableName();
+-            recordId = historyChange.getRecordId();
+-            operation = historyChange.getOperation();
++                recordId = historyChange.getRecordId();
++                operation = historyChange.getOperation();
+ 		  
+             if (operation == HistoryChange.HISTORYCHANGE_INSERT) {
+                 undoInsertDelete(1);
+@@ -487,14 +490,20 @@
+      *   @param isDelete int containing informaciton about insertion or erasure of record. 
+      */
+     public void undoInsertDelete(int isDelete) {
++        int contains = -1;
+         if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){        	
+         	Object[] object = searchObject(PlantloreConstants.ENTITY_OCCURRENCE,recordId);        	        	
+         	if (isError()) return; //tOccurrence doesn`t contain required data        	       		        		
+         	Occurrence occurrence = (Occurrence)object[0];             
+             occurrence.setDeleted(isDelete);                      	     	 
+              //Add to list of changed Record
+-             if (!editObjectList.contains((Record)occurrence))                 
+-                editObjectList.add((Record)occurrence);       
++             contains = this.isInObjectList(Occurrence.class, occurrence.getId());
++             if (contains == -1) {
++                 logger.debug(&quot;ObjectList - add occurrence &quot; + occurrence.getId());
++                 editObjectList.add((Record)occurrence);
++             } else {
++                 editObjectList.set(contains, (Record)occurrence); 
++             }       
+              //Update author of specific occurrence
+              isDelete = (isDelete == 1) ? 2 : isDelete;
+              Object[] objects = getAllAuthors(occurrence, 2-isDelete);
+@@ -505,8 +514,13 @@
+                 AuthorOccurrence authorOccurrence = (AuthorOccurrence)autOcc[0];
+                 authorOccurrence.setDeleted(isDelete);
+                  //Add to list of changed Record
+-                 if (!editObjectList.contains((Record)authorOccurrence))                 
+-                    editObjectList.add((Record)authorOccurrence);                 
++                contains = this.isInObjectList(AuthorOccurrence.class, authorOccurrence.getId());
++                 if (contains == -1) {
++                     logger.debug(&quot;ObjectList - add authorOccurrence &quot; + authorOccurrence.getId());
++                     editObjectList.add((Record)authorOccurrence);
++                 } else {
++                     editObjectList.set(contains, (Record)authorOccurrence); 
++                 }      
+             }                                     
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
+              Object[] object = searchObject(PlantloreConstants.ENTITY_AUTHOROCCURRENCE,recordId);               
+@@ -514,45 +528,86 @@
+              AuthorOccurrence authorOccurrence = (AuthorOccurrence)object[0];
+              authorOccurrence.setDeleted(isDelete);             
+              //Add to list of changed Record             
+-             if (!editObjectList.contains((Record)authorOccurrence))                 
+-                editObjectList.add((Record)authorOccurrence);             
++             contains = this.isInObjectList(AuthorOccurrence.class, authorOccurrence.getId());
++             if (contains == -1) {
++                 logger.debug(&quot;ObjectList - add authorOccurrence &quot; + authorOccurrence.getId());
++                 editObjectList.add((Record)authorOccurrence);
++             } else {
++                 editObjectList.set(contains, (Record)authorOccurrence); 
++             }                
+        } else if (tableName.equals(PlantloreConstants.ENTITY_HABITAT)) {            
+                Object[] object = searchObject(PlantloreConstants.ENTITY_HABITAT,recordId);  
+                if (isError()) return; //tHabitat doesn`t contain required data
+                Habitat habitat = (Habitat)object[0];
+                habitat.setDeleted(isDelete);
+                //Add to list of changed Record             
+-               if (!editObjectList.contains((Record)habitat))                 
+-                   editObjectList.add((Record)habitat);             
++               contains = this.isInObjectList(Habitat.class, habitat.getId());
++                 if (contains == -1) {
++                     logger.debug(&quot;ObjectList - add habitat &quot; + habitat.getId());
++                     editObjectList.add((Record)habitat);
++                 } else {
++                     editObjectList.set(contains, (Record)habitat); 
++                 }   
+         } else if (tableName.equals(PlantloreConstants.ENTITY_METADATA)) {
+              Object[] object = searchObject(PlantloreConstants.ENTITY_METADATA,recordId); 
+              if (isError()) return; //tMetadata doesn`t contain required data
+              Metadata metadata = (Metadata)object[0];
+              metadata.setDeleted(isDelete);
+              //Add to list of changed Record             
+-             if (!editObjectList.contains((Record)metadata))                 
+-                editObjectList.add((Record)metadata);             
++             contains = this.isInObjectList(Metadata.class, metadata.getId());
++             if (contains == -1) {
++                 logger.debug(&quot;ObjectList - add metadata ID &quot; + metadata.getId());
++                 editObjectList.add((Record)metadata);
++             } else {
++                 editObjectList.set(contains, (Record)metadata); 
++             }                                
+         } else if (tableName.equals(PlantloreConstants.ENTITY_PUBLICATION)) {
+              Object[] object = searchObject(PlantloreConstants.ENTITY_PUBLICATION,recordId);
+              if (isError()) return; //tPublication doesn`t contain required data
+              Publication publication = (Publication)object[0];
+              publication.setDeleted(isDelete);
+              //Add to list of changed Record             
+-             if (!editObjectList.contains((Record)publication))                 
+-                editObjectList.add((Record)publication);             
++             contains = this.isInObjectList(Publication.class, publication.getId());
++             if (contains == -1) {
++                 logger.debug(&quot;ObjectList - add publications&quot;);
++                 editObjectList.add((Record)publication);
++             } else {
++                 editObjectList.set(contains, (Record)publication); 
++             }                       
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {             
+              Object[] object = searchObject(PlantloreConstants.ENTITY_AUTHOR,recordId);  
+              if (isError()) return; //tAuthor doesn`t contain required data
+              Author author = (Author)object[0];
+              author.setDeleted(isDelete);
+              //Add to list of changed Record             
+-             if (!editObjectList.contains((Record)author))                 
+-                editObjectList.add((Record)author);             
++             contains = this.isInObjectList(Author.class, author.getId());
++             if (contains == -1) {
++                 logger.debug(&quot;ObjectList - add authors&quot;);
++                 editObjectList.add((Record)author);
++             } else {
++                 editObjectList.set(contains, (Record)author); 
++             }                       
+         }  else {
+             logger.error(&quot;Name of table is incorrect.&quot;);
+         }
+     }
+     
++    
++    public int isInObjectList(Class type, int historyRecordId) {     
++    	int placings = -1;        
++    	for (int i=0; i &lt; editObjectList.size(); i++) {                
++    		if (editObjectList.get(i).getClass().equals(type)) {                        
++    			int listId = ((Record)editObjectList.get(i)).getId();                       
++    			if (historyRecordId == listId) {    				
++    				placings = i;       				
++    				break;
++    			}
++    		}
++    	}             
++        return placings;
++    }
++    
++    
+     /**
+      * Rollaback operation Update.
+      */
+@@ -613,14 +668,8 @@
+         	// Select record AuthorOccurrence where id = authorOccurrenceId 
+     		Object[] object = searchObject(PlantloreConstants.ENTITY_AUTHOROCCURRENCE, authorOccId);
+     		if (isError()) return; //tAuthorOccurrence doesn`t contain required data
+-            authorOccurrence = (AuthorOccurrence)object[0];
+-        }     	                 
+-                
+-        boolean objectList = editObjectList.contains((Record)authorOccurrence); 
+-        if (!objectList) {
+-        	//add object to list of editing object
+-            editObjectList.add((Record)authorOccurrence);
+-        }
++               authorOccurrence = (AuthorOccurrence)object[0];
++        }     	                                        
+        
+        // Get number of columnName from authorOccurrence mapping
+         int columnConstant;
+@@ -922,8 +971,8 @@
+                         Object[] objectVill = searchObject(PlantloreConstants.ENTITY_VILLAGE,oldRecordId);
+                         if (isError()) return; //tVillage doesn`t contain required data
+                         NearestVillage village = (NearestVillage)objectVill[0];
+-                hab.setNearestVillage(village);
+-                logger.debug(&quot;Set selected value for update of attribute NearesVillage.&quot;);
++                        hab.setNearestVillage(village);                        
++                        logger.debug(&quot;Set selected value for update of attribute NearesVillage.&quot; + village.getName());
+                 } else {
+                         logger.error(&quot;UNDO - Incorrect oldRecordId for NearestVillage.&quot;);
+                 }                
+@@ -1140,10 +1189,10 @@
+         Metadata metadata = null;
+     	int placings = 0;
+     	boolean contain = false;
+-    	for (int i=0; i &lt; editObjectList.size(); i++) {
+-    		if (editObjectList.get(i) instanceof Metadata) {    			
+-    			int listOccId = ((Metadata)(editObjectList.get(i))).getId();
+-    			if (metadataId == listOccId) {
++    	for (int i=0; i &lt; editObjectList.size(); i++) {                        
++    		if (editObjectList.get(i) instanceof Metadata) {                                               
++    			int listId = ((Metadata)(editObjectList.get(i))).getId();                        
++    			if (metadataId == listId) {                                
+     				contain = true;
+     				placings = i; 
+     				metadata = (Metadata)(editObjectList.get(i));
+@@ -1156,7 +1205,7 @@
+         	// Select record Metadata where id = metadataId 
+     		Object[] object = searchObject(PlantloreConstants.ENTITY_METADATA, metadataId);
+     		if (isError()) return; //tMetadata doesn`t contain required data
+-    	    metadata = (Metadata)object[0];
++                metadata = (Metadata)object[0];
+         }
+     	
+         // Get number of columnName from metadata mapping.
+@@ -1229,7 +1278,7 @@
+         	editObjectList.set(placings,(Record)metadata);        
+         } else {
+         	// add object to list of editing object
+-            logger.debug(&quot;ObjectList - add metadata&quot;);
++            logger.debug(&quot;ObjectList - add metadata &quot;+metadata.getId());
+             editObjectList.add(metadata);
+         }
+     }
+@@ -1531,7 +1580,7 @@
+ 		        
+ 		        try {
+ 			    	for (int i=0; i&lt; count; i++) {			    		
+-			    			logger.debug(&quot;Object for update: &quot;+ ((Record)editObjectList.get(i)).getId());                         
++			                logger.debug(&quot;Object for update: &quot;+ editObjectList.get(i).getClass()+ &quot;, id&quot; + ((Record)editObjectList.get(i)).getId());                         
+ 			                type = editObjectList.get(i).getClass().getSimpleName();			                		               
+ 			                 if (editTypeHash.containsKey(type)) {
+ 			                         key = (Enum)editTypeHash.get(type); 
+@@ -1540,9 +1589,9 @@
+ 			                }                                  			                
+ 			                database.executeUpdateInTransactionHistory(editObjectList.get(i));
+ 			    		}
+-			    	//Delete selected data from history tables 
++			    	//Delete selected data from history tables                                 
+ 			    	deleteHistory();
+-		        } catch (Exception e) {
++                        } catch (Exception e) {
+ 		        	logger.error(&quot;Process UNDO failed. Exception caught in History. Details: &quot;+e.getMessage());
+ 		        	database.rollbackTransaction();                    
+                                  throw e; 		           		       	    
+@@ -1569,8 +1618,8 @@
+             logger.debug(&quot;Type of editing object (array for appcore): &quot; + editType.get(i));
+             editTypeArray[i] = editType.get(i);
+         }
+-        setChanged(); 
+-        notifyObservers(editTypeArray);
++        model.setChanged(); 
++        model.notifyObservers(editTypeArray);
+     }
+     
+     /**
+@@ -1601,6 +1650,7 @@
+                         logger.debug(&quot;Deleting historyRecord successfully. Number of result: &quot;+i);
+                 } catch (Exception e) {								
+                         logger.error(&quot;Process UNDO failed. Deleting historyRecord failed. Exception caught in History. Details: &quot;+e.getMessage());	        	                
++                        //database.rollbackTransaction();  
+                         throw e; 		           
+ 		} 						
+                 try {
+@@ -1613,6 +1663,7 @@
+                         }
+                 } catch (Exception e) {
+                         logger.error(&quot;Process UNDO failed. Deleting historyChange failed. Exception caught in History. Details: &quot;+e.getMessage());	        		                
++                        //database.rollbackTransaction();  
+                         throw e; 		           
+ 			} 		 
+     	}    	
+@@ -1851,6 +1902,8 @@
+ 		            database.conditionDelete(Occurrence.class, Occurrence.DELETED, &quot;=&quot;, 1);
+ 		            // delete data from table tHabitat with contidion cDelete == 1
+ 		            database.conditionDelete(Habitat.class, Habitat.DELETED, &quot;=&quot;, 1);
++                            // delete data from table tMetadata with contidion cDelete == 1
++		            database.conditionDelete(Metadata.class, Metadata.DELETED, &quot;=&quot;, 1);
+ 		            // delete data from table tPublication with contidion cDelete == 1
+ 		            database.conditionDelete(Publication.class, Publication.DELETED, &quot;=&quot;, 1);
+ 		            //Delete all date from tables tHistory and tHistoryChange
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.form	2006-09-05 19:22:41 UTC (rev 693)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.form	2006-09-05 19:27:43 UTC (rev 694)
+@@ -25,7 +25,7 @@
+                   &lt;Component id=&quot;jPanel3&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;568&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;646&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -80,7 +80,7 @@
+                       &lt;Component id=&quot;locationValueLabel&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;authorValueLabel&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace pref=&quot;538&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;616&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -178,7 +178,7 @@
+                       &lt;Component id=&quot;whenInsertValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;whoInsertValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace pref=&quot;552&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;630&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -248,7 +248,7 @@
+               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;692&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;770&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;undoButton&quot; min=&quot;-2&quot; pref=&quot;90&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -270,7 +270,7 @@
+                           &lt;Component id=&quot;displayedLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;displayedValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;79&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;157&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;nextButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-09-05 19:22:41 UTC (rev 693)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-09-05 19:27:43 UTC (rev 694)
+@@ -168,7 +168,7 @@
+                     .add(taxonValueLabel)
+                     .add(locationValueLabel, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(authorValueLabel, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+-                .addContainerGap(538, Short.MAX_VALUE))
++                .addContainerGap(616, Short.MAX_VALUE))
+         );
+         jPanel1Layout.setVerticalGroup(
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -210,7 +210,7 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(whenInsertValueLabel)
+                     .add(whoInsertValueLabel))
+-                .addContainerGap(552, Short.MAX_VALUE))
++                .addContainerGap(630, Short.MAX_VALUE))
+         );
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -269,7 +269,7 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 692, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 770, Short.MAX_VALUE)
+                     .add(jPanel3Layout.createSequentialGroup()
+                         .add(undoButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 90, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+@@ -290,7 +290,7 @@
+                         .add(displayedLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(displayedValueLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 79, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 157, Short.MAX_VALUE)
+                         .add(nextButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addContainerGap())
+         );
+@@ -332,7 +332,7 @@
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                         .add(helpButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 568, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 646, Short.MAX_VALUE)
+                         .add(closeButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addContainerGap())
+         );
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-05 19:22:41 UTC (rev 693)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-05 19:27:43 UTC (rev 694)
+@@ -346,8 +346,7 @@
+     				//Create database user
+     				database.createUser(userRecord.getLogin(), getPassword(), isAdmin); 
+     				//Insert information about user into tRight, tUser
+-    				int rightId = database.executeInsert(right);
+-                                right.setId(rightId);
++    				right = (Right)database.executeInsert(right);                               
+                                 database.executeInsertInTransaction(userRecord);		                                
+                                 //Add new name (login) of user to user list    	            
+                                 int count = users.length;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000955.html">[Plantlore-dev] r693 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+	<LI>Next message: <A HREF="000957.html">[Plantlore-dev] r695 - in trunk/src/net/sf/plantlore:	client/tableimport common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#956">[ date ]</a>
+              <a href="thread.html#956">[ thread ]</a>
+              <a href="subject.html#956">[ subject ]</a>
+              <a href="author.html#956">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

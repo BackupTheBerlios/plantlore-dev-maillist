@@ -1,0 +1,1010 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r100 - in trunk/src/net/sf/plantlore: client l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r100%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n%20server&In-Reply-To=%3C200604021744.k32HiloH011520%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000096.html">
+   <LINK REL="Next"  HREF="000100.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r100 - in trunk/src/net/sf/plantlore: client l10n server</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r100%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n%20server&In-Reply-To=%3C200604021744.k32HiloH011520%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r100 - in trunk/src/net/sf/plantlore: client l10n server">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun Apr  2 19:44:47 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000096.html">[Plantlore-dev] r99 - trunk/documentation
+</A></li>
+        <LI>Next message: <A HREF="000100.html">[Plantlore-dev] r101 - in trunk/src/net/sf/plantlore: client client/login middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#99">[ date ]</a>
+              <a href="thread.html#99">[ thread ]</a>
+              <a href="subject.html#99">[ subject ]</a>
+              <a href="author.html#99">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-04-02 19:44:26 +0200 (Sun, 02 Apr 2006)
+New Revision: 100
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Improved overview - records loaded from the database, switching between pages
+(a fix of HibernateDBLayer is needed - throws exceptions when trying to fetch
+the last record in a result), columns now have hand defined preferred width.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-04-02 17:44:26 UTC (rev 100)
+@@ -16,6 +16,7 @@
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.server.HibernateDBLayer;
++import org.apache.log4j.Logger;
+ 
+ /** Application core model
+  *
+@@ -24,13 +25,16 @@
+ public class AppCore extends Observable
+ {
+     private Preferences prefs;
+-    private int recordsPerPage;
++    private int recordsPerPage = 30;
++    private int currentPage = 1;
+     private DBLayer database;  
+     private OverviewTableModel tableModel;
++    private Logger logger;
+ 
+     /** Creates a new instance of AppCore */
+     public AppCore()
+     {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());        
+         prefs = Preferences.userNodeForPackage(this.getClass());
+         
+ //        database = new FirebirdDBLayer(&quot;localhost&quot;, &quot;3050&quot;, &quot;/mnt/data/temp/plantloreHIB.fdb&quot;, &quot;sysdba&quot;, &quot;masterkey&quot;);
+@@ -43,7 +47,21 @@
+         	System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+         }
+         
+-        tableModel = new OverviewTableModel(database);
++        
++        
++        //FIXME:
++        try {
++            
++            tableModel = new OverviewTableModel(database, prefs.getInt(&quot;recordsPerPage&quot;, 30));
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        logger.debug(&quot;tableModel created&quot;);
++        setChanged();
++        notifyObservers();
++        logger.debug(&quot;AppCore observers notified&quot;);
+     }
+     
+     /*********************************************************
+@@ -65,29 +83,80 @@
+     public OverviewTableModel getTableModel() {
+         return this.tableModel;
+     }
+-    
+-    /** 
+-     * TODO: make methods of OverviewTableModel call setChanged() of this observable.
+-     * and then remove from appCore methods duplicating those from OverviewTableModel
+-     */
+-    public void setModelChanged() {
+-        setChanged();
+-    }
+-    
++        
+     public void selectAll() {
+         tableModel.selectAll();
+-        setChanged();
+-        notifyObservers();
++        //setChanged();
++        //notifyObservers();
+     }
+ 
+     public void selectNone() {
+         tableModel.selectNone();
+-        setChanged();
+-        notifyObservers();
++        //setChanged();
++        //notifyObservers();
+     }
+     public void invertSelected() {
+         tableModel.invertSelected();
++        //setChanged();
++        //notifyObservers();
++    }
++
++    public int getRecordsPerPage() {
++        return tableModel.getPageSize();
++    }
++
++    public void setRecordsPerPage(int recordsPerPage) {
++        tableModel.setPageSize(recordsPerPage);
+         setChanged();
++        notifyObservers();        
++    }
++
++    public void nextPage() {
++        //FIXME:
++        try {
++            tableModel.nextPage();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        setChanged();
++        notifyObservers();        
++    }
++    
++    public void prevPage() {
++        //FIXME:
++        try {
++            tableModel.prevPage();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        setChanged();
+         notifyObservers();
+     }
++
++    public int getCurrentPage() {
++        return tableModel.getCurrentPage();
++    }
++
++    public void setCurrentPage(int currentPage) {
++        tableModel.setCurrentPage(currentPage);
++        setChanged();
++        notifyObservers();
++    }
++    
++    public int getResultsCount() {
++        return tableModel.getResultsCount();
++    }
++    
++    public int getPagesCount() {
++        return tableModel.getPagesCount();
++    }
++    
++    public void savePreferences() {
++        logger.info(&quot;Saving main window preferences.&quot;);
++        prefs.putInt(&quot;recordsPerPage&quot;, recordsPerPage);
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-04-02 17:44:26 UTC (rev 100)
+@@ -12,9 +12,13 @@
+ import java.awt.event.KeyEvent;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
++import java.beans.PropertyChangeEvent;
++import java.beans.PropertyChangeListener;
++import java.lang.Integer;
+ import java.rmi.RemoteException;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
++import javax.swing.JFormattedTextField;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.client.dblayer.FirebirdDBLayer;
+ import net.sf.plantlore.common.record.Plant;
+@@ -68,16 +72,24 @@
+         view.setHelpAboutAction(new HelpAboutAction());
+         view.setExportAction(new ExportAction());
+         view.setImportAction(new ImportAction());
+-        view.setSearchAction(new SearchAction());
++        
+         view.addDataAuthorsListener(new DataAuthorsListener());
+         view.addDataPublicationsListener(new DataPublicationsListener());
+         view.addDataHistoryListener(new DataHistoryListener());
++        
++        view.setSearchAction(new SearchAction());
+         view.setAddAction(new AddAction());
+         view.setEditAction(new EditAction());
+         view.setDeleteAction(new DeleteAction());
++
+         view.setSelectAllAction(new SelectAllAction());
+         view.setSelectNoneAction(new SelectNoneAction());
+         view.setInvertSelectedAction(new InvertSelectedAction());
++        view.setNextPageAction(new NextPageAction());
++        view.setPrevPageAction(new PreviousPageAction());
++
++        view.addWindowListener(new AppWindowListener());
++        view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+     }
+     
+     /** Handles click to menu item Settings.
+@@ -158,6 +170,7 @@
+     class ExitListener implements ActionListener {
+         public void actionPerformed(ActionEvent actionEvent)
+         {
++            model.savePreferences();
+             System.exit(0);
+         }
+     }
+@@ -293,19 +306,41 @@
+         }
+     }
+     
++    class PreviousPageAction extends AbstractAction {
++        public PreviousPageAction() {
++            putValue(NAME, L10n.getString(&quot;prevButton&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;prevButtonTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;prevButton&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            model.prevPage();
++        }
++    }
+     
++    class NextPageAction extends AbstractAction {
++        public NextPageAction() {
++            putValue(NAME, L10n.getString(&quot;nextButton&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;nextButtonTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;nextButton&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            model.nextPage();
++        }
++    }
++
+     class AppWindowListener extends WindowAdapter {
+         public void windowClosing(WindowEvent e)
+         {
+-            logger.info(&quot;Saving main window preferences.&quot;);
+-            
++            model.savePreferences();
+         }
+     }
+ 
+     class DataAuthorsListener implements ActionListener {
+         public void actionPerformed(ActionEvent actionEvent) {
+             AuthorManager authModel = new AuthorManager(model.getDatabase());
+-            AuthorManagerView authView = new AuthorManagerView(authModel, view.getFrame());
++            AuthorManagerView authView = new AuthorManagerView(authModel, view);
+             AuthorManagerCtrl authCtrl = new AuthorManagerCtrl(authModel, authView);
+             authView.show();
+         }
+@@ -325,9 +360,25 @@
+             //o vybranem zaznamu predame informace, ktere chceme o nem v historii zobrazit
+             //jmeno rosliny, jmeno autora a lokaci a idOccurrences
+             historyModel = new History(model.getDatabase(),&quot;Adis Abeba&quot;, &quot;Lada&quot;, &quot;Praha v&#253;chod&quot;, 1);
+-            historyView = new HistoryView(historyModel, view.getFrame());
++            historyView = new HistoryView(historyModel, view);
+             historyCtrl = new HistoryCtrl(historyModel, historyView);
+             historyView.show();  
+         }
+     }    
++    
++    class RecordsPerPagePropertyChangeListener implements PropertyChangeListener {
++        public void propertyChange(PropertyChangeEvent e) {
++            JFormattedTextField tf = (JFormattedTextField)e.getSource();
++            if (e != null &amp;&amp; e.getPropertyName().equals(&quot;value&quot;)) 
++            {
++                int i = ((Number)tf.getValue()).intValue(); 
++                if (i &lt; 1)
++                {
++                    tf.setValue(e.getOldValue());
++                } else {
++                    model.setRecordsPerPage(i);                    
++                }
++            }
++        }  
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-04-02 17:44:26 UTC (rev 100)
+@@ -15,6 +15,8 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.WindowAdapter;
++import java.beans.PropertyChangeListener;
++import java.text.NumberFormat;
+ import java.util.Observable;
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+@@ -49,11 +51,11 @@
+  *
+  * @author Jakub
+  */
+-public class AppCoreView implements Observer
++public class AppCoreView extends JFrame implements Observer 
+ {
+     private Preferences prefs;
+     private AppCore model;
+-    private JFrame frame;
++    //private JFrame frame;
+     private Container container;
+     private JPanel mainPane;
+     private JMenuBar menuBar = new JMenuBar();
+@@ -82,14 +84,18 @@
+             deleteButton = new JButton(),
+             selectAll = new JButton(),
+             selectNone = new JButton(),
+-            invertSelected  = new JButton();
++            invertSelected  = new JButton(),
++            prevPage = new JButton(),
++            nextPage = new JButton();
+     
+     private JLabel statusLabel;
+     
+     private JTable overview;
+     private JToolBar mainToolBar;
+     private JToolBar pageToolBar;
+-    private JFormattedTextField recordsPerPage;
++    private JFormattedTextField recordsPerPage = new JFormattedTextField(NumberFormat.getIntegerInstance());
++    private JLabel pageStatus = new JLabel(&quot;-/-&quot;);
++    private JLabel recordsCount = new JLabel(&quot;-&quot;);
+     private StatusBarManager sbm;
+     
+     /** Creates a new instance of AppCoreView */
+@@ -102,8 +108,8 @@
+ 
+     public void update(Observable observable, Object object)
+     {
+-        frame.repaint();
+-        overview.repaint();
++        recordsCount.setText(&quot;&quot;+model.getResultsCount());
++        pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount());
+     }
+     
+     /** Calls all the constructing init methods.
+@@ -116,7 +122,7 @@
+         initMenu();
+         initOverview();
+         initMainToolBar();
+-        frame.pack();
++        this.pack();
+     }
+ 
+     /** Constructs the main Plantlore JFrame.
+@@ -124,12 +130,12 @@
+      */
+     public void initFrame() 
+     {
+-        frame = new JFrame(L10n.getString(&quot;plantlore&quot;));
+-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+-        frame.setExtendedState(JFrame.MAXIMIZED_BOTH); 
+-        frame.setVisible(false);
+-        frame.setJMenuBar(menuBar);
+-        container = frame.getContentPane();
++//        frame = new JFrame(L10n.getString(&quot;plantlore&quot;));
++        this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
++        this.setExtendedState(JFrame.MAXIMIZED_BOTH); 
++        this.setVisible(false);
++        this.setJMenuBar(menuBar);
++        container = this.getContentPane();
+         container.setLayout(new BorderLayout());
+         mainPane = new JPanel();
+         mainPane.setLayout(new BorderLayout());
+@@ -204,9 +210,9 @@
+         OverviewTableModel otm = model.getTableModel();
+         overview = new JTable(otm);
+         TableColumn tc;
+-        for (int i = 0; i &lt; 23; i++) {
++        for (int i = 0; i &lt; otm.getColumnCount(); i++) {
+             tc = overview.getColumnModel().getColumn(i);
+-            tc.setPreferredWidth(otm.getColumnName(i).length()*10);
++            tc.setPreferredWidth(otm.getColumnSize(i));
+         }
+         JPanel tablePanel = new JPanel();
+         tablePanel.setLayout(new BorderLayout());
+@@ -217,11 +223,8 @@
+         mainPane.add(sp, BorderLayout.CENTER);
+         
+         pageToolBar = new JToolBar();
+-        JButton prev = new JButton(L10n.getString(&quot;prevButton&quot;));
+-        recordsPerPage = new JFormattedTextField();
+-        recordsPerPage.setValue(new Integer(prefs.getInt(&quot;recordsPerPage&quot;, 10)));
+-        JButton next = new JButton(L10n.getString(&quot;nextButton&quot;));
+-        recordsPerPage.setPreferredSize(new Dimension(50, recordsPerPage.getPreferredSize().height));
++        recordsPerPage.setValue(new Integer(model.getRecordsPerPage()));
++        recordsPerPage.setPreferredSize(new Dimension(40, 10));
+         recordsPerPage.setHorizontalAlignment(JTextField.CENTER);
+         pageToolBar.setFloatable(false);
+         pageToolBar.setRollover(true);
+@@ -234,17 +237,27 @@
+         pageToolBar.addSeparator();        
+         pageToolBar.add(invertSelected);
+         pageToolBar.addSeparator();        
+-        pageToolBar.add(prev);
++        pageToolBar.add(prevPage);
+         pageToolBar.add(recordsPerPage);
+-        pageToolBar.add(next);
++        pageToolBar.add(nextPage);
+         
++        recordsCount.setToolTipText(L10n.getString(&quot;overviewRecordsCountTT&quot;));
++        pageStatus.setToolTipText(L10n.getString(&quot;overviewPageStatusTT&quot;));
++        JPanel controlPane = new JPanel(new BorderLayout());
++        JPanel topControlPane = new JPanel(new FlowLayout());
+         JPanel toolBarPane = new JPanel(new FlowLayout());
+ //        toolBarPane.add(selectToolBar);
+         toolBarPane.add(pageToolBar);
+-        mainPane.add(toolBarPane, BorderLayout.SOUTH);
++        topControlPane.add(new JLabel(L10n.getString(&quot;overviewRecordsCount&quot;)));
++        topControlPane.add(recordsCount);
++        topControlPane.add(new JLabel(L10n.getString(&quot;overviewPageStatus&quot;)));
++        topControlPane.add(pageStatus);
++        controlPane.add(topControlPane, BorderLayout.NORTH);
++        controlPane.add(toolBarPane, BorderLayout.SOUTH);
++        mainPane.add(controlPane, BorderLayout.SOUTH);
+         ComponentAdjust ca = new ComponentAdjust();
+-        ca.add(prev);
+-        ca.add(next);
++        ca.add(prevPage);
++        ca.add(nextPage);
+         ca.setMaxWidth();
+         ca.clear();
+         ca.add(selectAll);
+@@ -252,8 +265,8 @@
+         ca.add(invertSelected);
+         ca.setMaxWidth();
+         
+-        sbm.add(prev, &quot;Previous page&quot;);
+-        sbm.add(next, &quot;Next page&quot;);
++        sbm.add(prevPage, &quot;Previous page&quot;);
++        sbm.add(nextPage, &quot;Next page&quot;);
+         sbm.add(recordsPerPage, &quot;Number of records per page&quot;);
+     }
+     
+@@ -265,13 +278,6 @@
+         return sbm;
+     }
+     
+-    /** Hides and shows the main Plantlore window.
+-     *
+-     */
+-    public void setVisible(boolean visible) {
+-        frame.setVisible(visible);
+-    }
+-
+     /** Sets an action to the settings menu item.
+      *
+      */
+@@ -370,13 +376,27 @@
+         exportButton.setAction(a);
+     }
+ 
+-    /** Adds a listener to the main window frame.
++    /** Sets an action to the previous page button.
+      *
+      */
+-    public void addWindowListener(WindowAdapter wa) {
+-        frame.addWindowListener(wa);
++    public void setPrevPageAction(AbstractAction a) {
++        prevPage.setAction(a);
+     }
+ 
++    /** Sets an action to the next page button.
++     *
++     */
++    public void setNextPageAction(AbstractAction a) {
++        nextPage.setAction(a);
++    }
++
++    /** Adds a listener to the main window frame.
++     *
++     */
++    /*public void addWindowListener(WindowAdapter wa) {
++        this.addWindowListener(wa);
++    }*/
++
+     /** Adds a listener to the Author manager menu item.
+      *
+      */
+@@ -398,10 +418,15 @@
+         dataHistory.addActionListener(al);
+     }
+     
++    public void setRecordsPerPageListener(PropertyChangeListener p)
++    {
++        recordsPerPage.addPropertyChangeListener(p);
++    }
++    
+     /** Returns the frame of the main window.
+      *
+      */
+-    protected JFrame getFrame() {
++/*    protected JFrame getFrame() {
+         return this.frame;
+-    }     
++    }     */
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-04-02 17:44:26 UTC (rev 100)
+@@ -7,27 +7,37 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.rmi.RemoteException;
+ import javax.swing.table.AbstractTableModel;
++import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.middleware.SelectQuery;
++import org.apache.log4j.Logger;
+ 
+ /** Implements a table model for the main data overview.
+  *
+  * @author Jakub
+  */
+-public class OverviewTableModel extends AbstractTableModel
+-{
++public class OverviewTableModel extends AbstractTableModel {
++    private Logger logger;
++    private static final int COLUMN_COUNT = 23;
+     private DBLayer db;
+-    private String[] columnNames = { &quot;X&quot;,&quot;Name&quot;, &quot;Author&quot;, &quot;Nearest bigger seat&quot;, &quot;Place description&quot;, &quot;Year&quot;, 
+-    &quot;Territory&quot;, &quot;Territory code&quot;,&quot;Phytochorion&quot;,&quot;Phytochorion code&quot;,&quot;Country&quot;,&quot;Quadrant&quot;,
+-    &quot;Ocurrence note&quot;, &quot;Location note&quot;, &quot;Altitude&quot;, &quot;Longitude&quot;, &quot;Latitude&quot;, &quot;Source&quot;, &quot;Publication&quot;,
+-    &quot;Herbarium&quot;, &quot;Metadata&quot;, &quot;Month&quot;, &quot;Day&quot;, &quot;Time&quot;};
++    private String[] columnNames;
++    private int[] columnSizes;
+     
++    private int resultid = 0;
++    private int resultsCount = 0;
++    private int pageSize = 30;
++    private int currentPage = 1;
++    
+     private Object[][] data = {
+-        {true, &quot;Pampeliska&quot;, &quot;neznamy&quot;, &quot;Praha&quot;, new Integer(1995), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(false), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;},
+-        {false,&quot;Hermanek&quot;, &quot;Jakub&quot;, &quot;Zelezny Brod&quot;, new Integer(1990), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(true), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;}        
++        {true, &quot;Pampeliska&quot;, &quot;neznamy&quot;, &quot;Praha&quot;, new Integer(1995), &quot;phy&quot;, &quot;cechy&quot;, new Boolean(false), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;},
++        {false,&quot;Hermanek&quot;, &quot;Jakub&quot;, &quot;Zelezny Brod&quot;, new Integer(1990), &quot;phy&quot;, &quot;cechy&quot;, new Boolean(true), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;}
+     };
+     
+     /** Simple mode if true - only first three columns are displayed
+@@ -36,32 +46,136 @@
+      */
+     private boolean simple = true;
+     
++    private int from = 1;
++    private int to = 1;
++    
+     /** Creates a new instance of OverviewTableModel */
+-    public OverviewTableModel(DBLayer db) {
+-       /* int resultid = 0;
++    public OverviewTableModel(DBLayer db, int pageSize) throws RemoteException, DBLayerException {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());
++        init();
++        
++        this.pageSize = pageSize;
++        resultsCount = 0;
+         this.db = db;
+-        SelectQuery sq = db.createQuery(Occurrence.class);
++        SelectQuery sq = db.createQuery(AuthorOccurrence.class);
++        //FIXME:
+         try {
+-            resultid = db.executeQuery(sq);
++            setResultid(db.executeQuery(sq));
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         }
+-        System.out.println(&quot;OverviewTableModel: &quot;+db.getNumRows(resultid)+&quot; retrieved.&quot;);
+-        */
++        loadData();
+     }
++    
++    private void init() {
++        columnNames = new String[COLUMN_COUNT];
++        columnSizes = new int[COLUMN_COUNT];
++        columnNames[0] = L10n.getString(&quot;overviewColX&quot;);
++        columnSizes[0] = 30;
++        columnNames[1] = L10n.getString(&quot;overviewColName&quot;);
++        columnSizes[1] = 100;
++        columnNames[2] = L10n.getString(&quot;overviewColAuthor&quot;);
++        columnSizes[2] = 100;
++        columnNames[3] = L10n.getString(&quot;overviewColVillage&quot;);
++        columnSizes[3] = 100;
++        columnNames[4] = L10n.getString(&quot;overviewColPlace&quot;);
++        columnSizes[4] = 150;
++        columnNames[5] = L10n.getString(&quot;overviewColYear&quot;);
++        columnSizes[5] = 50;
++        columnNames[6] = L10n.getString(&quot;overviewColTerritory&quot;);
++        columnSizes[6] = 100;
++        columnNames[7] = L10n.getString(&quot;overviewColPhyt&quot;);
++        columnSizes[7] = 100;
++        columnNames[8] = L10n.getString(&quot;overviewColPhytCode&quot;);
++        columnSizes[8] = 50;
++        columnNames[9] = L10n.getString(&quot;overviewColCountry&quot;);
++        columnSizes[9] = 100;
++        columnNames[10] = L10n.getString(&quot;overviewColQuadrant&quot;);
++        columnSizes[10] = 50;
++        columnNames[11] = L10n.getString(&quot;overviewColOccNote&quot;);
++        columnSizes[11] = 150;
++        columnNames[12] = L10n.getString(&quot;overviewColLocNote&quot;);
++        columnSizes[12] = 150;
++        columnNames[13] = L10n.getString(&quot;overviewColAltitude&quot;);
++        columnSizes[13] = 50;
++        columnNames[14] = L10n.getString(&quot;overviewColLongitude&quot;);
++        columnSizes[14] = 50;
++        columnNames[15] = L10n.getString(&quot;overviewColLatitude&quot;);
++        columnSizes[15] = 50;
++        columnNames[16] = L10n.getString(&quot;overviewColSource&quot;);
++        columnSizes[16] = 100;
++        columnNames[17] = L10n.getString(&quot;overviewColPublication&quot;);
++        columnSizes[17] = 100;
++        columnNames[18] = L10n.getString(&quot;overviewColHerbarium&quot;);
++        columnSizes[18] = 80;
++        columnNames[19] = L10n.getString(&quot;overviewColMetadata&quot;);
++        columnSizes[19] = 100;
++        columnNames[20] = L10n.getString(&quot;overviewColMonth&quot;);
++        columnSizes[20] = 50;
++        columnNames[21] = L10n.getString(&quot;overviewColDay&quot;);
++        columnSizes[21] = 50;
++        columnNames[22] = L10n.getString(&quot;overviewColTime&quot;);
++        columnSizes[22] = 100;
++    }
++    
++    /**
++     * Expects from, pageSize, currentPage and resultid variables to be set appropriately.
++     */
++    private void loadData() throws DBLayerException, RemoteException
++    {
++        Object[] row;
++        AuthorOccurrence result;
++        Plant plant;
++        Object[] resultObj, records;
++        resultsCount = db.getNumRows(getResultid());
++        logger.debug(&quot;resultsCount = &quot;+resultsCount);
++        to = Math.min(resultsCount, from + pageSize - 1);
++        logger.debug(&quot;to = &quot;+to+&quot; from=&quot;+from+&quot; currentPage=&quot;+currentPage);
++        data = new Object[to - from + 1][];
++        logger.debug(&quot;data.length = &quot;+data.length);
++        records = db.more(getResultid(), from, to);
++        logger.debug(&quot;records.length = &quot; + records.length);
+ 
+-    public int getRowCount()
+-    {
++        for (int i = 1; i &lt;= to - from + 1 ; i++) {
++            resultObj = (Object[])records[i-1];
++            result = (AuthorOccurrence)resultObj[0];
++            row = new Object[COLUMN_COUNT];
++            row[0] = false;
++            row[1] = result.getOccurrence().getPlant().getTaxon();
++            row[2] = result.getAuthor().getWholeName();
++            row[3] = result.getOccurrence().getHabitat().getNearestVillage().getName();
++            row[4] = result.getOccurrence().getHabitat().getDescription();
++            row[5] = result.getOccurrence().getYearCollected();
++            row[6] = result.getOccurrence().getHabitat().getTerritory().getName();
++            row[7] = result.getOccurrence().getHabitat().getPhytochorion().getName();
++            row[8] = result.getOccurrence().getHabitat().getPhytochorion().getCode();
++            row[9] = result.getOccurrence().getHabitat().getCountry();
++            row[10] = result.getOccurrence().getHabitat().getQuadrant();
++            row[11] = result.getOccurrence().getNote();
++            row[12] = result.getOccurrence().getHabitat().getNote();
++            row[13] = result.getOccurrence().getHabitat().getAltitude();
++            row[14] = result.getOccurrence().getHabitat().getLongitude();
++            row[15] = result.getOccurrence().getHabitat().getLatitude();
++            row[16] = result.getOccurrence().getDataSource();
++            row[17] = result.getOccurrence().getPublication().getCollectionName();
++            row[18] = result.getOccurrence().getHerbarium();
++            row[19] = result.getOccurrence().getMetadata().getDataSetTitle();
++            row[20] = result.getOccurrence().getMonthCollected();
++            row[21] = result.getOccurrence().getDayCollected();
++            row[22] = result.getOccurrence().getTimeCollected();
++            data[i-1] = row;
++        }//i        
++    }
++    
++    public int getRowCount() {
+         return data.length;
+     }
+-
+-    public int getColumnCount()
+-    {
++    
++    public int getColumnCount() {
+         return columnNames.length;
+     }
+-
+-    public Object getValueAt(int i, int i0)
+-    {
++    
++    public Object getValueAt(int i, int i0) {
+         return data[i][i0];
+     }
+     
+@@ -72,52 +186,130 @@
+     public String getColumnName(int c){
+         return columnNames[c];
+     }
+-
+-    public void setValueAt(Object value, int row, int column)
+-    {
++    
++    public void setValueAt(Object value, int row, int column) {
+         data[row][column] = value;
++        //repaint view - with new value
++        this.fireTableCellUpdated(row, column);
+     }
+     
+-    public boolean isCellEditable(int row, int column) 
+-    {
+-    	if (column == 0 )
+-    	{
+-    		return true;
+-    	}
+-    	return false;
++    public boolean isCellEditable(int row, int column) {
++        if (column == 0 ) {
++            return true;
++        }
++        return false;
+     }
+     
+-    public boolean isSimple()
+-    {
++    public int getColumnSize(int col) {
++        return columnSizes[col];
++    }
++    
++    public boolean isSimple() {
+         return simple;
+     }
+     
+-    public void setSimple(boolean simple)
+-    {
++    public void setSimple(boolean simple) {
+         this.simple = simple;
+     }
+     
+-    public void selectAll() 
+-    {
++    public void selectAll() {
+         for (int i = 0; i &lt; data.length; i++) {
+-            data[i][0] = true;
++            setValueAt(true,i,0);
+         }
+     }
+     
+-    public void selectNone() 
+-    {
++    public void selectNone() {
+         for (int i = 0; i &lt; data.length; i++) {
+-            data[i][0] = false;
++            setValueAt(false, i, 0);
+         }
+     }
+     
+-    public void invertSelected()
+-    {
++    public void invertSelected() {
+         for (int i = 0; i &lt; data.length; i++) {
+             if ((Boolean)data[i][0] == true)
+-                data[i][0] = false;
++                setValueAt(false, i, 0);
+             else
+-                data[i][0] = true;
+-        }        
++                setValueAt(true, i, 0);
++        }
+     }
++    
++    public int getPageSize() {
++        return pageSize;
++    }
++    
++    public void setPageSize(int pageSize) {
++        this.pageSize = pageSize;
++        if (from + pageSize &gt; resultsCount)
++            from = resultsCount - pageSize + 1;
++        //FIXME: - taky musi umet prepocitat from a to
++        try {
++            loadData();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        fireTableDataChanged();
++    }
++    
++    public int getCurrentPage() {
++        return currentPage;
++    }
++    
++    public void setCurrentPage(int currentPage) {
++        this.currentPage = currentPage;
++    }
++
++    public boolean nextPage() throws DBLayerException, RemoteException 
++    {
++        int lastPage = getPagesCount();
++        logger.debug(&quot;lastPage = &quot; + lastPage);
++        if (currentPage &lt; lastPage)
++        {
++            currentPage++;  
++            from = from + pageSize;
++            loadData(); //load data with new parameter currentPage
++            fireTableDataChanged(); //let the table compoment know it should redraw itself
++            logger.debug(&quot;currentPage = &quot;+ currentPage);
++            return true;
++        } else {
++            return false;
++        }
++    }
++    
++    public boolean prevPage() throws DBLayerException, RemoteException
++    {
++        if (currentPage &gt; 1)
++        {
++            currentPage--;
++            from = from - pageSize;
++            loadData(); //load data with new parameter currentPage
++            fireTableDataChanged(); //let the table compoment know it should redraw itself
++            logger.debug(&quot;currentPage = &quot;+ currentPage);
++            return true;
++        } else {
++            return false;
++        }
++    }
++    
++    public int getResultid() {
++        return resultid;
++    }
++
++    public void setResultid(int resultid) {
++        this.resultid = resultid;
++    }
++
++    public int getResultsCount() {
++        return resultsCount;
++    }
++    
++    public void setResultsCount(int resultsCount) {
++        this.resultsCount = resultsCount;
++    }
++    
++    public int getPagesCount() 
++    {
++        return ((Number)Math.ceil(resultsCount / (pageSize*1.0))).intValue();
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-04-02 17:44:26 UTC (rev 100)
+@@ -22,7 +22,9 @@
+ statusLangSettings = Switches to language settings
+ statusOtherSettings = Switches to other settings
+ prevButton = Prev
++prevButtonTT = Shows previous page
+ nextButton = Next
++nextButtonTT = Shows next page
+ Data=Data
+ dataImport=&amp;Import
+ dataImportTooltip=Imports occurence records into the database
+@@ -45,7 +47,34 @@
+ invertSelected=Invert
+ invertSelectedTT=Inverts the selection
+ 
++overviewColX = X
++overviewColName = Name
++overviewColAuthor = Author
++overviewColVillage = Nearest village
++overviewColPlace = Place description
++overviewColYear = Year
++overviewColTerritory = Territory
++overviewColPhyt = Phytochorion
++overviewColPhytCode = Phyt. code
++overviewColCountry = Country
++overviewColQuadrant = Quadrant
++overviewColOccNote = Note (occurrence)
++overviewColLocNote = Note (location)
++overviewColAltitude = Altitude
++overviewColLongitude = Longitude
++overviewColLatitude = Latitude
++overviewColSource = Source
++overviewColPublication = Publication
++overviewColHerbarium = Herbarium
++overviewColMetadata = Metadata
++overviewColMonth = Month
++overviewColDay = Day
++overviewColTime = Time
+ 
++overviewRecordsCount=Results:
++overviewRecordsCountTT=Number of results found
++overviewPageStatus=Page:
++overviewPageStatusTT=Current page / Total number of pages
+ 
+ authorMgr=Author manager
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-02 15:28:02 UTC (rev 99)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-02 17:44:26 UTC (rev 100)
+@@ -88,9 +88,9 @@
+             throw new DBLayerException(&quot;Cannot load Hibernate configuration. Details: &quot;+e.getMessage());            
+         }
+ 
+-        cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Temp/plantloreHIBdata.fdb&quot;);
++        //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Temp/plantloreHIBdata.fdb&quot;);
+         //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/DatabaseTest/database/plantlore.fdb&quot;);
+-        //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreDBdata.fdb&quot;);
++        cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreHIBdata.fdb&quot;);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, &quot;sysdba&quot;);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, &quot;masterkey&quot;);        
+         try {
+@@ -215,9 +215,11 @@
+         // Read all the selected rows
+         try {
+             for (int i=0; i&lt;=(to-from); i++) {
++                logger.debug(&quot;About to get result number &quot;+i);
+                 if (res.next()) {
+                     data[i] = res.get();
+                 } else {
++                    logger.debug(&quot;res.get() would return: &quot;+res.get());
+                     logger.error(&quot;Result doesn't have enough rows&quot;);
+                     throw new DBLayerException(&quot;Result doesn't have enough rows&quot;);                
+                 }                
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000096.html">[Plantlore-dev] r99 - trunk/documentation
+</A></li>
+	<LI>Next message: <A HREF="000100.html">[Plantlore-dev] r101 - in trunk/src/net/sf/plantlore: client client/login middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#99">[ date ]</a>
+              <a href="thread.html#99">[ thread ]</a>
+              <a href="subject.html#99">[ subject ]</a>
+              <a href="author.html#99">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

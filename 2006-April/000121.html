@@ -1,0 +1,364 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r119 - trunk/src/net/sf/plantlore/common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r119%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200604071145.k37Bj1vJ015984%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000119.html">
+   <LINK REL="Next"  HREF="000122.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r119 - trunk/src/net/sf/plantlore/common</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r119%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200604071145.k37Bj1vJ015984%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r119 - trunk/src/net/sf/plantlore/common">krater at berlios.de
+       </A><BR>
+    <I>Fri Apr  7 13:45:01 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000119.html">[Plantlore-dev] r118 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000122.html">[Plantlore-dev] r120 - trunk/lib
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#121">[ date ]</a>
+              <a href="thread.html#121">[ thread ]</a>
+              <a href="subject.html#121">[ subject ]</a>
+              <a href="author.html#121">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-07 13:44:57 +0200 (Fri, 07 Apr 2006)
+New Revision: 119
+
+Modified:
+   trunk/src/net/sf/plantlore/common/Assistant.java
+   trunk/src/net/sf/plantlore/common/AutoComboBox.java
+   trunk/src/net/sf/plantlore/common/AutoTextArea.java
+Log:
+The Assistant placement bug has been fixed in AutoTextArea.java. The maximum-number-of-lines restriction has been added.
+
+The AutoComboBox now accepts new strings as well (though the use of such behaviour is discouraged, see the Javadoc of this component).
+
+
+Modified: trunk/src/net/sf/plantlore/common/Assistant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Assistant.java	2006-04-05 14:01:18 UTC (rev 118)
++++ trunk/src/net/sf/plantlore/common/Assistant.java	2006-04-07 11:44:57 UTC (rev 119)
+@@ -1,10 +1,13 @@
+ package net.sf.plantlore.common;
+ 
++import java.awt.Component;
+ import java.awt.Container;
++import java.awt.Point;
+ import java.awt.Rectangle;
+ 
+ import javax.swing.JLayeredPane;
+ import javax.swing.JList;
++import javax.swing.JRootPane;
+ import javax.swing.JScrollPane;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.text.Position;
+@@ -25,6 +28,7 @@
+ public class Assistant extends JScrollPane {
+ 
+ 	protected JList list;
++	private Point o;
+ 	
+ 	/**
+ 	 * Create the Assistant.
+@@ -63,13 +67,29 @@
+ 
+ 	/** Display the Assistant on the designated coordinates. */
+ 	public void display(int x, int y) {
+-		setLocation(x, y); setVisible(true);
++		setLocation(o.x + x, o.y + y); setVisible(true);
+ 	}
+ 
+ 	/** Display the Assistant on the designated coordinates if it is not already visible. */
+ 	public void display(Rectangle r) {
+ 		display(r.x, r.y);
+ 	}
++	
++	/** Re-adjust the offset of the Visual Assistant according to the position of the parent components. */
++	public void readjustOffset(Component c) {
++		o =  new Point(0, 0); 
++		while(c != null &amp;&amp; !(c instanceof JRootPane)) {
++			Point p = c.getLocation();
++			o.translate(p.x, p.y);
++			c = c.getParent();			
++		}
++	}
++	
++	/** Adjust the offset of the Visual Assistant according to the position of the parent components. */
++	public void adjustOffset(Component c) {
++		if(o != null) return;
++		readjustOffset(c);
++	}
+ 
+ 	/** Set selected index and ensure it is visible. */
+ 	public void setSelectedIndex(int index) {
+
+Modified: trunk/src/net/sf/plantlore/common/AutoComboBox.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-05 14:01:18 UTC (rev 118)
++++ trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-07 11:44:57 UTC (rev 119)
+@@ -1,5 +1,6 @@
+ package net.sf.plantlore.common;
+ 
++
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
+@@ -15,18 +16,32 @@
+ 
+ /**
+  * AutoComboBox is an extension of the standard JComboBox.
++ * The AutoComboBox can run in two modes now
++ * &lt;ul&gt;
++ * &lt;li&gt;&lt;b&gt;strict&lt;/b&gt; ~
+  * It prevents the User from entering an invalid or incomplete entry,
+- * and ensures that something is always selected.
++ * and ensures that something is always selected.&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;benevolent&lt;/b&gt; ~ The User can enter anything (not just something
++ * that matches one of the choices in the list). The component acts as a 
++ * guide this time.&lt;/li&gt;
++ * &lt;/ul&gt;
+  * &lt;br/&gt;
+  * Heavily refined from the source code created by Stephane Crasnier. 
+  * &lt;br/&gt;
+- * I wish I wrote it myself from scratch :/
++ * The use of the benevolent behaviour is discouraged as it contradicts the sole purpose 
++ * of this component. If you want to allow the User 
++ * to leave this field blank, use a special
++ * record &quot;------&quot; or &quot;not specified&quot; instead.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @version 1.1
+  * @since The beginning of time.
+  */
+ public class AutoComboBox extends JComboBox {
+ 	
++	protected boolean allowNew = false;
++	protected int capacity = 32;
++	
+ 
+ 	/**
+ 	 * Create the AutoComboBox with given array of choices.
+@@ -42,8 +57,22 @@
+ 		editor.setDocument(a); editor.addKeyListener(a); editor.addFocusListener(a);
+ 	}
+ 	
++	/**
++	 * Specify whether the component should also accept strings that are not part of the list of choices.
++	 * 
++	 * @param strict  True (ie. be strict!) if new strings are not allowed.
++	 */
++	public void setStrict(boolean strict) { allowNew = !strict; }
+ 	
++	/**
++	 * Set the maximum number of characters the user can insert into the text field.
++	 * 
++	 * @param capacity The maximum number of characters the user can type.
++	 */
++	public void setCapacity(int capacity) { this.capacity = capacity; }
+ 	
++	
++	
+ 	private class AutoDocument extends PlainDocument implements KeyListener, FocusListener {
+ 		
+ 		/** Prevent entering the setMatch method recursively. */
+@@ -53,25 +82,31 @@
+ 		 * Select the first suitable choice beginnig with &lt;code&gt;prefix&lt;/code&gt;.
+ 		 * 
+ 		 * @param prefix		The prefix of the string. 
+-		 * @param partial	Display only partial string? 
++		 * @param popupl	Display the string only (no popup selection)? 
+ 		 */
+-		synchronized private void setMatch(String prefix, boolean partial) {
++		synchronized private void setMatch(String prefix, boolean popup) {
+ 			if (!prevent) {
+ 				prevent = true;
+-				setPopupVisible(partial); // make sure popup is/isn't visible
++				setPopupVisible(popup); // make sure popup is/isn't visible
+ 				try {
++					boolean noMatch = true;
+ 					if (prefix == null) prefix = getText(0, getLength());
+ 					// Find the first suitable choice and select it.
+ 					for(int i = 0; i &lt; getItemCount(); i++) {
+ 						String item = (String) getItemAt(i); // test the i-th choice
+ 						if( prefix.length() &lt;= item.length() &amp;&amp; prefix.equalsIgnoreCase(item.substring(0, prefix.length())) ) {
+ 							setSelectedIndex(i); // CRAP! This method calls remove() &amp; insertString()!!!
+-							if(partial) item = item.substring(0, prefix.length()); // trim the string
++							if(popup) item = item.substring(0, prefix.length()); // trim the string
+ 							super.remove(0, getLength());
+ 							super.insertString(0, item, null); // rewrite the text
++							noMatch = false;
+ 							break;
+ 						}
+ 					}
++					if(allowNew &amp;&amp; noMatch &amp;&amp; prefix.length() &lt; capacity) {
++						super.remove(0, getLength());
++						super.insertString(0, prefix, null);
++					}
+ 				} catch (BadLocationException e) {} 
+ 				finally { prevent = false; }
+ 			}
+@@ -102,4 +137,6 @@
+ 		public void keyReleased(KeyEvent arg0) {}
+ 		public void focusGained(FocusEvent arg0) {}
+ 	}
++
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/AutoTextArea.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-04-05 14:01:18 UTC (rev 118)
++++ trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-04-07 11:44:57 UTC (rev 119)
+@@ -28,7 +28,8 @@
+  * 			&lt;code&gt;Page Up&lt;/code&gt;, &lt;code&gt;Page Down&lt;/code&gt; and
+  * 			mouse clicks behave like when in &lt;code&gt;JTextArea&lt;/code&gt;,
+  * 		&lt;/li&gt;
+- * 		&lt;li&gt;&lt;code&gt;Escape&lt;/code&gt; and &lt;code&gt;Enter&lt;/code&gt; are disabled,&lt;/li&gt;
++ * 		&lt;li&gt;&lt;code&gt;Escape&lt;/code&gt; is disabled,&lt;/li&gt;
++ * 		&lt;li&gt;&lt;code&gt;Enter&lt;/code&gt; creates a new line,&lt;/li&gt;
+  * 		&lt;li&gt;&lt;code&gt;Tab&lt;/code&gt; transfers the focus to the next component,&lt;/li&gt;
+  * 		&lt;li&gt;&lt;code&gt;Delete&lt;/code&gt;, &lt;code&gt;Backspace&lt;/code&gt; and any
+  * 			other key switch the &lt;code&gt;AutoTextArea&lt;/code&gt; to the ASSISTANCE mode.&lt;/li&gt;
+@@ -65,17 +66,24 @@
+  * &lt;/dl&gt; 
+  * &lt;br/&gt;
+  * The AutoTextArea assumes the list of choices is sorted according to the selected language
+- * (the behaviour of the Assistant may appear confusing otherwise).
++ * (the behaviour of the Assistant may seem to be confusing otherwise).
+  * &lt;br/&gt;
++ * AutoTextArea &lt;b&gt;does now provide&lt;/b&gt;
++ * &lt;ul&gt;
++ * &lt;li&gt;size restriction - &quot;unlimited&quot; number of records cannot be entered,&lt;/li&gt;
++ * &lt;li&gt;smart assistant placement - the Visual Assistant now displays correctly even when placed within
++ *      several other components (panels).&lt;/li&gt;
++ * &lt;/ul&gt;
++ * 
++ * &lt;br/&gt;
+  * AutoTextArea &lt;b&gt;does not provide&lt;/b&gt; 
+  * &lt;ul&gt;
+- * &lt;li&gt;size restriction - &quot;unlimited&quot; number of records can be entered,&lt;/li&gt;
+  * &lt;li&gt;duplicity checks - one record may be entered twice,&lt;/li&gt; 
+- * &lt;li&gt;scrolling - use JScrollPane with AutoTextArea explicitly,&lt;/li&gt;
+- * &lt;li&gt;smart assistant placement - the Visual Assistant may not be completely visible in some cases.&lt;/li&gt;
++ * &lt;li&gt;scrolling - use JScrollPane with AutoTextArea explicitly.&lt;/li&gt;
+  * &lt;/ul&gt;   
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @version 1.1
+  */
+ public class AutoTextArea extends JTextArea implements KeyListener, FocusListener, MouseListener {
+ 	
+@@ -95,6 +103,9 @@
+ 	/** The number of items skipped in the assistant when PAGE_DOWN/PAGE_UP is pressed. */
+ 	private int step = 10;
+ 	
++	/** The maximum number of lines that can be inserted into the text area. */
++	protected int capacity = 50;
++	
+ 
+ 	/*======================================================================
+ 	 	Keyboard behaviour
+@@ -113,9 +124,13 @@
+ 			case KeyEvent.VK_TAB: // transfer the focus to another component
+ 				if((e.getModifiers() &amp; KeyEvent.SHIFT_DOWN_MASK) &gt; 0) transferFocusBackward();
+ 				else transferFocus();				
+-			case KeyEvent.VK_ENTER:
+ 			case KeyEvent.VK_ESCAPE:
+ 				e.consume(); // no further processing of this event
++				
++			case KeyEvent.VK_ENTER:
++				// Consume this event only if the number of records exceeds the set capacity.
++				if(capacity &lt;= this.getLineCount()) e.consume(); 
++				
+ 			case KeyEvent.VK_UP:
+ 			case KeyEvent.VK_DOWN:
+ 			case KeyEvent.VK_LEFT:
+@@ -140,7 +155,7 @@
+ 		// Consume the event -&gt; no further processing 
+ 		e.consume();
+ 		
+-		boolean eoln = false;
++		boolean eoln = false; // does this line end with a newline \n?
+ 		String prefix = &quot;&quot;; // contents of the current line
+ 		try { prefix = getText(start, end - start); } catch(BadLocationException b) {}
+ 		if(prefix.endsWith(&quot;\n&quot;)) { end--; eoln = true; }
+@@ -191,15 +206,18 @@
+ 			case KeyEvent.VK_ENTER: // insert the current selection, switch to the FreeRoam
+ 				mode = Mode.FREE_ROAM;
+ 				assistant.setVisible(false);
++				String newline = (capacity &lt;= this.getLineCount()) ? &quot;&quot; : &quot;\n&quot;;
+ 				if(eoln) end++;
+ 				if(list.isSelectionEmpty()) replaceRange(&quot;&quot;, start, end);
+-				else replaceRange(list.getSelectedValue() + &quot;\n&quot;, start, end);
++				else replaceRange(list.getSelectedValue() + newline, start, end);
+ 				return;
+ 			}
+ 		}
+ 		
+ 		// Mode switchers - DEL, BACKSPACE, ANY_OTHER_KEY
+ 		mode = Mode.ASSISTANCE;
++		assistant.adjustOffset(this); // make sure the Visual assistant gets displayed on the correct spot
++		
+ 		if(!assistant.isVisible())
+ 			try {
+ 				// Place the assistant below the current line
+@@ -305,8 +323,19 @@
+ 		addKeyListener(this); addFocusListener(this);
+ 	}
+ 	
++	@Deprecated
++	public void adjustOffset() {
++		assistant.adjustOffset(this);
++	}
+ 	
++	/** Set the maximum number of records that can be inserted into this text area. */
++	public void setCapacity(int capacity) {
++		this.capacity = capacity;
++	}
++
+ 	
++	
++	
+ 	/*======================================================================
+ 	 	Unimplemented &amp; uninteresting methods
+ 	  ======================================================================*/
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000119.html">[Plantlore-dev] r118 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000122.html">[Plantlore-dev] r120 - trunk/lib
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#121">[ date ]</a>
+              <a href="thread.html#121">[ thread ]</a>
+              <a href="subject.html#121">[ subject ]</a>
+              <a href="author.html#121">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

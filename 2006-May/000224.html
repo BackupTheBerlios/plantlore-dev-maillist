@@ -1,0 +1,552 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r200 - trunk/src/net/sf/plantlore/client/export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r200%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605011023.k41ANYY1019455%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000225.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r200 - trunk/src/net/sf/plantlore/client/export</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r200%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605011023.k41ANYY1019455%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r200 - trunk/src/net/sf/plantlore/client/export">krater at berlios.de
+       </A><BR>
+    <I>Mon May  1 12:23:34 CEST 2006</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000225.html">[Plantlore-dev] Import &amp; spojene problemy
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#224">[ date ]</a>
+              <a href="thread.html#224">[ thread ]</a>
+              <a href="subject.html#224">[ subject ]</a>
+              <a href="author.html#224">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-01 12:23:34 +0200 (Mon, 01 May 2006)
+New Revision: 200
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+Log:
+ExportMng accepts both ResultSetIdentificators (int) and SelectQueries.
+If you passed a ResultSetIdentificator, you had to close the corresponding SelectQuery yourself!
+In the light of recent changes made to the HibDBLayer, the Export manager can handle the SelectQuery by himself.
+
+ExportProgressView.java can display exceptions thrown by the ExportMng now.
+
+TODO: Use the L10n class (*View.java, Exceptions!).
+
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-04-30 20:06:28 UTC (rev 199)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-01 10:23:34 UTC (rev 200)
+@@ -62,11 +62,38 @@
+ 	 * @param selection	The set of selected records.
+ 	 */
+ 	public DefaultDirector(Builder builder, int result, DBLayer database, Selection selection) {
+-		this.build = builder; this.result = result; this.database = database;
+-		this.selection = selection.clone(); 
++		setBuilder(builder); 
++		setResult(result); 
++		setDatabase(database); 
++		setSelection(selection); 
+ 	}
+ 	
+ 	
++	protected void setBuilder(Builder builder) {
++		if(builder == null)
++			logger.warn(&quot;The builder is null!&quot;);
++		build = builder;
++	}
++	
++	protected void setResult(int result) {
++		if(result &lt; 0)
++			logger.warn(&quot;The result set is probably not valid!&quot;);
++		this.result =  result;
++	}
++	
++	protected void setDatabase(DBLayer db) {
++		if(db == null)
++			logger.warn(&quot;The database layer is null!&quot;);
++		this.database = db;
++	}
++	
++	protected void setSelection(Selection selection) {
++		if(selection == null || selection.isEmpty())
++			logger.warn(&quot;The selection is null or empty!&quot;);
++		if(selection == null) this.selection = new Selection(); // empty selection
++		else this.selection = selection.clone();
++	}
++	
+ 	/** 
+ 	 * How many records have been exported.
+ 	 * 
+@@ -88,7 +115,7 @@
+ 	 * @param record The &quot;node&quot; in the tree hierarchy representing the
+ 	 * whole record.
+ 	 */
+-	private void buildPart(Record record) throws IOException {
++	private void buildParts(Record record) throws IOException {
+ 		// Build this part of the record.
+ 		build.part(record);
+ 		// Now look at all children of this record.
+@@ -96,7 +123,7 @@
+ 			Method getter = Template.getMethod(record.getClass(), key);
+ 			try {
+ 				// And build'em too.
+-				buildPart( (Record) getter.invoke( record, NO_PARAM ) );
++				buildParts( (Record) getter.invoke( record, NO_PARAM ) );
+ 			}
+ 			catch(IllegalAccessException e) { e.printStackTrace(); }
+ 			catch(InvocationTargetException e) { e.printStackTrace(); }
+@@ -128,7 +155,7 @@
+ 				build.startRecord();
+ 				
+ 				// Parse the record.
+-				buildPart( record );
++				buildParts( record );
+ 				
+ 				// ONE-TO-MANY HACK:
+ 				// Occurrence -&gt; AuthorOccurrences &amp; Authors
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-04-30 20:06:28 UTC (rev 199)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-01 10:23:34 UTC (rev 200)
+@@ -4,6 +4,7 @@
+ import java.io.FileWriter;
+ import java.io.IOException;
+ import java.io.Writer;
++import java.rmi.RemoteException;
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+@@ -13,6 +14,8 @@
+ import net.sf.plantlore.common.exception.ExportException;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
++import net.sf.plantlore.server.DBLayerException;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -23,12 +26,15 @@
+  * &lt;br/&gt;
+  * There are several entities involved in the export:
+  * &lt;ul&gt;
++ * &lt;li&gt;&lt;b&gt;DBLayer&lt;/b&gt; the database layer that will carry out the requests.
++ * 					Mustn't be null!&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;Director&lt;/b&gt; iterates over the &lt;i&gt;result set&lt;/i&gt; 
+  * 					and &lt;i&gt;selected records&lt;/i&gt; passes to the &lt;i&gt;builder&lt;/i&gt;,&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;Builder&lt;/b&gt; writes the records to the &lt;i&gt;output&lt;/i&gt;.&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;Selection&lt;/b&gt; stores the list of all selected records 
+  * 					(&lt;i&gt;restriction&lt;/i&gt; in the database terminology).&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;ResultID&lt;/b&gt; identifies the result set.&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;SelectQuery&lt;/b&gt; identifies the result set as well (in fact the resultId is derived from it).&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;Template&lt;/b&gt; stores the list of all selected columns that should be 
+  * 					exported (&lt;i&gt;projection&lt;/i&gt; in the database terminology).&lt;/li&gt;
+  * &lt;li&gt;&lt;b&gt;File&lt;/b&gt; stores the name of file as the user has suggested it.&lt;/li&gt;
+@@ -36,7 +42,11 @@
+  * 					and is used to determine which &lt;i&gt;builder&lt;/i&gt; will be used
+  * 					to produce the output.&lt;/li&gt;
+  * &lt;/ul&gt;
+- *  
++ * &lt;br/&gt;
++ * It is strongly recommended to &lt;b&gt;use one of the constructors&lt;/b&gt;
++ * instead of creating the object partially using setters!
++ * The participating entities may depend on each other and
++ * therefore their setters must be called in a specific order.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-29 
+@@ -67,7 +77,8 @@
+ 	private DefaultDirector director;
+ 	private Builder builder;
+ 	private boolean aborted = false, exportInProgress = false;
+-	private int results, selectedResults;
++	private int results = -1, selectedResults = -1;
++	private SelectQuery query = null;
+ 	
+ 	private Writer writer;
+ 	private Thread current;
+@@ -81,12 +92,29 @@
+ 	 * @param selection	The list of selected records. 
+ 	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+ 	 */
+-	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template) {
++	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template) 
++	throws ExportException {
+ 		setDBLayer(dblayer);
+ 		setResultId(result);
+ 		setSelection(selection);
+ 		setTemplate(template); 
+ 	}
++	
++	/**
++	 * Create a new Export Manager.
++	 * 
++	 * @param dblayer The database layer mediating the access to the database.
++	 * @param query	The query defining the result set which is to be iterated over.
++	 * @param selection	The list of selected records. 
++	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
++	 */
++	public ExportMng(DBLayer dblayer, SelectQuery query, Selection selection, Template template) 
++	throws ExportException, DBLayerException, RemoteException {
++		setDBLayer(dblayer);
++		setSelectQuery(query);
++		setSelection(selection);
++		setTemplate(template);
++	}
+ 
+ 	/**
+ 	 * Create a new Export manager and &lt;b&gt;mark all records AND columns as selected&lt;/b&gt;.
+@@ -94,7 +122,8 @@
+ 	 * @param dblayer	The database layer mediating the access to the database.
+ 	 * @param result	The result set identificator which is to be iterated over.
+ 	 */
+-	public ExportMng(DBLayer dblayer, int result) {
++	public ExportMng(DBLayer dblayer, int result) 
++	throws ExportException {
+ 		setDBLayer(dblayer);
+ 		setResultId(result);
+ 		setTemplate(null);
+@@ -104,13 +133,30 @@
+ 	}
+ 	
+ 	/**
++	 * Create a new Export manager and &lt;b&gt;mark all records AND columns as selected&lt;/b&gt;.
++	 * 
++	 * @param dblayer	The database layer mediating the access to the database.
++	 * @param query	The query defining the result set which is to be iterated over.
++	 */
++	public ExportMng(DBLayer dblayer, SelectQuery query) 
++	throws ExportException, DBLayerException, RemoteException {
++		setDBLayer(dblayer);
++		setSelectQuery(query);
++		setTemplate(null);
++		
++		Selection select = new Selection(); select.all();
++		setSelection(select);
++	}
++	
++	/**
+ 	 * Create a new Export manager and &lt;b&gt;mark all columns as selected&lt;/b&gt;.
+ 	 * 
+ 	 * @param dblayer	The database layer mediating the access to the database. 
+ 	 * @param result	The result set identificator which is to be iterated over.
+ 	 * @param selection	The list of selected records. Shouldn't be empty.
+ 	 */
+-	public ExportMng(DBLayer dblayer, int result, Selection selection) {
++	public ExportMng(DBLayer dblayer, int result, Selection selection) 
++	throws ExportException{
+ 		this(dblayer, result, selection, null);
+ 	}
+ 	
+@@ -124,20 +170,44 @@
+ 	 * @param filter	The filter which will be used to determine the appropriate builder of the output.
+ 	 * @param file	The name of the file where the output will be written.
+ 	 */
+-	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template, XFilter filter, String filename) {
++	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template, XFilter filter, String filename) 
++	throws ExportException {
+ 		this(dblayer, result, selection, template);
+ 		setSelectedFile(filename);
+ 		setActiveFileFilter(filter);
+ 	}
+ 	
+ 	/**
++	 * Create a new Export manager.
++	 * 
++	 * @param dblayer	The database layer mediating the access to the database. Shouldn't be empty.
++	 * @param query	The query defining the result set which is to be iterated over. Shouldn't be empty.
++	 * @param selection	The list of selected records. Shouldn't be empty.
++	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
++	 * @param filter	The filter which will be used to determine the appropriate builder of the output.
++	 * @param file	The name of the file where the output will be written.
++	 */
++	public ExportMng(DBLayer dblayer, SelectQuery query, Selection selection, Template template, XFilter filter, String filename) 
++	throws ExportException, DBLayerException, RemoteException  {
++		setDBLayer(dblayer);
++		setSelectQuery(query);
++		setSelection(selection);
++		setTemplate(template);
++		setSelectedFile(filename);
++		setActiveFileFilter(filter);
++	}
++	
++	/**
+ 	 * Set a new DBLayer.
+-	 * &lt;b&gt;Forget the current result set identificator&lt;/b&gt; (if there is any) - that identificator
+-	 * most probably refered to a result set of the previous dblayer! 
++	 * &lt;b&gt;Forget the current result set identificator AND/OR selection query&lt;/b&gt;
++	 * - those objects most probably refered to a result set of the previous dblayer! 
+ 	 */
+-	synchronized public void setDBLayer(DBLayer dblayer) {
+-		if(dblayer == null) 
+-			logger.warn(&quot;The database layer is null!&quot;);
++	synchronized public void setDBLayer(DBLayer dblayer)
++	throws ExportException {
++		if(dblayer == null) { 
++			logger.error(&quot;The database layer is null!&quot;);
++			throw new ExportException(&quot;The database layer cannot be null!&quot;);
++		}
+ 		db = dblayer;
+ 		results = selectedResults = resultId = -1;
+ 	}
+@@ -205,6 +275,28 @@
+ 	}
+ 	
+ 	/**
++	 * Set a particular select query. The manager will execute this select query
++	 * and update the &lt;code&gt;resultId&lt;/code&gt;. 
++	 */
++	synchronized public void setSelectQuery(SelectQuery query) 
++	throws ExportException, DBLayerException, RemoteException {
++		if(query == null)
++			logger.warn(&quot;The select query is null!&quot;);
++
++		// Discontinue using the previous query
++		if(this.query != null) db.closeQuery(this.query);
++		this.query = query;
++		
++		if(this.query != null) {
++			results = selectedResults = -1;
++			resultId = db.executeQuery( query );
++			results = db.getNumRows( resultId );
++			if(select != null) selectedResults = select.size( results );
++		}
++	}
++	
++	
++	/**
+ 	 * Start the export procedure. The export procedure
+ 	 * will run in its own thread.
+ 	 * 
+@@ -212,7 +304,8 @@
+ 	 * @throws ExportException	If the information provided is not complete.
+ 	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
+ 	 */
+-	synchronized public void start() throws ExportException, IOException {
++	synchronized public void start() 
++	throws ExportException, IOException {
+ 		// Check if we have all necessary components ready.
+ 		if( db == null )
+ 			throw new ExportException(&quot;There is no point in starting an export - the DBLayer is not set!&quot;);
+@@ -269,6 +362,8 @@
+ 					// Dispose of the writer.
+ 					writer.close();
+ 					exportInProgress = false;
++					// Dispose of the query.
++					if(query != null) db.closeQuery( query );
+ 					logger.debug(&quot;Environment cleaned up.&quot;);
+ 					// Notify observers the export has ended.
+ 					update(null, null);
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-04-30 20:06:28 UTC (rev 199)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-05-01 10:23:34 UTC (rev 200)
+@@ -1,71 +1,44 @@
+ package net.sf.plantlore.client.export;
+ 
+ import java.awt.event.ActionEvent;
+-import java.util.Observable;
+-import java.util.Observer;
+ 
+ import javax.swing.AbstractAction;
+-import javax.swing.Action;
+ import javax.swing.JOptionPane;
+ 
+ //import net.sf.plantlore.l10n.L10n;
+ 
+-public class ExportProgressCtrl implements Observer {
++public class ExportProgressCtrl {
+ 	
+ 	private ExportMng model;
+ 	private ExportProgressView view;
+ 	
+-	private Action abort = new Abort(), close = new Close(), current = close;
++		
+ 	
+-	
+-	
+ 	public ExportProgressCtrl(ExportMng model, ExportProgressView view) {
+ 		this.model = model; this.view = view;
+-		view.abort.addActionListener( current );
+-		model.addObserver(this);
++		view.abort.addActionListener( new Abort() );
+ 	}
+ 	
+ 	class Abort extends AbstractAction {
+ 		public void actionPerformed(ActionEvent arg0) {
+-			int response =
+-				JOptionPane.showOptionDialog(view,
+-					    &quot;The export procedure will be aborted.&quot;,
+-					    &quot;Abort export&quot;,
+-					    JOptionPane.OK_CANCEL_OPTION,
+-					    JOptionPane.WARNING_MESSAGE,
+-					    null,
+-					    null,
+-					    null);
++			if(model.isExportInProgress()) {
++				int response =
++					JOptionPane.showOptionDialog(view,
++							&quot;The export procedure will be aborted.&quot;,
++							&quot;Abort export&quot;,
++							JOptionPane.OK_CANCEL_OPTION,
++							JOptionPane.WARNING_MESSAGE,
++							null,
++							null,
++							null);
+ 				if(response == JOptionPane.OK_OPTION) {
+ 					model.abort();
+ 				}
++			}
++			else
++				view.setVisible(false);
+ 		}
+ 	}
+ 	
+-	class Close extends AbstractAction {
+-		public void actionPerformed(ActionEvent arg0) {
+-			view.setVisible(false);		
+-		}
+-	}
+ 
+-	/**
+-	 * Switch the behaviour of the abort button appropriatelly.
+-	 */
+-	public void update(Observable source, Object parameter) {
+-		boolean runs = model.isExportInProgress();
+-		if(runs &amp;&amp; current == close) {
+-			view.abort.removeActionListener(current);
+-			current = abort;
+-			view.abort.addActionListener(current);
+-			view.abort.setText(&quot;Abort&quot;);
+-		} else if(!runs &amp;&amp; current == abort) {
+-			view.abort.removeActionListener(current);
+-			current = close;
+-			view.abort.addActionListener(current);
+-			view.abort.setText(&quot;Close&quot;);
+-		}
+-		
+-		
+-	}
+-
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-04-30 20:06:28 UTC (rev 199)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-01 10:23:34 UTC (rev 200)
+@@ -16,7 +16,7 @@
+ public class ExportProgressView extends javax.swing.JFrame implements Observer {
+ 	
+ 	private ExportMng model;
+-	private int total;
++	private int total, count;
+     
+     /** Creates new form ExportProgressView */
+     public ExportProgressView(ExportMng model) {
+@@ -95,6 +95,8 @@
+     		progress.setStringPainted(false);
+     	}
+     	
++    	abort.setText(&quot;Abort&quot;);
++    	
+     	super.setVisible(visible);
+     	
+     	update(null, null);
+@@ -104,28 +106,45 @@
+     
+ 	public void update(Observable source, Object parameter) {
+ 		if(model.isAborted()) {
+-			status.setText(&quot;Aborting...&quot;);
+-		}
+-		if(!model.isExportInProgress()) {
++			setTitle(&quot;Export aborted&quot;);
++			if(total &gt; 0)
++				status.setText(&quot;Export procedure aborted.\n &quot; + count +&quot;/&quot; + total + &quot; records exported.&quot;);
++			else
++				status.setText(&quot;Export procedure aborted.\n &quot; + count + &quot; records exported.&quot;);
++			progress.setValue(0);
++			progress.setString(&quot;&quot;);
++			abort.setText(&quot;Close&quot;);
++		} 
++		else if(!model.isExportInProgress()) {
+ 			setTitle(&quot;Export completed&quot;);
+ 			status.setText(&quot;Completed...&quot;);
+ 			progress.setMaximum(100);
+ 			progress.setValue(100);
+ 			progress.setString(&quot;100%&quot;);
++			abort.setText(&quot;Close&quot;);
++		}
++		else if( parameter != null &amp;&amp; parameter instanceof Exception ) {
++			Exception e = (Exception) parameter;
++			setTitle(&quot;Export interrupted&quot;);
+ 			
++			status.setText(&quot;An exception interrupted the export procedure: &quot; + e);
++			
++			progress.setValue(0);
++			progress.setString(&quot;&quot;);
++			abort.setText(&quot;Close&quot;);
+ 		}
+ 		else if( this.isVisible() ) {
+-			int count = model.getNumberOfExported();
++			count = model.getNumberOfExported();
+ 			if(count &gt;= 0) {
+ 				progress.setValue( count );
+ 				if(total &gt; 0) {
+ 					String percent = Integer.toString(100*count / total) + &quot;%&quot;;
+ 					progress.setString( percent );
+-					status.setText(&quot;Exporting &quot; + count + &quot;. of &quot; + total);
++					status.setText(&quot;Exporting\n &quot; + count + &quot;. of &quot; + total);
+ 					setTitle(&quot;Exported &quot; + percent);
+ 				}
+ 				else {
+-					status.setText(&quot;Exporting &quot; + count + &quot;.&quot;);
++					status.setText(&quot;Exporting\n &quot; + count + &quot;.&quot;);
+ 					setTitle(&quot;Exported &quot; + count);
+ 				}
+ 				
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000225.html">[Plantlore-dev] Import &amp; spojene problemy
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#224">[ date ]</a>
+              <a href="thread.html#224">[ thread ]</a>
+              <a href="subject.html#224">[ subject ]</a>
+              <a href="author.html#224">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

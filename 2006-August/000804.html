@@ -1,0 +1,565 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r582 - in trunk/src/net/sf/plantlore:	client/history client/metadata client/user server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r582%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20client/metadata%20client/user%20server&In-Reply-To=%3C200608280001.k7S01XMD009938%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000803.html">
+   <LINK REL="Next"  HREF="000805.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r582 - in trunk/src/net/sf/plantlore:	client/history client/metadata client/user server</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r582%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/history%20client/metadata%20client/user%20server&In-Reply-To=%3C200608280001.k7S01XMD009938%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r582 - in trunk/src/net/sf/plantlore:	client/history client/metadata client/user server">lada at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 28 02:01:33 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000803.html">[Plantlore-dev] Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+        <LI>Next message: <A HREF="000805.html">[Plantlore-dev] r583 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#804">[ date ]</a>
+              <a href="thread.html#804">[ thread ]</a>
+              <a href="subject.html#804">[ subject ]</a>
+              <a href="author.html#804">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-28 01:59:53 +0200 (Mon, 28 Aug 2006)
+New Revision: 582
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.form
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+History, userManager, metadataManager - query is not closed after reconnect, delete setting new dblayer (database = dblayer).
+
+HistoryView - dialog is bigger now
+
+Use new defaultEscapeKeyPressed()
+
+HibernateDBLayer.java - add prefix to user login. You have to create new user with prefix in database (you can find more information in mail).
+
+Modified: trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -35,11 +35,7 @@
+         DefaultEscapeKeyPressed escapeKeyPressed = new DefaultEscapeKeyPressed(view);
+         // Add action listeners to buttons
+         view.closeButton.setAction(new DefaultCancelAction(view));
+-        view.helpButton.addActionListener(new helpButtonListener());
+-        // Add key listeners
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.detailsTextArea.addKeyListener(escapeKeyPressed);
++        view.helpButton.addActionListener(new helpButtonListener());        
+     }
+        
+    /**
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -2019,8 +2019,7 @@
+ 	 * Set a new DBLayer.
+ 	 */
+ 	synchronized public void setDBLayer(DBLayer dblayer) {
+-		closeQuery();
+-		database = dblayer;
++		query = null;                
+ 	}
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -42,26 +42,7 @@
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+         this.model = modelH;        
+         this.view = viewH;
+-        DefaultEscapeKeyPressed escapeKeyPressed = new DefaultEscapeKeyPressed(view);
+-             
+-        //Add action listeners to buttons        
+-        view.closeButton.setAction(new DefaultCancelAction(view));        
+-        view.previousButton.addActionListener(new previousButtonListener());
+-        view.nextButton.addActionListener(new nextButtonListener());
+-        view.selectAllButton.addActionListener(new selectAllButtonListener());
+-        view.unselectAllButton.addActionListener(new unselectAllButtonListener());
+-        view.undoButton.addActionListener(new undoSelectedButtonListener());
+-        view.toDisplayValueTextField.addActionListener(new rowSetDisplayChangeListener());
+-        //Add key listeners
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.previousButton.addKeyListener(escapeKeyPressed);
+-        view.nextButton.addKeyListener(escapeKeyPressed);
+-        view.selectAllButton.addKeyListener(escapeKeyPressed);
+-        view.unselectAllButton.addKeyListener(escapeKeyPressed);
+-        view.undoButton.addKeyListener(escapeKeyPressed);
+-        view.toDisplayValueTextField.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.getTable().addKeyListener(escapeKeyPressed);                                
++        DefaultEscapeKeyPressed escapeKeyPressed = new DefaultEscapeKeyPressed(view);        
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.form	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.form	2006-08-27 23:59:53 UTC (rev 582)
+@@ -25,7 +25,7 @@
+                   &lt;Component id=&quot;jPanel3&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;518&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;568&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -80,7 +80,7 @@
+                       &lt;Component id=&quot;locationValueLabel&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;authorValueLabel&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace pref=&quot;488&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;538&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -178,7 +178,7 @@
+                       &lt;Component id=&quot;whenInsertValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;whoInsertValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace pref=&quot;502&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;552&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -248,7 +248,7 @@
+               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;642&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;692&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;undoButton&quot; min=&quot;-2&quot; pref=&quot;90&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -270,7 +270,7 @@
+                           &lt;Component id=&quot;displayedLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;displayedValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;29&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;79&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;nextButton&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -167,7 +167,7 @@
+                     .add(taxonValueLabel)
+                     .add(locationValueLabel, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(authorValueLabel, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+-                .addContainerGap(488, Short.MAX_VALUE))
++                .addContainerGap(538, Short.MAX_VALUE))
+         );
+         jPanel1Layout.setVerticalGroup(
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -209,7 +209,7 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(whenInsertValueLabel)
+                     .add(whoInsertValueLabel))
+-                .addContainerGap(502, Short.MAX_VALUE))
++                .addContainerGap(552, Short.MAX_VALUE))
+         );
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -268,7 +268,7 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 642, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 692, Short.MAX_VALUE)
+                     .add(jPanel3Layout.createSequentialGroup()
+                         .add(undoButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 90, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+@@ -289,7 +289,7 @@
+                         .add(displayedLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(displayedValueLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 29, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 79, Short.MAX_VALUE)
+                         .add(nextButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addContainerGap())
+         );
+@@ -331,7 +331,7 @@
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                         .add(helpButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 518, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 568, Short.MAX_VALUE)
+                         .add(closeButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addContainerGap())
+         );
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -56,17 +56,7 @@
+         view.undoToDateButton.addActionListener(new undoToDateButtonListener());
+         view.detailsButton.addActionListener(new detailsHistoryListener());
+         view.toDisplayValueTextField.addActionListener(new rowSetDisplayChangeListener()); 
+-        view.clearHistoryButton.addActionListener(new clearHistoryListener());
+-        // Add key listeners
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.previousButton.addKeyListener(escapeKeyPressed);
+-        view.nextButton.addKeyListener(escapeKeyPressed);
+-        view.undoToDateButton.addKeyListener(escapeKeyPressed);
+-        view.toDisplayValueTextField.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.tableHistoryList.addKeyListener(escapeKeyPressed);
+-        view.clearHistoryButton.addKeyListener(escapeKeyPressed);
+-        view.detailsButton.addKeyListener(escapeKeyPressed);
++        view.clearHistoryButton.addActionListener(new clearHistoryListener());       
+     }
+  
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -49,25 +49,7 @@
+         
+         // Add action listene
+         view.closeButton.setAction(new DefaultCancelAction(view)); 
+-        view.operationButton.addActionListener(new operationButtonListener());
+-        // Add key listener
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.operationButton.addKeyListener(escapeKeyPressed);
+-        view.technicalContactNameText.addKeyListener(escapeKeyPressed);
+-        view.technicalContactEmailText.addKeyListener(escapeKeyPressed);
+-        view.technicalContactAddressText.addKeyListener(escapeKeyPressed);
+-        view.contentContactNameText.addKeyListener(escapeKeyPressed);
+-        view.contentContactEmailText.addKeyListener(escapeKeyPressed);
+-        view.contectContactAddressText.addKeyListener(escapeKeyPressed);
+-        view.dataSetTitleText.addKeyListener(escapeKeyPressed);
+-        view.dataSetDetailsText.addKeyListener(escapeKeyPressed);
+-        view.sourceInstirutionIdText.addKeyListener(escapeKeyPressed);
+-        view.sourceIdText.addKeyListener(escapeKeyPressed);
+-        view.abbrevText.addKeyListener(escapeKeyPressed);
+-        view.recordbasisText.addKeyListener(escapeKeyPressed);
+-        view.noteTextArea.addKeyListener(escapeKeyPressed);
+-        view.createDateChooser.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
++        view.operationButton.addActionListener(new operationButtonListener());       
+       }
+    
+    /**
+@@ -125,6 +107,7 @@
+                 //check wether all obligatory fields were filled 
+                 if (view.checkNotNull()) {
+                     //load data
++                    logger.debug(&quot;metadata createWhen: &quot; + model.getMetadataRecord().getDateCreate());
+                     model.getMetadataRecord().setTechnicalContactName(view.technicalContactNameText.getText());
+                     model.getMetadataRecord().setTechnicalContactEmail(view.technicalContactEmailText.getText());
+                     model.getMetadataRecord().setTechnicalContactAddress(view.technicalContactAddressText.getText());
+@@ -137,7 +120,7 @@
+                     model.getMetadataRecord().setSourceId(view.sourceIdText.getText());
+                     model.getMetadataRecord().setOwnerOrganizationAbbrev(view.abbrevText.getText());
+                     model.getMetadataRecord().setRecordBasis(view.recordbasisText.getText());
+-                    model.getMetadataRecord().setBiotopeText(view.noteTextArea.getText());
++                    model.getMetadataRecord().setBiotopeText(view.noteTextArea.getText());                    
+                     model.getMetadataRecord().setDateModified(new Date());
+                     model.getMetadataRecord().setDeleted(0);                 
+                     view.close(); 
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -498,8 +498,7 @@
+ 	 * Set a new DBLayer.
+ 	 */
+ 	synchronized public void setDBLayer(DBLayer dblayer) {
+-		closeQuery();
+-		database = dblayer;
++		query = null;		
+ 	}
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -70,27 +70,7 @@
+         view.searchButton.addActionListener(new searchUserListener());
+         view.sortAscendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+         view.sortDescendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+-        view.sortField.addFocusListener(new SortComboFocusListener());
+-        
+-        // Add key listeners
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.previousButton.addKeyListener(escapeKeyPressed);
+-        view.nextButton.addKeyListener(escapeKeyPressed);
+-        view.addButtons.addKeyListener(escapeKeyPressed);
+-        view.toDisplayValueTextField.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.editButtons.addKeyListener(escapeKeyPressed);
+-        view.deleteButton.addKeyListener(escapeKeyPressed);
+-        view.detailsButton.addKeyListener(escapeKeyPressed);
+-        view.searchButton.addKeyListener(escapeKeyPressed);
+-        view.sortField.addKeyListener(escapeKeyPressed);
+-        view.tableMetadataList.addKeyListener(escapeKeyPressed);
+-        view.sortAscendingRadioButton.addKeyListener(escapeKeyPressed);
+-        view.sortDescendingRadioButton.addKeyListener(escapeKeyPressed);
+-        view.sourceInstitutionIdText.addKeyListener(escapeKeyPressed);           
+-        view.sourceIdText.addKeyListener(escapeKeyPressed);
+-        view.dataSetTitleText.addKeyListener(escapeKeyPressed);
+-        view.addKeyListener(escapeKeyPressed);                   
++        view.sortField.addFocusListener(new SortComboFocusListener());                             
+     }   
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -52,23 +52,7 @@
+         //Add action listene
+         view.closeButton.setAction(new DefaultCancelAction(view)); 
+         view.operationButton.addActionListener(new OperationButtonListener());
+-        view.editGroupTextArea.addFocusListener(new UserAreaListener());
+-        // Add key listener
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.operationButton.addKeyListener(escapeKeyPressed);
+-        view.editGroupTextArea.addKeyListener(escapeKeyPressed);
+-        view.loginText.addKeyListener(escapeKeyPressed);
+-        view.passwordtext.addKeyListener(escapeKeyPressed);
+-        view.firstNameText.addKeyListener(escapeKeyPressed);
+-        view.surnameText.addKeyListener(escapeKeyPressed);
+-        view.emailText.addKeyListener(escapeKeyPressed);
+-        view.addressText.addKeyListener(escapeKeyPressed);
+-        view.noteText.addKeyListener(escapeKeyPressed);
+-        view.addRightCheckBox.addKeyListener(escapeKeyPressed);
+-        view.administratorCheckBox.addKeyListener(escapeKeyPressed);
+-        view.editAllCheckBox.addKeyListener(escapeKeyPressed);
+-        view.editGroupTextArea.addKeyListener(escapeKeyPressed);
++        view.editGroupTextArea.addFocusListener(new UserAreaListener());      
+     }
+     
+  
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -416,11 +416,13 @@
+     				database.executeUpdateInTransaction(userRecord.getRight());                                
+                                 database.executeUpdateInTransaction(userRecord);                                 
+                                 userList.set(idRecord, userRecord);                                  
+-                                //Update list of names (logins) of users
+-                                Pair&lt;String, Integer&gt; userTmp = users[userRecord.getId()];
+-                                userTmp.setFirst(userRecord.getWholeName()+ &quot; (&quot; + userRecord.getLogin() + &quot; )&quot;);
+-                                logger.debug(userTmp.getFirst());
+-                                users[userRecord.getId()] = userTmp;                                                               
++                                // Update list of names (logins) of users                                
++                                //logger.debug(&quot;Edit user - before update user list&quot;);
++                                //Pair&lt;String, Integer&gt; userTmp = users[userRecord.getId()];
++                                //userTmp.setFirst(userRecord.getWholeName()+ &quot; (&quot; + userRecord.getLogin() + &quot; )&quot;);
++                                //logger.debug(userTmp.getFirst());
++                                //users[userRecord.getId()] = userTmp; 
++                                //logger.debug(&quot;Edit user - after update user list&quot;);
+ 		        }catch (RemoteException e) {
+ 		        	logger.error(&quot;Process update User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());
+ 		        	database.rollbackTransaction();		        	
+@@ -433,7 +435,8 @@
+                                 DBLayerException dbex = new DBLayerException(ERROR_EDIT + e.getMessage());
+                                 dbex.setStackTrace(e.getStackTrace());
+                                 throw dbex; 		            
+-		        } 	                        
++		        } 
++                        logger.debug(&quot;Edit user - before commit transaction&quot;);
+ 		        database.commitTransaction();                                                
+ 		        setInfoFinishedTask(true);
+ 		        return null;
+@@ -568,8 +571,7 @@
+ 	 * Set a new DBLayer.
+ 	 */
+ 	synchronized public void setDBLayer(DBLayer dblayer) {
+-		closeQuery();
+-		database = dblayer;
++		query = null;		
+ 	}
+     
+     /** 
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -33,7 +33,7 @@
+  */
+ public class UserManagerCtrl {
+     
+-	/** Instance of a logger */
++    /** Instance of a logger */
+     private Logger logger;
+     /** Model of UserManager MVC */
+     private UserManager model;
+@@ -71,44 +71,7 @@
+         view.sortAscendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+         view.sortDescendingRadioButton.addFocusListener(new SortDirectionRadioFocusListener());
+         view.showAllUserRadioBUtton.addFocusListener(new ShowUserDirectionRadioFocusListener());
+-        view.showCurrentUserRadioButton.addFocusListener(new ShowUserDirectionRadioFocusListener());
+-        
+-        //Add key listeners
+-        view.closeButton.addKeyListener(escapeKeyPressed);
+-        view.previousButton.addKeyListener(escapeKeyPressed);
+-        view.nextButton.addKeyListener(escapeKeyPressed);
+-        view.addButtons.addKeyListener(escapeKeyPressed);
+-        view.toDisplayValueTextField.addKeyListener(escapeKeyPressed);
+-        view.helpButton.addKeyListener(escapeKeyPressed);
+-        view.editButtons.addKeyListener(escapeKeyPressed);
+-        view.deleteButton.addKeyListener(escapeKeyPressed);
+-        view.detailsButton.addKeyListener(escapeKeyPressed);
+-        view.searchButton.addKeyListener(escapeKeyPressed);
+-        view.sortComboBox.addKeyListener(escapeKeyPressed);
+-        view.tableUserList.addKeyListener(escapeKeyPressed);
+-        view.sortAscendingRadioButton.addKeyListener(escapeKeyPressed);
+-        view.sortDescendingRadioButton.addKeyListener(escapeKeyPressed);
+-        view.addressSearchText.addKeyListener(escapeKeyPressed);           
+-        view.emailSearchText.addKeyListener(escapeKeyPressed);
+-        view.loginSearchText.addKeyListener(escapeKeyPressed);
+-        view.wholeNameSearchText.addKeyListener(escapeKeyPressed);
+-        view.showActiveUserPanel.addKeyListener(escapeKeyPressed);
+-        view.showAllUserRadioBUtton.addKeyListener(escapeKeyPressed);
+-        view.showCurrentUserRadioButton.addKeyListener(escapeKeyPressed);
+-        view.addKeyListener(escapeKeyPressed);
+-    /*    
+-        //Search user and Load data
+-        Task task = model.searchUser(true);        
+-        
+-        new DefaultProgressBar(task, view, true) {		   							 						
+-        	@Override
+-			public void afterStopping() {
+-				//Process result and Update view dialog
+-		        reloadData(1, model.getDisplayRows());		       
+-           } 		   					
+-		};		                 	                   
+-        task.start();   
+-        */                                    
++        view.showCurrentUserRadioButton.addFocusListener(new ShowUserDirectionRadioFocusListener());                              
+     }  
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-27 17:30:03 UTC (rev 581)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-27 23:59:53 UTC (rev 582)
+@@ -106,6 +106,9 @@
+     
+     private DatabaseSettings settings;
+     private String currentlyConnectedUser = &quot;&quot;;
++    
++    /** Plantlore prefix of user name */
++    private static final String USER_PREFIX = &quot;plantlore_&quot;;
+         
+     public HibernateDBLayer(DatabaseSettings settings) {
+     	this(null, settings);
+@@ -182,7 +185,7 @@
+         	cfg.setProperty(&quot;hibernate.connection.url&quot;, settings.getConnectionStringPrefix() + dbID 
+         			+ &quot;?&quot; + settings.getConnectionStringSuffix());
+         // Set username and password to access database
+-        cfg.setProperty(&quot;hibernate.connection.username&quot;, user);
++        cfg.setProperty(&quot;hibernate.connection.username&quot;, HibernateDBLayer.USER_PREFIX + user);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, password);
+         
+         // Build session factory &amp; create a new session.
+@@ -2034,7 +2037,7 @@
+         }        
+         try {
+             Connection conn = txSession.connection();                    
+-            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
++            PreparedStatement pstmt = conn.prepareStatement(&quot;CREATE USER &quot; +HibernateDBLayer.USER_PREFIX + name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot;+admin);            
+             pstmt.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+@@ -2090,10 +2093,10 @@
+             }            
+             // In case password has changed, execute statement to change the password
+             if ((password != null) &amp;&amp; (!password.equals(&quot;&quot;))) {                                    
+-                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot; +admin);                
++                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; WITH PASSWORD '&quot; +password+ &quot;' &quot; +admin);                
+                 pstmt.execute();
+             } else {                
+-                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +name+ &quot; &quot; +admin);                
++                PreparedStatement pstmt = conn.prepareStatement(&quot;ALTER USER &quot; +HibernateDBLayer.USER_PREFIX +name+ &quot; &quot; +admin);                
+                 pstmt.execute();            
+             }            
+         } catch (HibernateException e) {
+@@ -2137,7 +2140,7 @@
+         }
+         try {
+             Connection conn = txSession.connection();        
+-            PreparedStatement pstmt = conn.prepareStatement(&quot;DROP USER &quot; + name);            
++            PreparedStatement pstmt = conn.prepareStatement(&quot;DROP USER &quot; +HibernateDBLayer.USER_PREFIX + name);            
+             pstmt.execute();
+         } catch (HibernateException e) {
+             logger.warn(&quot;Unable to retrieve JDBC connection from the Hibernate session. Details: &quot;+e.getMessage());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000803.html">[Plantlore-dev] Prefix databazoveho uzivatele - postup jak si	uzivatele v DB vytvorit
+</A></li>
+	<LI>Next message: <A HREF="000805.html">[Plantlore-dev] r583 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#804">[ date ]</a>
+              <a href="thread.html#804">[ thread ]</a>
+              <a href="subject.html#804">[ subject ]</a>
+              <a href="author.html#804">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

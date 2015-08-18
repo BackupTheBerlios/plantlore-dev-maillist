@@ -1,0 +1,165 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Kratke pojednanie o zamkoch
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Kratke%20pojednanie%20o%20zamkoch&In-Reply-To=%3Cea88f1620608061102o1f8d98d0y3a3409220f70d9aa%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000658.html">
+   <LINK REL="Next"  HREF="000660.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Kratke pojednanie o zamkoch</H1>
+    <B>Tomas Kovarik</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Kratke%20pojednanie%20o%20zamkoch&In-Reply-To=%3Cea88f1620608061102o1f8d98d0y3a3409220f70d9aa%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Kratke pojednanie o zamkoch">tkovarik at gmail.com
+       </A><BR>
+    <I>Sun Aug  6 20:02:22 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000658.html">[Plantlore-dev] [Bug #8265] The overview throws an exception on the	last page
+</A></li>
+        <LI>Next message: <A HREF="000660.html">[Plantlore-dev] r488 - in trunk/src/net/sf/plantlore: client	common/debug middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#659">[ date ]</a>
+              <a href="thread.html#659">[ thread ]</a>
+              <a href="subject.html#659">[ subject ]</a>
+              <a href="author.html#659">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Caute,
+
+tak som konecne viac prenikol do toho ako sa implementuju a pouzivaju zamky
+v Hibernate. Na zaciatok jedna zla sprava: Zamykanie tak ako sme o nom
+uvazovali (zamknutie zaznamu pri nacitani, odomknutie pri update)
+nepojde(teda nie je to uplne pravda, slo by to ale nepaci sa mi ako -
+podrobnosti
+nizsie).
+
+Na zaciatok nejake definicie :)
+* Optimistic lock - strategia zamykania kedy predpokladame, ze ku konfliktom
+nebude prilis dochadzat. V pripade konfliktu sa musi jeden z ucastnikov
+odrollovat. Vyhodou je relativne jednoducha implementacia, maly vplyv na
+vykon aplikacie. Odporucaju (a pouzivaju) sa zevraj celkom casto.
+
+* Pessimistic lock - strategia, kedy predpokladame ze konflikty su caste a
+nedovolime editovat zaroven rovnake data viacerym uzivatelom. Transakcie
+ktore uzivatelia vykonavaju su v podstate serializovane (druha zacne az ta
+prva uplne skonci). Toto riesenie chceme implementovat. Vyhodou je uz
+sponminana serializovatelnost, nevyhody su jednak vykon (ale to by ma az tak
+netrapilo) ale hlavne to, ze implementacia nie je uplne jednoducha.
+
+Kde je teda problem s pesimistickymi zamkami?
+1. Zamky sa tykaju len jednej databazovej transakcie [rozlisujeme databazovu
+transakciu - to medzi beginTransaction a commit resp.
+rollbackTransaction a aplikacnu
+transakciu - urcita postupnost akcii uzivatela, napr. vybrat zaznam, upravit
+ho, ulozit upravy]. Na zaciatku transakcie nacitame a zamkneme data, po
+commite (resp. rollbacku) sa zamok uvolni. My ale chceme aby zamok vydrzal
+pocas celej aplikacnej transakcie, co je problem pretoze to moze trvat dost
+dlho a musime si stale drzat otvorenu databazovu transakciu (co ma daleko od
+efektivneho pouzitia)
+
+2. Nejde to v Hibernate dobre implementovat. Hovorime o pripade, kedy drzime
+otvorenu databazovu transakciu pocas celej uzivatelskej transakcie.
+Hibernate robi pesimisticke zamykanie pomocou SQL prikazu select ... for
+update, ktory funguje tak, ze nacita vybrane riadky a zamkne ich (skutocny
+lock na urovni databaze). Zamky su odomknute po skonceni (databazovej)
+transakcie. Tento zamok dovoli inej transakcii (teda inemu klientovi) citat
+tie to data pomocou normalneho selectu, nedovoli ale select ... for update,
+update a delete. Su dve moznosti ako &quot;nedovolit&quot; tieto tri operacie. Prva je
+cakat, kym transakcia ktora drzi zamky neskonci. Toto cakanie je v pohode
+kym hovorime o beznych databazovych transakciach. V pripade, ze natiahneme
+databazovu transakciu na dlzku aplikacnej transakcie (teda vratane cakania
+na input uzivatela) je cakanie neunosne. Bohuzial nejde zistit na co sa caka
+a ani to prerusit (neprisiel som na ziaden sposob a ziaden asi ani nebude,
+blokuje to totiz samotny databazovy system). Druha moznost je pouzit SQL
+prikaz select ... for update NOWAIT. V tomto pripade sa necaka ale vyskoci
+vynimka s informaciou o tom, ze su data zamknute. Toto by aj celkom slo,
+problem ale je, ze NOWAIT implementuje (AFAIK, z tych co nas zaujimaju) len
+Oracle a PostgreSQL od verzie 8.1. Este aj to by slo :) ... bohuzial ale
+Hibernate este neimplementuje NOWAIT u PostgreSQL kedze verzia 8.1 je dost
+nova (na nete ani v ich Bugtracku o tom nic nie je, pozeral som sa do
+zdrojakov Hibernatu a nenasiel som to tam. Mozno to tam raz bude, viem ze to
+uz implementovali u Hibernatu pre .NET). Takze this is not the way (mozne
+riesenia su opatchovat si Hibernate alebo pouzit Native Postgre SQL dotaz,
+obidve su ale blbosti)
+
+Pozn.: V skutocnosti by to slo spravit - pridat do databaze novu tabulku
+(tzv. lock table) a drzat si v nej informacie o zamknutych riadkoch. Pri
+nacitani dat pre editaciu by sa skontrolovalo ci nie je dany riadok
+zamknuty. Do tohto sa mi ale moc neche...
+
+Pozn.: Toto sa pise v knizke Hibernate in Action:
+
+&quot;Note that the duration of a pessimistic lock in Hibernate is a single
+database transaction! This means you can't use an exclusive lock to block
+concurrent access longer than a single database transaction. We consider
+this a good thing, because the only solution would be an extremely expensive
+lock held in memory (or a so called lock table in the database) for the
+duration of, for example, an application transaction. This is almost always
+a performance bottleneck; every data access involves additional lock checks
+to a synchronized lock manager. You may, if absolutely required in your
+particular application, implement a simple long pessimistic lock yourself,
+using Hibernate to manage the lock table. Patterns for this can be found on
+the Hibernate website; however, we definitely don't recommend this approach.
+You have to carefully examine the performance implications of this
+exceptional case.&quot;
+
+Ako to spravit? Optimisticke zamykanie.
+Je viac moznosti ako to spravit. Prva su opat dlhe databazove transakcie
+(rovanko dlhe ako aplikacne transakcie). Ak je nastaveny transaction
+isolation level na Repeatable read, druha transakcia ktora sa pokusi o
+commit neuspeje a musi sa odrollovat. Toto ale podla mna nevyhovuje, kedze
+taketo dlhe databazove transakcie su celkom prasarna.
+Druha moznost je verzovanie. Toto riesenie ma v Hibernate celkom slusnu
+podporu. Ide o to, ze sa do tablky prida stlpec version kde sa drzi verzia
+pre kazdy riadok. O vsetky upravy a nacitanie tohoto stlpca sa stara
+Hibernate takze nie je potreba nic upravovat. Databazova transakcia nemusi
+byt dlha, to znamena ze aplikacna transakcia pozostava z viacerych
+databazovych transakcii. V pripade, ze prva transakcia ulozila svoje upravy
+a druha sa snazi ulozit svoje, vyskoci StaleObjectException a je mozne bud
+druhu transakciu odrollovat (uzivatel pride o svoje upravy) alebo spravit
+merge uprav obidvoch transakcii (toto by sme ale museli implementovat uz my)
+
+No, mam dost, dufam, ze som na nic nezabudol. Podrobnosti sa daju najst v
+knizke Hibernate in Action (podarilo sa mi ju stiahnut z netu), ak chcete
+mozem vam ju poslat. Rozoberieme to vecer po Skype.
+
+Majte sa
+
+Kovo
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060806/54b66cca/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060806/54b66cca/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000658.html">[Plantlore-dev] [Bug #8265] The overview throws an exception on the	last page
+</A></li>
+	<LI>Next message: <A HREF="000660.html">[Plantlore-dev] r488 - in trunk/src/net/sf/plantlore: client	common/debug middleware server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#659">[ date ]</a>
+              <a href="thread.html#659">[ thread ]</a>
+              <a href="subject.html#659">[ subject ]</a>
+              <a href="author.html#659">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,950 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r190 - in trunk/src/net/sf/plantlore/client/export: . builders
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r190%20-%20in%20trunk/src/net/sf/plantlore/client/export%3A%20.%20builders&In-Reply-To=%3C200604270917.k3R9HieT006675%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000212.html">
+   <LINK REL="Next"  HREF="000213.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r190 - in trunk/src/net/sf/plantlore/client/export: . builders</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r190%20-%20in%20trunk/src/net/sf/plantlore/client/export%3A%20.%20builders&In-Reply-To=%3C200604270917.k3R9HieT006675%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r190 - in trunk/src/net/sf/plantlore/client/export: . builders">krater at berlios.de
+       </A><BR>
+    <I>Thu Apr 27 11:17:44 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000212.html">[Plantlore-dev] r189 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+        <LI>Next message: <A HREF="000213.html">[Plantlore-dev] r191 - trunk/analysis/biocase
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#211">[ date ]</a>
+              <a href="thread.html#211">[ thread ]</a>
+              <a href="subject.html#211">[ subject ]</a>
+              <a href="author.html#211">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-27 11:17:42 +0200 (Thu, 27 Apr 2006)
+New Revision: 190
+
+Added:
+   trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/Builder.java
+   trunk/src/net/sf/plantlore/client/export/Director.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+Log:
+The export framework is almost finished. The Director is not ready - it cannot handle `one-to-many` relations (Occurence -&gt; AuthorOccurence), but everything else is prepared for it.
+All classes from the package &quot;client.login.export&quot; are fully documented now.
+The only thing that remains is to implement the XMLBuilder, ABCDBuilder, and DCBuilder. I suggest you study the TrainingBuilder to see how to write your own Builder (and I strongly recommend the use of the AbstractBuilder).
+Note that the CSVBuilder is somehow &quot;special&quot; and you should not use its approach (because the way the AbstractBuilder is implemented is more &quot;<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">Dom4j at XML</A> friendly&quot; - at least I hope it is). 
+
+
+Added: trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -0,0 +1,135 @@
++package net.sf.plantlore.client.export;
++
++import java.io.IOException;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.ArrayList;
++import java.util.Hashtable;
++
++import net.sf.plantlore.common.record.Record;
++
++/**
++ * A default implementation of the Builder interface.
++ * It is strongly recommended to subclass the AbstractBuilder
++ * and implement the &lt;code&gt;output()&lt;/code&gt; method
++ * instead of implementing the whole Builder interface
++ * yourself.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-04-27
++ * @version 1.0
++ * @see net.sf.plantlore.client.Builder
++ * @see AbstractBuilder#output(Class, String, Object)
++ */
++public abstract class AbstractBuilder implements Builder {
++	
++	/** For an invocation of parameterless methods. */
++	protected static final Object[] NO_PARAMETERS = new Object[0];
++	
++	protected Template template;
++	
++	/** A list of getters of selected columns for every table. */
++	protected Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt; properties = 
++		new Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt;(20);
++	
++	/**
++	 * Create a new DefaultBuilder.
++	 * 
++	 * @param template The template describing which columns are selected.
++	 */
++	public AbstractBuilder(Template template) {
++		setTemplate(template);
++	}
++	
++	/**
++	 * Set another template.
++	 * The builder stores a clone of the template.
++	 *  
++	 * @param template The new template. &lt;b&gt;Mustn't be &lt;i&gt;null&lt;/i&gt;&lt;/b&gt;.
++	 */
++	public void setTemplate(Template template) {
++		assert(template != null);
++		this.template = template.clone();
++		
++		// Store all getters of all selected columns.
++		for( Class table : Template.BASIC_TABLES)
++			try {
++				// Get the list of all properties.
++				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getProperties();
++				// Create a list of getters of those properties.
++				ArrayList&lt;Method&gt; methods = new ArrayList&lt;Method&gt;( columns.size() );
++				properties.put(table, methods);
++				// Check if these properties (columns) are set to be exported. 
++				for(String column : columns)  
++					if( template.isSet(table, column) )
++						methods.add( Template.getMethod( table, column ) );
++			} 
++			catch(IllegalAccessException e) { /*e.printStackTrace();*/ }
++			catch(InstantiationException e) { /*e.printStackTrace();*/ }
++	}
++	
++	/**
++	 * @return A clone of the template this Builder currently uses.
++	 */
++	public Template getTemplate() {
++		return template.clone();
++	}
++	
++	/**
++	 * Write the [table, column, value] to the output.
++	 * 
++	 * @param table	Name of the table.
++	 * @param column Name of the column.
++	 * @param value Value of the &lt;code&gt;table.column&lt;/code&gt;.
++	 * @throws IOException If the output could not be written.
++	 */
++	protected abstract void output(Class table, String column, Object value) throws IOException;
++
++	/**
++	 * Send the value of all properties (i.e. all columns that are not foreign keys)
++	 * of this record to the output. Uses the &lt;code&gt;output()&lt;/code&gt; method.
++	 * 
++	 * @see AbstractBuilder#output(Class, String, Object)
++	 */
++	public void part(Record record) throws IOException {
++		if(record == null) return;
++		Class table = record.getClass();
++		ArrayList&lt;Method&gt; methods = properties.get( table );
++		for(Method getter : methods) 
++			try {
++				// Invoke the getter.
++				Object value = getter.invoke( record, NO_PARAMETERS );
++				output( table, getter.getName().substring(3), value );
++			} 
++			catch(IllegalAccessException e) { /*e.printStackTrace();*/ }
++			catch(InvocationTargetException e) { /*e.printStackTrace();*/ }
++	}
++
++	/**
++	 * Call &lt;code&gt;part(Record)&lt;/code&gt; repeatedly.
++	 * 
++	 * @see AbstractBuilder#part(Record)
++	 */
++	public void part(Record... records) throws IOException {
++		for(Record r : records) 
++			part( r );		
++	}
++
++	/** Empty. */
++	public void startRecord() throws IOException {
++	}
++
++	/** Empty. */
++	public void finishRecord() throws IOException {
++	}
++
++	/** Empty. */
++	public void header() throws IOException {
++	}
++
++	/** Empty. */
++	public void footer() throws IOException {
++	}
++
++	
++}
+
+Modified: trunk/src/net/sf/plantlore/client/export/Builder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -13,40 +13,48 @@
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+  * @version 1.0
+- * @see Director
++ * @see net.sf.plantlore.client.export.Director
+  */
+ public interface Builder {
+ 		
+ 	/** 
+-	 * Write a header. This method is called just once before the iteration starts. 
++	 * Write a header. This method must be called just once before the iteration starts. 
+ 	 */
+ 	void header() throws IOException;
+ 	
+ 	/** 
+-	 * Write a footer. This method is called just once after the iteration ends. 
++	 * Write a footer. This method must be called just once after the iteration ends. 
+ 	 */
+ 	void footer() throws IOException;
+ 	
+ 	/** 
+ 	 * Make adjustments needed before
+ 	 * the output of another record starts. 
+-	 * This method is called right before the &lt;code&gt;writeRecord()&lt;/code&gt;. 
++	 * This method must be called right before any call of &lt;code&gt;part()&lt;/code&gt;. 
+ 	 */
+ 	void startRecord() throws IOException;
+ 	
+ 	/**
++	 * Write a part of the whole record.
+ 	 * 
+-	 * @param arg
+-	 * @throws IOException
++	 * @param arg A part of a record to be written. The record corresponds with one table.
++	 * @throws IOException If the writer encounters an error.
+ 	 */
+ 	void part(Record arg) throws IOException;
+ 	
+-	
++	/**
++	 * Convenient passing of more records. 
++	 * A typical implementation should call &lt;code&gt;part(Record)&lt;/code&gt; repeatedly.  
++	 * 
++	 * @param args An unempty list of records.
++	 * @throws IOException If the writer encounters an error.
++	 * @see Builder#part(Record)
++	 */
+ 	void part(Record... args) throws IOException;
+ 	
+ 	/** 
+ 	 * Make adjustments needed after the output of the current record is completed.
+-	 * This method is called right after the &lt;code&gt;writeRecord()&lt;/code&gt;. 
++	 * This method must be called right after the last call of &lt;code&gt;part()&lt;/code&gt;. 
+ 	 */
+ 	void finishRecord() throws IOException;
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/Director.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -4,31 +4,29 @@
+ import java.lang.reflect.InvocationTargetException;
+ import java.lang.reflect.Method;
+ import java.rmi.RemoteException;
+-import java.util.ArrayList;
+ 
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.middleware.DBLayer;
+-import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.server.DBLayerException;
+ 
+-
+ import org.apache.log4j.Logger;
+ 
+ /**
+  * The Director class (for export).
+- * Purpose: The Director continualy fetches results of the &lt;code&gt;query&lt;/code&gt;.
+- * The selected queries (queries whose ID is in the &lt;code&gt;selection&lt;/code&gt;)
++ * Purpose: The Director continualy fetches results of the resultset
++ * identified by the &lt;code&gt;result&lt;/code&gt;.
++ * The selected results (records whose ID is in the &lt;code&gt;selection&lt;/code&gt;)
+  * are passed to the &lt;code&gt;builder&lt;/code&gt; - the builder is responsible for
+  * creating a corresponing output.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- *	@version wrong (must be rewritten!) 
++ * @version 0.9 might still slightly change
+  *
+  * @see net.sf.plantlore.client.common.Selection
+  * @see net.sf.plantlore.client.export.Builder
+- * @see net.sf.plantlore.middlerware.DBLayer
++ * @see net.sf.plantlore.middleware.DBLayer
+  */
+ public class Director implements Runnable {
+ 	
+@@ -38,6 +36,8 @@
+ 	private Selection selection;
+ 	private DBLayer database;
+ 	private int result;
++	
++	private int count = 0;
+ 
+ 	/**
+ 	 * Create a new export Director. The Director iterates over the results 
+@@ -46,8 +46,8 @@
+ 	 * passes to the &lt;code&gt;builder&lt;/code&gt;.
+ 	 * 
+ 	 * @param builder	The particular builder used to construct the final output.
+-	 * @param query	The query which will be iterated over.
+-	 * @param database	The database layer that will carry out the execution of the query.
++	 * @param result	The result describing the resultset that will be iterated over.
++	 * @param database	The database layer that will quench the Director's thirst for more results.
+ 	 * @param selection	The set of selected records.
+ 	 */
+ 	public Director(Builder builder, int result, DBLayer database, Selection selection) {
+@@ -56,52 +56,75 @@
+ 	}
+ 	
+ 	
++	/** 
++	 * How many records has been exported.
++	 * 
++	 * @return The exact number of exported records.
++	 */
++	public int exportedRecords() { 
++		return count;
++	}
++	
++	
+ 	private static Object[] NO_PARAM = new Object[0];
+ 	
+-	
++	/**
++	 * The whole record is returned in a tree structure.
++	 * We must traverse this structure.
++	 * The children are denoted as &lt;i&gt;foreign keys&lt;/i&gt; 
++	 * - they contain other parts of the whole record.
++	 * 
++	 * @param record The &quot;node&quot; in the tree hierarchy representing the
++	 * whole record.
++	 */
+ 	private void buildPart(Record record) throws IOException {
++		// Build this part of the record.
+ 		build.part(record);
++		// Now look at all children of this record.
+ 		for(String key : record.getForeignKeys()) {
+ 			Method getter = Template.getMethod(record.getClass(), key);
+ 			try {
++				// And build'em too.
+ 				buildPart( (Record) getter.invoke( record, NO_PARAM ) );
+ 			}
+-			catch(IllegalAccessException e) {}
+-			catch(InvocationTargetException e) {}
++			catch(IllegalAccessException e) { e.printStackTrace(); }
++			catch(InvocationTargetException e) { e.printStackTrace(); }
+ 		}
+ 	}
+ 	
+ 	
+-	/** Execute the exporting procedure as described. */
++	/** 
++	 * Execute the exporting procedure -
++	 * fetch all results from the resultset and those that are selected
++	 * send to the builder to process them.
++	 */
+ 	public void run() {
+ 		try {
+-			long count = 0; // how many records were exported
+-			
+ 			logger.info(&quot;Export begins...&quot;);
++			build.header();
+ 			
+-			// Create the header of the file (some opening tags possibly).
+-			build.header();
+ 			// Iterate over the result of the query.
+-			
+ 			int rows = database.getNumRows( result );
+ 			for(int i = 0; i &lt; rows; i++) {
+ 				Object[] records = database.next( result );
+ 				Record record = (Record) records[0];
+-				if( !selection.contains( record ) ) continue; // is it selected?
+-				
++				if( !selection.contains( record ) ) continue; // Is the record selected?
++			
+ 				count++;
+-				// Write down this record.
+ 				build.startRecord();
+ 				
+ 				// Parse the record.
+ 				buildPart( record );
+ 				
++				// ONE-TO-MANY HACK:
+ 				// Occurrence -&gt; AuthorOccurrences &amp; Authors
++				// TODO: Iterace pres vsechny AuthorOccurence
+ 				
+ 				
++				
+ 				build.finishRecord();
+ 			}
+-			// Create the footer of the file (some closing tags possibly).
++
+ 			build.footer();
+ 			logger.info(&quot;Export completed. &quot; + count + &quot; records sent to output.&quot;);
+ 		}
+@@ -117,10 +140,5 @@
+ 			logger.error(e); e.printStackTrace();
+ 		}
+ 	}
+-	
+-	
+-	
+-	
+ 
+-
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -10,23 +10,28 @@
+ 
+ 
+ /**
+- * The template that holds the information about the selected columns and tables.
+- * This information is used by the builder to decide, whether or not the currently
+- * considered column of a table should be exported.
++ * The template holds information about the selected columns and tables.
++ * This information may used by builders and access rights managers
++ * to decide, whether or not the currently
++ * considered column should be exported / is accessible.
++ * &lt;br/&gt;
++ * Note: The template doesn't know anything about the structure
++ * (mapping) of the database.  
++ *  
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-22
++ * @version 1.0
+  */
+ public class Template {
+ 	
+-	/** The list of all pairs Table:Column that shall be exported. */
++	/** The list of all pairs Table.Column that are set. */
+ 	private Collection&lt;String&gt; columns = new HashSet&lt;String&gt;(20);
+ 	
+-	/** The list of all tables the current template covers. */
+-	private ArrayList&lt;Class&gt; tables = new ArrayList&lt;Class&gt;(20);
+-	
+ 	/** 
+ 	 * The list of &quot;basic tables&quot; i.e. tables related directly to the Occurence data.
++	 * The other tables are database specific and are used by our System only
++	 * (concerns History, LastUpdate, User, AccessRights, and possibly more).
+ 	 */
+ 	public final static Class[] BASIC_TABLES = new Class[] { 
+ 			Author.class, AuthorOccurrence.class, Habitat.class,
+@@ -34,108 +39,94 @@
+ 			Plant.class, Publication.class, Territory.class,
+ 			Village.class };
+ 	
++	/** Create a new template. */
++	public Template() {}
+ 	
+-	private static Hashtable&lt;String,Method&gt; getters;
++	/** A copy constructor. */
++	public Template(Template template) {
++		columns = new HashSet&lt;String&gt;( template.columns );
++	}
+ 	
+ 	
++	@Override
++	public Template clone() {
++		return new Template(this);
++	}
++	
++	
++	/** The list of all getters (of all properties of all tables). */
++	private static Hashtable&lt;String,Method&gt; getters = new Hashtable&lt;String, Method&gt;(100);
++	
++	/**
++	 * Return the getter of this Table.Column property.
++	 * &lt;br/&gt;
++	 * This method is fast because all getters are pre-loaded.
++	 * 
++	 * @param table	The class identifying the table.
++	 * @param column The name of the column.
++	 * @return The getter of table.column
++	 */
+ 	public static Method getMethod(Class table, String column) {
+ 		return getters.get(table+&quot;.&quot;+column);
+ 	}
+ 		
++	/** Pre-load all getters. */
+ 	static {
++		// Take all basic tables.
+ 		for( Class table : Template.BASIC_TABLES)
+ 			try {
++				// Take all their columns.
+ 				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getColumns();
+-				for(String column : columns)  
++				for(String column : columns)
++					// And store their getters. 
+ 					getters.put(table+&quot;.&quot;+column, getter(table, column));
+ 			} 
+-			catch(IllegalAccessException e) { e.printStackTrace(); }
+-			catch(InstantiationException e) { e.printStackTrace(); }
++			catch(IllegalAccessException e) {}
++			catch(InstantiationException e) {}
+ 	}
+ 	
+-	
++	/**
++	 * Return the method that corresponds with the getter of &lt;code&gt;table.column&lt;/code&gt;.  
++	 * 
++	 * @return The getter of &lt;code&gt;table.column&lt;/code&gt;. 
++	 */
+ 	private static Method getter(Class table, String column) {
+ 		try {
++			// Create the name of the getter.
+ 			StringBuilder s = new StringBuilder(&quot;get&quot; + column); 
+ 			s.setCharAt(3, Character.toUpperCase(s.charAt(3)));
+-			
++			// Take it. 
+ 			return table.getMethod( s.toString(), new Class[0] );
+-		} catch(NoSuchMethodException e) { e.printStackTrace(); }
++		} catch(NoSuchMethodException e) {}
+ 		return null;
+ 	}
+ 	
+-	
+-		
+-	/** 
+-	 * @return The table that is central (primary) to the current query. 
+-	 */
+-	public Class getRootTable() { return tables.get(0); }
+-	
+-	/** 
+-	 * Mark the database as set every time the database gets involved in a query!
+-	 * @param table	The database that is involved in a query.
+-	 */ 
+-	public void set(Class table) { 
+-		tables.add(table); 
+-	}
+-	
+-	/** 
+-	 * Unset a previously selected table.
+-	 * @param table The table to be unset. 
+-	 */
+-	public void unset(Class table) { 
+-		tables.remove(table);
+-	}
+-	
+-	/** 
+-	 * 
+-	 * @param table
+-	 * @return true if the some of the table's columns are seleted to be exported. 
+-	 */
+-	public boolean isSet(Class table) { 
+-		return tables.contains(table); 
+-	} 
+-	
+-	/**
+-	 * 
+-	 * @param table	The table we are interested in and that will be deleted if it is there.
+-	 * @return true if the table is set.
+-	 */
+-	public boolean isSetD(Class table) { return tables.remove(table); }
+-	
+-	/**
+-	 * 
+-	 * @param table
+-	 * @param column
+-	 */
++			
++	/** Select the &lt;code&gt;table.column&lt;/code&gt;. */
+ 	public void set(Class table, String column) { 
+-		columns.add(table+&quot;.&quot;+column);
+-		tables.add(table);
++		columns.add(table.getSimpleName()+&quot;.&quot;+column);
+ 	}
+ 	
+-	
++	/** Unselect the &lt;code&gt;table.column&lt;/code&gt;. */
+ 	public void unset(Class table, String column) { 
+-		columns.remove(table+&quot;.&quot;+column); 
++		columns.remove(table.getSimpleName()+&quot;.&quot;+column); 
+ 	}
+ 	
+-	
++	/** @return true if the &lt;code&gt;table.column&lt;/code&gt; is set.*/
+ 	public boolean isSet(Class table, String column) { 
+-		return columns.contains(table+&quot;.&quot;+column); 
++		return columns.contains(table.getSimpleName()+&quot;.&quot;+column); 
+ 	}
+ 	
+-	/** 
+-	 * Deselect all columns of all tables.
+-	 */
+-	public void unsetAll() { 
++	/** Unselect all columns of all tables. */
++	public void unsetEverything() { 
+ 		columns.clear(); 
+-		tables.clear();
+ 	}
+ 	
+ 		
+ 	/**
+ 	 * Match this template against another one.
+ 	 * 
+-	 * @param t	The template against which the matching will be held.
++	 * @param t	The template against which the matching will be done.
+ 	 * @return	True if this template is a superset of the other template.
+ 	 */ 
+ 	public boolean match(Template t) { 
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -2,128 +2,110 @@
+ 
+ import java.io.IOException;
+ import java.io.Writer;
+-import java.lang.reflect.InvocationTargetException;
+-import java.lang.reflect.Method;
+ import java.util.ArrayList;
+-import java.util.Hashtable;
+ 
+-import net.sf.plantlore.client.export.Builder;
++import net.sf.plantlore.client.export.AbstractBuilder;
+ import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.client.export.Template;
+ 
+ 
+ /**
+  * CSV Builder.
+- * An ingenious use of introspection :]
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-23
++ * @version 1.0 final
+  */
+-public class CSVBuilder implements Builder{
++public class CSVBuilder extends AbstractBuilder{
+ 	
+-	private Writer output;
++	private Writer stream;
+ 	
+-	private boolean first;
++	/** Is this the first column on this line? */
++	private boolean firstColumnOnThisLine;
+ 		
+ 	private static final String DELIMITER = &quot;,&quot;;
+ 	private static final String DOUBLEQUOTE = &quot;\&quot;&quot;;
+ 	private static final String NEWLINE = System.getProperty(&quot;line.separator&quot;);
+ 	
+-	private static final Object[] NO_PARAMETERS = new Object[0];
+-	
+-	
+ 	private ArrayList&lt;Record&gt; cache = new ArrayList&lt;Record&gt;(20);
+ 	private ArrayList&lt;Author&gt; authors = new ArrayList&lt;Author&gt;(10);
+ 	private ArrayList&lt;AuthorOccurrence&gt; authocc = new ArrayList&lt;AuthorOccurrence&gt;(10);
+ 	
+-	private Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt; properties = 
+-		new Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt;(20);
+-		
++	
+ 	/**
+ 	 * Create a new CSV Builder. 
+-	 * The output is written as a comma separated values.
++	 * The output is written in the format of comma separated values:&lt;br/&gt;
++	 * &lt;pre&gt;
++	 * Erik Kratochv&#237;l, <A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>, Gagea pratensis (Pers.) Dumort., ostru&#382;in&#237;k m&#283;kk&#253;
++	 * &lt;pre&gt;
+ 	 * 
+ 	 * @param output	The writer where the output will be sent.
+ 	 * @param tmp	The template that describes the selected columns and tables.
+ 	 */
+ 	public CSVBuilder(Writer output, Template tmp) {
+-		this.output = output;
+-		for( Class table : Template.BASIC_TABLES)
+-			try {
+-				// Get the list of all properties.
+-				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getProperties();
+-				// Create a list of getters of those properties.
+-				ArrayList&lt;Method&gt; methods = new ArrayList&lt;Method&gt;( columns.size() );
+-				properties.put(table, methods);
+-				// Check if these properties (columns) are set to be exported. 
+-				for(String column : columns)  
+-					if( tmp.isSet(table, column) ) // yes -&gt; store the getter
+-						try {
+-							methods.add( table.getMethod( methodName(column), new Class[0] ) );
+-						} catch(NoSuchMethodException e) { e.printStackTrace(); }
+-			} 
+-			catch(IllegalAccessException e) { e.printStackTrace(); }
+-			catch(InstantiationException e) { e.printStackTrace(); }
+-	}
+-	
+-	
+-	public void header() throws IOException {
++		super(tmp);
++		assert(tmp != null);
+ 		
++		this.stream = output;
+ 	}
+ 	
+-	
++	/**
++	 * Insert a line breaker.
++	 */
+ 	public void footer() throws IOException {
+-		output.write(NEWLINE);
++		stream.write(NEWLINE);
+ 	}
+ 	
+-	
++	/**
++	 * Clear the cache before receiving a new record set.
++	 */
+ 	public void startRecord() throws IOException {
+-		 cache.clear(); authors.clear(); authocc.clear(); first = true;
++		 cache.clear(); authors.clear(); authocc.clear(); firstColumnOnThisLine = true;
+ 	}
+ 	
+-	
++	/**
++	 * Flush the cache.
++	 */
+ 	public void finishRecord() throws IOException {
+-		if(authors.size() + authocc.size() == 0)
+-			for(Record record : cache) { 
+-				write( record );
+-				output.write(NEWLINE);
+-			}
++		if(authors.size() + authocc.size() == 0) {
++			for(Record record : cache) 
++				writeCached( record );
++			stream.write(NEWLINE);
++		}
+ 		else
+ 			for(int i = 0; i &lt; Math.max(authors.size(), authocc.size()); i++) {
+-				for(Record record : cache) write( record );
+-				if(!authors.isEmpty()) write( authors.get(i) );
+-				if(!authocc.isEmpty()) write( authocc.get(i) );
+-				output.write(NEWLINE);
+-				first = true;
++				for(Record record : cache) 
++					writeCached( record );
++				if(!authors.isEmpty()) writeCached( authors.get(i) );
++				if(!authocc.isEmpty()) writeCached( authocc.get(i) );
++				stream.write(NEWLINE);
++				firstColumnOnThisLine = true;
+ 			}
+ 	}
+ 	
+-	
++	/**
++	 * Cache the results.
++	 */
++	@Override
+ 	public void part(Record record) throws IOException {
+ 		if(record instanceof Author) authors.add( (Author) record );
+ 		else if(record instanceof AuthorOccurrence) authocc.add( (AuthorOccurrence) record );
+ 		else cache.add(record);
+ 	}
+ 	
+-	
+-	public void part(Record... records) throws IOException {
+-		for(Record r : records) 
+-			part( r );		
+-	}
+-	
+-	
++		
+ 	/**
+-	 * Send the &lt;code&gt;value&lt;/code&gt; in the CSV format
+-	 * to the output.
++	 * Convert the value to the CSV format.
++	 *  
++	 *  @return The converted value.
+ 	 */ 
+-	protected void w(Object value) throws IOException {
+-		if( value == null ) return; // no value means no output 
++	protected String convertToValidCSV(Object value) throws IOException {
++		if( value == null ) return null; // no value means no output 
+ 		
+ 		StringBuilder r = new StringBuilder( value.toString() );
+ 		boolean containsDoubleQuote = r.indexOf(DOUBLEQUOTE) &gt;= 0, 
+ 			containsDelimiter = r.indexOf(DELIMITER) &gt;= 0,
+ 			containsNewline = r.indexOf(NEWLINE) &gt;= 0;
+-		
+ 		// Convert doublequotes to double-doublequotes: &quot; -&gt; &quot;&quot;
+ 		if( containsDoubleQuote ) { 
+ 			int k = 0;
+@@ -131,41 +113,31 @@
+ 				r.insert(k, DOUBLEQUOTE); k += 2;
+ 			}
+ 		}
+-		
+ 		// Wrap problematic records.
+ 		if( containsDoubleQuote || containsDelimiter || containsNewline ) {
+ 			r.insert(0, DOUBLEQUOTE); r.append(DOUBLEQUOTE);
+ 		}
+-		
+-		output.write( r.toString() );
++		return r.toString() ;
+ 	}
+ 	
++	
+ 	/**
+-	 * Construct the getter method name from the name of the &lt;code&gt;column&lt;/code&gt;
++	 * Write the cached records - use the &lt;code&gt;part()&lt;/code&gt; method now.
+ 	 * 
+-	 * @param column	The name of the column whose value we need to obtain. 
+-	 * @return	The getter's name.
++	 * @param record
++	 * @see net.sf.plantlore.client.export.AbstractBuilder#part(Record)
+ 	 */
+-	private String methodName(String column) {
+-		StringBuilder s = new StringBuilder(&quot;get&quot; + column); // prepend `get` in front of  the name
+-		s.setCharAt(3, Character.toUpperCase(s.charAt(3))); // convert the first letter of the name to uppercase
+-		return s.toString();
++	protected void writeCached(Record record) throws IOException {
++		super.part(record);
+ 	}
+-
+ 	
+-	
+-	protected void write(Record record) throws IOException {
+-		Class table =  record.getClass();
+-		ArrayList&lt;Method&gt; methods = properties.get( table );
+-		for(Method getter : methods) 
+-			try {
+-				// Invoke the getter.
+-				Object value = getter.invoke( record, NO_PARAMETERS );
+-				if( !first ) output.write(DELIMITER); else first = false;
+-				w( value );
+-			} 
+-			catch(IllegalAccessException e) { e.printStackTrace(); }
+-			catch(InvocationTargetException e) { e.printStackTrace(); }
++	/**
++	 * Send the &lt;code&gt;value&lt;/code&gt; to the output.
++	 */
++	protected void output(Class table, String column, Object value) throws IOException {
++		if( firstColumnOnThisLine ) firstColumnOnThisLine = false; 
++		else stream.write(DELIMITER);
++		stream.write( convertToValidCSV( value ) );
+ 	}
+ 	
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-26 21:18:40 UTC (rev 189)
++++ trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-27 09:17:42 UTC (rev 190)
+@@ -2,12 +2,34 @@
+ 
+ import java.io.IOException;
+ 
+-import net.sf.plantlore.client.export.Builder;
+-import net.sf.plantlore.common.record.Record;
++import net.sf.plantlore.client.export.AbstractBuilder;
++import net.sf.plantlore.client.export.Template;
+ 
+-public class TrainingBuilder implements Builder {
++/**
++ * A training extension of the AbstractBuilder.
++ * Convenient if you wish to see the results immediately
++ * on the default output.
++ * &lt;br/&gt;
++ * The output has the following form:&lt;br/&gt;
++ * &lt;pre&gt;
++ * &lt;157&gt;
++ *   Author.WholeName = Erik Kratochv&#237;l
++ *   Author.Email = <A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>
++ *   Plant.Taxon = Gagea pratensis (Pers.) Dumort. 
++ *   Plant.CzechName = ostru&#382;in&#237;k m&#283;kk&#253;
++ * &lt;/157&gt;
++ * &lt;/pre&gt;
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-04-27
++ */
++public class TrainingBuilder extends AbstractBuilder {
+ 	
+ 	private int i = 0;
++	
++	public TrainingBuilder(Template template) {
++		super(template);
++	}
+ 
+ 	public void header() throws IOException {
+ 		System.out.println(&quot;Training Builder engaged.&quot;);		
+@@ -18,20 +40,16 @@
+ 	}
+ 
+ 	public void startRecord() throws IOException {
+-		System.out.println(&quot; [&quot; + i + &quot;].starts &quot;);
++		System.out.println(&quot; &lt;&quot; + i + &quot;&gt;&quot;);
+ 	}
+ 
+-	public void part(Record arg) throws IOException {
+-		System.out.println(&quot;  &#9642; &quot; + arg.getClass().getSimpleName() );
+-	}
+-
+-	public void part(Record... args) throws IOException {
+-		for(Record r : args) part( r );
+-	}
+-
+ 	public void finishRecord() throws IOException {
+-		System.out.println(&quot; [&quot; + i + &quot;].ends &quot;);
++		System.out.println(&quot; &lt;/&quot; + i + &quot;&gt;&quot;);
+ 		i++;
+ 	}
++	
++	protected void output(Class table, String column, Object value) throws IOException {
++		System.out.println(&quot;   &quot; + table.getName() + &quot;.&quot; + column + &quot; = &quot; + value.toString());
++	}
+ 
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000212.html">[Plantlore-dev] r189 - in trunk/src/net/sf/plantlore: client common
+</A></li>
+	<LI>Next message: <A HREF="000213.html">[Plantlore-dev] r191 - trunk/analysis/biocase
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#211">[ date ]</a>
+              <a href="thread.html#211">[ thread ]</a>
+              <a href="subject.html#211">[ subject ]</a>
+              <a href="author.html#211">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

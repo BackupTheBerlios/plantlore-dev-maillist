@@ -1,0 +1,641 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r655 - trunk/src/net/sf/plantlore/client/overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r655%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200609040113.k841Dc4g022994%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000912.html">
+   <LINK REL="Next"  HREF="000914.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r655 - trunk/src/net/sf/plantlore/client/overview</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r655%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200609040113.k841Dc4g022994%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r655 - trunk/src/net/sf/plantlore/client/overview">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 03:13:38 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000912.html">[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+        <LI>Next message: <A HREF="000914.html">[Plantlore-dev] r656 - in trunk/src/net/sf/plantlore:	client/export/builders common/record config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#913">[ date ]</a>
+              <a href="thread.html#913">[ thread ]</a>
+              <a href="subject.html#913">[ subject ]</a>
+              <a href="author.html#913">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-04 03:13:32 +0200 (Mon, 04 Sep 2006)
+New Revision: 655
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+Log:
+Add and edit now use Task for storing changes.
+Fixed a bug when edit fell down when you deleted day and clicked on store.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-04 01:03:25 UTC (rev 654)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-04 01:13:32 UTC (rev 655)
+@@ -23,6 +23,7 @@
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+@@ -911,7 +912,7 @@
+         //cIsoDateTimeBegin construction
+         Calendar c = Calendar.getInstance();
+         c.set(Calendar.YEAR, year);
+-        if (month != null) { //user entered month
++        if (month != null &amp;&amp; day != null) { //user entered month
+             c.set(Calendar.MONTH, month);
+             c.set(Calendar.DAY_OF_MONTH,day);
+         } else { //user didn't enter month, however we still have to compose cIsoDateTimeBegin column
+@@ -1002,226 +1003,234 @@
+      *
+      * @param updateAllPlants says whether to create a new habitat if the user made a change to a habitat that is used also by other occurrences.
+      */
+-    public void storeRecord(boolean updateAllPlants) throws DBLayerException, RemoteException {
+-        boolean newOccurrenceInserted = false;
+-        DBLayerUtils dlu = new DBLayerUtils(database);
++    public Task storeRecord(final boolean updateAllPlants) {
++        return new Task() {
++            public Object task() throws RemoteException, DBLayerException {
++                
++                boolean newOccurrenceInserted = false;
++                DBLayerUtils dlu = new DBLayerUtils(database);
+ 
+-        logger.info(&quot;Storing occurrence record...&quot;);
+-        try {     
+-                if (editMode) {
+-                    boolean originalTaxonSurvived = originalTaxonSurvived();
+-                    
+-                    boolean ok = database.beginTransaction();
+-                    if (!ok) {
+-                        logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
+-                        throw new DBLayerException(&quot;Can't create transaction. Another already running.&quot;);
+-                    }
+-                                            
+-                    prepareOccurrenceUpdate(updateAllPlants);
+-                    if (originalTaxonSurvived) {
+-                        // update original occurrence
+-                        logger.info(&quot;Updating original occurrence&quot;);
+-                        database.executeUpdateInTransaction(o);
+-                        logger.debug(&quot;Original occurrence id=&quot;+o.getId()+&quot; updated.&quot;);
+-                    } else {
+-                        // delete original occurrence and bound author occurrences
+-                        logger.info(&quot;Deleting original occurrence and associated author occurrences&quot;);
+-                        o.setDeleted(1);
+-                        database.executeUpdateInTransaction(o);
+-                        dlu.deleteHabitatInTransaction(o.getHabitat());
+-                        logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
+-                        Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
+-                        Iterator it = aoSet.iterator();
+-                        while (it.hasNext()) {
+-                            Map.Entry&lt;Integer, AuthorOccurrence&gt; entry = (Entry&lt;Integer, AuthorOccurrence&gt;) it.next();
+-                            AuthorOccurrence tmp = entry.getValue();
+-                            tmp.setDeleted(2);
+-                            database.executeUpdateInTransactionHistory(tmp);
+-                            logger.debug(&quot;AuthorOccurrence id &quot;+tmp.getId()+&quot; &quot;+tmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
+-                        }
+-                        //clear the authorOccurrences so that we don't try to delete them once again further in this method
+-                        authorOccurrences.clear();
+-                        originalAuthors.clear();//user
+-                    }//original taxon didn't survive
+-                    
+-                    /* original taxon survived but an author was removed
+-                     *
+-                     */
+-                    
+-                    
+-                    //If the user removed some of the original authors then delete the corresponding authorOccurrences
+-                    Iterator it = originalAuthors.iterator();
+-                    while (it.hasNext()) {
+-                        boolean originalSurvived = false;
+-                        Pair&lt;Integer,String&gt; auth = (Pair&lt;Integer,String&gt;)it.next();
+-                        AuthorOccurrence aoTmp = null;
+-                        for (int i = 0; i &lt; authorList.size(); i++) {
+-                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; p = (Pair&lt;Pair&lt;String,Integer&gt;,String&gt;) authorList.get(i);
+-                            Pair&lt;String,Integer&gt; pp = p.getFirst();
+-                            if (p.getFirst().getSecond().equals(auth.getFirst()) &amp;&amp; p.getSecond().equals(auth.getSecond())) {
+-                                originalSurvived = true;
+-                                break;
++                logger.info(&quot;Storing occurrence record...&quot;);
++                try {     
++                        if (editMode) {
++                            boolean originalTaxonSurvived = originalTaxonSurvived();
++
++                            boolean ok = database.beginTransaction();
++                            if (!ok) {
++                                logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
++                                throw new DBLayerException(&quot;Can't create transaction. Another already running.&quot;);
+                             }
+-                        }
+-                        if (!originalSurvived) {
+-                            aoTmp = authorOccurrences.get(auth.getFirst());
+-                            aoTmp.setDeleted(1);
+-                            database.executeUpdateInTransaction(aoTmp);
+-                            logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+aoTmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
+-                        }
+-                    }
+-                                        
+-                    //Update original authors roles 
+-                    for (int j = 0; j &lt; authorList.size(); j++) {
+-                        Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(j);
+-                        String role = pTmp.getSecond();
+-                        if (role == null)
+-                            role = &quot;&quot;;
+-                        if (originalAuthors.contains(
+-                                new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
+-                            ) {
+-                            logger.info(&quot;Updating authorOccurrence properties for &quot;+pTmp.getFirst().getFirst());
+-                            AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getFirst().getSecond());
+-                            aoTmp.setRole(pTmp.getSecond());
+-                            aoTmp.setNote(resultRevision.get(j));
+-                            database.executeUpdateInTransaction(aoTmp);
+-                            logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+pTmp.getFirst().getFirst()+&quot; updated&quot;);
+-                        } 
+-                    }
+-                    
+-                    /*At this point we've deleted all that we should have deleted
+-                     *
+-                     *So we can start inserting
+-                     */
+-                    
+-                    //K++ A?
+-                    //create a new Occurrence for each new flower and also create new AuthorOccurrences
+-                    for (int j = 0; j &lt; taxonList.size(); j++) {
+-                        if (taxonOriginal.equals(taxonList.get(j)))
+-                            continue; //skip the original taxon, it's been already taken care of 
+-                        logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
+-                        Occurrence occTmp = cloneOccurrence();
+-                        occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
+-                        int occId = database.executeInsertInTransaction(occTmp);
+-                        occTmp.setId(occId);
+-                        logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
+-                        Integer id = lookupPlant(taxonList.get(j));
+-                        if (!id.equals(-1)) {
+-                            Plant plTmp = (Plant) dlu.getObjectFor(id, Plant.class);
+-                            occTmp.setPlant(plTmp);
+-                        }
+-                        
+-                        for (int k = 0; k &lt; authorList.size(); k++) {
+-                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
+-                            logger.info(&quot;Creating a new authorOccurrence for &quot;+taxonList.get(j)+&quot; and &quot;+pTmp.getFirst().getFirst());
+-                            AuthorOccurrence aoTmp = new AuthorOccurrence();
+-                            aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
+-                            aoTmp.setRole(pTmp.getSecond());
+-                            aoTmp.setNote(resultRevision.get(k));
+-                            aoTmp.setOccurrence(occTmp);
+-                            aoTmp.setDeleted(0);
+-                            database.executeInsertInTransaction(aoTmp);
+-                            logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());
+-                            newOccurrenceInserted = true;
+-                        }
+-                    }
+-                    
+-                    
+-                    //A++ K-orig
+-                    //for the original taxon update the original taxon (that has already been done) and the author occurrence ( not needed)
+-                    //and for new authors create a new author occurrence 
+-                    if (originalTaxonSurvived)
+-                        for (int k = 0; k &lt; authorList.size(); k++) {
+-                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
+-                            String role = pTmp.getSecond();
+-                            if (role == null)
+-                                role = &quot;&quot;;
+-                            if (!originalAuthors.contains(
+-                                    new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
+-                                ) {
+-                                AuthorOccurrence aoTmp = new AuthorOccurrence();
+-                                logger.info(&quot;Creating authorOccurrence for &quot;+o.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
+-                                aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
+-                                aoTmp.setRole(pTmp.getSecond());
+-                                aoTmp.setNote(resultRevision.get(k));
+-                                aoTmp.setOccurrence(o);
+-                                aoTmp.setDeleted(0);
+-                                database.executeInsertInTransaction(aoTmp);    
+-                                logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());                            
++
++                            prepareOccurrenceUpdate(updateAllPlants);
++                            if (originalTaxonSurvived) {
++                                // update original occurrence
++                                logger.info(&quot;Updating original occurrence&quot;);
++                                database.executeUpdateInTransaction(o);
++                                logger.debug(&quot;Original occurrence id=&quot;+o.getId()+&quot; updated.&quot;);
++                            } else {
++                                // delete original occurrence and bound author occurrences
++                                logger.info(&quot;Deleting original occurrence and associated author occurrences&quot;);
++                                o.setDeleted(1);
++                                database.executeUpdateInTransaction(o);
++                                dlu.deleteHabitatInTransaction(o.getHabitat());
++                                logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
++                                Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
++                                Iterator it = aoSet.iterator();
++                                while (it.hasNext()) {
++                                    Map.Entry&lt;Integer, AuthorOccurrence&gt; entry = (Entry&lt;Integer, AuthorOccurrence&gt;) it.next();
++                                    AuthorOccurrence tmp = entry.getValue();
++                                    tmp.setDeleted(2);
++                                    database.executeUpdateInTransactionHistory(tmp);
++                                    logger.debug(&quot;AuthorOccurrence id &quot;+tmp.getId()+&quot; &quot;+tmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                                }
++                                //clear the authorOccurrences so that we don't try to delete them once again further in this method
++                                authorOccurrences.clear();
++                                originalAuthors.clear();//user
++                            }//original taxon didn't survive
++
++                            /* original taxon survived but an author was removed
++                             *
++                             */
++
++
++                            //If the user removed some of the original authors then delete the corresponding authorOccurrences
++                            Iterator it = originalAuthors.iterator();
++                            while (it.hasNext()) {
++                                boolean originalSurvived = false;
++                                Pair&lt;Integer,String&gt; auth = (Pair&lt;Integer,String&gt;)it.next();
++                                AuthorOccurrence aoTmp = null;
++                                for (int i = 0; i &lt; authorList.size(); i++) {
++                                    Pair&lt;Pair&lt;String,Integer&gt;,String&gt; p = (Pair&lt;Pair&lt;String,Integer&gt;,String&gt;) authorList.get(i);
++                                    Pair&lt;String,Integer&gt; pp = p.getFirst();
++                                    if (p.getFirst().getSecond().equals(auth.getFirst()) &amp;&amp; p.getSecond().equals(auth.getSecond())) {
++                                        originalSurvived = true;
++                                        break;
++                                    }
++                                }
++                                if (!originalSurvived) {
++                                    aoTmp = authorOccurrences.get(auth.getFirst());
++                                    aoTmp.setDeleted(1);
++                                    database.executeUpdateInTransaction(aoTmp);
++                                    logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+aoTmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                                }
+                             }
+-                        }
+-                    
+-                    database.commitTransaction();
+-                    occurrenceTableModel.reload();
+-                    newOccurrenceInserted = false;
+-                    
+-                } else { //Add Mode
+-                    NearestVillage v;
+-                    Phytochorion p;
+-                    Territory t;
+-                    Habitat h = new Habitat();
+-                    v = (NearestVillage)dlu.getObjectFor(village.getSecond(),NearestVillage.class);
+-                    p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
+-                    t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);                    
+-                    if (altitude != null) h.setAltitude(altitude);
+-                    if (phytCountry != null) h.setCountry(phytCountry);
+-                    if (habitatDescription != null) h.setDescription(habitatDescription);
+-                    if (latitude != null) h.setLatitude(latitude);
+-                    if (longitude != null) h.setLongitude(longitude);
+-                    h.setNearestVillage(v);
+-                    if (habitatNote != null)h.setNote(habitatNote);
+-                    h.setPhytochorion(p);
+-                    if (quadrant != null) h.setQuadrant(quadrant);
+-                    h.setTerritory(t);
+-                    h.setDeleted(0);
+-                    
+-                    boolean ok = database.beginTransaction();
+-                    if (!ok) {
+-                        logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
+-                        throw new DBLayerException(L10n.getString(&quot;Error.TransactionRaceConditions&quot;),DBLayerException.ERROR_TRANSACTION);
+-                    }
+-                    
+-                    logger.info(&quot;Creating a shared habitat&quot;);
+-                    Record rec = dlu.findMatchInDB(h);
+-                    if (rec == null) {
+-                        logger.debug(&quot;THIS HABITAT is NOT in the database yet. Creating a new one.&quot;);
+-                        int habId = database.executeInsertInTransaction(h);//insert the shared habitat
+-                        h.setId(habId);
+-                        logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
+-                    } else {
+-                        logger.debug(&quot;THIS HABITAT ALREADY IS in the database! Using it.&quot;);
+-                        h = (Habitat) rec;
+-                    }
+-                        
+-                    for (int j = 0; j &lt; taxonList.size(); j++) {
+-                        logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
+-                        Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
+-                        int occId = database.executeInsertInTransaction(occ);
+-                        occ.setId(occId);
+-                        logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
+-                        
+-                        for (int k = 0; k &lt; authorList.size(); k++) {
+-                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
+-                            logger.info(&quot;Creating an AuthorOccurrence for &quot;+occ.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
+-                            AuthorOccurrence aoTmp = new AuthorOccurrence();
+-                            aoTmp.setRole(pTmp.getSecond());
+-                            aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
+-                            aoTmp.setNote(resultRevision.get(k));
+-                            aoTmp.setOccurrence(occ);
+-                            aoTmp.setDeleted(0);
+-                            database.executeInsertInTransaction(aoTmp);                            
+-                        }//for authorList
+-                    }// for taxonList
+-                    
+-                    database.commitTransaction();
+-                    occurrenceTableModel.load(h.getId());
+-                }//add mode
+-        } catch (DBLayerException ex) {
+-            database.rollbackTransaction();
+-            throw ex;
+-        }        
+-        
+-        checkAndPropagateChanges();
++
++                            //Update original authors roles 
++                            for (int j = 0; j &lt; authorList.size(); j++) {
++                                Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(j);
++                                String role = pTmp.getSecond();
++                                if (role == null)
++                                    role = &quot;&quot;;
++                                if (originalAuthors.contains(
++                                        new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
++                                    ) {
++                                    logger.info(&quot;Updating authorOccurrence properties for &quot;+pTmp.getFirst().getFirst());
++                                    AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getFirst().getSecond());
++                                    aoTmp.setRole(pTmp.getSecond());
++                                    aoTmp.setNote(resultRevision.get(j));
++                                    database.executeUpdateInTransaction(aoTmp);
++                                    logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+pTmp.getFirst().getFirst()+&quot; updated&quot;);
++                                } 
++                            }
++
++                            /*At this point we've deleted all that we should have deleted
++                             *
++                             *So we can start inserting
++                             */
++
++                            //K++ A?
++                            //create a new Occurrence for each new flower and also create new AuthorOccurrences
++                            for (int j = 0; j &lt; taxonList.size(); j++) {
++                                if (taxonOriginal.equals(taxonList.get(j)))
++                                    continue; //skip the original taxon, it's been already taken care of 
++                                logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
++                                Occurrence occTmp = cloneOccurrence();
++                                occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
++                                int occId = database.executeInsertInTransaction(occTmp);
++                                occTmp.setId(occId);
++                                logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
++                                Integer id = lookupPlant(taxonList.get(j));
++                                if (!id.equals(-1)) {
++                                    Plant plTmp = (Plant) dlu.getObjectFor(id, Plant.class);
++                                    occTmp.setPlant(plTmp);
++                                }
++
++                                for (int k = 0; k &lt; authorList.size(); k++) {
++                                    Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                                    logger.info(&quot;Creating a new authorOccurrence for &quot;+taxonList.get(j)+&quot; and &quot;+pTmp.getFirst().getFirst());
++                                    AuthorOccurrence aoTmp = new AuthorOccurrence();
++                                    aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                                    aoTmp.setRole(pTmp.getSecond());
++                                    aoTmp.setNote(resultRevision.get(k));
++                                    aoTmp.setOccurrence(occTmp);
++                                    aoTmp.setDeleted(0);
++                                    database.executeInsertInTransaction(aoTmp);
++                                    logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());
++                                    newOccurrenceInserted = true;
++                                }
++                            }
++
++
++                            //A++ K-orig
++                            //for the original taxon update the original taxon (that has already been done) and the author occurrence ( not needed)
++                            //and for new authors create a new author occurrence 
++                            if (originalTaxonSurvived)
++                                for (int k = 0; k &lt; authorList.size(); k++) {
++                                    Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                                    String role = pTmp.getSecond();
++                                    if (role == null)
++                                        role = &quot;&quot;;
++                                    if (!originalAuthors.contains(
++                                            new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
++                                        ) {
++                                        AuthorOccurrence aoTmp = new AuthorOccurrence();
++                                        logger.info(&quot;Creating authorOccurrence for &quot;+o.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
++                                        aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                                        aoTmp.setRole(pTmp.getSecond());
++                                        aoTmp.setNote(resultRevision.get(k));
++                                        aoTmp.setOccurrence(o);
++                                        aoTmp.setDeleted(0);
++                                        database.executeInsertInTransaction(aoTmp);    
++                                        logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());                            
++                                    }
++                                }
++
++                            database.commitTransaction();
++                            occurrenceTableModel.reload();
++                            newOccurrenceInserted = false;
++
++                        } else { //Add Mode
++                            NearestVillage v;
++                            Phytochorion p;
++                            Territory t;
++                            Habitat h = new Habitat();
++                            v = (NearestVillage)dlu.getObjectFor(village.getSecond(),NearestVillage.class);
++                            p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
++                            t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);                    
++                            if (altitude != null) h.setAltitude(altitude);
++                            if (phytCountry != null) h.setCountry(phytCountry);
++                            if (habitatDescription != null) h.setDescription(habitatDescription);
++                            if (latitude != null) h.setLatitude(latitude);
++                            if (longitude != null) h.setLongitude(longitude);
++                            h.setNearestVillage(v);
++                            if (habitatNote != null)h.setNote(habitatNote);
++                            h.setPhytochorion(p);
++                            if (quadrant != null) h.setQuadrant(quadrant);
++                            h.setTerritory(t);
++                            h.setDeleted(0);
++
++                            boolean ok = database.beginTransaction();
++                            if (!ok) {
++                                logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
++                                throw new DBLayerException(L10n.getString(&quot;Error.TransactionRaceConditions&quot;),DBLayerException.ERROR_TRANSACTION);
++                            }
++
++                            logger.info(&quot;Creating a shared habitat&quot;);
++                            Record rec = dlu.findMatchInDB(h);
++                            if (rec == null) {
++                                logger.debug(&quot;THIS HABITAT is NOT in the database yet. Creating a new one.&quot;);
++                                int habId = database.executeInsertInTransaction(h);//insert the shared habitat
++                                h.setId(habId);
++                                logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
++                            } else {
++                                logger.debug(&quot;THIS HABITAT ALREADY IS in the database! Using it.&quot;);
++                                h = (Habitat) rec;
++                            }
++
++                            for (int j = 0; j &lt; taxonList.size(); j++) {
++                                logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
++                                Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
++                                int occId = database.executeInsertInTransaction(occ);
++                                occ.setId(occId);
++                                logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
++
++                                for (int k = 0; k &lt; authorList.size(); k++) {
++                                    Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                                    logger.info(&quot;Creating an AuthorOccurrence for &quot;+occ.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
++                                    AuthorOccurrence aoTmp = new AuthorOccurrence();
++                                    aoTmp.setRole(pTmp.getSecond());
++                                    aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                                    aoTmp.setNote(resultRevision.get(k));
++                                    aoTmp.setOccurrence(occ);
++                                    aoTmp.setDeleted(0);
++                                    database.executeInsertInTransaction(aoTmp);                            
++                                }//for authorList
++                            }// for taxonList
++
++                            database.commitTransaction();
++                            occurrenceTableModel.load(h.getId());
++                        }//add mode
++                } catch (DBLayerException ex) {
++                    database.rollbackTransaction();
++                    throw ex;
++                }        
++
++                checkAndPropagateChanges();
++                
++                return null;
++          }//task()
++        };//return new Task() {
++
+     }//storeRecord()
+ 
+     /** Checks whether the user created a new country or data source.
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-04 01:03:25 UTC (rev 654)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-04 01:13:32 UTC (rev 655)
+@@ -32,12 +32,16 @@
+ import javax.swing.JSpinner;
+ import javax.swing.JTextArea;
+ import javax.swing.JTextField;
++import javax.swing.SwingUtilities;
+ import javax.swing.event.ChangeEvent;
+ import javax.swing.event.ChangeListener;
+ import javax.swing.event.DocumentEvent;
+ import javax.swing.event.DocumentListener;
+ import javax.swing.text.BadLocationException;
+ import com.toedter.calendar.JCalendar;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
++import net.sf.plantlore.common.Task;
+ import org.apache.log4j.Logger;
+ 
+ import net.sf.plantlore.client.checklist.ChecklistCtrl;
+@@ -621,25 +625,61 @@
+                                 options,
+                                 options[0]);
+                         switch (choice) {
+-                            case 0:
+-                                model.storeRecord(true);
+-                                view.setVisible(false);
++                            case 0:                                
++                                Task task = model.storeRecord(true);
++                                task.setPostTaskAction(new PostTaskAction() {
++                                    public void afterStopped(Object value) {
++                                        SwingUtilities.invokeLater(new Runnable() {
++                                            public void run() {
++                                                view.setVisible(false);
++                                            }
++                                        });
++                                    }
++                                });
++                                Dispatcher.getDispatcher().dispatch(task, view, false);
+                                 break;
+                             case 1:
+-                                model.storeRecord(false);
+-                                view.setVisible(false);
++                                task = model.storeRecord(false);
++                                task.setPostTaskAction(new PostTaskAction() {
++                                    public void afterStopped(Object value) {
++                                        SwingUtilities.invokeLater(new Runnable() {
++                                            public void run() {
++                                                view.setVisible(false);
++                                            }
++                                        });
++                                    }
++                                });
++                                Dispatcher.getDispatcher().dispatch(task, view, false);
+                                 break;
+                             case 2:
+                             default:                        
+                                 //we'll do nothing and leave the AddEdit dialog visible
+                         }
+                     } else {
+-                            model.storeRecord(true);
+-                            view.setVisible(false);                    
++                            Task task = model.storeRecord(true);
++                            task.setPostTaskAction(new PostTaskAction() {
++                                public void afterStopped(Object value) {
++                                    SwingUtilities.invokeLater(new Runnable() {
++                                        public void run() {
++                                            view.setVisible(false);
++                                        }
++                                    });
++                                }
++                            });
++                            Dispatcher.getDispatcher().dispatch(task, view, false);
+                     }
+                 } else {//inAddMode
+-                    model.storeRecord(true);
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;AddEdit.AddConfirmation&quot;),L10n.getString(&quot;AddEdit.AddConfirmationTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    Task task = model.storeRecord(true);
++                    task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            SwingUtilities.invokeLater(new Runnable() {
++                                public void run() {
++                                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;AddEdit.AddConfirmation&quot;),L10n.getString(&quot;AddEdit.AddConfirmationTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                                }
++                            });
++                        }
++                    });
++                    Dispatcher.getDispatcher().dispatch(task, view, false);
+                     //view.setVisible(false);
+                 }
+             } catch (RemoteException ex) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000912.html">[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+	<LI>Next message: <A HREF="000914.html">[Plantlore-dev] r656 - in trunk/src/net/sf/plantlore:	client/export/builders common/record config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#913">[ date ]</a>
+              <a href="thread.html#913">[ thread ]</a>
+              <a href="subject.html#913">[ subject ]</a>
+              <a href="author.html#913">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

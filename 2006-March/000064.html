@@ -1,0 +1,243 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r69 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r69%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603252349.k2PNnjUf000686%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000063.html">
+   <LINK REL="Next"  HREF="000065.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r69 - trunk/src/net/sf/plantlore/server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r69%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200603252349.k2PNnjUf000686%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r69 - trunk/src/net/sf/plantlore/server">kovo at berlios.de
+       </A><BR>
+    <I>Sun Mar 26 00:49:45 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000063.html">[Plantlore-dev] r68 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000065.html">[Plantlore-dev] r70 - in trunk/src/net/sf/plantlore/client: . resources
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#64">[ date ]</a>
+              <a href="thread.html#64">[ thread ]</a>
+              <a href="subject.html#64">[ subject ]</a>
+              <a href="author.html#64">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-03-26 00:49:40 +0100 (Sun, 26 Mar 2006)
+New Revision: 69
+
+Modified:
+   trunk/src/net/sf/plantlore/server/DBLayer.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fix problems with returning query results, enable more simultaneous select queries
+
+Modified: trunk/src/net/sf/plantlore/server/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/DBLayer.java	2006-03-25 00:31:49 UTC (rev 68)
++++ trunk/src/net/sf/plantlore/server/DBLayer.java	2006-03-25 23:49:40 UTC (rev 69)
+@@ -29,14 +29,16 @@
+         
+     public void executeUpdate(Object data) throws DBLayerException;
+     
+-    public Object[] more(int from, int to) throws DBLayerException;
++    public Object[] more(int resultId, int from, int to) throws DBLayerException;
+     
+-    public Object[] next() throws DBLayerException;
+-    
++    public Object[] next(int resultId) throws DBLayerException;
++
++    public int getNumRows(int resultId);
++        
+     public void close(Result QRes) throws DBLayerException;
+     
+     public SelectQuery createQuery(Class classname);
+ 
+-    public void executeQuery(SelectQuery query) throws DBLayerException;    
++    public int executeQuery(SelectQuery query) throws DBLayerException;    
+         
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-25 00:31:49 UTC (rev 68)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-25 23:49:40 UTC (rev 69)
+@@ -43,14 +43,18 @@
+     private Session session;
+     /** Query object used for building SELECT queries */
+     private DetachedCriteria query;
+-    /** Results of a select query */
+-    private ScrollableResults results;
+     /** Pool of select queries */        
+-    private Hashtable queries;
+-            
++    private Hashtable results;
++    /** Maximum result ID used */
++    private int maxResultId;
++    
+     /** Creates a new instance of HibernateDBLayer */
+     public HibernateDBLayer() {
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());
++        logger = Logger.getLogger(this.getClass().getPackage().getName());        
++        // Initialize pool of select queries
++        results = new Hashtable();
++        // Initialize maximum result id
++        maxResultId = 0;
+     }    
+     
+     /**
+@@ -80,7 +84,7 @@
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot create Hibernate session. Details: &quot;+e.getMessage());
+             throw new DBLayerException(&quot;Cannot create Hibernate session. Details: &quot;+e.getMessage());                        
+-        }            
++        }        
+     }    
+     
+     /**
+@@ -171,7 +175,7 @@
+      *          array as well (in case associated entities are fetched)
+      *  @throws DBLayerException
+      */
+-    public Object[] more(int from, int to) throws DBLayerException {    
++    public Object[] more(int resultId, int from, int to) throws DBLayerException {    
+         // Check validity of arguments
+         if (from&gt;to) {
+             logger.error(&quot;Cannot read rows from &quot;+from+&quot; to &quot;+to+&quot; because from &gt; to&quot;);
+@@ -181,13 +185,15 @@
+             logger.error(&quot;Cannot read rows starting at the given index: &quot;+from);
+             throw new DBLayerException(&quot;Cannot read rows starting at the given index: &quot;+from);            
+         }
++        // Get results for the given resultId
++        ScrollableResults res = (ScrollableResults)results.get(resultId);
+         // Move ResultSet to the first row we want to read. In case we want to read the first row,
+         // move the pointer before the first row, else move it to the given position
+         try {
+             if (from &gt; 1) {
+-                results.setRowNumber(from-1);
++                res.setRowNumber(from-1);
+             } else {
+-                results.beforeFirst();
++                res.beforeFirst();
+             }
+         } catch (HibernateException e) {
+             logger.error(&quot;Cannot move to the given row of results: &quot;+from);
+@@ -198,8 +204,8 @@
+         // Read all the selected rows
+         try {
+             for (int i=0; i&lt;=(to-from); i++) {
+-                if (results.next()) {
+-                    data[i] = results.get();
++                if (res.next()) {
++                    data[i] = res.get();
+                 } else {
+                     logger.error(&quot;Result doesn't have enough rows&quot;);
+                     throw new DBLayerException(&quot;Result doesn't have enough rows&quot;);                
+@@ -219,19 +225,31 @@
+      *          associated entities were fetched.
+      *  @throws DBLayerException when loading the results fails
+      */
+-    public Object[] next() throws DBLayerException {
++    public Object[] next(int resultId) throws DBLayerException {
++        // Get results for the given resultId
++        ScrollableResults res = (ScrollableResults)results.get(resultId);
+         // In case no more rows are available, return null
+         try {
+-            if (!results.next()) {
++            if (!res.next()) {
+                 return null;
+             }
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Database error occured&quot;);
+             throw new DBLayerException(&quot;Database error occured&quot;);
+         }        
+-        return results.get();        
++        return res.get();        
+     }
+     
++    public int getNumRows(int resultId) {
++        // Get results for the given resultId
++        ScrollableResults res = (ScrollableResults)results.get(resultId);        
++        int currentRow = res.getRowNumber();
++        res.afterLast();
++        int numRows = res.getRowNumber();
++        res.setRowNumber(currentRow);
++        return numRows;
++    }
++    
+     /**
+      *  Close hibernate session.
+      *
+@@ -256,7 +274,6 @@
+      */
+     public SelectQuery createQuery(Class classname) {
+         SelectQuery query = new SelectQuery(session.createCriteria(classname));
+-        queries.put(1, query);
+         return query;
+     }    
+     
+@@ -266,12 +283,13 @@
+      *  @param query query we want to execute
+      *  @throws DBLayerException when selecting records from the database fails
+      */
+-    public void executeQuery(SelectQuery query) throws DBLayerException {
++    public int executeQuery(SelectQuery query) throws DBLayerException {
+         Transaction tx = null;        
++        ScrollableResults res;
+         try {
+             tx = session.beginTransaction();
+             // Execute detached criteria query
+-            query.getCriteria().scroll();
++            res = query.getCriteria().scroll();
+             // Commit transaction
+             tx.commit();                                      
+         } catch (HibernateException e) {
+@@ -281,5 +299,9 @@
+             logger.fatal(&quot;Selecting records from the database failed. Details: &quot;+e.getMessage());
+             throw new DBLayerException(&quot;Selecting records from the database failed. Details: &quot;+e.getMessage());
+         }
++        // Update current maximum result id and save the results
++        maxResultId++;
++        results.put(maxResultId, res);
++        return maxResultId;
+     }
+ }
+\ No newline at end of file
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000063.html">[Plantlore-dev] r68 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000065.html">[Plantlore-dev] r70 - in trunk/src/net/sf/plantlore/client: . resources
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#64">[ date ]</a>
+              <a href="thread.html#64">[ thread ]</a>
+              <a href="subject.html#64">[ subject ]</a>
+              <a href="author.html#64">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

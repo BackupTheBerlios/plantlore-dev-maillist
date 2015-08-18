@@ -1,0 +1,261 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r590 - in trunk/src/net/sf/plantlore: client/login	common common/exception l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r590%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09common%20common/exception%20l10n%20server&In-Reply-To=%3C200608290856.k7T8uoGw013440%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000822.html">
+   <LINK REL="Next"  HREF="000824.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r590 - in trunk/src/net/sf/plantlore: client/login	common common/exception l10n server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r590%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09common%20common/exception%20l10n%20server&In-Reply-To=%3C200608290856.k7T8uoGw013440%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r590 - in trunk/src/net/sf/plantlore: client/login	common common/exception l10n server">krater at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug 29 10:56:50 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000822.html">[Plantlore-dev] [Task #3056] Check bugs in Overview
+</A></li>
+        <LI>Next message: <A HREF="000824.html">[Plantlore-dev] Osetrovani vyjimek DBLayerException a	RemoteException
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#823">[ date ]</a>
+              <a href="thread.html#823">[ thread ]</a>
+              <a href="subject.html#823">[ subject ]</a>
+              <a href="author.html#823">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-29 10:56:48 +0200 (Tue, 29 Aug 2006)
+New Revision: 590
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+A futile attempt to recognize more details of some JDBCExceptions (exception codes [SQLState] are not standardized, besides the sick postgre throws 08004 like mad every time the database is off, the username is invalid, and the password is invalid. Trying to parse the SQLException? Insane?).
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-08-29 08:56:48 UTC (rev 590)
+@@ -44,7 +44,7 @@
+ 					String problem = ex.getMessage();
+ 					
+ 					if(ex instanceof DBLayerException &amp;&amp; ex.getCause() != null )
+-						problem = ( (DBLayerException)ex ).getErrorInfo();
++						problem = problem + ( (DBLayerException)ex ).getErrorInfo();
+ 					
+ 					JOptionPane.showMessageDialog( 
+ 							parent, 
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-29 08:56:48 UTC (rev 590)
+@@ -1,14 +1,8 @@
+ package net.sf.plantlore.common;
+ 
+-import java.rmi.RemoteException;
+-
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+-import javax.swing.JOptionPane;
+ 
+-import net.sf.plantlore.common.exception.DBLayerException;
+-import net.sf.plantlore.l10n.L10n;
+-
+ /**
+  * A simple and convenient
+  * implementation of the abstract ProgressBar.
+@@ -34,16 +28,8 @@
+ 		
+ 		getTask().stop();
+ 		
+-		if( ex instanceof RemoteException || ex instanceof DBLayerException )
+-			DefaultReconnectDialog.show(parent, ex);
++		DefaultExceptionHandler.handle(parent, ex);
+ 		
+-		else
+-			JOptionPane.showMessageDialog( 
+-					parent, 
+-					ex.getMessage(), 
+-					L10n.getString(&quot;Error.General&quot;), 
+-					JOptionPane.ERROR_MESSAGE );
+-		
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-29 08:56:48 UTC (rev 590)
+@@ -1,14 +1,8 @@
+ package net.sf.plantlore.common;
+ 
+-import java.rmi.RemoteException;
+-
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+-import javax.swing.JOptionPane;
+ 
+-import net.sf.plantlore.common.exception.DBLayerException;
+-import net.sf.plantlore.l10n.L10n;
+-
+ /**
+  * A simple and convenient
+  * implementation of the abstract ProgressBar.
+@@ -36,16 +30,8 @@
+ 		
+ 		getTask().stop();
+ 		
+-		if( ex instanceof RemoteException || ex instanceof DBLayerException )
+-			DefaultReconnectDialog.show(parent, ex);
++		DefaultExceptionHandler.handle(parent, ex);
+ 		
+-		else
+-			JOptionPane.showMessageDialog( 
+-					parent, 
+-					ex.getMessage(), 
+-					L10n.getString(&quot;Error.General&quot;), 
+-					JOptionPane.ERROR_MESSAGE );
+-		
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-08-29 08:56:48 UTC (rev 590)
+@@ -32,6 +32,10 @@
+         public static final int ERROR_CONNECT = 2;
+         /** Login and/or password do not match any user record */
+         public static final int ERROR_LOGIN = 3;
++        /** The username is not recognized - the Username doesn't exist. */
++        public static final int ERROR_USERNAME = 31;
++        /** The password is incorrect or contains illegal characters. */
++        public static final int ERROR_PASSWORD = 32;
+         /** Saving data into the DB failed */
+         public static final int ERROR_SAVE = 4;
+         /** Deleteing data from the database failed */
+@@ -115,6 +119,12 @@
+             	case ERROR_LOGIN:
+             		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Login&quot;);
+             		break;
++            	case ERROR_USERNAME:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Username&quot;);
++            		break;
++            	case ERROR_PASSWORD:
++            		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Password&quot;);
++            		break;
+             	case ERROR_SAVE:
+             		this.errorInfo = L10n.getString(&quot;DBLayer.Error.Save&quot;);
+             		break;
+@@ -189,8 +199,19 @@
+         public int translateSQLState(String sqlstate) {
+             String errorClass = sqlstate.substring(0,2);
+             String errorDetail = sqlstate.substring(2);
++            
++            System.out.println(&quot;---------------------------------------Translating sqlstate = &quot; + sqlstate);
++            
+             // Connection exception - Connection does not exist, was interrupted or cannot be established
+             if (errorClass.equals(&quot;08&quot;)) {
++            	/* POINTLESS :(
++            	if(&quot;004&quot;.equals(errorDetail))
++            		return ERROR_USERNAME;
++            	if (&quot;005&quot;.equals(errorDetail))
++            		return ERROR_PASSWORD;
++            	if(&quot;W21&quot;.equals(errorDetail) || &quot;W48&quot;.equals(errorDetail))
++            		return ERROR_LOGIN;
++            	*/
+                 return ERROR_CONNECT;
+             }
+             // Integrity constraint violation - NOT NULL, FOREIGN KEY, UNIQUE violation
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-29 08:56:48 UTC (rev 590)
+@@ -1360,7 +1360,26 @@
+ 
+ Search.Extended=&amp;Extended
+ 
+-Overview.TransformationInfo=
++DBLayer.Error.Unspecified=There is no additional information regarding to the problem.
++DBLayer.Error.LoadConfig=Unable to load the database configuration file. 
++DBLayer.Error.Connect=Unable to connect to the database engine.\nIs it running?
++DBLayer.Error.Login=Authentication failed.\nIncorrect user name or password.
++DBLayer.Error.Username=The username is not accepted.
++DBLayer.Error.Password=The password is incorrect.
++DBLayer.Error.Save=Unable to store data into the database.
++DBLayer.Error.Delete=Unable to delete the record from the database.
++DBLayer.Error.Update=Ubable to update the record in the database.
++DBLayer.Error.Select=Unable to perform the selection.
++DBLayer.Error.LoadData=Unable to obtain the data.
++DBLayer.Error.Close=Unable to close something.
++DBLayer.Error.Rights=Insufficient access rights.
++DBLayer.Error.DB=Something happened to the database, devil knows what.
++DBLayer.Error.Transaction=Another transaction is already running.
++DBLayer.Error.Resources=Out of resources!
++DBLayer.Error.DiskFull=The disk is full.
++DBLayer.Error.OutOfMemory=Out of memory.
++DBLayer.Error.MaxConnections=Maximum number of users reached.
++DBLayer.Error.Other=Unable to comply.
+ 
+ Overview.Transformation.Panel=Transformation coordinate system
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-28 22:56:22 UTC (rev 589)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-29 08:56:48 UTC (rev 590)
+@@ -201,6 +201,8 @@
+                 .scroll();
+             
+             sr.next();
++            if(sr.get() == null)
++            	throw new DBLayerException(L10n.getString(&quot;Error.MissingUserAccount&quot;), DBLayerException.ERROR_USERNAME);
+             plantloreUser = (User)(sr.get())[0];
+             rights = plantloreUser.getRight();
+         } 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000822.html">[Plantlore-dev] [Task #3056] Check bugs in Overview
+</A></li>
+	<LI>Next message: <A HREF="000824.html">[Plantlore-dev] Osetrovani vyjimek DBLayerException a	RemoteException
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#823">[ date ]</a>
+              <a href="thread.html#823">[ thread ]</a>
+              <a href="subject.html#823">[ subject ]</a>
+              <a href="author.html#823">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

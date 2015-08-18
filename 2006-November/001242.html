@@ -1,0 +1,243 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r861 - in trunk/src/net/sf/plantlore: client	client/overview common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-November/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r861%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20common%20l10n&In-Reply-To=%3C200611041857.kA4IvM9e000285%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001243.html">
+   <LINK REL="Next"  HREF="001244.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r861 - in trunk/src/net/sf/plantlore: client	client/overview common l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r861%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20common%20l10n&In-Reply-To=%3C200611041857.kA4IvM9e000285%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r861 - in trunk/src/net/sf/plantlore: client	client/overview common l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sat Nov  4 19:57:22 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001243.html">[Plantlore-dev] [Bug #9105] Implement a better duplicity check
+</A></li>
+        <LI>Next message: <A HREF="001244.html">[Plantlore-dev] r862 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1242">[ date ]</a>
+              <a href="thread.html#1242">[ thread ]</a>
+              <a href="subject.html#1242">[ subject ]</a>
+              <a href="author.html#1242">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-11-04 19:57:21 +0100 (Sat, 04 Nov 2006)
+New Revision: 861
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented [ Bug #9105 ] Implement a better duplicity check
+Had to fix a bug(?) in DBLayerUtils.findMatch() ... needs Erik to review the change whether it could affect his code in a wrong way.
+
+Also fixed a bug in overview - after executing plantlore it crashed on enter or spacebar key press.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-11-04 18:57:21 UTC (rev 861)
+@@ -1598,6 +1598,9 @@
+         /** Listnes to the enter key pressed in overview and invokes Detail. */
+ 	class OverviewKeyListener implements KeyListener {
+ 		public void keyTyped(KeyEvent e) {
++                    if (! model.loggedIn())
++                        return;
++                    
+ 			if (e.getKeyText(e.getKeyChar()).equals(&quot;Space&quot;))
+ 				model.invertSelectedOnCurrentRow();
+ 			if (e.getKeyText(e.getKeyChar()).equals(&quot;Enter&quot;)) {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-11-04 18:57:21 UTC (rev 861)
+@@ -840,9 +840,13 @@
+             temp.setTime(time);
+             c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
+             c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++            c.set(Calendar.SECOND,0);
++            c.set(Calendar.MILLISECOND,0);
+         } else {
+             c.set(Calendar.HOUR_OF_DAY,0);
+             c.set(Calendar.MINUTE,1); //so that we avoid possible problems with strong inequality when searching - we set the from minute in search by default to 0
++            c.set(Calendar.SECOND,0);
++            c.set(Calendar.MILLISECOND,0);
+         }
+         occ.setIsoDateTimeBegin(c.getTime());
+         
+@@ -1322,7 +1326,7 @@
+      *
+      * @return Pair&lt;Boolean,String&gt; where the Boolean is true if the data is fine, otherwise it is false in which case the String contains a message for the user
+      */
+-    public Pair&lt;Boolean,String&gt; checkData() throws RemoteException {
++    public Pair&lt;Boolean,String&gt; checkData() throws RemoteException, DBLayerException {
+         if (authorList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.AtLeastOneAuthor&quot;));
+         else {
+@@ -1417,6 +1421,63 @@
+                 return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidLatitude&quot;));            
+         }
+         
++        DBLayerUtils dlu = new DBLayerUtils(database);
++        NearestVillage v;
++        Phytochorion p;
++        Territory t;
++        Habitat h = new Habitat();
++        v = (NearestVillage)dlu.getObjectFor(village.getSecond(),NearestVillage.class);
++        p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
++        t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);                    
++        if (altitude != null) h.setAltitude(altitude);
++        if (phytCountry != null) h.setCountry(phytCountry);
++        if (habitatDescription != null) h.setDescription(habitatDescription);
++        if (latitude != null) h.setLatitude(latitude);
++        if (longitude != null) h.setLongitude(longitude);
++        h.setNearestVillage(v);
++        if (habitatNote != null)h.setNote(habitatNote);
++        h.setPhytochorion(p);
++        if (quadrant != null) h.setQuadrant(quadrant);
++        h.setTerritory(t);
++        h.setDeleted(0);
++
++        Record rec = dlu.findMatchInDB(h);
++
++        if (rec != null) {
++            logger.debug(&quot;HABITAT FOUND in db&quot;);
++            h = (Habitat) rec;
++            int aoTmpId = 0;
++            for (int j = 0; j &lt; taxonList.size(); j++) {
++                logger.debug(&quot;Checking occurrence&quot;);
++                Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
++                rec = dlu.findMatchInDB(occ);
++                if (rec == null) { //the occurrence is not yet in the db. it's safe to continue
++                    logger.debug(&quot;Occurrence NOT in db, continuing&quot;);
++                    continue;
++                }
++
++                occ = (Occurrence) rec;
++                //the occurrence is in the db. -&gt; check the author occurrences 
++
++                for (int k = 0; k &lt; authorList.size(); k++) {
++                    Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                    AuthorOccurrence aoTmp = new AuthorOccurrence();
++                    aoTmp.setRole(pTmp.getSecond());
++                    aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                    aoTmp.setNote(resultRevision.get(k));
++                    aoTmp.setOccurrence(occ);
++                    aoTmp.setDeleted(0);
++                    logger.debug(&quot;Checking author occurrence&quot;);
++                    rec = dlu.findMatchInDB(aoTmp);
++                    if (rec != null) { //found a duplicate, announce it
++                        logger.debug(&quot;DUPLICATE found&quot;);
++                        return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.TryingToInsertDuplicate&quot;));
++                    } else
++                        logger.debug(&quot;Author occurrence NOT in db. yet&quot;);
++                }//for authorList
++            }// for taxonList                                    
++        }
++        
+         return new Pair&lt;Boolean,String&gt;(true,&quot;&quot;);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-11-04 18:57:21 UTC (rev 861)
+@@ -409,13 +409,15 @@
+ 			// Equal properties.
+ 			for(String property : record.getProperties()) {
+ 				Object value = record.getValue(property);
+-				if( value != null ) 
++				if( value != null ) {
+ 					query.addRestriction(RESTR_EQ, property, null, value, null);
++                                }
+ 			}
+ 			// Equal foreign keys (by their ID's)!
+ 			for(String key : record.getForeignKeys() ) {
+ 				Record subrecord = (Record) record.getValue(key);
+-				query.addRestriction(RESTR_EQ, key, null, subrecord, null);
++                                if (subrecord != null) //the query won't find a record with no publication associated if restriction &quot;publication = null&quot; added...
++                                    query.addRestriction(RESTR_EQ, key, null, subrecord, null);
+ 			}
+ 			
+ 			// Is there such record?
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-11-04 18:57:21 UTC (rev 861)
+@@ -1869,3 +1869,5 @@
+ Overview.Tree.Number=number
+ 
+ AddEdit.CheckMessage.CompulsoryDescription=You have to enter all requested data. Please fill in the place description.
++
++AddEdit.CheckMessage.TryingToInsertDuplicate=You are trying to insert a record that already exists in the database.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-11-04 18:57:21 UTC (rev 861)
+@@ -2191,3 +2191,5 @@
+ Overview.Tree.Number=\u010D\u00EDslo
+ 
+ AddEdit.CheckMessage.CompulsoryDescription=You have to enter all requested data. Please fill in the place description.
++
++AddEdit.CheckMessage.TryingToInsertDuplicate=Pokou\u0161\u00EDte se vlo\u017Eit z\u00E1znam, kter\u00FD u\u017E v datab\u00E1zi existuje.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-11-04 00:13:03 UTC (rev 860)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-11-04 18:57:21 UTC (rev 861)
+@@ -2192,3 +2192,5 @@
+ Overview.Tree.Number=number
+ 
+ AddEdit.CheckMessage.CompulsoryDescription=You have to enter all requested data. Please fill in the place description.
++
++AddEdit.CheckMessage.TryingToInsertDuplicate=You are trying to insert a record that already exists in the database.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001243.html">[Plantlore-dev] [Bug #9105] Implement a better duplicity check
+</A></li>
+	<LI>Next message: <A HREF="001244.html">[Plantlore-dev] r862 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1242">[ date ]</a>
+              <a href="thread.html#1242">[ thread ]</a>
+              <a href="subject.html#1242">[ subject ]</a>
+              <a href="author.html#1242">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

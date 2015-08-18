@@ -1,0 +1,538 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r101 - in trunk/src/net/sf/plantlore: client client/login middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r101%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/login%20middleware%20server&In-Reply-To=%3C200604022031.k32KVC34002359%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000099.html">
+   <LINK REL="Next"  HREF="000101.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r101 - in trunk/src/net/sf/plantlore: client client/login middleware server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r101%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/login%20middleware%20server&In-Reply-To=%3C200604022031.k32KVC34002359%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r101 - in trunk/src/net/sf/plantlore: client client/login middleware server">krater at berlios.de
+       </A><BR>
+    <I>Sun Apr  2 22:31:12 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000099.html">[Plantlore-dev] r100 - in trunk/src/net/sf/plantlore: client l10n server
+</A></li>
+        <LI>Next message: <A HREF="000101.html">[Plantlore-dev] Zapis zo schodzky Plantlore
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#100">[ date ]</a>
+              <a href="thread.html#100">[ thread ]</a>
+              <a href="subject.html#100">[ subject ]</a>
+              <a href="author.html#100">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-02 22:31:11 +0200 (Sun, 02 Apr 2006)
+New Revision: 101
+
+Added:
+   trunk/src/net/sf/plantlore/client/login/
+   trunk/src/net/sf/plantlore/client/login/DBInfo.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+Modified:
+   trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/Server.java
+   trunk/src/net/sf/plantlore/server/Undertaker.java
+Log:
+Login Model Added. Only a partial implementation - left for Jakub to finish.
+DBLayerFactory(String, short) changed to more rational DBLayerFactory(String, int).
+The logger is used more often to report problems (instead of System.err.println).
+New comments created.
+
+Added: trunk/src/net/sf/plantlore/client/login/DBInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -0,0 +1,59 @@
++package net.sf.plantlore.client.login;
++
++/**
++ * Store information about one DB.
++ * &lt;ul&gt;
++ * &lt;li&gt;&lt;b&gt;alias&lt;/b&gt; ~ the name that will be presented to the user (such as &lt;i&gt;&quot;Home Database&quot;&lt;/i&gt;)&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;host&lt;/b&gt; ~ the host name of the server where the database is located&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;port&lt;/b&gt; ~ the port number where the server listens&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;db&lt;/b&gt; ~ the database identificator&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;user&lt;/b&gt; ~ last five user names that have been used for authentication&lt;/li&gt;
++ * &lt;/ul&gt;
++ * 
++ * @author Erik Kratochv&#237;l
++ * @version 1.0 final
++ */
++public class DBInfo {
++	protected String alias;
++	protected String host;
++	protected String db;
++	protected String[] user;	
++	protected int port;
++	
++	/**
++	 * Create a new record.
++	 * 
++	 * @param alias The name the user will be presented with.
++	 * @param host The hostname where the server runs.
++	 * @param port The port number where the server listens, 0 means default.
++	 * @param db The database identificator.
++	 * @param users The list of user names used lately.
++	 */
++	public DBInfo(String alias, String host, int port, String db, String[] users) {
++		this.alias = alias; this.host = host; this.port = (port &lt;= 0) ? 1099 : port; this.db = db; this.user = users;
++	}
++	
++	/**
++	 * Add a new user name into the list of users. The least used username will be lost.
++	 * The list of users will start with the newly added username. 
++	 * 
++	 * @param name The name to be added.
++	 */
++	public void addUser(String name) {
++		for(int i = 1; i &lt; user.length; i++) user[i] = user[i - 1];
++		user[0] = name;
++	}
++	
++	/**
++	 * Pick a user. The selected name will be moved to the start of the list.
++	 * The selected user will be at the top of the list next time.
++	 * 
++	 * @param id	The chosen user.
++	 */
++	public void selectUser(int id) {
++		String name = user[id];
++		for(int i = id; i &gt; 0; i--) user[i] = user[i - 1];
++		user[0] = name;
++	}
++		
++}
+
+Added: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -0,0 +1,96 @@
++package net.sf.plantlore.client.login;
++
++import java.rmi.NotBoundException;
++import java.rmi.RemoteException;
++import java.util.Observable;
++import java.util.Vector;
++
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.DBLayerFactory;
++import net.sf.plantlore.server.DBLayerException;
++
++/**
++ * 
++ * Preliminary usage: &lt;br/&gt;
++ * &lt;ul&gt;
++ * &lt;li&gt;Login login = new Login(new RMIDBLayerFactory());&lt;/li&gt;
++ * &lt;li&gt;login.connectToSelected(...)&lt;/li&gt;
++ * &lt;/ul&gt;
++ * 
++ * 
++ * @author Erik Kratochv&#237;l, Jakub Kotowski
++ * @version 0.5
++ */
++public class Login extends Observable {
++	
++	public static final int MAX_NAMES = 5;
++
++	private Vector&lt;DBInfo&gt; dbinfo = new Vector&lt;DBInfo&gt;(10);
++	private DBInfo selected = null;
++	
++	private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
++	
++	private DBLayerFactory factory = null;
++	private DBLayer dblayer = null;
++	
++	
++	public Login(DBLayerFactory factory) {
++		this.factory = factory;
++	}
++	
++	
++	
++	protected void load() {
++		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
++		
++		this.hasChanged(); this.notifyObservers();
++	}
++	
++	protected void save() {
++		// TODO: JAKUB: ulozit kolekci dbinfo zpatky do XML souboru se jmenem `file`.
++	}
++	
++	
++	public void createRecord(String alias, String host, int port, String db) {
++		DBInfo r = new DBInfo(alias, host, port, db, new String[5]);
++		dbinfo.add(r);
++		save();
++		this.hasChanged(); this.notifyObservers();
++	}
++	
++	public void deleteRecord(DBInfo info) {
++		dbinfo.remove(info);
++		save();
++		this.hasChanged(); this.notifyObservers();
++	}
++	
++	public void updateSelectedRecord(DBInfo info) {
++		int index = dbinfo.indexOf(selected);
++		dbinfo.setElementAt(info, index); // info.clone()?
++		selected = info; 
++		this.hasChanged(); this.notifyObservers();
++	}
++	
++	/** Subject to change.. */
++	public DBInfo[] getRecords() {
++		// Well, this sucks! The ugliest way to do things... is to have a Cloneable interface and don't use it.
++		// Seeing is believing: <A HREF="http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[">http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[</A>])
++		return dbinfo.toArray(new DBInfo[0]);
++	}
++	
++	public void setSelected(int index) {
++		selected = dbinfo.elementAt(index);		
++	}
++	
++	public DBLayer connectToSelected(String name, String password) throws NotBoundException, RemoteException, DBLayerException {
++		DBLayer dblayer = factory.create(selected.host, selected.port);
++		dblayer.initialize(name, password, selected.db);
++		return dblayer;
++	}
++	
++	public DBLayer getDBLayer() {
++		return dblayer;
++	}
++	
++	
++}
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/middleware/DBLayerFactory.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -27,7 +27,7 @@
+ 	 * @throws RemoteException		If the RMI encounters a problem.
+ 	 * @throws NotBoundException	If the server is not running on the specified port.
+ 	 */
+-	DBLayer create(String host, short port) throws RemoteException, NotBoundException;
++	DBLayer create(String host, int port) throws RemoteException, NotBoundException;
+ 	
+ 	/** 
+ 	 * Destroy the DBLayer. This is a special measure, 
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -83,7 +83,7 @@
+ 	 * @return A stub of the remote object that lives on the server and mediates the connection
+ 	 * with the remote database.
+ 	 */
+-	public synchronized DBLayer create(String host, short port) throws RemoteException, NotBoundException {
++	public synchronized DBLayer create(String host, int port) throws RemoteException, NotBoundException {
+ 		// Connect to the remote server and obtain the RemoteDBLayerFactory
+ 		Registry registry = LocateRegistry.getRegistry(host, port);
+ 		RemoteDBLayerFactory remoteFactory = (RemoteDBLayerFactory) registry.lookup(RemoteDBLayerFactory.ID);
+
+Modified: trunk/src/net/sf/plantlore/server/ConnectionInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/server/ConnectionInfo.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -1,21 +1,24 @@
+ package net.sf.plantlore.server;
+ 
++import java.io.Serializable;
++
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ 
+ /**
+- *  Information about the client connected to a server:
++ *  Information the particular connection:
+  *  &lt;ul&gt;
+- *  &lt;li&gt;&lt;code&gt;database&lt;/code&gt; = the DBLayer object/stub that mediates the connection to the database&lt;/li&gt; 
++ *  &lt;li&gt;&lt;code&gt;database&lt;/code&gt; = the DBLayer object that mediates the connection to the database&lt;/li&gt;
++ *   &lt;li&gt;&lt;code&gt;stub&lt;/code&gt; = the stub of the DBLayer object that mediates the connection to the database&lt;/li&gt;
+  *  &lt;li&gt;&lt;code&gt;remote factory&lt;/code&gt; = null if the object is created locally or reference of the factory that created the &lt;code&gt;database&lt;/code&gt;&lt;/li&gt;
+  *  &lt;li&gt;&lt;code&gt;client host&lt;/code&gt; = identification of the computer for which the &lt;code&gt;database&lt;/code&gt; was created&lt;/li&gt;
+  *  &lt;/ul&gt;
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+- * @version 1.0
++ * @version 1.0 final
+  */
+-public class ConnectionInfo {
++public class ConnectionInfo implements Serializable {
+ 	
+ 	private RemoteDBLayerFactory remoteFactory = null;
+ 	private DBLayer database = null;
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -32,7 +32,7 @@
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+- * @version 1.0  
++ * @version 1.0  final
+  */
+ public class RMIRemoteDBLayerFactory extends UnicastRemoteObject
+ 	implements RemoteDBLayerFactory, Undertaker {
+@@ -54,7 +54,7 @@
+ 	
+ 	/** Keep information about all connected clients. */
+ 	private Hashtable&lt;DBLayer, ConnectionInfo&gt; client = 
+-		new Hashtable&lt;DBLayer, ConnectionInfo&gt;(maxConnectionsTotal);
++		new Hashtable&lt;DBLayer, ConnectionInfo&gt;(2*maxConnectionsTotal);
+ 	
+ 	/** 
+ 	 * Create a new RMIDBLayerFactory.
+@@ -140,7 +140,7 @@
+ 		// Unexport the object even if there is an action in progress.
+ 		UnicastRemoteObject.unexportObject(db, true);
+ 		
+-		logger.info(&quot;The database layer &quot; + db + &quot; has been disconnected and destroyed.&quot;);
++		logger.info(&quot;The database layer &quot; + db + &quot; was disconnected and destroyed.&quot;);
+ 	}
+ 
+ 	/**
+@@ -151,6 +151,7 @@
+ 	 * @throws RemoteException If the RMI encounters an error.
+ 	 */	
+ 	public synchronized void destroy(DBLayer stub) throws RemoteException {
++		if(stub == null) return;
+ 		ConnectionInfo info = client.remove(stub);
+ 		if(info != null) disconnect(info.getDatabase());
+ 		else try {
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -7,6 +7,8 @@
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
+ 
++import org.apache.log4j.Logger;
++
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ import net.sf.plantlore.server.tools.*;
+ 
+@@ -30,6 +32,8 @@
+ 	private RMIRemoteDBLayerFactory remoteFactory = null;
+ 	private int port = DEFAULT_PORT;
+ 	private Guard guard = null;
++	
++	private Logger logger;
+ 
+ 	/** Create a new instance of RMIServer running on the default port. */
+ 	public RMIServer() throws RemoteException, AlreadyBoundException {
+@@ -39,6 +43,9 @@
+ 	/** Create a new instance of RMIServer running on the specified port. */
+ 	public RMIServer(int port) throws RemoteException, AlreadyBoundException { 
+ 		this.port = port;
++		
++		logger = Logger.getLogger(this.getClass().getPackage().getName());
++		
+ 		// Control object that will return the server after the client passed a valid certif. information
+ 		guard = new RMIServerControl(this);
+ 		RMI.bind(port, guard, Guard.ID);
+@@ -53,14 +60,14 @@
+ 	 * @param client The client to be kicked.
+ 	 */
+ 	public synchronized void disconnect(ConnectionInfo client) {
+-		try { remoteFactory.destroy(client.getStub()); } catch(RemoteException e) {}
++		try { remoteFactory.destroy(client.getStub()); } 
++		catch(RemoteException e) { logger.warn(e); }
+ 	}
+ 	
+ 	/** 
+ 	 * Bind a new RemoteDBLayerFactory to the rmiregistry on the specified &lt;code&gt;port&lt;/code&gt;. 
+ 	 * If the rmiregistry is not currently running on that port, it will be created. 
+ 	 * 
+-	 * @return The RemoteDBLayerFactory.
+ 	 * @throws AlreadyBoundException If another RemoteDBLayerFactory is already bound to the rmiregistry. 
+ 	 */
+ 	public synchronized void start() throws AlreadyBoundException {
+@@ -73,17 +80,18 @@
+ 			if(remoteFactory == null) remoteFactory = new RMIRemoteDBLayerFactory();
+ 			// Bind the factory to the rmiregistry. 
+ 			registry.bind(RemoteDBLayerFactory.ID, remoteFactory);
++			
++			logger.info(&quot;The RemoteDBLayerFactory has been bound to the rmiregistry.&quot;);
+ 		}
+-		catch(RemoteException e) { System.err.println(e); } // FIXME: use logger
++		catch(RemoteException e) { logger.error(e); }
+ 	}
+ 	
+ 	/** 
+ 	 * Unbind the RemoteDBLayerFactory from the rmiregistry on the specified &lt;code&gt;port&lt;/code&gt;. 
+ 	 * The rmiregistry on the specified port is &lt;b&gt;not&lt;/b&gt; stopped, because some other programs may be still
+-	 * using it!
++	 * using it!&lt;br/&gt;
++	 * This will terminate the server completely.
+ 	 * 
+-	 * FIXME: Krom toho stejn&#283; neum&#237;m rmiregistry ukon&#269;it pomoc&#237; javy.
+-	 * 
+ 	 * @param harsh		Be harsh and disconnect every client connected to the server.
+ 	 */
+ 	public synchronized void stop(boolean harsh) {
+@@ -92,21 +100,30 @@
+ 			// 1. Unbind the RemoteDBLayerFactory from the rmiregistry 
+ 			// -&gt; noone can obtain the stub of the remote factory anymore
+ 			RMI.unbind(port, RemoteDBLayerFactory.ID);
++			logger.debug(&quot;The RemoteDBLayerFactory was unbound from the rmiregistry.&quot;);
+ 			
+ 			// 2. Unexport the remote factory -&gt; noone can make a remote call anymore
+ 			RMI.unexport(remoteFactory);
++			logger.debug(&quot;The RemoteDBLayerFactory was unexported. It cannot accept remote calls now.&quot;);
+ 			
+ 			// 3. Disconnect all users from the server.
+-			if(harsh) remoteFactory.disconnectAll();
++			if(harsh) {
++				remoteFactory.disconnectAll();
++				logger.info(&quot;All clients were disconnected.&quot;);
++			}
+ 
+ 			// 4. Disconnect this object from the RMI -&gt;
+ 			UnicastRemoteObject.unexportObject(this, true);
++			logger.info(&quot;The RMIServer now stops accepting remote calls.&quot;);
+ 			
+ 			// 5. Disconnect the control guard and unexport it
+ 			RMI.unbind(port, Guard.ID);
+ 			RMI.unexport(guard);
++			logger.debug(&quot;The ServerProxy is now unavailable.&quot;);
++			
++			logger.info(&quot;The Server terminates. Bye.&quot;);
+ 		}
+-		catch(Exception e) { System.err.println(e); } // FIXME: use logger
++		catch(Exception e) { logger.error(e); }
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/server/Server.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Server.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/server/Server.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -6,11 +6,48 @@
+ import java.rmi.RemoteException;
+ import java.util.Collection;
+ 
++/**
++ * Server management.
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 29.3.2006
++ * @version 1.0 final
++ *
++ * @param &lt;E&gt;	The class storing information about currently connected clients.
++ */
+ public interface Server&lt;E&gt; extends Remote, Serializable {
+ 	
++	/**
++	 * Return a collection of currently connected clients.
++	 * 
++	 * @return Currently connected clients.
++	 * @throws RemoteException	if the RMI encounters an error (network/server).
++	 */
+ 	Collection&lt;? extends E&gt;	getClients() throws RemoteException;
++	
++	/**
++	 * &quot;Kick&quot; the specified client. The client is disconnected immediately.
++	 * 
++	 * @param client The client to be kicked from the server.
++	 * @throws RemoteException if the RMI encounters an error (network/server).
++	 */
+ 	void disconnect(E client) throws RemoteException;
++	
++	/**
++	 * Run the server on the specified port.
++	 * 
++	 * @throws RemoteException if the RMI encounters an error (network/server).
++	 * @throws AlreadyBoundException if another server is already running on the specified port.
++	 */
+ 	void start() throws RemoteException, AlreadyBoundException;
++	
++	/**
++	 * Terminate the server. If &lt;code&gt;harsh&lt;/code&gt; is true, the server terminates immediately,
++	 * if not, it waits, until the last client disconnects. 
++	 * 
++	 * @param harsh Should all currently connected clients be disconnected?
++	 * @throws RemoteException if the RMI encounters an error (network/server).
++	 */
+ 	void stop(boolean harsh) throws RemoteException;
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/Undertaker.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Undertaker.java	2006-04-02 17:44:26 UTC (rev 100)
++++ trunk/src/net/sf/plantlore/server/Undertaker.java	2006-04-02 20:31:11 UTC (rev 101)
+@@ -3,13 +3,19 @@
+ import net.sf.plantlore.middleware.DBLayer;
+ 
+ /**
+- * 
++ * The Undertaker can properly bury DBLayers, that were not properly destroyed. 
+  *   
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-03-26
++ * @version 1.0 final
+   */
+ public interface Undertaker {
+ 	
++	/**
++	 * Take care of the DBLayer that was not closed properly.
++	 * 
++	 * @param db		The DBLayer.
++	 */
+ 	void bury(DBLayer db);
+ 
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000099.html">[Plantlore-dev] r100 - in trunk/src/net/sf/plantlore: client l10n server
+</A></li>
+	<LI>Next message: <A HREF="000101.html">[Plantlore-dev] Zapis zo schodzky Plantlore
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#100">[ date ]</a>
+              <a href="thread.html#100">[ thread ]</a>
+              <a href="subject.html#100">[ subject ]</a>
+              <a href="author.html#100">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

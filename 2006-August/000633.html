@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Reconnect &amp; RemoteException
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Reconnect%20%26%20RemoteException&In-Reply-To=%3Cf4dc39b90608040415i384e8e49t7eb9ce4e9e954eb6%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000632.html">
+   <LINK REL="Next"  HREF="000634.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Reconnect &amp; RemoteException</H1>
+    <B>L33t</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Reconnect%20%26%20RemoteException&In-Reply-To=%3Cf4dc39b90608040415i384e8e49t7eb9ce4e9e954eb6%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Reconnect &amp; RemoteException">discontinuum at gmail.com
+       </A><BR>
+    <I>Fri Aug  4 13:15:00 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000632.html">[Plantlore-dev] r484 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+        <LI>Next message: <A HREF="000634.html">[Plantlore-dev] r485 - in trunk/src/net/sf/plantlore: client	client/export client/login common common/debug server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#633">[ date ]</a>
+              <a href="thread.html#633">[ thread ]</a>
+              <a href="subject.html#633">[ subject ]</a>
+              <a href="author.html#633">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Jak osetrovat RemoteException?
+
+try {
+
+  ...
+
+} catch( RemoteException e ) {
+  DefaultReconnectDialog.show(parent, e);
+  return; // nemusi byt, mate-li pak jeste neco v planu..
+}
+
+Parent je typu Component a ma stejny vyznam, jako u
+JOptionPane.showMessageDialog(). Vyjimka e se pouzije pro ziskani popisu
+chyby.
+
+Nikde nemusite nic nastavovat, vsechno by melo fungovat &quot;samo&quot;.
+DefaultReconnectionDialog uzivateli nabidne moznost znovupripojeni.
+
+
+Pouziti DefaultProgressBar/DefaultProgressBarEx.
+
+Pokud pouzivate ProgressBar, jakoze urcite pouzivate, *zvazte* pouziti tridy
+DefaultProgressBar. Vetsinou je totiz metoda exceptionHandler() definovana
+uplne stejne v celem vasem kodu a napric kody se zase trochu lisi. V
+DefaultProgressBar je RemoteException odchycena a zpracovana podle predch.
+popisu, tzn. pokud se narazi na nejaky problem behem vaseho tasku, je tohle
+vyreseno. Zbyle chyby v tasku se hlasi standardne - objevi se okno s popisem
+problemu, tj. vetsinou to, co uz vsichni mate.
+
+Tj. doporuceni je pouzivat
+
+Task t = new MyTask();
+new DefaultProgressBar(myView, t, true);
+t.start();
+
+a pokud potrebujete vlastni afterStopped() operaci, pak
+
+Task t = new MyTask();
+new DefaultProgressBar(myView, t, true) {
+
+  @Override
+  public void afterStopped() {
+    ....
+  }
+
+  @Override
+  public void afterStopping() {
+    ....
+  }
+}
+t.start();
+
+
+Problemy.
+
+Bohuzel momentalne neni mozne poznat, kdy DBLayerException byla vyhozena
+proto, ze se operace nepovedla z duvodu vypadku pripojeni k databazi, a nebo
+proto, ze se jedna o podruzne duvody (nedostatecna prava, neuplny zaznam,
+...). Zjednodusene receno, neda se poznat, na kterou DBLayerException by se
+mela nabizet moznost znovupripojeni k databazi a na kterou uz ne.
+Konzultoval sem to s Kovem, ten slibil, ze se na to podiva a do
+DBLayerException pripadne dodela nejaky mechanismus, ktery rozliseni umozni.
+
+Pak to akorat bude znamenat, ze i ve vetvi osetrujici DBLayerException
+muzete pripadne nabizet totez, co ve vetvi s RemoteException.
+
+
+Zakomponovani k aktualnim modelum.
+
+Do AppCoreCtrl.DatabaseChange.update(..) na konec vepiste pro kazdy svuj
+model:
+
+if( myModel != null )
+  myModel.setDatabase( dblayer ); // dblayer je lok. promenna
+
+V DBLayer je mechanismus jejiho zneplatneni. Pri provedeni reconnectu se
+totiz provadi taky logout, ktery by mel aktualni dblayer zneplatnit. Tzn.
+pokud se ji pokusite pouzit znova, tak vam to hodi vyjimky, ze nejste
+pripojeni. Bohuzel mechanismus nefunguje (a ani nemuze) fungovat 100%. Pokud
+totiz na chvilku vypadne sit, tak to RMI nemusi poznat, logout se nepovede
+(sit vypadena a zniceni dblayer musi provest server). Kdyz pak dojde k
+vytvoreni nove dblayer a vy si ji nevyzvednete, ta stara muze zacit fungovat
+(sit opet funkcni). Pak budou v aplikaci 2 dblayers.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060804/9ea42606/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060804/9ea42606/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000632.html">[Plantlore-dev] r484 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+	<LI>Next message: <A HREF="000634.html">[Plantlore-dev] r485 - in trunk/src/net/sf/plantlore: client	client/export client/login common common/debug server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#633">[ date ]</a>
+              <a href="thread.html#633">[ thread ]</a>
+              <a href="subject.html#633">[ subject ]</a>
+              <a href="author.html#633">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

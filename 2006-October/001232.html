@@ -1,0 +1,1205 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r856 - in trunk/src/net/sf/plantlore: client	client/login client/overview client/overview/tree	common/exception config l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-October/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r856%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/login%20client/overview%20client/overview/tree%0A%09common/exception%20config%20l10n%20server&In-Reply-To=%3C200610221417.k9MEHhvd003572%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001231.html">
+   <LINK REL="Next"  HREF="001233.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r856 - in trunk/src/net/sf/plantlore: client	client/login client/overview client/overview/tree	common/exception config l10n server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r856%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/login%20client/overview%20client/overview/tree%0A%09common/exception%20config%20l10n%20server&In-Reply-To=%3C200610221417.k9MEHhvd003572%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r856 - in trunk/src/net/sf/plantlore: client	client/login client/overview client/overview/tree	common/exception config l10n server">krater at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct 22 16:17:43 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001231.html">[Plantlore-dev] r855 - in trunk/src/net/sf/plantlore:	client/authors client/overview common
+</A></li>
+        <LI>Next message: <A HREF="001233.html">[Plantlore-dev] [Bug #9231] DBLayer never stores the Unique	Identifier
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1232">[ date ]</a>
+              <a href="thread.html#1232">[ thread ]</a>
+              <a href="subject.html#1232">[ subject ]</a>
+              <a href="author.html#1232">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-10-22 16:17:41 +0200 (Sun, 22 Oct 2006)
+New Revision: 856
+
+Added:
+   trunk/src/net/sf/plantlore/client/overview/DefaultValues.java
+Removed:
+   trunk/src/net/sf/plantlore/client/overview/InterestingFields.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java
+   trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+   trunk/src/net/sf/plantlore/config/log4j.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Login throws more informative exceptions. It is possible to recognize whether the database is not running or the password or the user name is incorrect. The DatabaseLayerException was improved in order to achieve this functionality.
+
+Add dialog can remember default values and restore them when reloaded or asked to. There is another RFE (to delete some parts of the add dialog - it should be done carefully so as not to clash with the mechanism that restores the default values). Edit dialog is not affected by this change.
+
+Habitat tree allows the User to open the Add dialog (popup menu created by Jakub Kotowski was bound to the tree). It seems to work flawlessly.
+
+
+InterestingFields.java renamed to DefaultValues.java
+
+HibernateDBLayer contains a bug (more in the bug track list on Berlios).
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -1065,7 +1065,7 @@
+                             DefaultExceptionHandler.handle(view,ex);
+                             return;
+                         }
+-                        addView.loadComponentData();
++                        addView.loadComponentData(false);
+                         addView.setVisible(true);   
+                     }//if ADD
+                     if (message.equals(&quot;DELETE&quot;)) {
+@@ -1878,7 +1878,8 @@
+ //                                view.overviewScrollPane.addComponentListener(overviewResizeListener);
+ 
+                                 /*-------------------------------------------------------------------
+-                                 *  This may no longer be necessary:
++                                 *  Notify the rest of the application that the database
++                                 * layer has chaged.
+                                  *------------------------------------------------------------------*/
+                 logger.debug(&quot;Distributing the new database layer to:&quot;);
+                 logger.debug(&quot; # export &quot;);
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -285,6 +285,7 @@
+ 	 * of the database layer a little bit easier. 
+ 	 * 
+ 	 * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++         * @author Jakub Kotowski (proper use of PostTaskAction)
+ 	 * @since 2006-08-30
+ 	 */
+ 	private class ConnectionTask extends Task {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -7,19 +7,24 @@
+ 
+ package net.sf.plantlore.client.overview;
+ 
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.ObjectInputStream;
++import java.io.ObjectOutputStream;
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.HashMap;
+ import java.util.HashSet;
++import java.util.Hashtable;
+ import java.util.Iterator;
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Observable;
+ import java.util.Set;
+-import javax.swing.JOptionPane;
+-import net.sf.plantlore.client.*;
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+@@ -34,7 +39,6 @@
+ import net.sf.plantlore.common.record.Publication;
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.common.record.Territory;
+-import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.NearestVillage;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -52,6 +56,7 @@
+  * it would work exactly the same as import does.
+  *
+  * @author fraktalek
++ * @author kaimu (restore/remember default values in the Add dialog for all databases the User works with)
+  */
+ public class AddEdit extends Observable {
+     public static final int WGS84 = 0;
+@@ -170,6 +175,10 @@
+         this.editMode = editMode;
+         logger = Logger.getLogger(this.getClass().getPackage().getName());      
+         occurrenceTableModel = new OccurrenceTableModel();
++        
++        // Load the default values from a file. Should work for the Add mode only!
++        if( !editMode )
++            getDefaultValues( true );
+     }
+  
+     /** Makes the model load data from for the occurrence with id occurrenceId.
+@@ -1826,8 +1835,9 @@
+         this.setAltitude(newCoordinate[2]);       
+     }     
+     
+-   
+     
++    
++    
+     public void setIsCancle(boolean isCancle) {
+         this.isCancled = isCancle;
+     }
+@@ -1835,6 +1845,114 @@
+     public boolean getIsCancle() {
+         return this.isCancled;
+     }
++    
++    
++    
++    
++    /*----------------------------------------------------------------------------------------
++     * Save and load the default values from a separate configuration file.
++     *
++     *----------------------------------------------------------------------------------------*/
++    private String defaultValuesFileName; {
++        String userHome = System.getProperty(&quot;user.home&quot;),
++        osName = System.getProperty(&quot;os.name&quot;),
++        plantloreDirName = (osName.equals(&quot;Linux&quot;) ? &quot;.&quot; : &quot;&quot;) + net.sf.plantlore.client.Plantlore.PLANTLORE, 
++        plantloreConfDir = userHome+File.separator+plantloreDirName;
++
++        File plantloreConfDirFile = new File(plantloreConfDir);
++        if (!plantloreConfDirFile.exists())
++                plantloreConfDirFile.mkdir();
++
++        defaultValuesFileName = plantloreConfDir + File.separator + &quot;add-default&quot;;
++    }
++    
++    
++    
++    /*
++     * The hashtable stores default values for different databases (these databases are
++     * recognized by their Unique Identifier).
++     *
++     * Thus the default values may differ for each database the User works with.
++     * It was a necessary step because some of the stored values may not be in the other database at all.
++     */
++    private Hashtable&lt;String, DefaultValues&gt; storedValues = new Hashtable&lt;String, DefaultValues&gt;(8);
++
++    
++    /**
++     * Load the table with default values.
++     */
++    private void load()
++    throws IOException, ClassNotFoundException {
++        logger.debug(&quot;Loading the list with default values.&quot;);
++        ObjectInputStream ois = new ObjectInputStream( new FileInputStream(defaultValuesFileName) );
++        storedValues = (Hashtable&lt;String, DefaultValues&gt;) ois.readObject();
++        ois.close();
++        
++        System.out.println(&quot;~~~ LIST OF KEYS &quot; + storedValues.keySet());
++    }
++
++    /**
++     * Store the table with default values.
++     */
++    private void save()
++    throws IOException {
++        logger.debug(&quot;Saving the list with default values.&quot;);
++        ObjectOutputStream oos = new ObjectOutputStream( new FileOutputStream(defaultValuesFileName) );
++        oos.writeObject( storedValues );
++        oos.close();
++    }
++    
++    
++
++    public void setDefaultValues(DefaultValues defaultValues) {
++        try {
++             // Gather the information from dialogs.
++            String databaseID = database.getUniqueDatabaseIdentifier();
++            storedValues.remove( databaseID );
++            if(defaultValues != null)
++                storedValues.put( databaseID, defaultValues );
++            // Store them.
++            save();
++        } catch(Exception e) {
++            logger.error(&quot;Unable to remember default values! &quot; + e.getMessage());
++            e.printStackTrace();
++        }
++    }
++    
++    
++    public DefaultValues getDefaultValues(boolean reload) {
++        try {
++            if(reload)
++                load();
++            if(database == null)
++                return null;
++            String databaseID = database.getUniqueDatabaseIdentifier();
++            return storedValues.get( databaseID );            
++        } catch(Exception e) {
++            logger.error(&quot;Unable to restore default values! &quot; + e.getMessage());
++            e.printStackTrace();
++        }
++        return null; 
++    }
++    
++    
++    public void restoreDefaultValuesInView() {
++        setChanged();
++        notifyObservers( getDefaultValues(false) );
++    }
++
++    
++
++
++    /* 
++     *
++     * This `Netbeans 5.0` is a real shit . Thank God to IBM for their vastly superior Eclipse 3.1
++     * What Netbeans cannot do properly:
++     * 1. indent the code automatically (when inserted...),
++     * 2. find usages (invoked on a method definition)
++     * 3. refactor method names
++     *
++     */
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -69,7 +69,7 @@
+ /**
+  *
+  * @author reimei
+- *@author kaimu
++ * @author kaimu (remember/restore default values)
+  */
+ public class AddEditCtrl {
+     private Logger logger;
+@@ -83,8 +83,6 @@
+     public final static int MAXIMUM_INTEGER_DIGITS = 9;
+     private final static Color COLOR_INVALID = Color.RED;
+     
+-    private RememberDefaultValuesAction defaults = new RememberDefaultValuesAction();
+-    
+     //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+     private ChecklistView checklistView;
+     
+@@ -148,8 +146,16 @@
+         view.settingsButton.setAction(new SettingsAction());
+         view.gpsChangeButton.setAction(new ChangeCoordinateSystemAction());
+         view.authButton.setAction(new AuthorManagerAction());
+-        view.rememberButton.setAction( defaults );
++        view.rememberButton.setAction( new RememberDefaultValuesAction() );
++        view.restoreButton.setAction( new RestoreDefaultValuesAction() );
+ //        view.preloadAuthorsCheckBox.addActionListener(new PreloadCheckBox());
++        
++        
++        /*
++         * AddEditView is constructed - this may be a perfect time to preload some default values.
++         * However it will not help us when another database is opened :(
++         */
++        
+     }
+     
+     
+@@ -725,7 +731,7 @@
+                     Task task = model.storeRecord(true);
+                     /*
+                      * The following announcement should be removed (it was a RFE)..
+-                     *
++                     */
+                     task.setPostTaskAction(new PostTaskAction() {
+                         public void afterStopped(Object value) {
+                             SwingUtilities.invokeLater(new Runnable() {
+@@ -736,9 +742,9 @@
+                         }
+                     });
+                     Dispatcher.getDispatcher().dispatch(task, view, false);
+-                     *
+-                     */
++                     /**/
+                     //view.setVisible(false);
++
+                 }
+             } catch (RemoteException ex) {
+                 logger.error(&quot;Remote problem: &quot;+ex);
+@@ -857,57 +863,14 @@
+      */
+     class RememberDefaultValuesAction extends StandardAction {
+         
+-        private String defaultValuesFileName; {
+-		String userHome = System.getProperty(&quot;user.home&quot;),
+-		osName = System.getProperty(&quot;os.name&quot;),
+-		plantloreDirName = (osName.equals(&quot;Linux&quot;) ? &quot;.&quot; : &quot;&quot;) + net.sf.plantlore.client.Plantlore.PLANTLORE, 
+-		plantloreConfDir = userHome+File.separator+plantloreDirName;
+-		
+-		File plantloreConfDirFile = new File(plantloreConfDir);
+-		if (!plantloreConfDirFile.exists())
+-			plantloreConfDirFile.mkdir();
+-		
+-		defaultValuesFileName = plantloreConfDir + File.separator + &quot;add-default&quot;;
+-	}
+-        
+-        /*
+-         * The hashtable stores default values for different databases (these databases are
+-         * recognized by their Unique Identifier).
+-         *
+-         * Thus the default values may differ for each database the User works with.
+-         * It was a necessary step because some of the stored values may not be in the other database at all.
+-         */
+-        private Hashtable&lt;String, InterestingFields&gt; storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);
+-        
+         /**
+          * Create a new Action that is capable of remembering the list of default values.
+-         * Also note that when first constructed it restores the state of the dialog to its previous state.
+          */
+         RememberDefaultValuesAction() {
+             super(&quot;Add.Remember&quot;);
+         }
+ 
+         /**
+-         * Load the table with default values.
+-         */
+-        private void load()
+-        throws IOException, ClassNotFoundException {
+-		ObjectInputStream ois = new ObjectInputStream( new FileInputStream(defaultValuesFileName) );
+-		storedValues = (Hashtable&lt;String, InterestingFields&gt;) ois.readObject();
+-		ois.close();
+-	}
+-            
+-        /**
+-         * Store the table with default values.
+-         */
+-        private void save()
+-        throws IOException {
+-		ObjectOutputStream oos = new ObjectOutputStream( new FileOutputStream(defaultValuesFileName) );
+-		oos.writeObject( storedValues );
+-		oos.close();
+-	}
+-          
+-        /**
+          * @return null if the string is null or empty (ie. &quot;&quot;)
+          */
+         private String evaluate(String s) {
+@@ -925,140 +888,147 @@
+             return (Pair&lt;String, Integer&gt;) o;
+         }
+         
++        
+         /**
+-         * Restore the state of the most important fields.
++         * Forget the state of the most important fields.
+          */
+-        public void restore(boolean reload) {
+-            try {
+-                if(reload)
+-                    load();
+-                
+-                if( storedValues == null )
+-                    // There are no stored values yet.
+-                    storedValues = new Hashtable&lt;String, InterestingFields&gt;(8);
++        public void forget() {
++            model.setDefaultValues( null );
++        }
+ 
+-                // Look for default values that were saved for the database we are currently working with.
+-                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                if( databaseID == null)
+-                    // We are propably not connected to a database yet. This should never happen.
+-                    return;
++        /**
++         * Take action = remember the state of fields.
++         */
++        public void actionPerformed(ActionEvent e) {
++            logger.debug(&quot;Trying to memorize the default values for this dialog.&quot;);
++            
++            DefaultValues defaults = new DefaultValues();
+ 
+-                // Obtain the default values.
+-                InterestingFields defaults = storedValues.get( databaseID );
+-                if( defaults == null)
+-                    // No default values stored for this particular database. Never mind.
+-                    return;
++            defaults.territory = evaluate( view.territoryNameCombo.getSelectedItem() );
++            defaults.phytochorion = evaluate( view.phytNameCombo.getSelectedItem() );
++            defaults.town = evaluate( view.townComboBox.getSelectedItem() );
++            defaults.publication = evaluate( view.publicationCombo.getSelectedItem() );
++            defaults.project = evaluate( view.projectCombo.getSelectedItem() );
++            defaults.quadrant = evaluate( view.quadrantTextField.getText() );
++            defaults.country = evaluate( (String) view.phytCountryCombo.getSelectedItem() );
++            defaults.herbarium = evaluate( view.herbariumTextField.getText() );
++            defaults.source = evaluate( (String) view.sourceCombo.getSelectedItem() );
++            defaults.latitude = evaluate( view.latitudeTextField.getText() );
++            defaults.longitude = evaluate( view.longitudeTextField.getText() );
++            defaults.altitude = evaluate( view.altitudeTextField.getText() ); 
++            defaults.time = evaluate( view.timeTextField.getText() );
++            defaults.day = evaluate( view.dayTextField.getText() );
++            defaults.month = view.monthChooser.getMonth();
++            defaults.year = (Integer) view.yearSpinner.getValue();
++            defaults.description = evaluate( view.descriptionArea.getText() );
++            defaults.locationNote = evaluate( view.locationNoteArea.getText() );
++            defaults.occurrenceNote = evaluate( view.occurrenceNoteArea.getText() );
+ 
+-                // Now, do some reviving.
+-                // The trouble is, that sometimes (mostly with the fields monitored with focus listeners) the model would have to be
+-                // notified manually. Shame (that Swing doesn't provide a unified interface for some changes..). Let's go!
+-                if(defaults.territory != null)
+-                    view.territoryNameCombo.setSelectedItem( defaults.territory );
+-                if(defaults.phytochorion != null)
+-                    view.phytNameCombo.setSelectedItem( defaults.phytochorion );
+-                if(defaults.town != null)
+-                    view.townComboBox.setSelectedItem( defaults.town );
+-                if(defaults.project != null)
+-                    view.projectCombo.setSelectedItem( defaults.project );
+-                if(defaults.publication != null)
+-                    view.publicationCombo.setSelectedItem( defaults.publication );
++            model.setDefaultValues( defaults );
++        }
++    }
++    
+ 
+-                if(defaults.quadrant != null)
+-                    view.quadrantTextField.setText( defaults.quadrant );
+-                if(defaults.country != null)
+-                    view.phytCountryCombo.setSelectedItem( defaults.country );
+-                if(defaults.herbarium != null)
+-                    view.herbariumTextField.setText( defaults.herbarium );
+-                if(defaults.source != null)
+-                    view.sourceCombo.setSelectedItem(defaults.source);
+-                if(defaults.latitude != null)
+-                    view.latitudeTextField.setText( defaults.latitude );
+-                if(defaults.altitude != null)
+-                    view.altitudeTextField.setText( defaults.altitude );
+-                if(defaults.longitude != null)
+-                    view.longitudeTextField.setText( defaults.longitude );
+-                if(defaults.time != null)
+-                    view.timeTextField.setText( defaults.time );
+-                if(defaults.month != null)
+-                    view.monthChooser.setMonth( defaults.month );
+-                if(defaults.day != null)
+-                    view.dayTextField.setText( defaults.day );
+-                if(defaults.year != null)
+-                    view.yearSpinner.setValue( defaults.year );
+-
+-                if(defaults.description != null)
+-                    view.descriptionArea.setText( defaults.description );
+-                if(defaults.locationNote != null)
+-                    view.locationNoteArea.setText( defaults.locationNote );
+-                if(defaults.occurrenceNote != null)
+-                    view.occurrenceNoteArea.setText( defaults.occurrenceNote );
+-            } catch (Exception e) {
+-                logger.error(&quot;Unable to restore default values! &quot; + e.getMessage());
+-            }
+-                    
++    /**
++     * This action restores the default values in the dialog.
++     *
++     * @author Erik Kratochv&#237;l
++     */
++    class RestoreDefaultValuesAction extends StandardAction {
++        
++        /**
++         * Create a new Action that is capable of remembering the list of default values.
++         */
++        RestoreDefaultValuesAction() {
++            super(&quot;Add.Restore&quot;);
+         }
++
+         
+         /**
+-         * Remember the state of the most important fields.
++         * Take action = restore the state of fields.
+          */
+-        public void remember() {
+-            try {
+-                // Gather the information from dialogs.
+-                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                storedValues.remove( databaseID );
+-                InterestingFields defaults = new InterestingFields();
++        public void actionPerformed(ActionEvent e) {
++            logger.debug(&quot;Trying to restore the default values of this dialog.&quot;);
++            
++            // Obtain the default values.
++            DefaultValues defaults = model.getDefaultValues( false );
++            if( defaults == null)
++                // No default values stored for this particular database. Never mind.
++                return;
+ 
+-                defaults.territory = evaluate( view.territoryNameCombo.getSelectedItem() );
+-                defaults.phytochorion = evaluate( view.phytNameCombo.getSelectedItem() );
+-                defaults.town = evaluate( view.townComboBox.getSelectedItem() );
+-                defaults.publication = evaluate( view.publicationCombo.getSelectedItem() );
+-                defaults.project = evaluate( view.projectCombo.getSelectedItem() );
+-                defaults.quadrant = evaluate( view.quadrantTextField.getText() );
+-                defaults.country = evaluate( (String) view.phytCountryCombo.getSelectedItem() );
+-                defaults.herbarium = evaluate( view.herbariumTextField.getText() );
+-                defaults.source = evaluate( (String) view.sourceCombo.getSelectedItem() );
+-                defaults.latitude = evaluate( view.latitudeTextField.getText() );
+-                defaults.longitude = evaluate( view.longitudeTextField.getText() );
+-                defaults.altitude = evaluate( view.altitudeTextField.getText() ); 
+-                defaults.time = evaluate( view.timeTextField.getText() );
+-                defaults.day = evaluate( view.dayTextField.getText() );
+-                defaults.month = view.monthChooser.getMonth();
+-                defaults.year = (Integer) view.yearSpinner.getValue();
+-                defaults.description = evaluate( view.descriptionArea.getText() );
+-                defaults.locationNote = evaluate( view.locationNoteArea.getText() );
+-                defaults.occurrenceNote = evaluate( view.occurrenceNoteArea.getText() );
++            // Now, do some reviving.
++            // The trouble is, that sometimes (mostly with the fields monitored with focus listeners) the model would have to be
++            // notified manually. Shame (that Swing doesn't provide a unified interface for some changes..). Let's go!
++            if(defaults.territory != null)
++                view.territoryNameCombo.setSelectedItem( defaults.territory );
++            if(defaults.phytochorion != null)
++                view.phytNameCombo.setSelectedItem( defaults.phytochorion );
++            if(defaults.town != null)
++                view.townComboBox.setSelectedItem( defaults.town );
++            if(defaults.project != null)
++                view.projectCombo.setSelectedItem( defaults.project );
++            if(defaults.publication != null)
++                view.publicationCombo.setSelectedItem( defaults.publication );
+ 
+-                storedValues.put( databaseID, defaults );
+-                // Store them.
+-                save(); 
+-            } catch(Exception e) {
+-                //logger.error(&quot;Unable to remember default values! &quot; + e.getMessage());
+-                e.printStackTrace();
+-            }
++            if(defaults.quadrant != null)
++                view.quadrantTextField.setText( defaults.quadrant );
++            if(defaults.country != null)
++                view.phytCountryCombo.setSelectedItem( defaults.country );
++            if(defaults.herbarium != null)
++                view.herbariumTextField.setText( defaults.herbarium );
++            if(defaults.source != null)
++                view.sourceCombo.setSelectedItem(defaults.source);
++            if(defaults.latitude != null)
++                view.latitudeTextField.setText( defaults.latitude );
++            if(defaults.altitude != null)
++                view.altitudeTextField.setText( defaults.altitude );
++            if(defaults.longitude != null)
++                view.longitudeTextField.setText( defaults.longitude );
++            if(defaults.time != null)
++                view.timeTextField.setText( defaults.time );
++            if(defaults.month != null)
++                view.monthChooser.setMonth( defaults.month );
++            if(defaults.day != null)
++                view.dayTextField.setText( defaults.day );
++            if(defaults.year != null)
++                view.yearSpinner.setValue( defaults.year );
++
++            if(defaults.description != null)
++                view.descriptionArea.setText( defaults.description );
++            if(defaults.locationNote != null)
++                view.locationNoteArea.setText( defaults.locationNote );
++            if(defaults.occurrenceNote != null)
++                view.occurrenceNoteArea.setText( defaults.occurrenceNote );
++
+         }
++    }
++    
++    
++    /**
++     * This action throws away the default values in the dialog.
++     * Currently unused.
++     *
++     * @author Erik Kratochv&#237;l
++     */
++    class ForgetDefaultValuesAction extends StandardAction {
+         
+         /**
+-         * Forget the state of the most important fields.
++         * Create a new Action that is capable of forgeting the list of default values.
+          */
+-        public void forget() {
+-            try {
+-                String databaseID = model.getDatabase().getUniqueDatabaseIdentifier();
+-                storedValues.remove( databaseID );
+-                save();
+-            } catch(Exception e) {
+-                logger.error(&quot;Unable to forget default values! &quot; + e.getMessage());
+-            }
++        ForgetDefaultValuesAction() {
++            super(&quot;Add.Forget&quot;);
+         }
+ 
+         /**
+-         * Take action = remember the state of fields.
++         * Take action = forget the state of fields.
+          */
+         public void actionPerformed(ActionEvent e) {
+-            logger.debug(&quot;Trying to memorize the default values for this dialog.&quot;);
+-            remember();
++            logger.debug(&quot;Trying to forget the default values for this dialog.&quot;);
++            model.setDefaultValues( null );
+         }
+     }
+ 
++
+         
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-10-22 14:17:41 UTC (rev 856)
+@@ -1048,9 +1048,11 @@
+                           &lt;Component id=&quot;authButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;rememberButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;restoreButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;18&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;325&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;226&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;okButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;12&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -1067,9 +1069,10 @@
+                               &lt;Component id=&quot;settingsButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;okButton&quot; linkSize=&quot;13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;requiredInfoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;authButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;rememberButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;restoreButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;requiredInfoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace pref=&quot;16&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+@@ -1128,11 +1131,21 @@
+                 &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;rememberButton&quot;&gt;
+                   &lt;Properties&gt;
+                     &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;rem&quot;/&gt;
++                    &lt;Property name=&quot;actionCommand&quot; type=&quot;java.lang.String&quot; value=&quot;REMEMBER&quot;/&gt;
+                   &lt;/Properties&gt;
+                   &lt;AuxValues&gt;
+                     &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                   &lt;/AuxValues&gt;
+                 &lt;/Component&gt;
++                &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;restoreButton&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;res&quot;/&gt;
++                    &lt;Property name=&quot;actionCommand&quot; type=&quot;java.lang.String&quot; value=&quot;RESTORE&quot;/&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
+               &lt;/SubComponents&gt;
+             &lt;/Container&gt;
+             &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;extendedPanel&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -48,11 +48,13 @@
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.l10n.L10n;
++import net.sf.plantlore.middleware.DBLayer;
+ import org.apache.log4j.Logger;
+ 
+ /**
+  *
+- * @author  reimei
++ * @author reimei
++ * @author kaimu (remember/restore default values)
+  */
+ public class AddEditView extends javax.swing.JDialog implements Observer {
+     private Logger logger;
+@@ -97,6 +99,13 @@
+         
+         extendedPanel.setVisible(visible);
+         setLocationRelativeTo(parent);
++        
++        // Do not show the Remember/Restore buttons in the Edit mode...
++        if(inEditMode) {
++            rememberButton.setVisible(false);
++            restoreButton.setVisible(false);
++        }
++        
+         this.pack();
+     }
+     
+@@ -183,6 +192,7 @@
+         requiredInfoLabel = new javax.swing.JLabel();
+         authButton = new javax.swing.JButton();
+         rememberButton = new javax.swing.JButton();
++        restoreButton = new javax.swing.JButton();
+         extendedPanel = new javax.swing.JPanel();
+         jScrollPane6 = new javax.swing.JScrollPane();
+         occurrenceTable = new javax.swing.JTable();
+@@ -649,7 +659,11 @@
+         authButton.setText(&quot;aut&quot;);
+ 
+         rememberButton.setText(&quot;rem&quot;);
++        rememberButton.setActionCommand(&quot;REMEMBER&quot;);
+ 
++        restoreButton.setText(&quot;res&quot;);
++        restoreButton.setActionCommand(&quot;RESTORE&quot;);
++
+         org.jdesktop.layout.GroupLayout buttonPanelLayout = new org.jdesktop.layout.GroupLayout(buttonPanel);
+         buttonPanel.setLayout(buttonPanelLayout);
+         buttonPanelLayout.setHorizontalGroup(
+@@ -663,16 +677,18 @@
+                 .add(authButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(rememberButton)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(4, 4, 4)
++                .add(restoreButton)
++                .add(18, 18, 18)
+                 .add(requiredInfoLabel)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 325, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 226, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+                 .addContainerGap())
+         );
+ 
+-        buttonPanelLayout.linkSize(new java.awt.Component[] {authButton, cancelButton, helpButton, okButton, rememberButton, settingsButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++        buttonPanelLayout.linkSize(new java.awt.Component[] {authButton, cancelButton, helpButton, okButton, rememberButton, restoreButton, settingsButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+ 
+         buttonPanelLayout.setVerticalGroup(
+             buttonPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -683,9 +699,10 @@
+                     .add(settingsButton)
+                     .add(cancelButton)
+                     .add(okButton)
+-                    .add(requiredInfoLabel)
+                     .add(authButton)
+-                    .add(rememberButton))
++                    .add(rememberButton)
++                    .add(restoreButton)
++                    .add(requiredInfoLabel))
+                 .addContainerGap(16, Short.MAX_VALUE))
+         );
+ 
+@@ -873,8 +890,18 @@
+             else latitudeTextField.setText(&quot;&quot;);
+     }
+     
+-    public void loadComponentData()
++    
++    
++    public void loadComponentData() {
++        loadComponentData(true);
++    }
++    
++    public void loadComponentData(boolean alsoRestoreDefaultValues)
+     {
++        
++        logger.debug(&quot;================ LOAD COMPONENT DATA ===================&quot;);
++        
++        
+         switch (model.getCoordinateSystem()) {
+             case AddEdit.WGS84:
+                 coordinateSystemLabel.setText(L10n.getString(&quot;Overview.CoordinateSystemLabel&quot;)+&quot;: WGS-84&quot;);
+@@ -956,8 +983,20 @@
+             dayTextField.setText(&quot;&quot;+model.getDay());
+         else
+             dayTextField.setText(&quot;&quot;);
++        
++        /*-------------------------------------------------------------------------------------------
++         * Try to preload the default values for this dialog 
++         * that the User might have saved earlier :)
++         *-------------------------------------------------------------------------------------------*/
++        if(alsoRestoreDefaultValues) {
++            logger.debug(&quot;Restoring the default values in this Add dialog.&quot;);
++            restoreDefaultValuesInThisDialog( model.getDefaultValues(false) );
++        }
++        
++        
+     }//loadComponentData
+     
++    
+     public void clearComponentData() {
+         //if ( ! preloadAuthorsCheckBox.isSelected() ) {
+             resetAuthorModel(); initAuthorTable();
+@@ -1136,8 +1175,69 @@
+             }
+         });
+     }
++    
++    
++    private void restoreDefaultValuesInThisDialog(DefaultValues defaultValues) {
++        // Default Values reviving.
++        // The trouble is, that sometimes (mostly with the fields monitored with focus listeners) the model would have to be
++        // notified manually. Shame (that Swing doesn't provide a unified interface for some changes..). Let's go!
++        if(defaultValues == null)
++            return;
++        
++        if(defaultValues.territory != null)
++            territoryNameCombo.setSelectedItem( defaultValues.territory );
++        if(defaultValues.phytochorion != null)
++            /*if(phytNameCombo instanceof AutoComboBoxNG3)
++                ((AutoComboBoxNG3)phytNameCombo).setValue( defaultValues.phytochorion );
++            else*/
++                phytNameCombo.setSelectedItem( defaultValues.phytochorion );
++        if(defaultValues.town != null)
++            townComboBox.setSelectedItem( defaultValues.town );
++        if(defaultValues.project != null)
++            projectCombo.setSelectedItem( defaultValues.project );
++        if(defaultValues.publication != null)
++            publicationCombo.setSelectedItem( defaultValues.publication );
+ 
++        if(defaultValues.quadrant != null)
++            quadrantTextField.setText( defaultValues.quadrant );
++        if(defaultValues.country != null)
++            phytCountryCombo.setSelectedItem( defaultValues.country );
++        if(defaultValues.herbarium != null)
++            herbariumTextField.setText( defaultValues.herbarium );
++        if(defaultValues.source != null)
++            sourceCombo.setSelectedItem(defaultValues.source);
++        if(defaultValues.latitude != null)
++            latitudeTextField.setText( defaultValues.latitude );
++        if(defaultValues.altitude != null)
++            altitudeTextField.setText( defaultValues.altitude );
++        if(defaultValues.longitude != null)
++            longitudeTextField.setText( defaultValues.longitude );
++        if(defaultValues.time != null)
++            timeTextField.setText( defaultValues.time );
++        if(defaultValues.month != null)
++            monthChooser.setMonth( defaultValues.month );
++        if(defaultValues.day != null)
++            dayTextField.setText( defaultValues.day );
++        if(defaultValues.year != null)
++            yearSpinner.setValue( defaultValues.year );
++
++        if(defaultValues.description != null)
++            descriptionArea.setText( defaultValues.description );
++        if(defaultValues.locationNote != null)
++            locationNoteArea.setText( defaultValues.locationNote );
++        if(defaultValues.occurrenceNote != null)
++            occurrenceNoteArea.setText( defaultValues.occurrenceNote );
++    }
++
++    
+     public void update(Observable o, Object arg) {
++        
++        if(arg instanceof DefaultValues) {
++            logger.debug(&quot;Restoring default values as requested (in update).&quot;);
++            restoreDefaultValuesInThisDialog( (DefaultValues) arg );        
++        }
++            
++        
+         if (arg instanceof Pair) {
+             String s = ((Pair&lt;String,Integer&gt;)arg).getFirst();
+             int i = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
+@@ -1339,6 +1439,7 @@
+     protected javax.swing.JTextField quadrantTextField;
+     protected javax.swing.JButton rememberButton;
+     private javax.swing.JLabel requiredInfoLabel;
++    protected javax.swing.JButton restoreButton;
+     protected javax.swing.JButton settingsButton;
+     protected javax.swing.JComboBox sourceCombo;
+     protected javax.swing.JLabel sourceLabel;
+
+Added: trunk/src/net/sf/plantlore/client/overview/DefaultValues.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/DefaultValues.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/DefaultValues.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -0,0 +1,18 @@
++package net.sf.plantlore.client.overview;
++
++import net.sf.plantlore.common.Pair;
++
++/**
++ * The holder object of most important fields in the dialog whose state should be stored.
++ * The list of currently selected authors is not saved because that component may be a subject to change.
++ *
++ * This class must cannot be an inner class because then that inner class would become
++ * an object of serialization as well!
++ *
++ * @author kaimu
++ */
++public class DefaultValues implements java.io.Serializable {
++    public Pair&lt;String, Integer&gt; territory, phytochorion, town, publication, project;
++    public String description, locationNote, occurrenceNote, latitude, longitude, altitude, country, time, day, quadrant, herbarium, source;
++    public Integer month, year;
++}
+\ No newline at end of file
+
+Deleted: trunk/src/net/sf/plantlore/client/overview/InterestingFields.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/InterestingFields.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/InterestingFields.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -1,18 +0,0 @@
+-package net.sf.plantlore.client.overview;
+-
+-import net.sf.plantlore.common.Pair;
+-
+-/**
+- * The holder object of most important fields in the dialog whose state should be stored.
+- * The list of currently selected authors is not saved because that component may be a subject to change.
+- *
+- * This class must cannot be an inner class because then that inner class would become
+- * an object of serialization as well!
+- *
+- * @author kaimu
+- */
+-public class InterestingFields implements java.io.Serializable {
+-    public Pair&lt;String, Integer&gt; territory, phytochorion, town, publication, project;
+-    public String description, locationNote, occurrenceNote, latitude, longitude, altitude, country, time, day, quadrant, herbarium, source;
+-    public Integer month, year;
+-}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form	2006-10-22 14:17:41 UTC (rev 856)
+@@ -79,6 +79,11 @@
+       &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
+       &lt;SubComponents&gt;
+         &lt;Component class=&quot;javax.swing.JTree&quot; name=&quot;habitatTree&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;componentPopupMenu&quot; type=&quot;javax.swing.JPopupMenu&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;popupMenu&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JTree(model.getTreeModel());&quot;/&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -93,7 +98,7 @@
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Component id=&quot;searchButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;EmptySpace pref=&quot;179&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;209&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;refreshButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -62,6 +62,7 @@
+ 
+         deleteMenuItem.setText(&quot;Item&quot;);
+ 
++        habitatTree.setComponentPopupMenu(popupMenu);
+         jScrollPane1.setViewportView(habitatTree);
+ 
+         searchButton.setText(&quot;jButton1&quot;);
+@@ -74,7 +75,7 @@
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1Layout.createSequentialGroup()
+                 .add(searchButton)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 179, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 209, Short.MAX_VALUE)
+                 .add(refreshButton))
+         );
+         jPanel1Layout.setVerticalGroup(
+
+Modified: trunk/src/net/sf/plantlore/common/exception/DBLayerException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/common/exception/DBLayerException.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -83,8 +83,32 @@
+         // Better constructor to allow proper exception wrapping.
+         public DBLayerException(String message, Throwable originalException) {
+         	super(message, originalException);
+-        	if(originalException instanceof JDBCException)        	
+-        		setError( translateSQLState( ((JDBCException)originalException).getSQLState()), null );
++        	if(originalException instanceof JDBCException) {
++                    setError( translateSQLState( ((JDBCException)originalException).getSQLState()), null );
++                    // Perform a better error recognition here.
++                    // The real reason why the connection was refused is usually wrapped 
++                    // in several other exceptions. 
++                    if( errorCode == ERROR_CONNECT ) {
++                        for(Throwable cause = originalException; cause != null; cause = cause.getCause()) {
++                            String info = cause.getMessage();
++                            if(info == null)
++                                continue;
++                            if( info.toLowerCase().contains(&quot;password&quot;) ) {
++                                //logger.info(&quot;The particular reason the connection was refused: &quot; + info);
++                                errorCode = ERROR_PASSWORD;
++                                errorInfo = L10n.getString(&quot;DBLayer.Error.Password&quot;);
++                                return;
++                            }
++                            else if( info.toLowerCase().contains(&quot;username&quot;) ) {
++                                //logger.info(&quot;The particular reason the connection was refused: &quot; + info);
++                                errorCode = ERROR_PASSWORD;
++                                errorInfo = L10n.getString(&quot;DBLayer.Error.Username&quot;);
++                                return;
++                            }
++                        }
++                    }
++                }
++                
+         }
+         
+         // Better constructor to allow proper exception wrapping.
+@@ -210,7 +234,7 @@
+             
+             // Connection exception - Connection does not exist, was interrupted or cannot be established
+             if (errorClass.equals(&quot;08&quot;)) {
+-            	/* POINTLESS :(
++            	/* POINTLESS :( - these numbers are database specific...
+             	if(&quot;004&quot;.equals(errorDetail))
+             		return ERROR_USERNAME;
+             	if (&quot;005&quot;.equals(errorDetail))
+
+Modified: trunk/src/net/sf/plantlore/config/log4j.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/config/log4j.properties	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/config/log4j.properties	2006-10-22 14:17:41 UTC (rev 856)
+@@ -1,5 +1,5 @@
+ ### set log levels - for more verbose logging change 'info' to 'debug' ###
+-log4j.rootLogger=warn, file
++log4j.rootLogger=debug, stdout
+ 
+ ### direct log messages to stdout ###
+ log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-10-22 14:17:41 UTC (rev 856)
+@@ -5,7 +5,7 @@
+ Overview.MenuPrint = &amp;Tisk
+ Overview.MenuPrintTT = Vytiskne ozna\u010den\u00e9 z\u00e1znamy
+ Overview.MenuExit = &amp;Konec
+-Overview.MenuLogin = Logi&amp;n
++Overview.MenuLogin = &amp;P\u0159ihl\u00E1sit
+ Overview.MenuHelp = &amp;N\u00E1pov\u011Bda
+ Overview.MenuHelpContents = &amp;Obsah
+ Overview.MenuHelpAbout = O &amp;aplikaci
+@@ -1452,7 +1452,7 @@
+ 
+ Information.UserCannotEditTitle=Editace u\u017Eivatele
+ 
+-Overview.MenuFileReconnect=Znovu p\u0159ipojit
++Overview.MenuFileReconnect=Obnovit p\u0159ipojen\u00ED
+ 
+ Overview.MenuFileLogoutTT=Odhl\u00E1\u0161en\u00ED od datab\u00E1ze
+ 
+@@ -1750,7 +1750,7 @@
+ 
+ Server.Info.TerminatingServer=Prob\u00EDh\u00E1 zastavov\u00E1n\u00ED serveru...
+ 
+-Overview.MenuFileLogout=Odpojit
++Overview.MenuFileLogout=Odhl\u00E1sit
+ 
+ Overview.MenutFileExit=Konec
+ 
+@@ -1782,13 +1782,13 @@
+ 
+ DBLayer.Error.LoadConfig=Nepoda\u0159ilo se na\u010D\u00EDst konfigura\u010Dn\u00ED soubory datab\u00E1ze.
+ 
+-DBLayer.Error.Connect=Nepoda\u0159ilo se p\u0159ipojit k datab\u00E1zi.\nJe datab\u00E1ze spu\u0161t\u011Bna.
++DBLayer.Error.Connect=Nepoda\u0159ilo se p\u0159ipojit k datab\u00E1zi.\nJe datab\u00E1ze spu\u0161t\u011Bna?
+ 
+ DBLayer.Error.Login=Autorizace se nezda\u0159ila. Neplatn\u00E9 jm\u00E9no nebo heslo
+ 
+-DBLayer.Error.Username=Neexistuj\u00EDc\u00ED u\u017Eivatelsk\u00E9 jm\u00E9no.
++DBLayer.Error.Username=Zkontrolujte pros\u00EDm, zda jste zadali spr\u00E1vn\u00E9\np\u0159ihla\u0161ovac\u00ED \u00FAdaje (platn\u00E9 u\u017E. jm\u00E9no a heslo).
+ 
+-DBLayer.Error.Password=Neplatn\u00E9 heslo.
++DBLayer.Error.Password=Zkontrolujte pros\u00EDm, zda jste zadali spr\u00E1vn\u00E9\np\u0159ihla\u0161ovac\u00ED \u00FAdaje (u\u017E. jm\u00E9no a heslo).
+ 
+ DBLayer.Error.Save=Nepoda\u0159ilo se vlo\u017Eit data do datab\u00E1ze.
+ 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-10-19 15:03:14 UTC (rev 855)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-10-22 14:17:41 UTC (rev 856)
+@@ -224,11 +224,22 @@
+                 // No record in the table - we have to insert it (this is the first time the database is accessed)
+                 UnitIdDatabase unitid = new UnitIdDatabase();
+                 unitid.setUnitIdDb(UniqueIDGenerator.generate());
+-                sess.save(unitid);
++                
+                 if (unitid.getUnitIdDb() == null) {
+                     logger.error(&quot;Failed to generate unique id for the database&quot;);
+                     throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;));
+                 } else {
++                    /*
++                     * FIXME: This does not work!!
++                     *
++                     * Every time I open a database (even as an administrator)
++                     * the unique value is not stored! The UnitIdDb table is always empty.
++                     *
++                     * Besides, the unique database identifier should be generated and stored
++                     * right after the database is created, as it is the only time we are perfectly
++                     * sure that we have administrator rights!!
++                     */
++                    sess.save(unitid);
+                     this.databaseID = unitid.getUnitIdDb();
+                 }
+             } else {
+@@ -2432,4 +2443,11 @@
+ 		}
+ 		return currentlyConnectedUser ; 
+ 	}
++        
++        
++        /*===============================================================================
++         *  It is most fortunate that God does not grant us every wish.
++         *  For if He did most of my teammates would be pushing up daisies 
++         *  here and there by now. As would all the people that created Swing.
++         *===============================================================================*/
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001231.html">[Plantlore-dev] r855 - in trunk/src/net/sf/plantlore:	client/authors client/overview common
+</A></li>
+	<LI>Next message: <A HREF="001233.html">[Plantlore-dev] [Bug #9231] DBLayer never stores the Unique	Identifier
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1232">[ date ]</a>
+              <a href="thread.html#1232">[ thread ]</a>
+              <a href="subject.html#1232">[ subject ]</a>
+              <a href="author.html#1232">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

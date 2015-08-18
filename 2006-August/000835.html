@@ -1,0 +1,254 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r598 - in trunk/src/net/sf/plantlore: client/login	common/record middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r598%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09common/record%20middleware%20server&In-Reply-To=%3C200608300828.k7U8Stft018511%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000834.html">
+   <LINK REL="Next"  HREF="000836.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r598 - in trunk/src/net/sf/plantlore: client/login	common/record middleware server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r598%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%0A%09common/record%20middleware%20server&In-Reply-To=%3C200608300828.k7U8Stft018511%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r598 - in trunk/src/net/sf/plantlore: client/login	common/record middleware server">krater at mail.berlios.de
+       </A><BR>
+    <I>Wed Aug 30 10:28:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000834.html">[Plantlore-dev] Uvodni bitva prohrana
+</A></li>
+        <LI>Next message: <A HREF="000836.html">[Plantlore-dev] r599 - in trunk/src/net/sf/plantlore:	client/createdb client/login common/debug l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#835">[ date ]</a>
+              <a href="thread.html#835">[ thread ]</a>
+              <a href="subject.html#835">[ subject ]</a>
+              <a href="author.html#835">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-30 10:28:53 +0200 (Wed, 30 Aug 2006)
+New Revision: 598
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+Log:
+The War with the Logger was won!
+
+The reason was extremely simple! Recently, I have used Logger in the Record - parent of all holder objects. Since logger is not Serializable, it was impossible to pass *any* of its descendants through the RMI, not just User and Right (thx to Jakub who noticed that). This is why the Logger caused that exception. Mystery solved, no magic I'm afraid, just stupidity. Deleting two lines made the trick.
+
+I made a little change to the return call (the User is returned instead of { User, Right }) during my experiments and I'm lazy to undo it, because it works as well (it is because User carries the Right object itself...)
+
+The remote connection should work flawlessly now. HF
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-29 20:07:08 UTC (rev 597)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-30 08:28:53 UTC (rev 598)
+@@ -294,11 +294,11 @@
+ 				setStatusMessage( L10n.getString(&quot;Login.InitializingDBLayer&quot;) );
+ 				logger.debug(&quot;Initializing that DBLayer (&quot; + dbinfo.databaseType + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+ 				
+-				Object[] init = currentDBLayer.initialize(dbinfo.getDatabaseIdentifier(), name, password);
++				User init = currentDBLayer.initialize(dbinfo.getDatabaseIdentifier(), name, password);
+ 				if(isCanceled())
+-					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
+-				plantloreUser = (User)init[0];
+-				accessRights = (Right)init[1];
++					throw new DBLayerException(L10n.getString(&quot;Common.Canceled&quot;));
++				plantloreUser = init;
++				accessRights = init.getRight();
+ 			} 
+ 			catch (Exception e) {
+ 				logger.error(&quot;The initialization of the DBLayer failed! &quot; + e.getMessage());
+@@ -398,7 +398,7 @@
+ 			this.wrappedDBLayer = db;
+ 		}
+ 
+-		synchronized public Object[] initialize(String dbID, String user, String password) throws DBLayerException, RemoteException {
++		synchronized public User initialize(String dbID, String user, String password) throws DBLayerException, RemoteException {
+ 			verifyValidity();
+ 			return wrappedDBLayer.initialize(dbID, user, password);
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-29 20:07:08 UTC (rev 597)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-30 08:28:53 UTC (rev 598)
+@@ -4,11 +4,7 @@
+ import java.lang.reflect.Method;
+ import java.util.*;
+ 
+-import net.sf.plantlore.client.occurrenceimport.parsers.XMLOccurrenceParser;
+ 
+-import org.apache.log4j.Logger;
+-
+-
+ /**
+  * The common ancestor of all records. 
+  * Every record corresponds to a certain table of the database.
+@@ -25,9 +21,9 @@
+  */
+ public abstract class Record implements Serializable {
+ 	
+-	private Logger logger = Logger.getLogger(XMLOccurrenceParser.class.getPackage().getName());
+ 	
+ 	
++	
+ 	private static final long serialVersionUID = 20060604000L;
+ 	
+ 	/** 
+@@ -224,7 +220,7 @@
+ 		try {
+ 			setValue(column, value);
+ 		} catch(Exception e) {
+-			logger.error(&quot;Unable to set &quot;+getClass().getSimpleName()+&quot;.&quot;+column+&quot; = &quot;+value+&quot;! &quot; + e.getMessage() );
++			// Whatever
+ 		}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-29 20:07:08 UTC (rev 597)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-08-30 08:28:53 UTC (rev 598)
+@@ -10,6 +10,7 @@
+ import java.io.Serializable;
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
++
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.exception.DBLayerException;
+@@ -33,7 +34,7 @@
+      *          (Right object, index 1)
+      *  @throws DBLayerException when the database connection cannot be initialized
+      */
+-    public Object[] initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
++    public User initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
+ 
+     /**
+      * The database layer performs several kinds of operations each of which may
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-29 20:07:08 UTC (rev 597)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-30 08:28:53 UTC (rev 598)
+@@ -34,6 +34,7 @@
+ import net.sf.plantlore.common.record.Phytochorion;
+ import net.sf.plantlore.common.record.Plant;
+ import net.sf.plantlore.common.record.Publication;
++import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.User;
+@@ -168,7 +169,7 @@
+      *          ERROR_SELECT: Unable to read contents of TUSER table
+      *          ERROR_LOGIN: Authentication failed (wrong password, username or account disabled)
+      */
+-    public Object[] initialize(String dbID, String user, String password) 
++    public User initialize(String dbID, String user, String password) 
+     throws DBLayerException, RemoteException {
+         Configuration cfg;
+         currentlyConnectedUser = user;
+@@ -209,18 +210,20 @@
+                 .scroll();
+             
+             logger.debug(&quot;DBLayer Initialization - verifying existence of the user, part 2.&quot;);
+-            sr.next();
+-            if(sr.get() == null) {
++
++            if( ! sr.next() ) {
+             	logger.debug(&quot;DBLayer Initialization - things are not going well. sr.get() returned null!&quot;);
+             	throw new DBLayerException(L10n.getString(&quot;Error.MissingUserAccount&quot;), DBLayerException.ERROR_USERNAME);
+             }
+-            plantloreUser = (User)(sr.get())[0];
++            
++            Object[] userinfo = sr.get();
++            plantloreUser = (User)userinfo[0];
+             rights = plantloreUser.getRight();
+             logger.debug(&quot;DBLayer Initialization - finished!&quot;);
+         } 
+         catch (JDBCException e) {
+         	if(sessionFactory != null)
+-        		sessionFactory.close(); 
++        		sessionFactory.close();
+         	sessionFactory = null;
+             logger.fatal(&quot;Cannot connect to the database. Details: &quot;+e.getMessage());
+             throw new DBLayerException(L10n.getString(&quot;Error.ConnectionFailed&quot;), e);
+@@ -233,12 +236,13 @@
+             throw e;
+         }
+         finally {
+-        	
+         	if(sess != null) sess.close();
+         }
+         
++        logger.debug(&quot;User and rights ~ &quot; + plantloreUser.toFullString() + &quot; and &quot; + rights.toFullString());
++        
+         // Return User and Right object with users details
+-        return new Object[] { plantloreUser, rights };
++        return plantloreUser;
+     }
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-08-29 20:07:08 UTC (rev 597)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-08-30 08:28:53 UTC (rev 598)
+@@ -28,7 +28,6 @@
+  * connections effectively&lt;/li&gt;
+  * &lt;/ol&gt;
+  * 
+- * TODO:  maxConnectionsPerIP &amp; maxConnectionsTotal by se asi m&#283;ly na&#269;&#237;tat z n&#283;jak&#233;ho config souboru.
+  * 
+  * @author Erik Kratochv&#237;l
+  * @since 2006-03-13
+@@ -39,7 +38,7 @@
+ 	
+ 	private static final long serialVersionUID = 2006060433002698L;
+ 	
+-	private Logger logger  = Logger.getLogger(this.getClass().getPackage().getName());;
++	private Logger logger  = Logger.getLogger(RMIRemoteDBLayerFactory.class.getPackage().getName());
+ 	
+ 	private ServerSettings  settings;
+ 	private Undertaker undertaker;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000834.html">[Plantlore-dev] Uvodni bitva prohrana
+</A></li>
+	<LI>Next message: <A HREF="000836.html">[Plantlore-dev] r599 - in trunk/src/net/sf/plantlore:	client/createdb client/login common/debug l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#835">[ date ]</a>
+              <a href="thread.html#835">[ thread ]</a>
+              <a href="subject.html#835">[ subject ]</a>
+              <a href="author.html#835">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

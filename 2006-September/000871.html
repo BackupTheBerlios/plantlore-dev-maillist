@@ -1,0 +1,2303 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r621 - in trunk/src/net/sf/plantlore/client: .	history metadata user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r621%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09history%20metadata%20user&In-Reply-To=%3C200609012244.k81Miq3m010786%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000869.html">
+   <LINK REL="Next"  HREF="000872.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r621 - in trunk/src/net/sf/plantlore/client: .	history metadata user</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r621%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09history%20metadata%20user&In-Reply-To=%3C200609012244.k81Miq3m010786%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r621 - in trunk/src/net/sf/plantlore/client: .	history metadata user">lada at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  2 00:44:52 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000869.html">[Plantlore-dev] How-to: Omezeni delky vstupu uzivatele
+</A></li>
+        <LI>Next message: <A HREF="000872.html">[Plantlore-dev] Vyjimka
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#871">[ date ]</a>
+              <a href="thread.html#871">[ thread ]</a>
+              <a href="subject.html#871">[ subject ]</a>
+              <a href="author.html#871">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-09-02 00:44:46 +0200 (Sat, 02 Sep 2006)
+New Revision: 621
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/user/AddEditUserView.form
+   trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+Log:
+Exception are catch correctly now - use DefaultExceptionHandler.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -1726,10 +1726,10 @@
+ 					tableImportModel.setDBLayer( dblayer );
+ 				logger.debug(&quot; # record history &quot;);
+ 				if (historyModel != null ) 
+-					historyModel.setDBLayer( dblayer );
++					historyModel.restartQuery(History.HISTORY_RECORD);
+ 				logger.debug(&quot; # complete history &quot;);
+ 				if (wholeHistoryModel != null ) 
+-					wholeHistoryModel.setDBLayer( dblayer );
++					wholeHistoryModel.restartQuery(History.HISTORY_WHOLE);
+ 				logger.debug(&quot; # user manager &quot;);
+ 				if (userManagerModel != null )
+ 					userManagerModel.setDBLayer( dblayer );
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -19,6 +19,7 @@
+ import java.util.HashSet;
+ import java.util.Hashtable;
+ import java.util.Observable;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Author;
+@@ -58,8 +59,8 @@
+     private SelectQuery query = null;
+     /** Exception with details about an error */
+     private String error = null;
+-    /** Remote exception (network communication failed)*/
+-    private RemoteException remoteEx;
++    /** Exception (network communication failed)*/
++    private Exception exception;
+     /** True if MyTask finished successful*/
+     private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+@@ -129,6 +130,10 @@
+     private Hashtable&lt;String, Integer&gt; publicationHash;
+     private Hashtable&lt;String, Enum&gt; editTypeHash;
+     
++    /** Constants used for identification type of history */
++    public static final int HISTORY_RECORD = 1;
++    public static final int HISTORY_WHOLE = 2;
++    
+     /** Constants used for description of errors */
+     public static final String ERROR_SEARCH_RECORD = &quot;Error.HistoryRecordSearchFailed&quot;;
+     public static final String ERROR_SEARCH_DATA = &quot;Error.HistoryDataSearchFailed&quot;;
+@@ -176,22 +181,22 @@
+     public Task initialize(int idObj) {
+     	dataId = idObj;
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws Exception {
+-    			
+-    			try {
+-		           //Save basic data
+-		           initOccHistoryData(dataId);
+-			       //Searching for information about data editing concerned with specific habitat
+-			       searchEditHistory(getData());	       
+-			       //Process results of a search &quot;edit&quot; query 
+-			       processResult(1,DEFAULT_DISPLAY_ROWS);			       		      
+-    			}catch (Exception e) {
+-    				logger.error(&quot;Initialize of Record History failed. Exception caught in History. Details: &quot;+e.getMessage());
+-    				throw e;
+-    			}        	
+-    			setInfoFinishedTask(true);
+-    			return null;
+-    		}
++            public Object task() throws Exception {
++
++                    try {
++                          //Save basic data
++                           initOccHistoryData(dataId);
++                           //Searching for information about data editing concerned with specific habitat
++                           searchEditHistory(getData());	       
++                           //Process results of a search &quot;edit&quot; query 
++                           processResult(1,DEFAULT_DISPLAY_ROWS);			       		      
++                    }catch (Exception e) {
++                            logger.error(&quot;Initialize of Record History failed. Exception caught in History. Details: &quot;+e.getMessage());
++                            throw e;
++                    }        	
++                    setInfoFinishedTask(true);
++                    return null;
++                    }
+ 	    };
+ 	    return task;
+     }
+@@ -209,8 +214,8 @@
+     		       //Process results 
+     		       processResult(1, DEFAULT_DISPLAY_ROWS);
+     		   } catch (Exception e) {
+-    			   logger.error(&quot;Initialize of Whole History failed. caught in History. Details: &quot;+e.getMessage());
+-   				   throw e;
++    			   logger.error(&quot;Initialize of Whole History failed. Exception caught in History. Details: &quot;+e.getMessage());
++                           throw e;
+     		   }    
+     		   setInfoFinishedTask(true);
+     		   return null;
+@@ -225,33 +230,26 @@
+      *  @throws DBLayerException in case search failed
+      *  @throws RemoteException in case network communication failed
+      */   
+-    public void initOccHistoryData(int idOcc) throws RemoteException, DBLayerException {
++    public void initOccHistoryData(int idOcc) throws Exception {
+     	SelectQuery query = null;
+         int resultIdRecord = 0;
+         Object[] object = null;      
+         
+         try {    	  
+- 		    query = database.createQuery(Occurrence.class);
++ 	    query = database.createQuery(Occurrence.class);
+        	    query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, idOcc, null);
+        	    query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.DELETED, null, 0, null);    	                   
+             resultIdRecord = database.executeQuery(query);
+             object = database.next(resultIdRecord);                    
+             database.closeQuery(query);            
+-        } catch(RemoteException e) {
+-        	    logger.error(&quot;Remote exception caught in History. Details: &quot;+e.getMessage());       	            	     
+-        	     RemoteException remex = new RemoteException(e.getMessage());
+-                 remex.setStackTrace(e.getStackTrace());
+-                 throw remex; 		           		           	   
+-        } catch(DBLayerException e) {
+-     	    logger.error(&quot;Search selected occurrence failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                                
+-             DBLayerException dbex = new DBLayerException(ERROR_SEARCH_RECORD + e.getMessage());
+-             dbex.setStackTrace(e.getStackTrace());
+-             throw dbex; 		           
+-        }                                          
++        } catch(Exception ex) {            
++     	     logger.error(&quot;Search selected occurrence failed. Exception caught in History. Details: &quot;+ex.getMessage());       	                                                                             
++             throw ex; 		           
++        }                  
++        
+         if (object == null) {
+      	   logger.error(&quot;tOccurrence doesn't contain required data&quot;);  
+-     	   DBLayerException dbex = new DBLayerException(ERROR_SEARCH_RECORD + &quot;tOccurrence doesn't contain required data&quot;);                      
+-     	   throw dbex; 		            
++     	   throw  new DBLayerException(ERROR_SEARCH_RECORD + &quot;tOccurrence doesn't contain required data&quot;);                           	   		            
+         } else {
+      	   
+      	   Occurrence occurrence = (Occurrence)object[0];    	   
+@@ -259,15 +257,15 @@
+      	        	 
+      	   //Check rights
+      	   if(! hasRights(occurrence.getCreatedWho().getId())) {
+-     		   DBLayerException dbex = new DBLayerException(&quot;Bezparametricky konstruktor byl smazan!&quot;);
++     		   DBLayerException dbex = new DBLayerException(&quot;&quot;);
+      		   dbex.setError(DBLayerException.ERROR_RIGHTS, ERROR_NO_RIGHTS);
+         	   throw dbex; 		            
+      	   }   
+-     	   if (isError()) {
+-     		  RemoteException remoteEx = new RemoteException(getRemoteEx().getMessage());
++     	   if (isError()) {    
++          Exception ex = getException(); 		  
+      		  setError(null);
+-     		  setRemoteEx(null);
+-     		  throw remoteEx;
++     		  setException(null);
++     		  throw ex;
+      	   }
+      	   
+  	       //Save basic information about specific occurrence 
+@@ -287,7 +285,7 @@
+      * @throws DBLayerException in case search failed
+      * @throws RemoteException in case network communication failed
+      */     
+-    public void searchEditHistory(Object data) throws RemoteException, DBLayerException
++    public void searchEditHistory(Object data) throws Exception
+     {    
+     	//Cleare historyDataList
+     	historyDataList.clear(); 
+@@ -312,16 +310,9 @@
+ 	        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.operation&quot;, null, HistoryChange.HISTORYCHANGE_EDIT, null);
+ 	        query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);
+ 	        resultIdEdit = database.executeQuery(query); 
+-		} catch (RemoteException e) {
+-			logger.error(&quot;Remote exception caught in History (searchEditHistory). Details: &quot;+e.getMessage());			
+-			RemoteException remex = new RemoteException(e.getMessage());
+-            remex.setStackTrace(e.getStackTrace());
+-            throw remex; 		
+-		} catch (DBLayerException e) {
+-			logger.error(&quot;DBLayer exception caught in History (searchEditHistory). Details: &quot;+e.getMessage());
+-			DBLayerException dbex = new DBLayerException(ERROR_SEARCH_DATA + e.getMessage());
+-            dbex.setStackTrace(e.getStackTrace());
+-            throw dbex; 	            
++		} catch (Exception ex) {
++		     logger.error(&quot;Exception caught in History.searchEditHistory(). Details: &quot;+ex.getMessage());						
++                     throw ex; 	            
+ 		}                
+ 		setResultId(resultIdEdit);   		
+     }
+@@ -333,7 +324,7 @@
+      * @throws DBLayerException in case search failed
+      *  @throws RemoteException in case network communication failed
+      */
+-    public void searchWholeHistoryData() throws RemoteException, DBLayerException {
++    public void searchWholeHistoryData() throws Exception {
+         
+     	// Cleare historyDataList
+     	historyDataList.clear();
+@@ -351,16 +342,9 @@
+ 			query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);			
+ 			query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);
+ 			resultIdWHistory = database.executeQuery(query);
+-		} catch (RemoteException e) {
+-			logger.error(&quot;Remote exception caught in History (searchWholeHistoryData). Details: &quot;+e.getMessage());
+-			RemoteException remex = new RemoteException(e.getMessage());
+-            remex.setStackTrace(e.getStackTrace());
+-            throw remex; 		
+-		} catch (DBLayerException e) {
+-			logger.error(&quot;DBLayer exception caught in History (searchWholeHistoryData). Details: &quot;+e.getMessage());			
+-			DBLayerException dbex = new DBLayerException(ERROR_SEARCH_DATA + e.getMessage());
+-            dbex.setStackTrace(e.getStackTrace());
+-            throw dbex; 	            
++		} catch (Exception ex) {
++			logger.error(&quot;Exception caught in History.searchWholeHistoryData(). Details: &quot;+ex.getMessage());			
++                        throw ex; 	            
+ 	    }
+ 		setResultId(resultIdWHistory);                 
+     }
+@@ -370,7 +354,7 @@
+      * @param from number of the first row to show in table. Number of the first row to retraieve is 1.
+      * @param count number of rows to retrieve 
+      */
+-    public void processResult(int from, int count) throws RemoteException, DBLayerException{
++    public void processResult(int from, int count) throws Exception{
+         
+         if (this.resultId != 0) {
+             int currentRow = getResultRows();
+@@ -394,21 +378,14 @@
+             	Object[] objectHistory;
+              	try {
+              		objectHistory = database.more(this.resultId, 0, to-1);  
+-             	} catch(RemoteException e) {
+-             		logger.error(&quot;Remote exception caught in History (processResult). Details: &quot;+e.getMessage());
+-             		RemoteException remex = new RemoteException(e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		                                                                                 
+-                } catch (DBLayerException e) {                  
+-                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());                       
+-                    DBLayerException dbex = new DBLayerException(ERROR_PROCESS + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 
++             	} catch(Exception ex) {             		            
++                    logger.error(&quot;History - Processing search results failed: &quot; + ex.getMessage());                                           
++                    throw ex; 
+                 }  
+                 if (objectHistory == null) {
+                 	logger.error(&quot;tHistoryChange doesn`t contain required data&quot;);
+                 	DBLayerException dbex = new DBLayerException(ERROR_PROCESS + &quot;tHistoryChange doesn`t contain required data&quot;);                   
+-                    throw dbex; 
++                        throw dbex; 
+                 }
+                 int countResult = objectHistory.length;  
+                 logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);                
+@@ -762,6 +739,7 @@
+                 } catch (ParseException e) {
+                         logger.error(&quot;Parse time failed. &quot;+ e);
+                         setError(ERROR_PARSE_DATE);
++                        setException(e);
+                         return;
+                 }
+                 occ.setTimeCollected(time);
+@@ -1404,21 +1382,18 @@
+             resultIdObject = database.executeQuery(query);
+             object = database.next(resultIdObject);
+             database.closeQuery(query);
+-        } catch(RemoteException e) {
+-        	logger.error(&quot;Remote exception caught in History. Details: &quot;+e.getMessage());
+-       	    setError(ERROR_REMOTE_EXCEPTION);
+-       	    setRemoteEx(e);	    
++        } catch(Exception e) {
++            logger.error(&quot;Search selected &quot; + typeObject  +&quot; failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++       	    setError(ERROR_SEARCH_OBJECT); 
++       	    setException(e);	    
+        	    return null;
+-        } catch(DBLayerException e) {
+-        	logger.error(&quot;Search selected &quot; + typeObject  +&quot; failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
+-            setError(ERROR_SEARCH_OBJECT); 
+-            return null;
+-        }
+-              
++        } 
++        
+ 	   if (object == null) {
+-		   logger.error(&quot;t&quot;+typeObject+ &quot; doesn't contain required data&quot;);  
+-		   setError(ERROR_SEARCH_OBJECT);		   
+-		   return null;           
++               logger.error(&quot;t&quot;+typeObject+ &quot; doesn't contain required data&quot;);  
++               setError(ERROR_SEARCH_OBJECT);		   
++               setException(new DBLayerException(ERROR_SEARCH_OBJECT + &quot; t&quot;+typeObject+ &quot; doesn't contain required data&quot;));
++               return null;           
+ 	   } 	 
+        return object; 	       	          	              	        
+     }
+@@ -1447,18 +1422,16 @@
+             if (to &gt; 0)
+                 objects = database.more(resultIdAuthors, 0, to-1);
+             database.closeQuery(query);
+-        } catch(RemoteException e) {
+-        	logger.error(&quot;Remote exception caught in History. Details: &quot;+e.getMessage());
+-       	    setError(ERROR_REMOTE_EXCEPTION);
+-       	    setRemoteEx(e);       	    
+-        } catch(DBLayerException e) {
+-        	logger.error(&quot;Search authors failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
+-            setError(ERROR_SEARCH_AUTHOR);            
+-        }     
++        } catch(Exception ex) {
++        	logger.error(&quot;Search authors failed. DBLayer exception caught in History. Details: &quot;+ex.getMessage());       	                                                   
++                setError(ERROR_SEARCH_AUTHOR);
++                setException(ex);       	    
++        }  
+           
+         if (objects == null) {
+         	logger.error(&quot;tAuthors doesn't contain required data&quot;);  
+- 		    setError(ERROR_SEARCH_AUTHOR);		    		             
++ 		    setError(ERROR_SEARCH_AUTHOR);
++                    setException(new DBLayerException(ERROR_SEARCH_AUTHOR));
+         }
+         
+        return objects;
+@@ -1533,7 +1506,7 @@
+ 		        } catch (Exception e) {
+ 		        	logger.error(&quot;Process UNDO failed. Exception caught in History. Details: &quot;+e.getMessage());
+ 		        	database.rollbackTransaction();                    
+-                    throw e; 		           		       	    
++                                 throw e; 		           		       	    
+ 		        } 
+ 		        database.commitTransaction();	    	
+ 		    	//Create array of editing object and call notifyObservers
+@@ -1584,23 +1557,23 @@
+     		historyChange = historyRecord.getHistoryChange(); 
+     		
+ 	    	try {
+-				database.executeDeleteHistory(historyRecord);
+-				logger.debug(&quot;Deleting historyRecord successfully. Number of result: &quot;+i);
+-			} catch (Exception e) {								
+-				logger.error(&quot;Process UNDO failed. Deleting historyRecord failed. Exception caught in History. Details: &quot;+e.getMessage());	        	                
+-                throw e; 		           
+-			} 						
+-			try {
+-				int countResult = getRelationshipHistoryChange(historyChange.getId());				
+-				if (countResult == 0) {	
+-					database.executeDeleteHistory(historyChange);
+-					logger.debug(&quot;Deleting historyChange successfully.&quot;);
+-				} else {
+-					logger.debug(&quot;Exist other record in the table tHistory, whitch has the same value of attribute cChangeId.&quot;);
+-				}
+-			} catch (Exception e) {
+-				logger.error(&quot;Process UNDO failed. Deleting historyChange failed. Exception caught in History. Details: &quot;+e.getMessage());	        		                
+-                throw e; 		           
++                        database.executeDeleteHistory(historyRecord);
++                        logger.debug(&quot;Deleting historyRecord successfully. Number of result: &quot;+i);
++                } catch (Exception e) {								
++                        logger.error(&quot;Process UNDO failed. Deleting historyRecord failed. Exception caught in History. Details: &quot;+e.getMessage());	        	                
++                        throw e; 		           
++		} 						
++                try {
++                        int countResult = getRelationshipHistoryChange(historyChange.getId());				
++                        if (countResult == 0) {	
++                                database.executeDeleteHistory(historyChange);
++                                logger.debug(&quot;Deleting historyChange successfully.&quot;);
++                        } else {
++                                logger.debug(&quot;Exist other record in the table tHistory, whitch has the same value of attribute cChangeId.&quot;);
++                        }
++                } catch (Exception e) {
++                        logger.error(&quot;Process UNDO failed. Deleting historyChange failed. Exception caught in History. Details: &quot;+e.getMessage());	        		                
++                        throw e; 		           
+ 			} 		 
+     	}    	
+ 		//Clear lists 
+@@ -1628,10 +1601,10 @@
+                 database.closeQuery(query);
+         } catch(RemoteException e) {
+         	logger.error(&quot;Searching historyChange failed.Remote exception caught in History. Details: &quot;+e.getMessage());
+-       	    throw e;       	  
++       	        throw e;       	  
+         } catch(DBLayerException e) {
+         	logger.error(&quot;Searching historyChange failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
+-            throw e;       	  
++                throw e;       	  
+         }        
+        	return countResult;
+     }
+@@ -1805,7 +1778,7 @@
+         } catch (Exception e) {
+         	logger.error(&quot;Process cleare database failed. Exception caught in History. Details: &quot;+e.getMessage());
+         	database.rollbackTransaction();           
+-            throw e; 		                  	    
++                throw e; 		                  	    
+         }  
+     }
+     
+@@ -1845,8 +1818,7 @@
+ 		        } catch (Exception e) {
+ 		        	logger.error(&quot;Process cleare database failed. Exception caught in History. Details: &quot;+e.getMessage());
+ 		        	database.rollbackTransaction();                   
+-                    throw e;                     
+-		       	    
++                                throw e;                     		       	    
+ 		        } 
+ 		        database.commitTransaction();
+ 		        setInfoFinishedTask(true);
+@@ -1883,10 +1855,9 @@
+                 // No rights to work with history of the record
+                 return false;
+             }
+-        } catch (RemoteException e) {
+-        	logger.error(&quot;GetUserRight() failed. Remote exception caught in History. Details: &quot;+e.getMessage());
+-        	setError(ERROR_REMOTE_EXCEPTION);
+-        	setRemoteEx(e);
++        } catch (Exception e) {
++        	logger.error(&quot;GetUserRight() failed. Exception caught in History. Details: &quot;+e.getMessage());        	
++        	setException(e);
+         }   
+         return false;
+     }
+@@ -1899,6 +1870,41 @@
+         this.setChanged();
+         this.notifyObservers( event );
+      }
++    
++        
++    /**
++     * Close query.    
++     */    
++    public void closeQuery() {
++    	if(query != null) try {
++		      database.closeQuery(query);
++		      query = null;
++		} catch(Exception e) {
++			// Never mind.
++		}
++    }
++    
++       /**
++	* Restart select query after recconect to database.
++        * @param typeHistory identifier of history type ( 1 == record history, 2 == whole history)
++	*/
++      public void restartQuery(int typeHistory) {
++                query = null;  
++                /*
++                try {
++                    if (typeHistory == History.HISTORY_RECORD) {                        
++                        searchEditHistory(getData());
++                        processResult(1, DEFAULT_DISPLAY_ROWS);
++                    } else if (typeHistory == History.HISTORY_WHOLE) {
++                        searchWholeHistoryData();
++                        processResult(1, DEFAULT_DISPLAY_ROWS);
++                    }
++                 } catch (DBLayerException ex) {
++                        ex.printStackTrace();
++                 } catch (RemoteException ex) {
++                        ex.printStackTrace();
++                 }    */
++	}
+             
+      //***************************//
+     //****Init Hashtable*********//
+@@ -1998,31 +2004,14 @@
+         editTypeHash.put(&quot;Territory&quot;, PlantloreConstants.Table.TERRITORY);
+         editTypeHash.put(&quot;Phytochorion&quot;, PlantloreConstants.Table.PHYTOCHORION);        
+     }
+-       
+-    /**
+-     * Close query.    
+-     */    
+-    public void closeQuery() {
+-    	if(query != null) try {
+-		      database.closeQuery(query);
+-		      query = null;
+-		} catch(Exception e) {
+-			// Never mind.
+-		}
+-    }
++   
+     
+     //****************************//
+     //****Get and set metods*****//
+     //**************************//
++        
+     
+     /**
+-	 * Set a new DBLayer.
+-	 */
+-	synchronized public void setDBLayer(DBLayer dblayer) {
+-		query = null;                
+-	}
+-    
+-    /**
+      *  Set an error flag.
+      *  @param msg  message explaining the error which occured
+      */
+@@ -2051,19 +2040,19 @@
+     }  
+     
+     /**
+-     *  Set an remote exception (network communication failed)
+-     *  @param ex  RemoteException (network communication failed)
++     *  Set an exception 
++     *  @param ex  exception
+      */
+-    public void setRemoteEx(RemoteException ex) {
+-        this.remoteEx = ex;
++    public void setException(Exception ex) {
++        this.exception = ex;
+     }
+     
+     /**
+-     *  Get remote exception (network communication failed)
+-     *  @return remote exception (network communication failed)
++     *  Get exception
++     *  @return exception 
+      */
+-    public RemoteException getRemoteEx() {
+-        return this.remoteEx;
++    public Exception getException() {
++        return this.exception;
+     }  
+     
+     /** 
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -7,6 +7,7 @@
+ 
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Task;
+@@ -62,7 +63,7 @@
+      */
+     public void reloadData(int fromRow, int countRow) {
+     	try {
+-    		model.processResult(fromRow, countRow);        
++    	    model.processResult(fromRow, countRow);        
+             view.getTable().setModel(new HistoryTableModel(model));             
+             int from = model.getCurrentFirstRow();
+             int to = from + view.getTable().getRowCount() - 1;
+@@ -83,12 +84,12 @@
+            } else {
+         	   view.previousButton.setEnabled(false);
+            }
+-    	} catch (RemoteException e) {
+-    		DefaultReconnectDialog.show(view, e);
+-    	} catch (DBLayerException e) {
+-    		view.showErrorMessage(e.getMessage());
+-    	}
+-    	           
++    	}catch (Exception ex) {
++           logger.error(&quot;Reload data failed. Details:&quot; + ex.getMessage());           
++           ex.printStackTrace();
++           DefaultExceptionHandler.handle(view, ex);           
++           return;
++        }     	           
+     }
+     
+    /**
+@@ -100,7 +101,9 @@
+        {    	  
+     	   // Check whether an error flag is set
+            if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get previous page of results
+@@ -132,7 +135,9 @@
+        {
+     	   // Check whether an error flag is set 
+            if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get next page of result
+@@ -164,7 +169,9 @@
+        {   
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }    	   
+     	   model.setSelectAll(true);    	  	   
+@@ -182,7 +189,9 @@
+        {   
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+     	   model.setUnselectedAll(true); 
+@@ -199,7 +208,9 @@
+        {   
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }    	   
+     	   // process selected record
+@@ -212,33 +223,31 @@
+             	   logger.debug(&quot;Button OK was press.&quot;);
+             	   Task task = model.commitUpdate(model.getResultRows(), true);  
+             	   
+-            	   new DefaultProgressBar(task, view, true) {		   									
+-							@Override
+-		   					public void afterStopping() {
+-								try {
+-								   if (! model.isFinishedTask()) return;
+-								   model.setInfoFinishedTask(false);	
+-			   					   model.searchEditHistory(model.getData());
+-			   					   reloadData(1,model.getDisplayRows());			   	            	          
+-			   	                   view.setCountResutl(model.getResultRows());
+-								} catch (RemoteException e) {
+-									DefaultReconnectDialog.show(view, e);
+-						    	} catch (DBLayerException e) {
+-						    		view.showErrorMessage(e.getMessage());
+-						    	}
+-		   	               } 		   					
+-		   				};		   					                   	                   
+-	                    task.start();     	                   
++            	   new DefaultProgressBar(task, view, true) {                       
++                        @Override
++                        public void afterStopping() {
++                                try {
++                                   if (! model.isFinishedTask()) return;
++                                   model.setInfoFinishedTask(false);	
++                                   model.searchEditHistory(model.getData());
++                                   reloadData(1,model.getDisplayRows());			   	            	          
++                                   view.setCountResutl(model.getResultRows());
++                                }catch (Exception ex) {                                   
++                                   ex.printStackTrace();
++                                   DefaultExceptionHandler.handle(view, ex);                                   
++                                   return;
++                                } 
++                        } 		   					
++                  };		   					                   	                   
++	          task.start();     	                   
+                } else {            	  
+             	   logger.debug(&quot;Button Cancle was press.&quot;); 
+                }  
+-           } else {
+-        	   if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+-        		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+-        	   } else {
+-        		   view.showErrorMessage(model.getError());
+-        	   }
+-        	   model.setError(null);        	           	  
++           } else {                
++        	Exception ex = model.getException();  
++                ex.printStackTrace();
++                DefaultExceptionHandler.handle(view, ex);                                   
++        	model.setError(null);        	           	  
+            }
+        }
+    }
+@@ -251,7 +260,9 @@
+        public void actionPerformed(ActionEvent actionEvent) {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Save old value 
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -123,8 +123,7 @@
+             Date when = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWhen();
+     	    editHistoryData[ii][1] = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(when); 
+     	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();    	   
+-    	    editHistoryData[ii][3] = item;
+-    	    logger.debug(&quot;XXXXXXXXXX: &quot;+ item);
++    	    editHistoryData[ii][3] = item;    	    
+     	    editHistoryData[ii][4] = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
+     	    editHistoryData[ii][5] = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
+     	    ii++;
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -15,6 +15,7 @@
+ 
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Task;
+@@ -87,11 +88,12 @@
+            } else {
+         	   view.nextButton.setEnabled(false);
+            }
+-    	} catch (RemoteException e) {
+-    		DefaultReconnectDialog.show(view, e);
+-    	} catch (DBLayerException e) {
+-    		view.showErrorMessage(e.getMessage());
+-    	}    	        	         
++    	 } catch (Exception ex) {
++               logger.error(&quot;Reload data failed.&quot;);               
++               ex.printStackTrace();
++               DefaultExceptionHandler.handle(view, ex);               
++               return;
++        }         	         
+     }
+     
+    /**
+@@ -103,7 +105,9 @@
+        {    	  
+     	   // Check whether an error flag is set
+            if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get previous page of results
+@@ -135,7 +139,9 @@
+        {
+     	   // Check whether an error flag is set 
+            if (model.isError()) {
+-        	   view.showErrorMessage(model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get next page of result
+@@ -164,7 +170,9 @@
+        public void actionPerformed(ActionEvent actionEvent) {
+     	   // Check whether an error flag is set
+     	   if (model.isError() &amp;&amp; view.tableHistoryList.getRowCount() &gt; 0) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Save old value 
+@@ -205,7 +213,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError() &amp;&amp; view.tableHistoryList.getRowCount() &gt; 0) {
+-        	   view.showErrorMessage(model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableHistoryList.getSelectedRow() &lt; 0) {    
+@@ -226,34 +236,32 @@
+ 	                   Task task = model.commitUpdate(toResult, false);
+ 	                   
+ 	                   new DefaultProgressBar(task, view, true) {		   										
+-						    @Override
+-		   					public void afterStopping() {
+-		   						logger.debug(&quot;Load Data&quot;);	   
+-		   						try {
+-		   						   if (! model.isFinishedTask()) return;
+-		   						   model.setInfoFinishedTask(false);	
+-		   						   model.searchWholeHistoryData();
+-		   						   reloadData(1,model.getDisplayRows());
+-		   						   view.setCountResult(model.getResultRows());
+-		   						} catch (RemoteException e) {
+-									DefaultReconnectDialog.show(view, e);
+-						    	} catch (DBLayerException e) {
+-						    		view.showErrorMessage(e.getMessage());
+-						    	}
+-		   					}
+-		   				};		   					                   	                  
++                                @Override
++                                    public void afterStopping() {
++                                        logger.debug(&quot;Load Data&quot;);	   
++                                        try {
++                                           if (! model.isFinishedTask()) return;
++                                           model.setInfoFinishedTask(false);	
++                                           model.searchWholeHistoryData();
++                                           reloadData(1,model.getDisplayRows());
++                                           view.setCountResult(model.getResultRows());
++                                        } catch (Exception ex) {                                                                   
++                                           ex.printStackTrace();
++                                           DefaultExceptionHandler.handle(view, ex);                                                                   
++                                           return;
++                                        } 
++                                    }
++                            };		   					                   	                  
+ 	                    task.start();
+ 	                   
+ 	               } else {	                       	                     
+ 	                       logger.debug(&quot;Button Cancle was press.&quot;);
+ 	               } 
+                 } else {
+-                	if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+-             		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+-             	   } else {
+-             		   view.showErrorMessage(model.getError());
+-             	   }
+-             	   model.setError(null); 
++                    Exception ex = model.getException();  
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);                                   
++                    model.setError(null);                        
+                 }
+             }
+          }
+@@ -268,7 +276,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError() &amp;&amp; view.tableHistoryList.getRowCount() &gt; 0) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }        
+            if (view.tableHistoryList.getSelectedRow() &lt; 0) {
+@@ -283,13 +293,12 @@
+                detailsView.setDetailsMessage(detailsMessage);
+                detailsView.setVisible(true);               
+            } 
+-           if (model.getError() != null) {
+-	           if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+-	    		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+-	    	   } else {
+-	    		   view.showErrorMessage(model.getError());
+-	    	   }
+-	    	   model.setError(null); 
++           if (!model.isError()) {
++	           Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
++        	   model.setError(null); 
++                   model.setException(null);
+            }
+        }
+     }
+@@ -303,7 +312,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError() &amp;&amp; view.tableHistoryList.getRowCount() &gt; 0) {
+-        	   view.showErrorMessage(model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }     
+     	   if (view.tableHistoryList.getRowCount() == 0) {
+@@ -312,27 +323,26 @@
+     	   }
+            int okCancle = view.messageUndo(&quot;clearHistory&quot;);
+            if (okCancle == 0){
+-                   //Button OK was press
+-                   logger.debug(&quot;Button OK was press.&quot;);  
+-                   // delete records whit contition cdelete &gt; 0
+-                   Task task = model.clearDatabase();
+-                   
+-                   new DefaultProgressBar(task, view, true) {
+-                	        @Override
+-			   				public void afterStopping() {
+-		   						//load data
+-                	        	try {
+-                	        		model.searchWholeHistoryData();
+-                	        		reloadData(1,model.getDisplayRows());
+-                	        		view.totalResultValueLabel.setText(&quot;0&quot;);
+-                	        	} catch (RemoteException e) {
+-									DefaultReconnectDialog.show(view, e);
+-						    	} catch (DBLayerException e) {
+-						    		view.showErrorMessage(e.getMessage());
+-						    	}		   	               
+-		   					}
+-		   				};		   					                   	                   
+-	                    task.start();	                                                         
++           //Button OK was press
++           logger.debug(&quot;Button OK was press.&quot;);  
++           // delete records whit contition cdelete &gt; 0
++           Task task = model.clearDatabase();
++
++           new DefaultProgressBar(task, view, true) {
++                @Override
++                public void afterStopping() {
++                //load data
++                try {
++                        model.searchWholeHistoryData();
++                        reloadData(1,model.getDisplayRows());
++                        view.totalResultValueLabel.setText(&quot;0&quot;);
++                        } catch (Exception ex) {                                                                                    
++                            ex.printStackTrace();
++                            DefaultExceptionHandler.handle(view, ex);                                                                                  		   	               
++                        }
++                }
++           };		   					                   	                   
++           task.start();	                                                         
+            }
+        }
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -16,6 +16,7 @@
+ import net.sf.plantlore.client.history.History;
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.record.Metadata;
+ import org.apache.log4j.Logger;
+@@ -67,15 +68,13 @@
+                 if (view.checkNotNull()) {
+                         //Check if new name of project (dataSetTitle) already exist
+                 	if (!model.uniqueDatasetTitle(view.dataSetTitleText.getText())){       
+-                		if (model.isError()) {
+-                			if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+-                		 		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+-                		 	   } else {
+-                		 		   view.showErrorMessage(model.getError());
+-                		 	   }
+-                			   //TODO nastavit zde null
+-                		 	   model.setError(null); 
+-                		 	   return;
++                		if (model.isError()) {                			
++                                        Exception ex = model.getException();
++                                        ex.printStackTrace();
++                                        DefaultExceptionHandler.handle(view, ex);
++                                        model.setError(null);
++                                        model.setException(null);                		 	  
++                		 	return;
+                 		}
+                 		view.showErrorMessage(MetadataManager.ERROR_TITLE, MetadataManager.ERROR_DATASETTITLE);
+                 		return;
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -39,8 +39,8 @@
+     private SelectQuery query = null;
+     /** Exception with details about an error */
+     private String error = null;
+-    /** Remote exception (network communication failed)*/
+-    private RemoteException remoteEx;
++    /** Exception */
++    private Exception exception;
+     /** True if MyTask finished successful*/
+     private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+@@ -53,6 +53,8 @@
+     private String displayRow;           
+     /** Result of the search query */
+     private int resultId = 0;
++    /** Number of results for the current SelectQuery */
++    private int resultRows = 0;
+     /** List of data (results of a search query) displayed in the table */
+     private ArrayList&lt;Metadata&gt; metadataList = new ArrayList&lt;Metadata&gt;();         
+     /** Message containing information about changes in metadata*/
+@@ -133,40 +135,30 @@
+        
+     	if (createTask) {
+ 	    	final Task task = new Task() {    		    		
+-	    		public Object task() throws DBLayerException, RemoteException {
++	    		public Object task() throws Exception {
+ 	  		       int resultIdent;
+ 	    			try {
+ 	  		    	    resultIdent = search();
+ 	  		    	    setResultId(resultIdent);
+-		    	   }catch (RemoteException e) {	            
+-			            logger.error(&quot;Searching metada failed. Remote exception caught in Metadata. Details: &quot;+e.getMessage());			        	
+-		                RemoteException remex = new RemoteException(ERROR_SEARCH + e.getMessage());
+-		                remex.setStackTrace(e.getStackTrace());
+-		                throw remex; 		           
+-			        } catch (DBLayerException e) {
+-			        	logger.error(&quot;Searching metada failed. DBLayer exception caught in Metadata. Details: &quot;+e.getMessage());       	                                                   			        
+-		                DBLayerException dbex = new DBLayerException(ERROR_SEARCH + e.getMessage());
+-		                dbex.setStackTrace(e.getStackTrace());
+-		                throw dbex; 		           
+-			        }			
+-			        setInfoFinishedTask(true);
+-                    return null;			        
+-				}
++		    	   }catch (Exception e) {	            
++			        logger.error(&quot;Searching metada failed. Exception caught in Metadata. Details: &quot;+e.getMessage());			        			               
++		                throw e; 		           
++                            }			
++                            setInfoFinishedTask(true);
++                            return null;			        
++                            }
+ 		    };
+ 		    return task;
+     	} else {
+     		try {
+-    			int resultIdent = search();
+-    			setResultId(resultIdent);
+-			} catch (DBLayerException e) {
+-				logger.error(&quot;Searching metada failed. Remote exception caught in Metadata. Details: &quot;+e.getMessage());
+-				setError(ERROR_SEARCH);				               
+-			} catch (RemoteException e) {
+-				logger.error(&quot;Searching metada failed. DBLayer exception caught in Metadata. Details: &quot;+e.getMessage());				
+-				 setError(ERROR_REMOTE_EXCEPTION);	
+-				 setRemoteEx(e);
+-			}
+-			return null;
++                    int resultIdent = search();
++                    setResultId(resultIdent);
++                    } catch (Exception e) {
++                          logger.error(&quot;Searching metada failed. Exception caught in Metadata. Details: &quot;+e.getMessage());
++                           setError(ERROR_SEARCH);
++                           setException(e);
++                    }
++                    return null;
+     	}
+   }
+     
+@@ -249,10 +241,17 @@
+      * @param from number of the first row to show in table. 
+      * @param count number of rows to retrieve 
+      */
+-    public void processResult(int from, int count) throws RemoteException, DBLayerException{
++    public void processResult(int from, int count) throws Exception{
+         
+     	if (this.resultId != 0) {    		
+-            int currentRow = getResultRows();
++             int currentRow = getResultCount();
++            setResultRows(currentRow);
++            if (isError()) {
++                Exception ex = getException();
++                setError(null);
++                setException(null);
++                throw ex;
++            }
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));            
+            
+@@ -269,20 +268,13 @@
+                 Object[] objectMetadata;
+              	try {
+              		objectMetadata = database.more(this.resultId, 0, to-1);  
+-             	} catch(RemoteException e) {
+-             		logger.error(&quot;Remote exception caught in MetadataManager (processResult). Details: &quot;+e.getMessage());        			
+-        			RemoteException remex = new RemoteException(e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		                                    	                                                                                      
+-                } catch (DBLayerException e) {                  
+-                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());   
+-                    DBLayerException dbex = new DBLayerException(ERROR_PROCESS + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 
++             	}  catch (Exception e) {                  
++                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());                       
++                    throw e; 
+                 }  
+                 if (objectMetadata == null) {
+-                	logger.error(&quot;tMetadata doesn`t contain required data&quot;);
+-                	DBLayerException dbex = new DBLayerException(ERROR_PROCESS + &quot;tMetadata doesn`t contain required data&quot;);                   
++                    logger.error(&quot;tMetadata doesn`t contain required data&quot;);
++                    DBLayerException dbex = new DBLayerException(ERROR_PROCESS + &quot;tMetadata doesn`t contain required data&quot;);                   
+                     throw dbex; 
+                 }
+                 int countResult = objectMetadata.length;  
+@@ -290,7 +282,7 @@
+                 this.metadataList = new ArrayList&lt;Metadata&gt;();
+                 // Cast the results to the Metadata objects
+                 for (int i=0; i&lt;countResult; i++ ) {                    							
+-                	Object[] objHis = (Object[])objectMetadata[i];
++                    Object[] objHis = (Object[])objectMetadata[i];
+                     this.metadataList.add((Metadata)objHis[0]);
+                     logger.debug(&quot;Proccess: &quot;+ i + &quot;: &quot; + (Metadata)objHis[0]);
+                 }               
+@@ -324,15 +316,11 @@
+                 return false;
+             }
+             database.closeQuery(sq);
+-        } catch (RemoteException e) {
+-            logger.error(&quot;Remote exception caught in Metadata. Details: &quot;+e.getMessage());
+-            setError(ERROR_REMOTE_EXCEPTION);  
+-            setRemoteEx(e);
+-            return false;
+-        } catch (DBLayerException e) {
++        } catch (Exception e) {
+             logger.error(&quot;Loading metadata failed. Cannot determine whether metadata can be deleted&quot;);
+-            setError(ERROR_DELETE);
+-            return false;
++            setError(ERROR_DELETE);  
++            setException(e);
++            return false;       
+         }        
+         return true;
+     }
+@@ -358,16 +346,12 @@
+                 return false;
+             }
+             database.closeQuery(sq);
+-    	} catch (RemoteException e) {
+-            logger.error(&quot;Remote exception caught in Metadata. Details: &quot;+e.getMessage());
+-            setError(ERROR_REMOTE_EXCEPTION);
+-            setRemoteEx(e);
+-            return false;
+-        } catch (DBLayerException e) {
++    	} catch (Exception e) {
+             logger.error(&quot;Check unique datasetTitle failed. Cannot determine whether some name of project equals new datasetTitle.&quot;);
+             setError(ERROR_DATASETTITLE);
++            setException(e);
+             return false;
+-        }        
++        }    
+     	return true;
+     }
+     
+@@ -380,21 +364,13 @@
+     public Task addMetedataRecord () {
+     	    	
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws DBLayerException, RemoteException {
++    		public Object task() throws Exception {
+     			try {
+ 		            database.executeInsert(metadataRecord);		            		            
+-		        }catch (RemoteException e) {
++		        }catch (Exception e) {
+ 		        	logger.error(&quot;Process add metadata failed. Remote exception caught in MetadataManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();
+-                    RemoteException remex = new RemoteException(ERROR_ADD + e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process add metadata failed. DBLayer exception caught in MetadataManager. Details: &quot;+e.getMessage());       	                                                   
+-		        	database.rollbackTransaction();
+-                    DBLayerException dbex = new DBLayerException(ERROR_ADD + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 		            
++		        	database.rollbackTransaction();                    
++                                throw e; 		            
+ 		        } 		       
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+@@ -415,22 +391,14 @@
+     public Task editMetadataRecord() {       
+         
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws DBLayerException, RemoteException {
++    		public Object task() throws Exception {
+     			try {
+ 		        	database.executeUpdate(metadataRecord);
+ 		        	metadataList.set(idRecord, metadataRecord);
+-		        }catch (RemoteException e) {
++		        }catch (Exception e) {
+ 		        	logger.error(&quot;Process update metadata failed. Remote exception caught in MetadataManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();
+-                    RemoteException remex = new RemoteException(ERROR_EDIT + e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process update metadata failed. DBLayer exception caught in MetadataManager. Details: &quot;+e.getMessage());       	                                                   
+-		        	database.rollbackTransaction();
+-                    DBLayerException dbex = new DBLayerException(ERROR_EDIT + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 		            
++		        	database.rollbackTransaction();                   
++                                throw e; 		            
+ 		        } 		        
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+@@ -451,22 +419,13 @@
+     public Task deleteMetadataRecord() {
+     	
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws DBLayerException, RemoteException {
++    		public Object task() throws Exception {
+     			try {
+ 		        	metadataRecord.setDeleted(1);
+ 		            database.executeUpdate(metadataRecord);		            
+-		        }catch (RemoteException e) {
+-		        	logger.error(&quot;Process delete metadata failed. Remote exception caught in MetadataManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();
+-                    RemoteException remex = new RemoteException(ERROR_DELETE + e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process delete metadata failed. DBLayer exception caught in MetadataManager. Details: &quot;+e.getMessage());       	                                                   
+-		        	database.rollbackTransaction();
+-                    DBLayerException dbex = new DBLayerException(ERROR_DELETE + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 		            
++		        }catch (Exception e) {
++		        	logger.error(&quot;Process delete metadata failed. Remote exception caught in MetadataManager. Details: &quot;+e.getMessage());		        	
++                                throw e; 		            
+ 		        } 			        
+ 		        //Tell AppCore observerber
+ 		        setChanged(); 
+@@ -530,19 +489,19 @@
+     }    
+     
+     /**
+-     *  Set an remote exception (network communication failed)
+-     *  @param ex  RemoteException (network communication failed)
++     *  Set an exception 
++     *  @param ex  Exception 
+      */
+-    public void setRemoteEx(RemoteException ex) {
+-        this.remoteEx = ex;
++    public void setException(Exception ex) {
++        this.exception = ex;
+     }
+     
+     /**
+-     *  Get remote exception (network communication failed)
+-     *  @return remote exception (network communication failed)
++     *  Get exception 
++     *  @return exception 
+      */
+-    public RemoteException getRemoteEx() {
+-        return this.remoteEx;
++    public Exception getException() {
++        return this.exception;
+     }  
+     
+     /** 
+@@ -594,17 +553,35 @@
+         return this.resultId;
+     }
+     
++    
++     /**
++     * Get the number of results for the current SelectQuery. 
++     * @return number of results for the current SelectQuery
++     */
++    public int getResultRows() {
++       return this.resultRows;
++    }
++    
+     /**
++     * Set the number of results for the current SelectQuery.     
++     */
++    public void setResultRows(int resultCount) {
++        this.resultRows = resultCount;
++    }
++    
++  
++    /**
+      * Get the number of results for the current SelectQuery
+      * @return number of results for the current SelectQuery
+      */
+-    public int getResultRows() {
++    public int getResultCount() {
+         int resultCount = 0;
+         if (resultId != 0) try {
+                 resultCount = database.getNumRows(resultId);        	
+-        } catch(RemoteException e) {
+-        	logger.error(&quot;Get number of results failed.Remote exception caught in MetadataManager. Details: &quot;+e.getMessage());  
++        } catch(Exception e) {
++        	logger.error(&quot;Get number of results failed. Exception caught in MetadataManager. Details: &quot;+e.getMessage());  
+         	setError(ERROR_NUMBER_ROWS);
++                setException(e);
+         }
+         return resultCount;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -6,7 +6,7 @@
+  * To change this template, choose Tools | Template Manager
+  * and open the template in the editor.
+  */
+-
++    
+ package net.sf.plantlore.client.metadata;
+ 
+ import java.awt.event.ActionEvent;
+@@ -20,6 +20,7 @@
+ import net.sf.plantlore.client.user.AddEditUserView;
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Task;
+@@ -102,25 +103,13 @@
+            } else {
+         	   view.previousButton.setEnabled(false);
+            }
+-    	} catch (RemoteException e) {
+-    		DefaultReconnectDialog.show(view, e);
+-    	} catch (DBLayerException e) {
+-    		view.showErrorMessage(e.getMessage());
+-    	}    	           
+-    }
+-    
+-    /**
+-     * Display error message.
+-     */
+-    public void displayError() {
+-    	if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+- 		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+- 	   } else {
+- 		   view.showErrorMessage(model.getError());
+- 	   }
+-    	//TODO nastavit ci nenastvit null
+- 	   model.setError(null); 
+-    }
++    	}catch (Exception ex) {                      
++           ex.printStackTrace();
++           DefaultExceptionHandler.handle(view, ex);         
++           return;
++        } 
++       
++    }       
+      
+    /**
+     *  ActionListener class controlling the &lt;b&gt;PREV&lt;/b&gt; button on the form.
+@@ -131,7 +120,9 @@
+        {
+     	   // Check whether an error flag is set
+            if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get previous page of results
+@@ -164,7 +155,9 @@
+        {
+     	   //Check whether an error flag is set 
+            if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get next page of result
+@@ -193,7 +186,9 @@
+        public void actionPerformed(ActionEvent actionEvent) {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Save old value 
+@@ -233,7 +228,9 @@
+        {
+     	   //Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            //set information abut selected operation ADD
+@@ -252,14 +249,15 @@
+            Task task = model.addMetedataRecord();
+            
+            new DefaultProgressBar(task, view, true) {		   							 
+-   			@Override
+-   			public void afterStopping() {
+-   				   if (! model.isFinishedTask()) return;
+-				   model.setInfoFinishedTask(false);
+-    			   //load metadata
++                @Override
++                public void afterStopping() {
++                   if (! model.isFinishedTask()) return;
++                   model.setInfoFinishedTask(false);
++                   //load metadata
+     	           model.searchMetadata(false);
+     	           if (model.isError()) {
+-    	        	   displayError();
++    	        	   DefaultExceptionHandler.handle(view, model.getException());
++                           model.setError(null);
+     	        	   return;
+     	           }    	           
+     	           reloadData(1, model.getDisplayRows());    	                   
+@@ -277,7 +275,9 @@
+        {
+     	   //  Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {
+@@ -305,12 +305,12 @@
+                
+                new DefaultProgressBar(task, view, true) {
+             	   @Override
+-          			public void afterStopping() {
+-            		   if (! model.isFinishedTask()) return;
+-					   model.setInfoFinishedTask(false);
+-          			   //load metadata          				
+-                        if (model.isError()) return;
+-                        view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                         
++                public void afterStopping() {
++                     if (! model.isFinishedTask()) return;
++                     model.setInfoFinishedTask(false);
++                   //load metadata          				
++                    if (model.isError()) return;
++                    view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                         
+                      } 		   					
+           		};          		                 	                   
+                 task.start();                                       
+@@ -326,7 +326,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	  Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {    
+@@ -360,7 +362,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {    
+@@ -373,7 +377,8 @@
+                //Test if record can be deleted               
+                if (!model.checkDelete(resultNumber)) {
+             	   if (model.isError()) {
+-	            	   displayError();
++	            	   DefaultExceptionHandler.handle(view, model.getException());
++                           model.setError(null);
+ 	            	   return;
+             	   }
+                    view.showErrorMessage(MetadataManager.ERROR_TITLE, MetadataManager.ERROR_CHECK_DELETE);
+@@ -386,14 +391,16 @@
+ 		               Task task = model.deleteMetadataRecord();
+ 		               
+ 		             new DefaultProgressBar(task, view, true) {		   								  		   				
+-						@Override						
+-                        public void afterStopping() {
+-							if (! model.isFinishedTask()) return;
+-							model.setInfoFinishedTask(false);
+-                           // load metadata
++                                    @Override						
++                                     public void afterStopping() {
++                                        if (! model.isFinishedTask()) return;
++                                        model.setInfoFinishedTask(false);
++                                        // load metadata
+ 		   	               model.searchMetadata(false);  
+ 		   	               if (model.isError()) {
+-		   	            	   displayError();
++		   	            	   DefaultExceptionHandler.handle(view, model.getException());
++                                            model.setError(null);
++                                            model.setException(null);
+ 		   	            	   return;
+ 		   	               }
+ 		   	               reloadData(1, model.getDisplayRows());		   	              		   	               
+@@ -416,7 +423,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            model.setSourceInstitutionId(view.sourceInstitutionIdText.getText());           
+@@ -434,16 +443,16 @@
+            new DefaultProgressBar(task, view, true) {		   								  			
+ 			   @Override 
+         	   public void afterStopping() {
+-				   if (! model.isFinishedTask()) return;
+-				   model.setInfoFinishedTask(false);
+-					if (model.getDisplayRows() &lt;= 0) {
+-		               model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
+-		           }
+-		           //No record in result - show message to user
+-		           if (model.getResultRows() &lt; 1) {
+-		               view.showInfoMessage(MetadataManager.INFORMATION_RESULT_TITLE,MetadataManager.INFORMATION_RESULT);
+-		           }
+-		           reloadData(1, model.getDisplayRows());		           		           
++                       if (! model.isFinishedTask()) return;
++                       model.setInfoFinishedTask(false);
++                       if (model.getDisplayRows() &lt;= 0) {
++                       model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
++                       }
++                       //No record in result - show message to user
++                       if (model.getResultRows() &lt; 1) {
++                           view.showInfoMessage(MetadataManager.INFORMATION_RESULT_TITLE,MetadataManager.INFORMATION_RESULT);
++                       }
++                       reloadData(1, model.getDisplayRows());		           		           
+                } 		   					
+ 			};			                  	                   
+             task.start();                                                                  
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserView.form	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserView.form	2006-09-01 22:44:46 UTC (rev 621)
+@@ -225,6 +225,11 @@
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;loginText&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;passwordtext&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;Events&gt;
+             &lt;EventHandler event=&quot;actionPerformed&quot; listener=&quot;java.awt.event.ActionListener&quot; parameters=&quot;java.awt.event.ActionEvent&quot; handler=&quot;loginTextActionPerformed&quot;/&gt;
+           &lt;/Events&gt;
+@@ -233,16 +238,31 @@
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;firstNameText&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;surnameText&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;emailText&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;addressText&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;addressText&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;noteText&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+@@ -265,6 +285,9 @@
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
+                 &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;administratorCheckBox&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -283,6 +306,11 @@
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;passwordtext&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;firstNameText&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+@@ -373,6 +401,9 @@
+                 &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
+                   &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+                 &lt;/Property&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;editAllCheckBox&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -391,6 +422,9 @@
+                 &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
+                   &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+                 &lt;/Property&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;addRightCheckBox&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -409,6 +443,9 @@
+                 &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
+                   &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
+                 &lt;/Property&gt;
++                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                  &lt;ComponentRef name=&quot;editGroupTextArea&quot;/&gt;
++                &lt;/Property&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -430,6 +467,9 @@
+                   &lt;Properties&gt;
+                     &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
+                     &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                    &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++                      &lt;ComponentRef name=&quot;operationButton&quot;/&gt;
++                    &lt;/Property&gt;
+                   &lt;/Properties&gt;
+                   &lt;AuxValues&gt;
+                     &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(choices, this);&quot;/&gt;
+@@ -442,6 +482,11 @@
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;surnameText&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++              &lt;ComponentRef name=&quot;emailText&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+@@ -453,6 +498,9 @@
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+           &lt;Connection code=&quot;&quot;&quot;&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
++        &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++          &lt;ComponentRef name=&quot;closeButton&quot;/&gt;
++        &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;AuxValues&gt;
+         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -463,6 +511,9 @@
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+           &lt;Connection code=&quot;L10n.getString(&quot;UserManager.ButtonClose&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
++        &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++          &lt;ComponentRef name=&quot;helpButton&quot;/&gt;
++        &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;AuxValues&gt;
+         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+@@ -473,6 +524,9 @@
+         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+           &lt;Connection code=&quot;L10n.getString(&quot;UserManager.ButtonHelp&quot;)&quot; type=&quot;code&quot;/&gt;
+         &lt;/Property&gt;
++        &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
++          &lt;ComponentRef name=&quot;loginText&quot;/&gt;
++        &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;AuxValues&gt;
+         &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -260,20 +260,30 @@
+ 
+         createWhenuser.setText(L10n.getString(&quot;UserManager.CreateWhen&quot;)+ &quot;: &quot;);
+ 
++        loginText.setNextFocusableComponent(passwordtext);
+         loginText.addActionListener(new java.awt.event.ActionListener() {
+             public void actionPerformed(java.awt.event.ActionEvent evt) {
+                 loginTextActionPerformed(evt);
+             }
+         });
+ 
++        firstNameText.setNextFocusableComponent(surnameText);
++
++        emailText.setNextFocusableComponent(addressText);
++
++        addressText.setNextFocusableComponent(noteText);
++
+         noteLabel.setText(L10n.getString(&quot;UserManager.Note&quot;)+ &quot;: &quot;);
+ 
+         noteText.setColumns(20);
+         noteText.setRows(5);
++        noteText.setNextFocusableComponent(administratorCheckBox);
+         jScrollPane1.setViewportView(noteText);
+ 
+         dropWhenLabel.setText(L10n.getString(&quot;UserManager.DropWhen&quot;)+ &quot;: &quot;);
+ 
++        passwordtext.setNextFocusableComponent(firstNameText);
++
+         passwordLabel.setText(L10n.getString(&quot;UserManager.Password&quot;)+ &quot;: (*) &quot;);
+ 
+         createWhenValueLabel.setText(&quot;&quot;);
+@@ -284,20 +294,24 @@
+         administratorCheckBox.setText(L10n.getString(&quot;UserManager.Right.Administrator&quot;));
+         administratorCheckBox.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         administratorCheckBox.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        administratorCheckBox.setNextFocusableComponent(editAllCheckBox);
+ 
+         editAllCheckBox.setText(L10n.getString(&quot;UserManager.Right.EditAll&quot;));
+         editAllCheckBox.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         editAllCheckBox.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        editAllCheckBox.setNextFocusableComponent(addRightCheckBox);
+ 
+         addRightCheckBox.setText(L10n.getString(&quot;UserManager.Right.Add&quot;));
+         addRightCheckBox.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         addRightCheckBox.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        addRightCheckBox.setNextFocusableComponent(editGroupTextArea);
+ 
+         editGroupLabel.setText(L10n.getString(&quot;UserManager.Right.EditGroup&quot;));
+         editGroupLabel.setAutoscrolls(true);
+ 
+         editGroupTextArea.setColumns(20);
+         editGroupTextArea.setRows(5);
++        editGroupTextArea.setNextFocusableComponent(operationButton);
+         jScrollPane3.setViewportView(editGroupTextArea);
+ 
+         org.jdesktop.layout.GroupLayout jPanel2Layout = new org.jdesktop.layout.GroupLayout(jPanel2);
+@@ -330,6 +344,8 @@
+                 .addContainerGap())
+         );
+ 
++        surnameText.setNextFocusableComponent(emailText);
++
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+         jPanel1.setLayout(jPanel1Layout);
+         jPanel1Layout.setHorizontalGroup(
+@@ -420,10 +436,13 @@
+         );
+ 
+         operationButton.setText(&quot;&quot;);
++        operationButton.setNextFocusableComponent(closeButton);
+ 
+         closeButton.setText(L10n.getString(&quot;UserManager.ButtonClose&quot;));
++        closeButton.setNextFocusableComponent(helpButton);
+ 
+         helpButton.setText(L10n.getString(&quot;UserManager.ButtonHelp&quot;));
++        helpButton.setNextFocusableComponent(loginText);
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -41,8 +41,8 @@
+     private SelectQuery query = null;
+     /** Exception with details about an error */
+     private String error = null;
+-    /** Remote exception (network communication failed)*/
+-    private RemoteException remoteEx;
++    /** Exception */
++    private Exception exception;
+     /** True if MyTask finished successful*/
+     private boolean  finishedTask = false;
+     /** Constant with default number of rows to display */
+@@ -55,6 +55,8 @@
+     private String displayRow;    
+     /** Result of the search query */
+     private int resultId = 0;
++    /** Number of results for the current SelectQuery */
++    private int resultRows = 0;
+     /** List of data (results of a search query) displayed in the table */
+     private ArrayList&lt;User&gt; userList = new ArrayList&lt;User&gt;();         
+     /** Message containing information about changes in user record*/
+@@ -167,24 +169,16 @@
+        
+     	if (createTask) {
+ 	    	final Task task = new Task() {    		    		
+-	    		public Object task() throws DBLayerException, RemoteException {
++	    		public Object task() throws Exception {
+ 	  		       int resultIdent;
+ 	    			try {
+ 	  		    	    resultIdent = search();
+ 	  		    	    setResultId(resultIdent);	
+ 	  		    	    loadLoginUsers();
+-		    	   } catch (RemoteException e) {	            
++		    	   } catch (Exception e) {	            
+ 			            logger.error(&quot;Searching user failed. Remote exception caught in User. Details: &quot;+e.getMessage());
+-			        	database.rollbackTransaction();
+-		                RemoteException remex = new RemoteException(ERROR_SEARCH + e.getMessage());
+-		                remex.setStackTrace(e.getStackTrace());
+-		                throw remex; 		           
+-			        } catch (DBLayerException e) {
+-			        	logger.error(&quot;Searching user failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());       	                                                   
+-			        	database.rollbackTransaction();
+-		                DBLayerException dbex = new DBLayerException(ERROR_SEARCH + e.getMessage());
+-		                dbex.setStackTrace(e.getStackTrace());
+-		                throw dbex; 		           
++			            database.rollbackTransaction();		                
++		                    throw e; 		           
+ 			        }		
+ 			        setInfoFinishedTask(true);
+                     return null;			        
+@@ -193,17 +187,14 @@
+ 		    return task;
+     	} else {
+     		try {
+-    			int resultIdent = search();
+-    			setResultId(resultIdent);
+-			} catch (DBLayerException e) {
+-				logger.error(&quot;Searching user failed. Remote exception caught in User. Details: &quot;+e.getMessage());
+-				setError(ERROR_SEARCH);
+-			} catch (RemoteException e) {
+-				logger.error(&quot;Searching user failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());				
+-				setError(ERROR_REMOTE_EXCEPTION);	
+-				setRemoteEx(e);                
+-			}
+-			return null;
++                    int resultIdent = search();
++                    setResultId(resultIdent);
++                    } catch (Exception e) {
++                            logger.error(&quot;Searching user failed. Exception caught in User. Details: &quot;+e.getMessage());
++                            setError(ERROR_SEARCH);
++                            setException(e);               
++                    }
++                    return null;
+     	}
+   }
+     
+@@ -279,10 +270,17 @@
+      * @param from number of the first row to show in table. Number of the first row to retraieve is 1.
+      * @param count number of rows to retrieve 
+      */
+-    public void processResult(int from, int count) throws RemoteException, DBLayerException {
++    public void processResult(int from, int count) throws Exception {
+         
+         if (this.resultId != 0) {
+-            int currentRow = getResultRows();
++            int currentRow = getResultCount();
++            setResultRows(currentRow);
++            if (isError()) {
++                Exception ex = getException();
++                setError(null);
++                setException(null);
++                throw ex;
++            }
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));
+            
+@@ -299,21 +297,13 @@
+                 Object[] objectUser;
+              	try {
+              		objectUser = database.more(this.resultId, 0, to-1);  
+-             	} catch(RemoteException e) {
+-             		logger.error(&quot;Remote exception caught in UserManager (processResult). Details: &quot;+e.getMessage());
+-             		RemoteException remex = new RemoteException(e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex;                                                                              
+-                } catch (DBLayerException e) {                  
+-                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());   
+-                    DBLayerException dbex = new DBLayerException(ERROR_PROCESS + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 
++             	} catch(Exception e) {
++             		logger.error(&quot;Processing search results failed: &quot; + e.getMessage());                		
++                        throw e; 
+                 }  
+                 if (objectUser == null) {
+                 	logger.error(&quot;tUser doesn`t contain required data&quot;);
+-                	DBLayerException dbex = new DBLayerException(ERROR_PROCESS + &quot;tUser doesn`t contain required data&quot;);                   
+-                    throw dbex; 
++                	throw new DBLayerException(ERROR_PROCESS + &quot;tUser doesn`t contain required data&quot;);                                       
+                 }
+                 int countResult = objectUser.length;  
+                 logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);                
+@@ -340,7 +330,7 @@
+     public Task addUserRecord() {
+     	    	
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws DBLayerException, RemoteException {
++    		public Object task() throws Exception {
+     			
+     			boolean ok = false;
+     			ok = database.beginTransaction();
+@@ -367,18 +357,10 @@
+                                 logger.debug(userRecord.getId());
+                                 //TODO overit, zda znam cID nebo je zjistit jinak ... pravdepodobne se rovna count+1    	            
+                                 users = usersNew;
+-                        }catch (RemoteException e) {
+-                                logger.error(&quot;Process add User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());
+-                                database.rollbackTransaction();	
+-                                RemoteException remex = new RemoteException(ERROR_ADD + e);
+-                                remex.setStackTrace(e.getStackTrace());
+-                                throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process add User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();	
+-                    DBLayerException dbex = new DBLayerException(ERROR_ADD + e);
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 		            
++                        }catch (Exception e) {
++                                logger.error(&quot;Process add User failed. Exception caught in UserManager. Details: &quot;+e.getMessage());
++                                database.rollbackTransaction();	                               
++                                throw e; 		            
+ 		        } 	
+ 		        database.commitTransaction();
+ 		        setInfoFinishedTask(true);
+@@ -427,16 +409,8 @@
+                                 //logger.debug(&quot;Edit user - after update user list&quot;);
+ 		        }catch (RemoteException e) {
+ 		        	logger.error(&quot;Process update User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();		        	
+-                                RemoteException remex = new RemoteException(ERROR_EDIT + e.getMessage());
+-                                remex.setStackTrace(e.getStackTrace());
+-                                throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process update User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());       	                                                   
+-		        	database.rollbackTransaction();		        
+-                                DBLayerException dbex = new DBLayerException(ERROR_EDIT + e.getMessage());
+-                                dbex.setStackTrace(e.getStackTrace());
+-                                throw dbex; 		            
++		        	database.rollbackTransaction();		        	                       
++                                throw e; 		            
+ 		        } 
+                         logger.debug(&quot;Edit user - before commit transaction&quot;);
+ 		        database.commitTransaction();                                                
+@@ -458,7 +432,7 @@
+     	//Set actual time into param DROPWHEN - inform about deactive user account     	
+         userRecord.setDropWhen(new Date());    	
+     	final Task task = new Task() {    		    		
+-    		public Object task() throws DBLayerException, RemoteException {  
++    		public Object task() throws Exception {  
+     			
+     			boolean ok = false;
+     			ok = database.beginTransaction();
+@@ -471,18 +445,10 @@
+     				database.dropUser(userRecord.getLogin());
+     				//Set information abou dropping user into database
+     				 database.executeUpdate(userRecord);		            
+-		        }catch (RemoteException e) {
++		        }catch (Exception e) {
+ 		        	logger.error(&quot;Process delete User failed. Remote exception caught in UserManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();
+-                    RemoteException remex = new RemoteException(ERROR_DELETE + e.getMessage());
+-                    remex.setStackTrace(e.getStackTrace());
+-                    throw remex; 		           		       	    
+-		        } catch (DBLayerException e) {
+-		        	logger.error(&quot;Process delete User failed. DBLayer exception caught in UserManager. Details: &quot;+e.getMessage());
+-		        	database.rollbackTransaction();
+-                    DBLayerException dbex = new DBLayerException(ERROR_DELETE + e.getMessage());
+-                    dbex.setStackTrace(e.getStackTrace());
+-                    throw dbex; 		            
++		        	database.rollbackTransaction();                    
++                                throw e; 		            
+ 		        } 		
+ 		        database.commitTransaction();
+ 		        setInfoFinishedTask(true);
+@@ -498,7 +464,7 @@
+      * @throws DBLayerException in case search failed
+      * @throws RemoteException in case network communication failed
+      */
+-    public Pair&lt;String, Integer&gt;[] loadLoginUsers() throws DBLayerException, RemoteException{
++    public Pair&lt;String, Integer&gt;[] loadLoginUsers() throws Exception{
+         if (users == null)
+         {  
+             SelectQuery sq;
+@@ -527,16 +493,9 @@
+                     userLogin.add((String)record[2]);
+                 }
+                 database.closeQuery(sq);
+-            }catch (RemoteException e) {	            
+-	            logger.error(&quot;Searching user and creating Pairs (login, identifier) failed. Remote exception caught in User. Details: &quot;+e.getMessage());	        	
+-                RemoteException remex = new RemoteException(ERROR_CREATE_PAIRS + e.getMessage());
+-                remex.setStackTrace(e.getStackTrace());
+-                throw remex; 		           
+-	        } catch (DBLayerException e) {
+-	        	logger.error(&quot;Searching user and creating Pairs (login, identifier) failed. DBLayer exception caught in User. Details: &quot;+e.getMessage());       	                                                   
+-                DBLayerException dbex = new DBLayerException(ERROR_CREATE_PAIRS + e.getMessage());
+-                dbex.setStackTrace(e.getStackTrace());
+-                throw dbex; 		           
++            }catch (Exception e) {	            
++	            logger.error(&quot;Searching user and creating Pairs (login, identifier) failed. Remote exception caught in User. Details: &quot;+e.getMessage());	        	                
++                   throw e; 		           
+ 	        }					       
+             return users;
+         } else
+@@ -684,20 +643,20 @@
+         return this.error;
+     }      
+     
+-    /**
+-     *  Set an remote exception (network communication failed)
+-     *  @param ex  RemoteException (network communication failed)
++     /**
++     *  Set an exception 
++     *  @param ex  exception
+      */
+-    public void setRemoteEx(RemoteException ex) {
+-        this.remoteEx = ex;
++    public void setException(Exception ex) {
++        this.exception = ex;
+     }
+     
+     /**
+-     *  Get remote exception (network communication failed)
+-     *  @return remote exception (network communication failed)
++     *  Get exception
++     *  @return exception 
+      */
+-    public RemoteException getRemoteEx() {
+-        return this.remoteEx;
++    public Exception getException() {
++        return this.exception;
+     }  
+     
+     /** 
+@@ -749,16 +708,32 @@
+     }
+     
+     /**
+-     * Get the number of results for the current SelectQuery
++     * Get the number of results for the current SelectQuery. 
+      * @return number of results for the current SelectQuery
+      */
+     public int getResultRows() {
++       return this.resultRows;
++    }
++    
++    /**
++     * Set the number of results for the current SelectQuery.     
++     */
++    public void setResultRows(int resultCount) {
++        this.resultRows = resultCount;
++    }
++    
++    /**
++     * Get the number of results for the current SelectQuery
++     * @return number of results for the current SelectQuery
++     */
++    public int getResultCount() {
+         int resultCount = 0;
+         if (resultId != 0) try {
+                 resultCount = database.getNumRows(resultId);        	
+         } catch(RemoteException e) {
+                 logger.error(&quot;Get number of results failed.Remote exception caught in UserManager. Details: &quot;+e.getMessage());  
+             	setError(ERROR_REMOTE_EXCEPTION);
++                setException(e);
+         }
+         return resultCount;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-09-01 22:12:38 UTC (rev 620)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-09-01 22:44:46 UTC (rev 621)
+@@ -18,6 +18,7 @@
+ import net.sf.plantlore.client.metadata.MetadataManager;
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultEscapeKeyPressed;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Task;
+@@ -103,26 +104,14 @@
+            } else {
+         	   view.previousButton.setEnabled(false);
+            }
+-    	} catch (RemoteException e) {
+-    		DefaultReconnectDialog.show(view, e);
+-    	} catch (DBLayerException e) {
+-    		view.showErrorMessage(e.getMessage());
+-    	}    	           
++    	} catch (Exception ex) {           
++           ex.printStackTrace();
++           DefaultExceptionHandler.handle(view, ex);           
++           return;
++        } 
++	           
+     }
+-    
+-    /**
+-     * Display error message.
+-     */
+-    public void displayError() {
+-    	if (model.getError().equals(History.ERROR_REMOTE_EXCEPTION)) {
+- 		   DefaultReconnectDialog.show(view, model.getRemoteEx());
+- 	   } else {
+- 		   view.showErrorMessage(model.getError());
+- 	   }
+-    	//TODO nastavit ci nenastvit null
+- 	   model.setError(null); 
+-    }
+-   
++      
+    /**
+     *  ActionListener class controlling the &lt;b&gt;PREV&lt;/b&gt; button on the form.
+     *  The button PREV is used for browsing the search results.
+@@ -132,7 +121,9 @@
+        {
+     	   // Check whether an error flag is set
+            if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);                   
+         	   return;
+            }
+            // Get previous page of results
+@@ -164,7 +155,9 @@
+        {
+     	   // Check whether an error flag is set 
+            if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Get next page of result
+@@ -193,7 +186,9 @@
+        public void actionPerformed(ActionEvent actionEvent) {
+            // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            // Save old value 
+@@ -233,7 +228,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            //set information abut selected operation ADD
+@@ -259,7 +256,9 @@
+     			   //load data
+     	           model.searchUser(false);  
+     	           if (model.isError()) {
+-    	        	   displayError();
++    	        	   DefaultExceptionHandler.handle(view, model.getException());
++                           model.setError(null);
++                           model.setException(null);
+     	        	   return;
+     	           }    	
+     	           reloadData(1, model.getDisplayRows());    	             	           
+@@ -277,7 +276,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(UserManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableUserList.getSelectedRow() &lt; 0) {
+@@ -331,7 +332,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableUserList.getSelectedRow() &lt; 0) {    
+@@ -363,7 +366,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(UserManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+            if (view.tableUserList.getSelectedRow() &lt; 0) {    
+@@ -398,7 +403,9 @@
+                                        // load User
+ 		   	               model.searchUser(false); 
+ 		   	               if (model.isError()) {
+-		    	        	   displayError();
++		    	        	   DefaultExceptionHandler.handle(view, model.getException());
++                                           model.setError(null);
++                                           model.setException(null);
+ 		    	        	   return;
+ 		    	           }    	
+ 		   	               reloadData(1, model.getDisplayRows());		   	               		   	              
+@@ -420,7 +427,9 @@
+        {
+     	   // Check whether an error flag is set
+     	   if (model.isError()) {
+-        	   view.showErrorMessage(MetadataManager.ERROR_TITLE, model.getError());
++        	   Exception ex = model.getException();
++                   ex.printStackTrace();
++                   DefaultExceptionHandler.handle(view, ex);  
+         	   return;
+            }
+     	   model.setWholeName(view.wholeNameSearchText.getText());           
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000869.html">[Plantlore-dev] How-to: Omezeni delky vstupu uzivatele
+</A></li>
+	<LI>Next message: <A HREF="000872.html">[Plantlore-dev] Vyjimka
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#871">[ date ]</a>
+              <a href="thread.html#871">[ thread ]</a>
+              <a href="subject.html#871">[ subject ]</a>
+              <a href="author.html#871">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,2095 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r232 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r232%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605081009.k48A9hnO016576%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000273.html">
+   <LINK REL="Next"  HREF="000274.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r232 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r232%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605081009.k48A9hnO016576%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r232 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon May  8 12:09:43 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000273.html">[Plantlore-dev] Fwd:Lada - Poznamky ke schuzce
+</A></li>
+        <LI>Next message: <A HREF="000274.html">[Plantlore-dev] r233 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#272">[ date ]</a>
+              <a href="thread.html#272">[ thread ]</a>
+              <a href="subject.html#272">[ subject ]</a>
+              <a href="author.html#272">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-08 12:09:42 +0200 (Mon, 08 May 2006)
+New Revision: 232
+
+Added:
+   trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+   trunk/src/net/sf/plantlore/client/ButtonEditor.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/common/AutoTextArea.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/Pair.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Added role note editing in AddEdit, implemented database updating on Ok button click, changed taxon list setting to use new AutoTextArea.getLine() method, only not deleted authoroccurrences are loaded for each occurrence.
+Modified AutoTextArea.getLine() to strip new line and throw IndexOutOfBoundsException instead of BadLocationException.
+Slight change to Pair class to work with hash table based collections (thx to Erik).
+
+All DBLayer more() method calls adapted to new indexing starting from 0 (instead of from 1 as earlier).
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -14,7 +14,12 @@
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Iterator;
++import java.util.Map;
++import java.util.Map.Entry;
+ import java.util.Observable;
++import java.util.Set;
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+@@ -27,6 +32,7 @@
+ import net.sf.plantlore.common.record.Plant;
+ import net.sf.plantlore.common.record.Publication;
+ import net.sf.plantlore.common.record.Territory;
++import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.Village;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+@@ -46,15 +52,21 @@
+     private DBLayer database;      
+     
+     private int coordinateSystem;
+-    private Occurrence o;
++    private Occurrence o; //original occurrence
+     
+     //list of authors user selects
+     private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorList;
++    private ArrayList&lt;String&gt; resultRevision;
++    private HashSet&lt;Pair&lt;Integer,String&gt;&gt; originalAuthors;//authors with the same name and different role are different authors for us --&gt; they each have their own AuthorOccurrence record
+     
+     //list of AuthorOccurrence objects that correspond to our Occurrence object, we need it for update
++    //set by &lt;code&gt;getAuthorsOf()&lt;/code&gt; method
+     private HashMap&lt;Integer,AuthorOccurrence&gt; authorOccurrences;
+     private Pair&lt;String,Integer&gt; village;
+-    private String taxon;
++    
++    private ArrayList&lt;String&gt; taxonList;
++    private String taxonOriginal;
++    
+     private String localityDescription;
+     private Integer year;
+     private String habitatNote;
+@@ -74,6 +86,7 @@
+     private Integer month;
+     private Integer day;
+     private Date time;
++    private Occurrence[] habitatSharingOccurrences = null;
+     
+     private Pair&lt;String, Integer&gt;[] plants = null;
+     private Pair&lt;String, Integer&gt;[] authors = null;
+@@ -91,6 +104,7 @@
+     private Boolean skipUpdate = false;
+     private Boolean editMode = false;
+     
++    
+     /** Creates a new instance of AddEdit */
+     public AddEdit(DBLayer database, Boolean editMode) {
+         this.database = database;
+@@ -105,9 +119,33 @@
+     public void setRecord(Occurrence o) {
+         this.o = o;
+         coordinateSystem = WGS84;
++        
+         authorList = getAuthorsOf(o);
++        originalAuthors = new HashSet&lt;Pair&lt;Integer,String&gt;&gt;();
++        Pair&lt;Pair&lt;String,Integer&gt;,String&gt; p;
++        Pair&lt;String,Integer&gt; a;
++        for (int i = 0; i &lt; authorList.size(); i++) {
++            p = authorList.get(i);
++            a = p.getFirst();
++            Integer id = a.getSecond();
++            String role = p.getSecond();
++                        
++            originalAuthors.add(new Pair&lt;Integer,String&gt;(id,role));
++        }
++        
++        Iterator it = originalAuthors.iterator();
++        System.out.println(&quot;Original authors are: &quot;);
++        while (it.hasNext()) {
++            Pair&lt;Integer,String&gt; pOA = (Pair&lt;Integer,String&gt;)it.next();
++            System.out.println(&quot;&quot;+pOA.getFirst()+&quot;:&quot;+pOA.getSecond());
++        }
++        
+         village = new Pair(o.getHabitat().getNearestVillage().getName(), o.getHabitat().getNearestVillage().getId());
+-        taxon = o.getPlant().getTaxon();
++        
++        taxonList = new ArrayList();
++        taxonOriginal = o.getPlant().getTaxon();
++        taxonList.add(taxonOriginal);
++        
+         localityDescription = o.getHabitat().getDescription();
+         year = o.getYearCollected();
+         
+@@ -127,6 +165,9 @@
+         month = o.getMonthCollected();
+         day = o.getDayCollected();
+         time = o.getTimeCollected();
++                
++        //we also must determine (again) who shares habitat data with us
++        loadHabitatSharingOccurrences();
+     }
+ 
+     public Pair&lt;String, Integer&gt; getAuthor(int i) {
+@@ -146,11 +187,11 @@
+         logger.debug(&quot;Added author &quot;+author.getFirst()+&quot; as &quot;+author.getSecond());
+     }
+     
+-    public Pair&lt;Pair&lt;String, Integer&gt;,String&gt; removeAuthor(int i) {
++    /*public Pair&lt;Pair&lt;String, Integer&gt;,String&gt; removeAuthor(int i) {
+         Pair&lt;Pair&lt;String, Integer&gt;,String&gt; author = authorList.remove(i);
+         logger.debug(&quot;Removed author &quot;+author.getFirst()+&quot; &quot;+author.getSecond());
+         return author;
+-    }
++    }*/
+ 
+     public Pair&lt;String, Integer&gt; getVillage() {
+         return village;
+@@ -161,15 +202,10 @@
+         logger.debug(&quot;Village set to &quot;+village);
+     }
+ 
+-    public String getTaxon() {
+-        return taxon;
++    public String getTaxon(int i) {
++        return (String) taxonList.get(i);
+     }
+ 
+-    public void setTaxon(String taxon) {
+-        this.taxon = taxon;
+-        logger.debug(&quot;Taxon set to &quot;+ taxon);
+-    }
+-
+     public String getLocalityDescription() {
+         return localityDescription;
+     }
+@@ -378,12 +414,12 @@
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+                 System.out.println(&quot;getPlants(): we got &quot;+resultsCount+&quot; results.&quot;);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 plants = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    p = (Plant)((Object[])records[i-1])[0];
+-                    plants[i-1] = new Pair(p.getTaxon(), p.getId());
++                    p = (Plant)((Object[])records[i])[0];
++                    plants[i] = new Pair(p.getTaxon(), p.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -409,12 +445,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Author.WHOLENAME);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 authors = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    a = (Author)((Object[])records[i-1])[0];
+-                    authors[i-1] = new Pair&lt;String, Integer&gt;(a.getWholeName(), a.getId());
++                    a = (Author)((Object[])records[i])[0];
++                    authors[i] = new Pair&lt;String, Integer&gt;(a.getWholeName(), a.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -441,13 +477,13 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, AuthorOccurrence.ROLE);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 authorRoles = new String[resultsCount];
+                 String r;
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    r = (String)((Object[])records[i-1])[0];
+-                    authorRoles[i-1] = r;
++                    r = (String)((Object[])records[i])[0];
++                    authorRoles[i] = r;
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -474,12 +510,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Village.NAME);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 villages = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    v = (Village)((Object[])records[i-1])[0];
+-                    villages[i-1] = new Pair&lt;String, Integer&gt;(v.getName(), v.getId());
++                    v = (Village)((Object[])records[i])[0];
++                    villages[i] = new Pair&lt;String, Integer&gt;(v.getName(), v.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -506,12 +542,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Territory.NAME);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 territories = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    t = (Territory)((Object[])records[i-1])[0];
+-                    territories[i-1] = new Pair&lt;String,Integer&gt;(t.getName(), t.getId());
++                    t = (Territory)((Object[])records[i])[0];
++                    territories[i] = new Pair&lt;String,Integer&gt;(t.getName(), t.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -538,12 +574,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Phytochorion.NAME);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 phytNames = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    p = (Phytochorion)((Object[])records[i-1])[0];
+-                    phytNames[i-1] = new Pair&lt;String,Integer&gt;(p.getName(), p.getId());
++                    p = (Phytochorion)((Object[])records[i])[0];
++                    phytNames[i] = new Pair&lt;String,Integer&gt;(p.getName(), p.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -570,12 +606,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Phytochorion.CODE);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 phytCodes = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    p = (Phytochorion)((Object[])records[i-1])[0];
+-                    phytCodes[i-1] = new Pair&lt;String,Integer&gt;(p.getCode(), p.getId());
++                    p = (Phytochorion)((Object[])records[i])[0];
++                    phytCodes[i] = new Pair&lt;String,Integer&gt;(p.getCode(), p.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -604,14 +640,14 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Habitat.COUNTRY);
+                 resultid = database.executeQuery(sq); // the values can be doubled, we need to filter them 
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 countriesTemp = new String[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    h = (Habitat)((Object[])records[i-1])[0];
++                    h = (Habitat)((Object[])records[i])[0];
+                     if (h.getCountry() ==  null)
+                         System.out.println(&quot;\twas null&quot;);
+-                    if (i == 1) {
++                    if (i == 0) {
+                         countriesTemp[0] = h.getCountry();
+                         uniqueCount++;
+                         continue;
+@@ -652,12 +688,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.DATASOURCE);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 sources = new String[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    o = (Occurrence)((Object[])records[i-1])[0];
+-                    sources[i-1] = o.getDataSource();
++                    o = (Occurrence)((Object[])records[i])[0];
++                    sources[i] = o.getDataSource();
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -685,12 +721,12 @@
+                 //sq.addProjection(PlantloreConstants.PROJ_DISTINCT,Publication.REFERENCECITATION);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 publications = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    p = (Publication)((Object[])records[i-1])[0];
+-                    publications[i-1] = new Pair(p.getReferenceCitation(), p.getId());
++                    p = (Publication)((Object[])records[i])[0];
++                    publications[i] = new Pair(p.getReferenceCitation(), p.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -717,12 +753,12 @@
+                 sq.addOrder(PlantloreConstants.DIRECT_ASC, Metadata.DATASETTITLE);
+                 resultid = database.executeQuery(sq);
+                 resultsCount = database.getNumRows(resultid);
+-                records = database.more(resultid, 1, resultsCount);
++                records = database.more(resultid, 0, resultsCount-1);
+                 projects = new Pair[resultsCount];
+-                for (int i = 1; i &lt;= resultsCount; i++)
++                for (int i = 0; i &lt; resultsCount; i++)
+                 {
+-                    m = (Metadata)((Object[])records[i-1])[0];
+-                    projects[i-1] = new Pair(m.getDataSetTitle(), m.getId());
++                    m = (Metadata)((Object[])records[i])[0];
++                    projects[i] = new Pair(m.getDataSetTitle(), m.getId());
+                 }
+             } catch (RemoteException ex) {
+                 ex.printStackTrace();
+@@ -770,64 +806,113 @@
+         }
+     }
+     
++    /** Helper method to find id of given taxon according to &lt;code&gt;plants[]&lt;/code&gt;
++     *
++     * @return Id of the taxon if found
++     * @return -1 if not found
++     */
++    private Integer lookupPlant(String taxon) {
++        logger.debug(&quot;Looking up id for #&quot;+taxon+&quot;#&quot;);
++        for (int i=0; i &lt; plants.length ; i++) {
++            System.out.print(&quot;Trying #&quot;+plants[i]+&quot;#&quot;);
++            if (taxon.equals(plants[i].getFirst())) {
++                return plants[i].getSecond();
++            }
++        }
++        return -1;
++    }
++    
+     /** Pre-processes data gathered from the user.
+      *
++     * @paran author one of the authors of this occurrence to be processed
++     * @param newRecord if true then new record is to be created - e.g. we are in Add mode, otherwise the record is updated
++     * @param updateAllPlants if true then the shared habitat is updated, if false then a new habitat is created and asociated with our AuthorOccurrence object o. Has only sense if newRecord is true.
+      * @return AuthorOccurrence the object that will be created or updated
+      * @return true the object has to be updated
+      * @return false the object has to be created
+      */
+-    private Pair&lt;AuthorOccurrence,Boolean&gt; prepareAuthorOccurrence(boolean newRecord, Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author) {
+-        Pair&lt;AuthorOccurrence,Boolean&gt; result;
++    private Occurrence prepareNewOccurrence(String taxon, Habitat h) {
+         DBLayerUtils dlu = new DBLayerUtils(database);
+-        Occurrence o;
++        Occurrence occ;
+         Author a;
++        Metadata m;
++        Plant plant;
++        Publication publ ;
++        
++        occ = new Occurrence();
++        
++        m = new Metadata();
++        if (project != null)
++            m = (Metadata)dlu.getObjectFor(project.getSecond(),Metadata.class);
++
++        plant = new Plant();
++        Integer id = lookupPlant(taxon);
++        if (!id.equals(-1))
++            plant = (Plant)dlu.getObjectFor(id,Plant.class);
++
++        publ = new Publication();
++        if (publication != null)
++            publ = (Publication)dlu.getObjectFor(publication.getSecond(),Publication.class);
++            
++        occ.setDayCollected(day);
++        occ.setHabitat(h);
++        occ.setHerbarium(herbarium);
++        
++        //cIsoDateTimeBegin construction
++        Calendar c = Calendar.getInstance();
++        c.set(Calendar.YEAR, year);
++        c.set(Calendar.MONTH, month);
++        c.set(Calendar.DAY_OF_MONTH,day);
++        Calendar temp = Calendar.getInstance();
++        temp.setTime(time);
++        c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
++        c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        occ.setIsoDateTimeBegin(c.getTime());
++        
++        occ.setMetadata(m);
++        occ.setMonthCollected(month);
++        occ.setNote(occurrenceNote);
++        occ.setPlant(plant);
++        occ.setPublication(publ);
++        occ.setTimeCollected(time);
++        occ.setYearCollected(year);
++        
++        occ.setDeleted(0);
++        
++        //#### 2BE REMOVED
++        occ.setCreatedWhen(new Date());
++        occ.setUpdatedWhen(new Date());
++        occ.setCreatedWho((User) dlu.getObjectFor(2,User.class));
++        occ.setUpdatedWho((User) dlu.getObjectFor(2,User.class));        
++        //####        
++        
++        return occ;
++    }//prepareNewOccurrence
++
++    /** prepares the original occurrence record for the original taxon for update 
++     * modifies the AddEdit's occurrence o. Can insert a new habitat into the database if updateAllPlants is false.
++     * updates the existing habitat if updateAllPlants is true
++     *
++     */
++    private void prepareOccurrenceUpdate(boolean updateAllPlants) throws DBLayerException, RemoteException {
+         Habitat h;
+-        Village v; 
++        Village v;
+         Phytochorion p;
+         Territory t;
+         Metadata m;
+         Plant plant;
+-        Publication publ ;
++        Publication publ;
++        DBLayerUtils dlu = new DBLayerUtils(database);
+         
+-        if (newRecord)
+-            o = new Occurrence();
++        if (updateAllPlants)  
++            h = o.getHabitat();
+         else 
+-            o = this.o;
+-        
+-        assert authorList.size() &gt; 0;
+-        if (newRecord) {
+-            a = new Author();
+-            a.setId(author.getFirst().getSecond());
+-        } else {
+-            if (authorOccurrences.containsKey(author.getFirst().getSecond()))
+-                a = authorOccurrences.get(author.getFirst().getSecond()).getAuthor(); //we already have the author Object
+-            else
+-                a = (Author) dlu.getObjectFor(author.getFirst().getSecond(), Author.class); //have to retrieve the author object from database
+-        }
+-        
+-        if (newRecord)
+             h = new Habitat();
+-        else 
+-            h = o.getHabitat();
+         
+-        if (newRecord)
+-            v = new Village();
+-        else
+-            v = h.getNearestVillage();
+-        v.setId(village.getSecond());
+-
+         
+-        if (newRecord)
+-            p = new Phytochorion();
+-        else
+-            p = h.getPhytochorion();
+-        p.setId(phytCode.getSecond());
+-        
+-        if (newRecord)
+-            t = new Territory();
+-        else
+-            t = h.getTerritory();
+-        t.setId(territoryName.getSecond());
++        v = (Village)dlu.getObjectFor(village.getSecond(),Village.class);
++        p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
++        t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);
+ 
+         h.setAltitude(altitude);
+         h.setCountry(phytCountry);
+@@ -840,27 +925,26 @@
+         h.setQuadrant(quadrant);
+         h.setTerritory(t);
+         
+-        if (newRecord)
+-            m = new Metadata();
+-        else
+-            m = o.getMetadata();
++        if (updateAllPlants) {
++            database.executeUpdate(h);
++        } else {
++            //we've already created and set up a new Habitat now we have to store it into the database
++            h.setDeleted(0);
++            database.executeInsert(h);
++        }
++        
++        m = o.getMetadata();
+         if (project != null)
+-            m.setId(project.getSecond());
++            m = (Metadata)dlu.getObjectFor(project.getSecond(),Metadata.class);
+ 
+-        if (newRecord)
+-            plant = new Plant();
+-        else
+-            plant = o.getPlant();
+-        for (int i=0; i &lt; plants.length; i++)
+-            if (plants[i].equals(taxon))
+-                plant.setId(plants[i].getSecond());
++        plant = o.getPlant();
++        Integer id = lookupPlant(taxonOriginal);
++        if (!id.equals(-1)) 
++                plant = (Plant)dlu.getObjectFor(id,Plant.class);
+ 
+-        if (newRecord)
+-            publ = new Publication();
+-        else
+-            publ = o.getPublication();
++        publ = o.getPublication();
+         if (publication != null)
+-            publ.setId(publication.getSecond());
++            publ = (Publication)dlu.getObjectFor(publication.getSecond(),Publication.class);
+             
+         o.setDayCollected(day);
+         o.setHabitat(h);
+@@ -883,50 +967,275 @@
+         o.setPlant(plant);
+         o.setPublication(publ);
+         o.setTimeCollected(time);
+-        o.setYearCollected(year);
+-
++        o.setYearCollected(year);        
++    }
++    
++    /** Creates a clone of the AddEdit's occurrence o.
++     * However, creates a new Habitat for this new occurrence and inserts it into the database.
++     */
++    private Occurrence cloneOccurrence() throws DBLayerException, RemoteException {
++        Occurrence occTmp = new Occurrence();
++        Habitat hTmp = new Habitat();
++        hTmp.setAltitude(o.getHabitat().getAltitude());
++        hTmp.setCountry(o.getHabitat().getCountry());
++        hTmp.setDescription(o.getHabitat().getDescription());
++        hTmp.setLatitude(o.getHabitat().getLatitude());
++        hTmp.setLongitude(o.getHabitat().getLongitude());
++        hTmp.setNearestVillage(o.getHabitat().getNearestVillage());
++        hTmp.setNote(o.getHabitat().getNote());
++        hTmp.setPhytochorion(o.getHabitat().getPhytochorion());
++        hTmp.setQuadrant(o.getHabitat().getQuadrant());
++        hTmp.setTerritory(o.getHabitat().getTerritory());
++        hTmp.setDeleted(0);
+         
+-        if (newRecord) {
+-            AuthorOccurrence newAO = new AuthorOccurrence();
+-            newAO.setAuthor(a);
+-            newAO.setOccurrence(o);
+-            return new Pair&lt;AuthorOccurrence,Boolean&gt;(newAO, false);
+-        } else {
+-            AuthorOccurrence ao;
+-            Boolean update;
+-            if (authorOccurrences.containsKey(author.getFirst().getSecond())) {
+-                ao = authorOccurrences.get(author.getFirst().getSecond());
+-                update = true;
++        database.executeInsert(hTmp);
++        
++        occTmp.setDataSource(o.getDataSource());
++        occTmp.setDayCollected(o.getDayCollected());
++        occTmp.setHabitat(hTmp);
++        occTmp.setHerbarium(o.getHerbarium());
++        occTmp.setIsoDateTimeBegin(o.getIsoDateTimeBegin());
++        occTmp.setMetadata(o.getMetadata());
++        occTmp.setMonthCollected(o.getMonthCollected());
++        occTmp.setNote(o.getNote());
++        occTmp.setPlant(o.getPlant());
++        occTmp.setPublication(o.getPublication());
++        occTmp.setTimeCollected(o.getTimeCollected());
++        occTmp.setUnitIdDb(o.getUnitIdDb());
++        occTmp.setUnitValue(o.getUnitValue());
++        occTmp.setYearCollected(o.getYearCollected());
++        occTmp.setDeleted(0);
++        
++        //#### 2BE REMOVED
++        DBLayerUtils dlu = new DBLayerUtils(database);
++        occTmp.setCreatedWhen(new Date());
++        occTmp.setUpdatedWhen(new Date());
++        occTmp.setCreatedWho((User) dlu.getObjectFor(2,User.class));
++        occTmp.setUpdatedWho((User) dlu.getObjectFor(2,User.class));        
++        //####
++        
++        return occTmp;
++    }
++    
++    /** Deletes Habitat for given Occurrence if needed.
++     *
++     * Will delete Habitat if no live Occurrence point at it.
++     *
++     */
++    private void deleteHabitat(Habitat h) {
++        try {
++            SelectQuery sq = database.createQuery(Occurrence.class);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
++            sq.addRestriction(PlantloreConstants.RESTR_NE,Occurrence.DELETED, null, 1, null);
++            int resultid = database.executeQuery(sq);
++            int resultCount = database.getNumRows(resultid);
++            if (resultCount == 0) {
++                logger.info(&quot;Deleting habitat id=&quot;+h.getId()+&quot; with nearest village &quot;+h.getNearestVillage().getName());
++                h.setDeleted(1);
++                database.executeUpdate(h);
+             } else {
+-                ao = new AuthorOccurrence();
+-                update = false;
++                logger.debug(&quot;Leaving habitat id=&quot;+h.getId()+&quot; live. Live Occurrence records point at it.&quot;);
+             }
+-            ao.setAuthor(a);
+-            ao.setOccurrence(o);
+-            return new Pair&lt;AuthorOccurrence, Boolean&gt;(ao, update);
++        } catch (RemoteException e) {
++            e.printStackTrace();
++        } catch (DBLayerException e) {
++            e.printStackTrace();
+         }
+         
+-    }//prepareAuthorOccurrence
++    }
+     
+-    public void storeRecord() {
+-        //FIXME:
++    public void storeRecord(boolean updateAllPlants) {
++        DBLayerUtils dlu = new DBLayerUtils(database);
++
++        logger.info(&quot;Storing occurrence record...&quot;);
++        //FIXME: exception catching/throwing
+         try {     
+-            Pair&lt;AuthorOccurrence,Boolean&gt; rec;
+-            for (int i = 0; i &lt; authorList.size(); i++) {
+-                Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author = authorList.get(i);
+-                if (editMode)
+-                    rec = prepareAuthorOccurrence(false,author);
+-                else
+-                    rec = prepareAuthorOccurrence(true,author);
+-                rec.getFirst().setRole(author.getSecond());
+-                if (rec.getSecond()) {
+-                    logger.info(&quot;Updating AuthorOccurrence record id=&quot;+rec.getFirst().getId());
+-                    database.executeUpdate(rec.getFirst());
+-                } else {
+-                    logger.info(&quot;Creating a new AuthorOccurrence record for author &quot;+author.getFirst().getFirst()+&quot; role &quot;+author.getSecond());
+-                    database.executeInsert(rec.getFirst());
+-                }
+-            }
++                if (editMode) {
++                    boolean originalTaxonSurvived = false;
++                    
++                    for (int t = 0; t &lt; taxonList.size(); t++) {
++                        System.out.print(&quot;#&quot;+taxonOriginal + &quot;# vs #&quot;+taxonList.get(t)+&quot;#&quot;);
++                        if (taxonOriginal.equals(taxonList.get(t))) {
++                            originalTaxonSurvived = true;
++                            break;
++                        }
++                        System.out.println(&quot; NO&quot;);
++                    }
++
++                    prepareOccurrenceUpdate(updateAllPlants);
++                    if (originalTaxonSurvived) {
++                        // update original occurrence
++                        logger.info(&quot;Updating original occurrence&quot;);
++                        database.executeUpdate(o);
++                        logger.debug(&quot;Original occurrence id=&quot;+o.getId()+&quot; updated.&quot;);
++                    } else {
++                        // delete original occurrence and bound author occurrences
++                        logger.info(&quot;Deleting original occurrence and associated author occurrences&quot;);
++                        o.setDeleted(1);
++                        database.executeUpdate(o);
++                        deleteHabitat(o.getHabitat());
++                        logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
++                        Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
++                        Iterator it = aoSet.iterator();
++                        while (it.hasNext()) {
++                            Map.Entry&lt;Integer, AuthorOccurrence&gt; entry = (Entry&lt;Integer, AuthorOccurrence&gt;) it.next();
++                            AuthorOccurrence tmp = entry.getValue();
++                            tmp.setDeleted(1);
++                            database.executeUpdate(tmp);
++                            logger.debug(&quot;AuthorOccurrence id &quot;+tmp.getId()+&quot; &quot;+tmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                        }
++                        //clear the authorOccurrences so that we don't try to delete them once again further in this method
++                        authorOccurrences.clear();
++                        originalAuthors.clear();//user
++                    }//original taxon didn't survive
++                    
++                    /* originalni taxon prezil, ale byl ubran autor
++                     *
++                     */
++                    
++                    
++                    //If the user removed some of the original authors then delete the corresponding authorOccurrences
++                    Iterator it = originalAuthors.iterator();
++                    while (it.hasNext()) {
++                        boolean originalSurvived = false;
++                        Pair&lt;Integer,String&gt; auth = (Pair&lt;Integer,String&gt;)it.next();
++                        AuthorOccurrence aoTmp = null;
++                        for (int i = 0; i &lt; authorList.size(); i++) {
++                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; p = (Pair&lt;Pair&lt;String,Integer&gt;,String&gt;) authorList.get(i);
++                            Pair&lt;String,Integer&gt; pp = p.getFirst();
++                            if (p.getFirst().getSecond().equals(auth.getFirst()) &amp;&amp; p.getSecond().equals(auth.getSecond())) {
++                                originalSurvived = true;
++                                break;
++                            }
++                        }
++                        if (!originalSurvived) {
++                            aoTmp = authorOccurrences.get(auth.getFirst());
++                            aoTmp.setDeleted(1);
++                            database.executeUpdate(aoTmp);
++                            logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+aoTmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                        }
++                    }
++                                        
++                    //Update original authors roles 
++                    for (int j = 0; j &lt; authorList.size(); j++) {
++                        Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(j);
++                        String role = pTmp.getSecond();
++                        if (role == null)
++                            role = &quot;&quot;;
++                        if (originalAuthors.contains(
++                                new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
++                            ) {
++                            logger.info(&quot;Updating authorOccurrence properties for &quot;+pTmp.getFirst().getFirst());
++                            AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getFirst().getSecond());
++                            aoTmp.setRole(pTmp.getSecond());
++                            aoTmp.setResultRevision(resultRevision.get(j));
++                            database.executeUpdate(aoTmp);
++                            logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+pTmp.getFirst().getFirst()+&quot; updated&quot;);
++                        } 
++                    }
++                    
++                    /*At this point we've deleted all that we should have deleted
++                     *
++                     *So we can start inserting
++                     */
++                    
++                    //K++ A?
++                    //pro kazdou novou kytku vytvorit Occurrence a k nemu pro kazdeho autora vytvorit AuthorOccurrence
++                    for (int j = 0; j &lt; taxonList.size(); j++) {
++                        if (taxonOriginal.equals(taxonList.get(j)))
++                            continue; //skip the original taxon, it's been already taken care of 
++                        logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
++                        Occurrence occTmp = cloneOccurrence();
++                        occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
++                        database.executeInsert(occTmp);
++                        logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
++                        Integer id = lookupPlant(taxonList.get(j));
++                        if (!id.equals(-1)) {
++                            Plant plTmp = (Plant) dlu.getObjectFor(id, Plant.class);
++                            occTmp.setPlant(plTmp);
++                        }
++                        
++                        for (int k = 0; k &lt; authorList.size(); k++) {
++                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                            logger.info(&quot;Creating a new authorOccurrence for &quot;+taxonList.get(j)+&quot; and &quot;+pTmp.getFirst().getFirst());
++                            AuthorOccurrence aoTmp = new AuthorOccurrence();
++                            aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                            aoTmp.setRole(pTmp.getSecond());
++                            aoTmp.setResultRevision(resultRevision.get(k));
++                            aoTmp.setOccurrence(occTmp);
++                            aoTmp.setDeleted(0);
++                            database.executeInsert(aoTmp);
++                            logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());
++                        }
++                    }
++                    
++                    
++                    //A++ K-orig
++                    //pro puvodni kytku updatnout puvodni occurrence (uz jsme udelali) a author occurrence (neni potreba) 
++                    //a pro nove autory pro ni vytvorit author occurrence
++                    if (originalTaxonSurvived)
++                        for (int k = 0; k &lt; authorList.size(); k++) {
++                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                            String role = pTmp.getSecond();
++                            if (role == null)
++                                role = &quot;&quot;;
++                            if (!originalAuthors.contains(
++                                    new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
++                                ) {
++                                AuthorOccurrence aoTmp = new AuthorOccurrence();
++                                logger.info(&quot;Creating authorOccurrence for &quot;+o.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
++                                aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                                aoTmp.setRole(pTmp.getSecond());
++                                aoTmp.setResultRevision(resultRevision.get(k));
++                                aoTmp.setOccurrence(o);
++                                aoTmp.setDeleted(0);
++                                database.executeInsert(aoTmp);    
++                                logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());                            
++                            }
++                        }
++                    
++                } else { //Add Mode
++                    Village v;
++                    Phytochorion p;
++                    Territory t;
++                    Habitat h = new Habitat();
++                    v = (Village)dlu.getObjectFor(village.getSecond(),Village.class);
++                    p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
++                    t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);                    
++                    h.setAltitude(altitude);
++                    h.setCountry(phytCountry);
++                    h.setDescription(localityDescription);
++                    h.setLatitude(latitude);
++                    h.setLongitude(longitude);
++                    h.setNearestVillage(v);
++                    h.setNote(habitatNote);
++                    h.setPhytochorion(p);
++                    h.setQuadrant(quadrant);
++                    h.setTerritory(t);
++                    h.setDeleted(0);
++                    logger.info(&quot;Creating a shared habitat&quot;);
++                    database.executeInsert(h);//insert the shared habitat
++                    logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
++                        
++                    for (int j = 0; j &lt; taxonList.size(); j++) {
++                        logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
++                        Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
++                        database.executeInsert(occ);
++                        logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
++                        
++                        for (int k = 0; k &lt; authorList.size(); k++) {
++                            Pair&lt;Pair&lt;String,Integer&gt;,String&gt; pTmp = authorList.get(k);
++                            logger.info(&quot;Creating an AuthorOccurrence for &quot;+occ.getPlant().getTaxon()+&quot; and &quot;+pTmp.getFirst().getFirst());
++                            AuthorOccurrence aoTmp = new AuthorOccurrence();
++                            aoTmp.setRole(pTmp.getSecond());
++                            aoTmp.setAuthor((Author)dlu.getObjectFor(pTmp.getFirst().getSecond(),Author.class));
++                            aoTmp.setResultRevision(resultRevision.get(k));
++                            aoTmp.setOccurrence(occ);
++                            aoTmp.setDeleted(0);
++                            database.executeInsert(aoTmp);                            
++                        }//for authorList
++                    }// for taxonList
++                }//add mode
+         } catch (RemoteException ex) {
+             ex.printStackTrace();
+         } catch (DBLayerException ex) {
+@@ -934,18 +1243,87 @@
+         }        
+     }//createRecord()
+     
++    public Pair&lt;Boolean,String&gt; checkData() {
++        //TODO: check that the author set contains reasonable (not null) values
++        if (authorList.size() &lt; 1)
++            return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one author!&quot;);
++        if (taxonList.size() &lt; 1)
++            return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one taxon!&quot;);
++        
++        Pair&lt;Pair&lt;String,Integer&gt;,String&gt; ai, aj;
++        for (int i=0; i &lt; authorList.size() ; i++) {
++            ai = authorList.get(i);
++            Integer aiId = ai.getFirst().getSecond();
++            String aiRole = ai.getSecond();
++            for (int j=i+1; j &lt; authorList.size() ; j++) {
++                aj = authorList.get(j);
++                Integer ajId = aj.getFirst().getSecond();
++                String ajRole = aj.getSecond();
++                if (aiId.equals(ajId) &amp;&amp; aiRole.equals(ajRole)) {
++                    return new Pair&lt;Boolean,String&gt;(false, &quot;Author can appear only once in each role. Please modify &quot;+ai.getFirst().getFirst());
++                }
++            }
++        }
++        
++        return new Pair&lt;Boolean,String&gt;(true,&quot;&quot;);
++    }
+     
++    private void loadHabitatSharingOccurrences() {
++        Habitat h = o.getHabitat();
++        //FIXME:
++        try {
++            SelectQuery sq = database.createQuery(Occurrence.class);        
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
++            int resultid = database.executeQuery(sq);
++            int resultCount = database.getNumRows(resultid);
++            habitatSharingOccurrences = new Occurrence[resultCount];
++            
++            Object[] results = database.more(resultid, 0, resultCount-1);
++            Object[] tmp;
++            Occurrence occurrence;
++            for (int i = 0; i &lt; resultCount; i++) {
++                tmp = (Object[]) results[i];
++                occurrence = (Occurrence)tmp[0];
++                habitatSharingOccurrences[i] = occurrence;
++            }
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        } catch (RemoteException ex) {
++            ex.printStackTrace();
++        }
++    }
++    
++    /** returns all occurrences sharing the habitat - that means including the current working occurrence
++     */
++    public  Occurrence[] getHabitatSharingOccurrences() {
++        //sdili je? mozna s kym
++            //ano - zmena u vsech? ... zmenime to normalne - to co mame
++            //ne  - zmena jen u naseho zaznamu, tj. new Habitat h, insert(h), o.setHabitat(h), update(o) 
++        if (habitatSharingOccurrences != null)
++            return habitatSharingOccurrences;   
++        else {
++            loadHabitatSharingOccurrences();
++            return habitatSharingOccurrences;
++        }
++    }
++    
++    
++    /**As a side effect stores the AuthorOccurrence objects into &lt;code&gt;authorOccurrences&lt;/code&gt;
++     * Also creates new resultRevision arrayList and loads data into it... :-/
++     */
+     private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; getAuthorsOf(Occurrence o) {
+         ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorResults = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
+         authorOccurrences = new HashMap&lt;Integer,AuthorOccurrence&gt;();
++        resultRevision = new ArrayList();
+         //FIXME:
+         try {
+             //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
+             SelectQuery sq = database.createQuery(AuthorOccurrence.class);        
+             sq.addRestriction(PlantloreConstants.RESTR_EQ,AuthorOccurrence.OCCURRENCE,null,o,null);
++            sq.addRestriction(PlantloreConstants.RESTR_NE, AuthorOccurrence.DELETED, null, 1, null);
+             int resultid = database.executeQuery(sq);
+             int resultCount = database.getNumRows(resultid);
+-            Object[] results = database.more(resultid, 1, resultCount);
++            Object[] results = database.more(resultid, 0, resultCount-1);
+             Object[] tmp;
+             AuthorOccurrence ao;
+             Author a;
+@@ -953,9 +1331,15 @@
+                 tmp = (Object[]) results[i];
+                 ao = (AuthorOccurrence)tmp[0];
+                 a = ao.getAuthor();
++                String role = ao.getRole();
++                if (role == null)
++                    role = &quot;&quot;;/* avoid problems with null value... (we need to compare role for example in checkData() where we do role.equals())
++                            * so if we didn't set it here to empty string a NullPointerException could be thrown
++                            */
+                 authorResults.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(
+-                        new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),ao.getRole() ) );
++                        new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),role ) );
+                 authorOccurrences.put(a.getId(),ao);
++                resultRevision.add(ao.getResultRevision());
+             }
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+@@ -968,6 +1352,7 @@
+     
+     public void addAuthorRow() {
+         authorList.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(new Pair&lt;String,Integer&gt;(&quot;&quot;,0),&quot;&quot;));
++        resultRevision.add(null);
+         logger.info(&quot;Adding a new author row&quot;);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;addAuthorRow&quot;,-1));
+@@ -975,6 +1360,7 @@
+     
+     public void removeAuthorRow(int i) {
+         authorList.remove(i);
++        resultRevision.remove(i);
+         logger.info(&quot;AddEdit: Removing author row #&quot;+i);
+         setChanged();
+         notifyObservers(new Pair&lt;String,Integer&gt;(&quot;removeAuthorRow&quot;,i));        
+@@ -989,6 +1375,31 @@
+         authorList.get(i).setSecond(role);
+         logger.debug(&quot;Author role in row &quot;+i+&quot; set to &quot;+role);
+     }
++    
++    public void setResultRevision(int i, String revision) {
++        if (revision != null) {
++            resultRevision.set(i, revision);
++            logger.debug(&quot;AuthorOccurrence note #&quot;+i+&quot; set to &quot;+revision);
++        }
++    }
++    
++    public String getResultRevision(int i) {
++        return resultRevision.get(i);
++    }
++
++    public void setTaxons(ArrayList taxonList) {
++        //remove duplicities
++        for (int i=0 ; i &lt; taxonList.size() ; i++) {
++            for (int j=i+1 ; j &lt; taxonList.size() ; j++) {
++                if (taxonList.get(i).equals(taxonList.get(j)))
++                    taxonList.remove(j);
++            }
++        }
++        this.taxonList = taxonList;
++        for (int i = 0; i &lt; taxonList.size(); i++) {
++            logger.debug(&quot;Taxon list contains plant #&quot;+taxonList.get(i)+&quot;#&quot;);
++        }
++    }
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -19,19 +19,24 @@
+ import java.awt.event.MouseEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.util.ArrayList;
+ import java.util.Date;
+ import javax.swing.DefaultCellEditor;
+ import javax.swing.JButton;
+ import javax.swing.JComboBox;
+ import javax.swing.JFormattedTextField;
++import javax.swing.JOptionPane;
+ import javax.swing.JSpinner;
+ import javax.swing.JTextArea;
+ import javax.swing.JTextField;
+ import javax.swing.event.ChangeEvent;
+ import javax.swing.event.ChangeListener;
+ import javax.swing.table.TableColumn;
++import javax.swing.text.BadLocationException;
+ import net.sf.plantlore.common.AutoComboBox;
++import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.record.Occurrence;
+ 
+ /**
+  *
+@@ -150,8 +155,15 @@
+         }
+ 
+         public void focusLost(FocusEvent e) {
+-            JTextArea ta = (JTextArea) e.getSource();
+-            model.setTaxon(ta.getText());
++            ArrayList&lt;String&gt; taxonList = new ArrayList&lt;String&gt;();
++            AutoTextArea ta = (AutoTextArea) e.getSource();
++            int lineCount = ta.getLineCount();
++            for (int i=0; i &lt; lineCount; i++) {
++                String tmp = ta.getLine(i);
++                if (tmp.length() &gt; 1) //omit empty lines
++                    taxonList.add(tmp);
++            }
++            model.setTaxons(taxonList);
+         }
+     }//taxonAreaListener
+     
+@@ -257,8 +269,41 @@
+     
+     class OkButtonListener extends MouseAdapter {
+         public void mouseClicked(MouseEvent e) {
+-            model.storeRecord();
+-            view.setVisible(false);
++            int choice=-1;
++            Pair&lt;Boolean,String&gt; check = model.checkData();
++            if (!check.getFirst()) {
++                JOptionPane.showMessageDialog(view,check.getSecond());
++            } else {
++                Occurrence[] sharedOcc = model.getHabitatSharingOccurrences();
++                if (sharedOcc.length &gt; 1) {
++                    Object[] options = {&quot;All&quot;,&quot;Just this&quot;,&quot;Cancel&quot;};
++                    choice = JOptionPane.showOptionDialog(view, 
++                            &quot;This plant's habitat is shared by &quot;+sharedOcc.length+&quot; other occurrences. \nDo you want to edit all the plants or just this one?&quot;,
++                            &quot;Multiple plants share the same habitat&quot;,
++                            JOptionPane.YES_NO_CANCEL_OPTION,
++                            JOptionPane.QUESTION_MESSAGE,
++                            null,
++                            options,
++                            options[0]);
++                    System.out.println(&quot;User selected &quot;+options[choice]);
++                    switch (choice) {
++                        case 0:
++                            model.storeRecord(true);
++                            view.setVisible(false);
++                            break;
++                        case 1:
++                            model.storeRecord(false);
++                            view.setVisible(false);
++                            break;
++                        case 2:
++                        default:                        
++                            //we'll do nothing and leave the AddEdit dialog visible
++                    }
++                } else {
++                        model.storeRecord(true);
++                        view.setVisible(false);                    
++                }
++            }
+         }
+     }//OkButtonListener
+     
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-08 10:09:42 UTC (rev 232)
+@@ -48,74 +48,77 @@
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;YearLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;22&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;YearLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;yearSpinner&quot; min=&quot;-2&quot; pref=&quot;73&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;102&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;157&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;checklistButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
++                      &lt;Component id=&quot;jScrollPane3&quot; alignment=&quot;0&quot; pref=&quot;322&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;322&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;85&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;townComboBox&quot; pref=&quot;223&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;266&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jScrollPane3&quot; alignment=&quot;0&quot; pref=&quot;266&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;extendedButton&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;110&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;0&quot; pref=&quot;254&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;extendedButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;townComboBox&quot; alignment=&quot;0&quot; pref=&quot;254&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;townComboBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;24&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;TownLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;26&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;1&quot;&gt;
+-                                  &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;38&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; pref=&quot;69&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;53&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;53&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;yearSpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;YearLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;/Group&gt;
++                              &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;checklistButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;extendedButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;/Group&gt;
++                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;checklistButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;yearSpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;YearLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;extendedButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;183&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -179,6 +182,7 @@
+                 &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;descriptionArea.setLineWrap(true);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -806,6 +810,7 @@
+                     &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
+                   &lt;/Properties&gt;
+                   &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;locationNoteArea.setLineWrap(true);&quot;/&gt;
+                     &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                   &lt;/AuxValues&gt;
+                 &lt;/Component&gt;
+@@ -1072,6 +1077,7 @@
+                     &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
+                   &lt;/Properties&gt;
+                   &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;occurrenceNoteArea.setLineWrap(true);&quot;/&gt;
+                     &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                   &lt;/AuxValues&gt;
+                 &lt;/Component&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -158,6 +158,7 @@
+ 
+         descriptionArea.setColumns(20);
+         descriptionArea.setRows(5);
++        descriptionArea.setLineWrap(true);
+         jScrollPane2.setViewportView(descriptionArea);
+ 
+         taxonTextArea.setColumns(20);
+@@ -200,59 +201,59 @@
+         jPanel2Layout.setHorizontalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel2Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(TaxonLabel)
++                    .add(YearLabel))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel2Layout.createSequentialGroup()
+-                        .add(22, 22, 22)
+-                        .add(YearLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 73, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 102, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 157, Short.MAX_VALUE)
+                         .add(checklistButton))
+-                    .add(jPanel2Layout.createSequentialGroup()
+-                        .addContainerGap()
+-                        .add(TaxonLabel)
++                    .add(jScrollPane3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 322, Short.MAX_VALUE)
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 322, Short.MAX_VALUE))
++                .add(85, 85, 85)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(TownLabel)
++                    .add(jLabel2))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(townComboBox, 0, 223, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel2Layout.createSequentialGroup()
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 266, Short.MAX_VALUE)
+-                            .add(jScrollPane3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 266, Short.MAX_VALUE))))
+-                .add(110, 110, 110)
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(jLabel2)
+-                    .add(TownLabel))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 254, Short.MAX_VALUE)
+-                    .add(extendedButton)
+-                    .add(townComboBox, 0, 254, Short.MAX_VALUE))
++                            .add(extendedButton)
++                            .add(jScrollPane2))))
+                 .addContainerGap())
+         );
+         jPanel2Layout.setVerticalGroup(
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel2Layout.createSequentialGroup()
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel2Layout.createSequentialGroup()
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                            .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 24, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                            .add(TownLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jLabel2)
+-                            .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 24, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                        .add(26, 26, 26)
+-                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel2Layout.createSequentialGroup()
+-                                .add(TownLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                                .add(TaxonLabel)
+-                                .add(38, 38, 38))
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                            .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                     .add(jPanel2Layout.createSequentialGroup()
+                         .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 69, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 53, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(checklistButton)
+-                    .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(YearLabel)
+-                    .add(extendedButton))
+-                .add(4, 4, 4))
++                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(TaxonLabel)
++                            .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 53, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                .add(yearSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                                .add(YearLabel))
++                            .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                                .add(checklistButton)
++                                .add(extendedButton)))))
++                .add(183, 183, 183))
+         );
+         getContentPane().add(jPanel2, java.awt.BorderLayout.NORTH);
+ 
+@@ -456,6 +457,7 @@
+         jPanel7.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Location note&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         locationNoteArea.setColumns(20);
+         locationNoteArea.setRows(5);
++        locationNoteArea.setLineWrap(true);
+         jScrollPane4.setViewportView(locationNoteArea);
+ 
+         org.jdesktop.layout.GroupLayout jPanel7Layout = new org.jdesktop.layout.GroupLayout(jPanel7);
+@@ -568,6 +570,7 @@
+         jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Ocurrence note&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         occurrenceNoteArea.setColumns(20);
+         occurrenceNoteArea.setRows(5);
++        occurrenceNoteArea.setLineWrap(true);
+         jScrollPane5.setViewportView(occurrenceNoteArea);
+ 
+         org.jdesktop.layout.GroupLayout jPanel9Layout = new org.jdesktop.layout.GroupLayout(jPanel9);
+@@ -697,16 +700,25 @@
+             tableModel = new AuthorTableModel(model);
+         authorTable.setModel(tableModel);
+ 
+-        authorTable.setDefaultEditor(JButton.class, new ButtonEditor());
+-        authorTable.setDefaultRenderer(JButton.class, new ButtonEditor());
++        //authorTable.setDefaultEditor(JButton.class, new ButtonEditor());
++        //authorTable.setDefaultRenderer(JButton.class, new ButtonEditor());
+ 
+         TableColumn tc1 = authorTable.getColumnModel().getColumn(0);
+         TableColumn tc2 = authorTable.getColumnModel().getColumn(1);
++        TableColumn tc3 = authorTable.getColumnModel().getColumn(2);
++        TableColumn tc4 = authorTable.getColumnModel().getColumn(3);
+ 
+         JComboBox cb = new AutoComboBox(model.getAuthors());
+         tc1.setCellEditor(new DefaultCellEditor(cb));  
+         cb = new AutoComboBox(model.getAuthorRoles());
+         tc2.setCellEditor(new DefaultCellEditor(cb));
++        
++        ButtonEditor be = new ButtonEditor(model);
++        tc3.setCellEditor(be);
++        tc3.setCellRenderer(be);
++        
++        AuthorRevisionEditor are = new AuthorRevisionEditor(model);
++        tc4.setCellEditor(are);
+     }
+     
+     private void resetAuthorModel() {
+@@ -734,7 +746,7 @@
+         initAuthorTable();
+         
+         townComboBox.setSelectedItem(model.getVillage());
+-        taxonTextArea.insert(model.getTaxon(),0);
++        taxonTextArea.setText(model.getTaxon(0));
+         descriptionArea.setText(model.getLocalityDescription());
+         yearSpinner.setValue(model.getYear());
+         
+@@ -822,7 +834,7 @@
+             tableModel.removeRow(i);
+             //unfortunately have to set up the editors and renderers again because of the
+             //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
+-            initAuthorTable();            
++            //initAuthorTable();            
+         }
+     }
+         
+
+Added: trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -0,0 +1,80 @@
++/*
++ * AuthorRevisionEditor.java
++ *
++ * Created on 5. kv&#283;ten 2006, 14:42
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.awt.Component;
++import java.awt.event.ActionEvent;
++import java.util.ArrayList;
++import java.util.HashMap;
++import javax.swing.AbstractAction;
++import javax.swing.AbstractCellEditor;
++import javax.swing.JButton;
++import javax.swing.JOptionPane;
++import javax.swing.JTable;
++import javax.swing.table.TableCellEditor;
++import javax.swing.table.TableModel;
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class AuthorRevisionEditor extends AbstractCellEditor implements TableCellEditor {
++    HashMap&lt;Integer,JButton&gt; buttonMap = new HashMap&lt;Integer,JButton&gt;();
++    HashMap&lt;JButton,Integer&gt; buttonMapInverted = new HashMap&lt;JButton,Integer&gt;();
++    AddEdit aemodel;
++    String value = &quot;&quot;;
++    
++    class RevisionAction extends AbstractAction {
++        public RevisionAction() {
++            putValue(NAME, L10n.getString(&quot;addEditRevision&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;addEditRevisionTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;addEditRevision&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent e) {
++            JButton button = (JButton)e.getSource();
++            int row = buttonMapInverted.get(button);
++            String s = (String)JOptionPane.showInputDialog(null,&quot;Enter the note, please&quot;,&quot;AuthorOccurrence note&quot;,JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
++            value = s;
++            if (s != null) {
++                aemodel.setResultRevision(row,s);
++            } else { // user pressed cancel
++                value = e.getActionCommand();
++            }
++            fireEditingStopped();
++        }
++    }
++    
++    /** Creates a new instance of AuthorRevisionEditor */
++    public AuthorRevisionEditor(AddEdit aemodel) {
++        this.aemodel = aemodel;
++    }
++
++
++    public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
++        if (!buttonMap.containsKey(row)) {
++            JButton button = new JButton();
++            button.addActionListener(new RevisionAction());
++            button.setActionCommand(&quot;&quot;);
++            buttonMap.put(row,button);
++            buttonMapInverted.put(button,row);
++        }
++        JButton button = buttonMap.get(row);
++        TableModel tm = table.getModel();
++        button.setActionCommand((String) value);
++        return button;
++    }
++
++    public Object getCellEditorValue() {
++        return value;
++    }
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -12,32 +12,16 @@
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.util.ArrayList;
++import javax.swing.AbstractAction;
+ import javax.swing.JButton;
++import javax.swing.JOptionPane;
+ import javax.swing.event.TableModelEvent;
+ import javax.swing.event.TableModelListener;
+ import javax.swing.table.AbstractTableModel;
+ import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.l10n.L10n;
+ 
+-/** Listener for buttons in the table.
+- * Adds or removes rows calling the view according to the button's text.
+- */
+-class AuthorButtonListener implements ActionListener {
+-    AddEdit aemodel;
+-    
+-    public AuthorButtonListener(AddEdit aemodel) {
+-        this.aemodel = aemodel;
+-    }
+-    
+-    public void actionPerformed(ActionEvent actionEvent) {
+-        JButton btn = (JButton) actionEvent.getSource();
+-        if (btn.getText().equals(&quot;Add&quot;))
+-            aemodel.addAuthorRow();
+-        else
+-            aemodel.removeAuthorRow(Integer.parseInt(actionEvent.getActionCommand()));
+-    }
+-}
+ 
+-
+ /** Table model for the authors table in AddEditView.
+  *
+  */
+@@ -48,13 +32,14 @@
+     
+     public AuthorTableModel(AddEdit aemodel) {
+         this.aemodel = aemodel;
+-        row = new Object[3];
++        row = new Object[4];
+         row[0] = new Pair(&quot;&quot;,0);
+         row[1] = &quot;&quot;;
+-        JButton b = new JButton(&quot;Add&quot;);
++/*        JButton b = new JButton(&quot;Add&quot;);
+         b.addActionListener(new AuthorButtonListener(aemodel));
+-        b.setActionCommand(&quot;0&quot;);
+-        row[2] = b;
++        b.setActionCommand(&quot;0&quot;); */
++        row[2] = &quot;&quot;;//x
++        row[3] = &quot;&quot;;
+         data.add(row);
+         loadDataFromModel();
+         fireTableDataChanged();
+@@ -62,18 +47,19 @@
+     
+     private void loadDataFromModel() {
+         for (int i = 0; i &lt; aemodel.getAuthorCount(); i++)
+-            addRow(aemodel.getAuthor(i), aemodel.getAuthorRole(i));        
++            addRow(aemodel.getAuthor(i), aemodel.getAuthorRole(i), aemodel.getResultRevision(i));        
+     }
+     
+     public void reset() {
+         data.clear();
+-        row = new Object[3];
++        row = new Object[4];
+         row[0] = new Pair(&quot;&quot;,0);
+         row[1] = &quot;&quot;;
+-        JButton b = new JButton(&quot;Add&quot;);
++/*        JButton b = new JButton(&quot;Add&quot;);
+         b.addActionListener(new AuthorButtonListener(aemodel));
+-        b.setActionCommand(&quot;0&quot;);
+-        row[2] = b;
++        b.setActionCommand(&quot;0&quot;); */
++        row[2] = //x;
++        row[3] = &quot;&quot;;
+         data.add(row);
+         loadDataFromModel();
+         fireTableDataChanged();        
+@@ -81,17 +67,18 @@
+     
+     public void addRow() {
+         //create a new row
+-        row = new Object[3];
++        row = new Object[4];
+         row[0] = new Pair(&quot;&quot;,0);
+         row[1] = &quot;&quot;;
+-        JButton b = new JButton(&quot;Add&quot;);
++/*        JButton b = new JButton(&quot;Add&quot;);
+         b.addActionListener(new AuthorButtonListener(aemodel));
+-        b.setActionCommand(&quot;&quot;+data.size());
+-        row[2] = b;
++        b.setActionCommand(&quot;&quot;+data.size()); */
++        row[2] = &quot;&quot;;//x
++        row[3] = &quot;&quot;;
+         
+         //get the last row and update it's text to Remove
+-        Object[] rowTmp = data.get(data.size()-1);
+-        ((JButton)rowTmp[2]).setText(&quot;Remove&quot;);
++//        Object[] rowTmp = data.get(data.size()-1);
++//        ((JButton)rowTmp[2]).setText(&quot;Remove&quot;);
+         
+         data.add(row);
+ 
+@@ -100,30 +87,32 @@
+         fireTableRowsInserted(data.size()-1,data.size()-1);
+     }
+     
+-    public void addRow(Pair&lt;String, Integer&gt; author, String role) {
++    public void addRow(Pair&lt;String, Integer&gt; author, String role, String revision) {
+         addRow();
+         Object[] row = data.get(data.size()-2);
+         row[0] = author;
+         row[1] = role;
++        row[3] = revision;
+         fireTableDataChanged();
+     }
+     
+     public void removeRow(int i) {
+         System.out.println(&quot;AuthorTableModel: removing row #&quot;+i);
+         Object[] row = data.remove(i);
+-        JButton b = (JButton)row[2];
++
++/*        JButton b = (JButton)row[2];
+         for (int j=0; j &lt; data.size(); j++){
+             b = (JButton)data.get(j)[2];
+             b.setActionCommand(&quot;&quot;+j);
+         }
+-
++*/
+         //we fire that in case someone would like to register a table model listener with us
+         //and get some reasonable data
+         fireTableRowsDeleted(i,i);
+ 
+         //unfortunately have to do this so that each cell regets it's updated renderer
+         //which is needed for the last row mainly
+-        fireTableStructureChanged();
++        //fireTableStructureChanged();
+     }
+     
+     public int getRowCount() {
+@@ -149,6 +138,8 @@
+             aemodel.setAuthor(r, (Pair&lt;String, Integer&gt;) o);
+         if (c == 1)
+             aemodel.setAuthorRole(r, (String) o);
++        if (c == 3)
++            aemodel.setResultRevision(r, (String) o);
+     }
+     
+     public Class getColumnClass(int c) {
+@@ -163,6 +154,8 @@
+                 return String.class;
+             case 2:
+                 return JButton.class;
++            case 3:
++                return JButton.class;
+             default:
+                 return null;
+         }                                
+@@ -186,6 +179,8 @@
+                 return &quot;Role&quot;;
+             case 2:
+                 return &quot;&quot;;
++            case 3:
++                return &quot;Revision&quot;;
+             default:
+                 return &quot;&quot;;
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/ButtonEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -15,11 +15,13 @@
+ import java.awt.event.MouseAdapter;
+ import java.awt.event.MouseEvent;
+ import java.util.ArrayList;
++import java.util.HashMap;
+ import javax.swing.AbstractCellEditor;
+ import javax.swing.JButton;
+ import javax.swing.JTable;
+ import javax.swing.table.TableCellEditor;
+ import javax.swing.table.TableCellRenderer;
++import javax.swing.table.TableModel;
+ 
+ /** Button Editor and Renderer used by the author table in AddEdit dialog.
+  *
+@@ -27,24 +29,74 @@
+  * @author reimei
+  */
+ public class ButtonEditor extends AbstractCellEditor implements TableCellEditor, TableCellRenderer  {
+-    JButton button;
++    HashMap&lt;Integer,JButton&gt; editors = new HashMap&lt;Integer,JButton&gt;();
++    JButton addButton, removeButton;
++    AddEdit aemodel;
+     
++    /** Listener for buttons in the table.
++     * Adds or removes rows calling the view according to the button's text.
++     */
++    class AuthorButtonListener implements ActionListener {
++        AddEdit aemodel;
++
++        public AuthorButtonListener(AddEdit aemodel) {
++            this.aemodel = aemodel;
++        }
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            JButton btn = (JButton) actionEvent.getSource();
++            if (btn.getText().equals(&quot;Add&quot;))
++                aemodel.addAuthorRow();
++            else
++                aemodel.removeAuthorRow(Integer.parseInt(actionEvent.getActionCommand()));     
++            fireEditingStopped();
++        }
++    }
++
+     /** Creates a new instance of ButtonEditor */
+-    public ButtonEditor() {
+-        button = new JButton(&quot;Add&quot;);
++    public ButtonEditor(AddEdit aemodel) {
++        this.aemodel = aemodel;
++        addButton = new JButton(&quot;Add&quot;);
++        removeButton = new JButton(&quot;Remove&quot;);
+     }
+ 
+     public Object getCellEditorValue() {
+-        return button;
++        System.out.println(&quot;ButtonEditor.java: returning cell editor value&quot;);
++        return &quot;Kdo vi co a jak&quot;;
+     }
+     public Component getTableCellEditorComponent(JTable table, Object value,
+                                                  boolean isSelected,
+                                                  int row,
+                                                  int column) {
+-        return (Component)table.getModel().getValueAt(row,2);
++        TableModel tm = table.getModel();
++        int rowCount = tm.getRowCount();
++        
++        if (!editors.containsKey(row)) {
++            JButton button = new JButton();
++            button.addActionListener(new AuthorButtonListener(aemodel));
++            editors.put(row, button);
++        }
++        
++        JButton button = editors.get(row);
++        if (row == (rowCount-1)) {
++            button.setText(&quot;Add&quot;);
++            button.setActionCommand(&quot;&quot;);
++        } else {
++            button.setText(&quot;Remove&quot;);
++            button.setActionCommand(&quot;&quot;+row);
++        }
++        
++        return button;
+     }
+ 
+     public Component getTableCellRendererComponent(JTable table, Object object, boolean b, boolean b0, int row, int i0) {
+-        return (Component)table.getModel().getValueAt(row,2);
++        TableModel tm = table.getModel();
++        int rowCount = tm.getRowCount();
++        
++        if (row == (rowCount-1)) {
++            return addButton;
++        } else {
++            return removeButton;
++        }
+     }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -70,7 +70,7 @@
+      */
+     private boolean simple = true;
+     
+-    private int from = 1;
++    private int from = 0;
+     private int to = 1;
+     
+     /** Creates a new instance of OverviewTableModel */
+@@ -83,6 +83,7 @@
+         this.db = db;
+         SelectQuery sq = db.createQuery(Occurrence.class);
+         sq.addOrder(PlantloreConstants.DIRECT_ASC, Occurrence.YEARCOLLECTED); //setridit podle roku
++        sq.addRestriction(PlantloreConstants.RESTR_NE, Occurrence.DELETED, null, 1, null);
+         //FIXME:
+         try {
+             setResultid(db.executeQuery(sq));
+@@ -154,7 +155,7 @@
+             int resultid = db.executeQuery(sq);
+             int resultCount = db.getNumRows(resultid);
+             authorResults = new Pair[resultCount];
+-            Object[] results = db.more(resultid, 1, resultCount);
++            Object[] results = db.more(resultid, 0, resultCount-1);
+             Object[] tmp;
+             Author a;
+             for (int i = 0; i &lt; resultCount; i++) {
+@@ -175,56 +176,59 @@
+      */
+     private void loadData() throws DBLayerException, RemoteException
+     {
++        logger.info(&quot;Loading data for overview.&quot;);
+         Object[] row;
+         Occurrence result;
+         Plant plant;
+         Object[] resultObj, records;
+         resultsCount = db.getNumRows(getResultid());
+-        logger.debug(&quot;resultsCount = &quot;+resultsCount);
+-        to = Math.min(resultsCount, from + pageSize - 1);
+-        logger.debug(&quot;to = &quot;+to+&quot; from=&quot;+from+&quot; currentPage=&quot;+currentPage);
+-        data = new Object[to - from + 1][];
+-        logger.debug(&quot;data.length = &quot;+data.length);
+-        records = db.more(getResultid(), from, to);
+-        logger.debug(&quot;records.length = &quot; + records.length);
++        if (resultsCount &gt; 0) {
++            logger.debug(&quot;resultsCount = &quot;+resultsCount);
++            to = Math.min(resultsCount-1, from + pageSize - 1);
++            logger.debug(&quot;to = &quot;+to+&quot; from=&quot;+from+&quot; currentPage=&quot;+currentPage);
++            data = new Object[to - from + 1][];
++            logger.debug(&quot;data.length = &quot;+data.length);
++            records = db.more(getResultid(), from, to);
++            logger.debug(&quot;records.length = &quot; + records.length);
+ 
+-        for (int i = 1; i &lt;= to - from + 1 ; i++) {
+-            resultObj = (Object[])records[i-1];
+-            result = (Occurrence)resultObj[0];
+-            Record999 r = new Record999(result.getId(), false, from + i - 1);
+-            if (from + i - 1 &gt; recordsArray.size()) //most probably much faster than to ask recordsArray.contains(r)
+-                recordsArray.add(r);
+-            else 
+-                r = recordsArray.get(from+i-2);//array starts from 0 whereas records are numbered from 1
+-            
+-            row = new Object[COLUMN_COUNT + 1]; //we'll store the record id in the last column
+-            row[0] = r.selected;
+-            row[1] = r.number;
+-            row[2] = result.getPlant().getTaxon();
+-            row[3] = ((Object[])getAuthorsOf(result))[0];//occurrence must have at least one author, we'll choose the first one
+-            row[4] = result.getHabitat().getNearestVillage().getName();
+-            row[5] = result.getHabitat().getDescription();
+-            row[6] = result.getYearCollected();
+-            row[7] = result.getHabitat().getTerritory().getName();
+-            row[8] = result.getHabitat().getPhytochorion().getName();
+-            row[9] = result.getHabitat().getPhytochorion().getCode();
+-            row[10] = result.getHabitat().getCountry();
+-            row[11] = result.getHabitat().getQuadrant();
+-            row[12] = result.getNote();
+-            row[13] = result.getHabitat().getNote();
+-            row[14] = result.getHabitat().getAltitude();
+-            row[15] = result.getHabitat().getLongitude();
+-            row[16] = result.getHabitat().getLatitude();
+-            row[17] = result.getDataSource();
+-            row[18] = result.getPublication().getCollectionName();
+-            row[19] = result.getHerbarium();
+-            row[20] = result.getMetadata().getDataSetTitle();
+-            row[21] = result.getMonthCollected();
+-            row[22] = result.getDayCollected();
+-            row[23] = result.getTimeCollected();
+-            row[24] = result; //won't  be displayed, because in getColumnCount we pretend not to have this column
+-            data[i-1] = row;
+-        }//i        
++            for (int i = 0; i &lt; data.length ; i++) {
++                resultObj = (Object[])records[i];
++                result = (Occurrence)resultObj[0];
++                Record999 r = new Record999(result.getId(), false, from + i + 1);//we want to show the user numbers starting from 1 therefor the +1
++                if (from + i + 1 &gt; recordsArray.size()) //most probably much faster than to ask recordsArray.contains(r)
++                    recordsArray.add(r);
++                else 
++                    r = recordsArray.get(from+i);
++
++                row = new Object[COLUMN_COUNT + 1]; //we'll store the record id in the last column
++                row[0] = r.selected;
++                row[1] = r.number;
++                row[2] = result.getPlant().getTaxon();
++                row[3] = ((Object[])getAuthorsOf(result))[0];//occurrence must have at least one author, we'll choose the first one
++                row[4] = result.getHabitat().getNearestVillage().getName();
++                row[5] = result.getHabitat().getDescription();
++                row[6] = result.getYearCollected();
++                row[7] = result.getHabitat().getTerritory().getName();
++                row[8] = result.getHabitat().getPhytochorion().getName();
++                row[9] = result.getHabitat().getPhytochorion().getCode();
++                row[10] = result.getHabitat().getCountry();
++                row[11] = result.getHabitat().getQuadrant();
++                row[12] = result.getNote();
++                row[13] = result.getHabitat().getNote();
++                row[14] = result.getHabitat().getAltitude();
++                row[15] = result.getHabitat().getLongitude();
++                row[16] = result.getHabitat().getLatitude();
++                row[17] = result.getDataSource();
++                row[18] = result.getPublication().getCollectionName();
++                row[19] = result.getHerbarium();
++                row[20] = result.getMetadata().getDataSetTitle();
++                row[21] = result.getMonthCollected();
++                row[22] = result.getDayCollected();
++                row[23] = result.getTimeCollected();
++                row[24] = result; //won't  be displayed, because in getColumnCount we pretend not to have this column
++                data[i] = row;
++            }//i        
++        }//if resultsCount &gt; 1
+     }
+     
+     //momentalne nepouzita metoda
+@@ -268,6 +272,9 @@
+         return columnNames[c];
+     }
+     
++    /* nepouziva se
++     * primo v overview nelze editovat
++     */
+     public void setValueAt(Object value, int row, int column) {
+         data[row][column] = value;
+         if (column == 0)
+@@ -324,9 +331,9 @@
+     public void setPageSize(int pageSize) {
+         this.pageSize = pageSize;
+         if (from + pageSize &gt; resultsCount)
+-            from = resultsCount - pageSize + 1;
+-        if (from &lt; 1) //pageSize was bigger than the number of results
+-            from = 1;
++            from = resultsCount - pageSize;
++        if (from &lt; 0) //pageSize was bigger than the number of results
++            from = 0;
+         
+         currentPage = from / pageSize + 1;
+         //FIXME: 
+
+Modified: trunk/src/net/sf/plantlore/common/AutoTextArea.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -347,9 +347,20 @@
+ 	 * @return	The string on the specified line.
+ 	 * @throws BadLocationException	If there is no such line.
+ 	 */
+-	public String getLine(int line) throws BadLocationException {
+-		int start = getLineStartOffset(line), end = getLineEndOffset(line);
+-		return getText(start, end - start).trim();
++	public String getLine(int line) {
++            int start, end;
++            String s;
++            try {
++		start = getLineStartOffset(line);
++                end = getLineEndOffset(line);
++                s = getText(start, end - start);
++            } catch (BadLocationException ble) {
++                throw new IndexOutOfBoundsException(&quot;&quot;+line);
++            }
++            if (s.length() &gt; 0 &amp;&amp; s.charAt(s.length()-1) == '\n')
++                return s.substring(0,s.length()-1);
++            else
++                return s;
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -46,7 +46,7 @@
+             int resultCount = db.getNumRows(resultid);
+             if (resultCount == 0)
+                 return null;
+-            Object[] results = db.more(resultid, 1, 1);
++            Object[] results = db.more(resultid, 0, 0);
+             Object[] tmp = (Object[]) results[0];
+             return (Record)tmp[0];
+             
+
+Modified: trunk/src/net/sf/plantlore/common/Pair.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Pair.java	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/common/Pair.java	2006-05-08 10:09:42 UTC (rev 232)
+@@ -70,6 +70,14 @@
+         }
+     }
+     
++    /** Needed for the Pair to work with hash tables (HashSet, HashMap, ...).
++     * See JavaDoc for Object.hashCode()
++     */
++    @Override
++    public int hashCode() {
++    	return a.hashCode() ^ b.hashCode();
++    }    
++    
+     /** Converts this pair to String.
+      *
+      * @return &quot;[first,second]&quot; in case first and second are both instances of String
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-07 19:28:08 UTC (rev 231)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-08 10:09:42 UTC (rev 232)
+@@ -88,6 +88,10 @@
+ overviewPageStatus=Page:
+ overviewPageStatusTT=Current page / Total number of pages
+ 
++#AddEdit
++addEditRevision=&amp;Revision
++addEditRevisionTT=Add revision details
++
+ authorMgr=Author manager
+ 
+ publicationMgr=Publication manager
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000273.html">[Plantlore-dev] Fwd:Lada - Poznamky ke schuzce
+</A></li>
+	<LI>Next message: <A HREF="000274.html">[Plantlore-dev] r233 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#272">[ date ]</a>
+              <a href="thread.html#272">[ thread ]</a>
+              <a href="subject.html#272">[ subject ]</a>
+              <a href="author.html#272">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

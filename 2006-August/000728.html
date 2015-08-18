@@ -1,0 +1,763 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r531 - in trunk/src/net/sf/plantlore/common: .	record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r531%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%0A%09record&In-Reply-To=%3C200608192030.k7JKU2UY018576%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000727.html">
+   <LINK REL="Next"  HREF="000729.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r531 - in trunk/src/net/sf/plantlore/common: .	record</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r531%20-%20in%20trunk/src/net/sf/plantlore/common%3A%20.%0A%09record&In-Reply-To=%3C200608192030.k7JKU2UY018576%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r531 - in trunk/src/net/sf/plantlore/common: .	record">krater at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 19 22:30:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000727.html">[Plantlore-dev] [Bug #8467] Throws exception on resize while	loading data
+</A></li>
+        <LI>Next message: <A HREF="000729.html">[Plantlore-dev] [Bug #8480] Search query is wrong!!
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#728">[ date ]</a>
+              <a href="thread.html#728">[ thread ]</a>
+              <a href="subject.html#728">[ subject ]</a>
+              <a href="author.html#728">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-19 22:29:55 +0200 (Sat, 19 Aug 2006)
+New Revision: 531
+
+Modified:
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+Log:
+All basic records fortified (in order to simplify the reconstruction of records from a file).
+
+DBLayerUtils: A high-level method for a whole-record processing. You supply the Occurrence and all its AuthorOccurrences and the processRecord() method takes care of them (performs insert/update/delete according to the situation).
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -886,4 +886,176 @@
+ 	
+ 	
+ 	
++	
++	/**
++	 * NOT TESTED!
++	 * 
++	 * High-level record processor. 
++	 * Incorporates all rules that bind the record processing. 
++	 * 
++	 * @param occ	The basic occurrence record.
++	 * @param aos	All AuthorOccurrences belonging to the &lt;code&gt;occ&lt;/code&gt;.
++	 */
++	public void processRecord(Occurrence occ, AuthorOccurrence... aos) 
++	throws DBLayerException, RemoteException {
++		
++		// Preliminary validity check.
++		if( !occ.areAllNNSet() )
++			throw new DBLayerException(L10n.getString(&quot;Error.IncompleteRecord&quot;));
++		
++		// If the record is dead, then it is clearly meant to be deleted!
++		Intention intention =  occ.isDead() ? Intention.DELETE : Intention.UNKNOWN; 
++			
++		 // Try to find a matching Occurrence record in the database.
++		SelectQuery q = db.createQuery(Occurrence.class);
++		q.addRestriction(RESTR_EQ, Occurrence.UNITIDDB, null, occ.getUnitIdDb(), null);
++		q.addRestriction(RESTR_EQ, Occurrence.UNITVALUE, null, occ.getUnitValue(), null);
++		int resultId = db.executeQuery( q );
++		int rows = db.getNumRows( resultId );
++		if(rows &gt; 1)
++			throw new DBLayerException(L10n.getString(&quot;Error.AmbiguousRecord&quot;));
++
++		boolean isInDB = (rows != 0);
++		Occurrence occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
++		db.closeQuery(q); 
++		boolean isDead = isInDB ? occInDB.isDead() : false;
++			
++		// Begin a new transaction.
++		db.beginTransaction();
++			
++		try {
++			// The `occ` IS in the database as `occInDB` already.  
++			if( isInDB ) {
++				if( isDead )
++					switch(intention) {
++					case DELETE:
++						// Nothing to be done, the record is already dead.
++						break;
++					default:
++						occInDB = (Occurrence) update( occInDB, occ );
++					}
++				else
++					switch(intention) {
++					case DELETE:
++						occInDB = (Occurrence) delete( occInDB );
++						break;
++					default:
++						if( occInDB.equals(occ) )
++							occ = occInDB;
++						else
++							occInDB = (Occurrence) update( occInDB, occ );
++					}
++			}
++			// The `occ` is NOT in the database. 
++			else  
++				switch(intention) {
++				case DELETE:	
++					// There's nothing to delete.
++					break;
++				default:
++					occInDB = (Occurrence) insert( occ );
++				}
++			
++		} catch(DBLayerException e) {
++			// Roll back the transaction.
++			db.rollbackTransaction();
++			throw e;
++		} catch(RemoteException e) {
++			// Roll back the transaction.
++			db.rollbackTransaction();
++			throw e;
++		}
++			
++		 // Now, deal with Authors associated with this Occurrence.
++		int numberOfUndeadAuthors = 0; 
++			
++		// If the Occurrence record should have been DELETED,
++		// there is nothing more to be done.
++		if( intention == Intention.DELETE ) {
++			db.commitTransaction();
++		}
++		// The intention was to ADD or UPDATE the existing Occurrence record.  
++		else {
++			AuthorOccurrence[] aosInDB = new AuthorOccurrence[0];
++			if( isInDB ) 
++				aosInDB = findAllAuthors(occInDB, false);
++			// Compute the number of undead authors (authors, that are not marked as deleted). 
++			for(AuthorOccurrence ao : aosInDB) {
++				ao.setOccurrence( null ); // simplify the comparison
++				if( !ao.isDead() ) 
++					numberOfUndeadAuthors++ ;
++			}
++				
++			for( AuthorOccurrence ao : aos ) {
++				if( !ao.areAllNNSet() ) {
++					logger.warn(&quot;The AuthorOccurrence is incomplete - the Author is missing or a NN column is not set!&quot;);
++					continue;
++				}
++					
++				// Simplify the comparison (the Occurrence is known...)
++				ao.setOccurrence( null );
++					
++				// Check if that AuthorOccurrence is already in the database.
++				AuthorOccurrence aoInDB = null;
++				for( AuthorOccurrence alpha : aosInDB ) {
++					if( alpha.equalsUpTo( ao, AuthorOccurrence.DELETED ) ) {
++						aoInDB = alpha;
++						break;
++					}
++				}
++					
++				//	The Occurrence `occInDB` is in the database, that is for sure.
++				// The ao.Occurrence, however, is NOT from the database.
++				ao.setOccurrence( occInDB ); // now it's fine
++					
++				// The intention with this AuthorOccurrence. 
++				intention = ao.isDead() ? Intention.DELETE : Intention.UNKNOWN;
++					
++				try {
++					// [A] AO is not in the database.
++					if(aoInDB == null)
++						switch(intention) {
++						case DELETE:
++							break;
++						default:
++							insert( ao );							
++							numberOfUndeadAuthors++;
++						}
++						// [B] AO is in the database already.
++						else
++							switch(intention) {
++							case DELETE:
++								if( !aoInDB.isDead() ) {
++									aoInDB.setOccurrence( occInDB ); // repair the simplified ao
++									delete( aoInDB ); // delete the ao
++									numberOfUndeadAuthors--;
++								}
++								break;
++							default:
++								if( aoInDB.isDead() ) {
++									aoInDB.setOccurrence( occInDB ); // repair the simplified ao
++									aoInDB.setDeleted(0);
++									db.executeUpdateInTransaction( aoInDB ); // revive the ao
++									numberOfUndeadAuthors++;
++								}
++								break;
++							}
++				} catch (DBLayerException e) {
++					continue;
++				}
++					
++			}
++			
++			// Transaction is valid iff everything went fine and the number of undead authors is positive.
++			if( numberOfUndeadAuthors &gt; 0 )
++				db.commitTransaction();
++			else {
++				db.rollbackTransaction();
++				throw new DBLayerException(L10n.getString(&quot;Error.NoAuthorsLeft&quot;));
++			}
++			
++			
++		}
++	}
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -67,22 +67,22 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-    	if(column.equals(ID)) {
++    	if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-    	else if(column.equals(WHOLENAME)) setWholeName((String)value);
+-    	else if(column.equals(ORGANIZATION)) setOrganization((String)value);
+-    	else if(column.equals(ROLE)) setRole((String)value);
+-    	else if(column.equals(ADDRESS)) setAddress((String)value);
+-    	else if(column.equals(PHONENUMBER)) setPhoneNumber((String)value);
+-    	else if(column.equals(EMAIL)) setEmail((String)value);
+-    	else if(column.equals(URL)) setUrl((String)value);
+-    	else if(column.equals(NOTE)) setNote((String)value);
+-        else if(column.equals(CREATEDWHO)) setCreatedWho((User)value);                        
+-        else if(column.equals(DELETED)) { 
++    	else if(column.equalsIgnoreCase(WHOLENAME)) setWholeName((String)value);
++    	else if(column.equalsIgnoreCase(ORGANIZATION)) setOrganization((String)value);
++    	else if(column.equalsIgnoreCase(ROLE)) setRole((String)value);
++    	else if(column.equalsIgnoreCase(ADDRESS)) setAddress((String)value);
++    	else if(column.equalsIgnoreCase(PHONENUMBER)) setPhoneNumber((String)value);
++    	else if(column.equalsIgnoreCase(EMAIL)) setEmail((String)value);
++    	else if(column.equalsIgnoreCase(URL)) setUrl((String)value);
++    	else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
++        else if(column.equalsIgnoreCase(CREATEDWHO)) setCreatedWho((User)value);                        
++        else if(column.equalsIgnoreCase(DELETED)) { 
+         	if (value != null &amp;&amp; value instanceof String) 
+         		setDeleted(Integer.parseInt((String) value));
+         	else 
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -59,17 +59,17 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(AUTHOR)) setAuthor((Author)value);
+-		else if(column.equals(OCCURRENCE)) setOccurrence((Occurrence)value);
+-		else if(column.equals(ROLE)) setRole((String)value);
+-		else if(column.equals(NOTE)) setNote((String)value);
+-		else if(column.equals(DELETED)) {
++		else if(column.equalsIgnoreCase(AUTHOR)) setAuthor((Author)value);
++		else if(column.equalsIgnoreCase(OCCURRENCE)) setOccurrence((Occurrence)value);
++		else if(column.equalsIgnoreCase(ROLE)) setRole((String)value);
++		else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
++		else if(column.equalsIgnoreCase(DELETED)) {
+ 			if(value != null &amp;&amp; value instanceof String) 
+ 				setDeleted(Integer.parseInt((String) value));
+ 			else 
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -84,44 +84,44 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value) )
+     		value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(TERRITORY)) setTerritory((Territory)value);
+-		else if(column.equals(PHYTOCHORION)) setPhytochorion((Phytochorion)value);
+-		else if(column.equals(NEARESTVILLAGE) || column.equals(VILLAGE)) setNearestVillage((Village)value);
+-		else if(column.equals(QUADRANT)) setQuadrant((String)value);
+-		else if(column.equals(DESCRIPTION)) setDescription((String)value);
+-		else if(column.equals(COUNTRY)) setCountry((String)value);
+-		else if(column.equals(CREATEDWHO)) setCreatedWho((User)value); 
+-		else if(column.equals(ALTITUDE)) {
++		else if(column.equalsIgnoreCase(TERRITORY)) setTerritory((Territory)value);
++		else if(column.equalsIgnoreCase(PHYTOCHORION)) setPhytochorion((Phytochorion)value);
++		else if(column.equalsIgnoreCase(NEARESTVILLAGE) || column.equals(VILLAGE)) setNearestVillage((Village)value);
++		else if(column.equalsIgnoreCase(QUADRANT)) setQuadrant((String)value);
++		else if(column.equalsIgnoreCase(DESCRIPTION)) setDescription((String)value);
++		else if(column.equalsIgnoreCase(COUNTRY)) setCountry((String)value);
++		else if(column.equalsIgnoreCase(CREATEDWHO)) setCreatedWho((User)value); 
++		else if(column.equalsIgnoreCase(ALTITUDE)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setAltitude(Double.parseDouble((String) value));
+ 			else 
+ 				setAltitude((Double)value);
+ 		}
+-		else if(column.equals(LATITUDE)) {
++		else if(column.equalsIgnoreCase(LATITUDE)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setLatitude(Double.parseDouble((String) value));
+ 			else 
+ 				setLatitude((Double)value);
+ 		}
+-		else if(column.equals(LONGITUDE)) { 
++		else if(column.equalsIgnoreCase(LONGITUDE)) { 
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setLongitude(Double.parseDouble((String) value));
+ 			else 
+ 				setLongitude((Double)value);
+ 		}
+-		else if(column.equals(DELETED)) {
++		else if(column.equalsIgnoreCase(DELETED)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setDeleted(Integer.parseInt((String) value));
+ 			else 
+ 				setDeleted((Integer)value);
+ 		}
+-		else if(column.equals(NOTE)) setNote((String)value);
++		else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -89,33 +89,33 @@
+         if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(TECHNICALCONTACTADDRESS)) setTechnicalContactAddress((String)value);
+-		else if(column.equals(TECHNICALCONTACTEMAIL)) setTechnicalContactEmail((String)value);
+-		else if(column.equals(TECHNICALCONTACTNAME)) setTechnicalContactName((String)value);
+-		else if(column.equals(CONTENTCONTACTADDRESS)) setContentContactAddress((String)value);
+-		else if(column.equals(CONTENTCONTACTEMAIL)) setContentContactEmail((String)value);
+-		else if(column.equals(CONTENTCONTACTNAME)) setContentContactName((String)value);
+-		else if(column.equals(DATASETDETAILS)) setDataSetDetails((String)value);
+-		else if(column.equals(DATASETTITLE)) setDataSetTitle((String)value);
+-		else if(column.equals(SOURCEID)) setSourceId((String)value);
+-		else if(column.equals(SOURCEINSTITUTIONID)) setSourceInstitutionId((String)value);
+-		else if(column.equals(OWNERORGANIZATIONABBREV)) setOwnerOrganizationAbbrev((String)value);
+-		else if(column.equals(BIOTOPETEXT)) setBiotopeText((String)value);
+-		else if(column.equals(RECORDBASIS)) setRecordBasis((String)value);
+-		else if(column.equals(DELETED)) {
++		else if(column.equalsIgnoreCase(TECHNICALCONTACTADDRESS)) setTechnicalContactAddress((String)value);
++		else if(column.equalsIgnoreCase(TECHNICALCONTACTEMAIL)) setTechnicalContactEmail((String)value);
++		else if(column.equalsIgnoreCase(TECHNICALCONTACTNAME)) setTechnicalContactName((String)value);
++		else if(column.equalsIgnoreCase(CONTENTCONTACTADDRESS)) setContentContactAddress((String)value);
++		else if(column.equalsIgnoreCase(CONTENTCONTACTEMAIL)) setContentContactEmail((String)value);
++		else if(column.equalsIgnoreCase(CONTENTCONTACTNAME)) setContentContactName((String)value);
++		else if(column.equalsIgnoreCase(DATASETDETAILS)) setDataSetDetails((String)value);
++		else if(column.equalsIgnoreCase(DATASETTITLE)) setDataSetTitle((String)value);
++		else if(column.equalsIgnoreCase(SOURCEID)) setSourceId((String)value);
++		else if(column.equalsIgnoreCase(SOURCEINSTITUTIONID)) setSourceInstitutionId((String)value);
++		else if(column.equalsIgnoreCase(OWNERORGANIZATIONABBREV)) setOwnerOrganizationAbbrev((String)value);
++		else if(column.equalsIgnoreCase(BIOTOPETEXT)) setBiotopeText((String)value);
++		else if(column.equalsIgnoreCase(RECORDBASIS)) setRecordBasis((String)value);
++		else if(column.equalsIgnoreCase(DELETED)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setDeleted(Integer.parseInt((String) value));
+ 			else 
+ 				setDeleted((Integer)value);
+ 		}
+-		else if(column.equals(DATECREATE)) setDateCreate((java.util.Date)value);
+-		else if(column.equals(DATEMODIFIED)) setDateModified((java.util.Date)value);
++		else if(column.equalsIgnoreCase(DATECREATE)) setDateCreate((java.util.Date)value);
++		else if(column.equalsIgnoreCase(DATEMODIFIED)) setDateModified((java.util.Date)value);
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -104,44 +104,44 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(UNITIDDB)) setUnitIdDb((String)value);
+-		else if(column.equals(UNITVALUE)) setUnitValue((String)value);
+-		else if(column.equals(HABITAT)) setHabitat((Habitat)value);
+-		else if(column.equals(PLANT)) setPlant((Plant)value);
+-		else if(column.equals(YEARCOLLECTED)) {
++		else if(column.equalsIgnoreCase(UNITIDDB)) setUnitIdDb((String)value);
++		else if(column.equalsIgnoreCase(UNITVALUE)) setUnitValue((String)value);
++		else if(column.equalsIgnoreCase(HABITAT)) setHabitat((Habitat)value);
++		else if(column.equalsIgnoreCase(PLANT)) setPlant((Plant)value);
++		else if(column.equalsIgnoreCase(YEARCOLLECTED)) {
+ 			if (value != null &amp;&amp; value instanceof String)  
+ 				setYearCollected(Integer.parseInt((String) value));
+ 			else 
+ 				setYearCollected((Integer)value);
+ 		}
+-		else if(column.equals(MONTHCOLLECTED)) {
++		else if(column.equalsIgnoreCase(MONTHCOLLECTED)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setMonthCollected(Integer.parseInt((String) value));
+ 			else 
+ 				setMonthCollected((Integer)value);
+ 		}
+-		else if(column.equals(DAYCOLLECTED)) { 
++		else if(column.equalsIgnoreCase(DAYCOLLECTED)) { 
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setDayCollected(Integer.parseInt((String) value));
+ 			else  
+ 				setDayCollected((Integer)value);
+ 		}
+-		else if(column.equals(TIMECOLLECTED)) setTimeCollected(checkDate(value));
+-		else if(column.equals(ISODATETIMEBEGIN)) setIsoDateTimeBegin(checkDate(value));
+-		else if(column.equals(DATASOURCE)) setDataSource((String)value);
+-		else if(column.equals(PUBLICATION)) setPublication((Publication)value);
+-		else if(column.equals(HERBARIUM)) setHerbarium((String)value);
+-		else if(column.equals(CREATEDWHEN)) setCreatedWhen(checkDate(value));
+-		else if(column.equals(UPDATEDWHEN)) setUpdatedWhen(checkDate(value));
+-		else if(column.equals(METADATA)) setMetadata((Metadata)value);
+-		else if(column.equals(NOTE)) setNote((String)value);
+-		else if(column.equals(DELETED)) {
++		else if(column.equalsIgnoreCase(TIMECOLLECTED)) setTimeCollected(checkDate(value));
++		else if(column.equalsIgnoreCase(ISODATETIMEBEGIN)) setIsoDateTimeBegin(checkDate(value));
++		else if(column.equalsIgnoreCase(DATASOURCE)) setDataSource((String)value);
++		else if(column.equalsIgnoreCase(PUBLICATION)) setPublication((Publication)value);
++		else if(column.equalsIgnoreCase(HERBARIUM)) setHerbarium((String)value);
++		else if(column.equalsIgnoreCase(CREATEDWHEN)) setCreatedWhen(checkDate(value));
++		else if(column.equalsIgnoreCase(UPDATEDWHEN)) setUpdatedWhen(checkDate(value));
++		else if(column.equalsIgnoreCase(METADATA)) setMetadata((Metadata)value);
++		else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
++		else if(column.equalsIgnoreCase(DELETED)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setDeleted(Integer.parseInt((String)value));
+ 			else
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -55,14 +55,14 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(CODE)) setCode((String)value);
+-		else if(column.equals(NAME)) setName((String)value);
++		else if(column.equalsIgnoreCase(CODE)) setCode((String)value);
++		else if(column.equalsIgnoreCase(NAME)) setName((String)value);
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -66,20 +66,20 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(SURVEYTAXID)) setSurveyTaxId((String)value);
+-		else if(column.equals(TAXON)) setTaxon((String)value);
+-		else if(column.equals(GENUS)) setGenus((String)value);
+-		else if(column.equals(SPECIES)) setSpecies((String)value);
+-		else if(column.equals(SCIENTIFICNAMEAUTHOR)) setScientificNameAuthor((String)value);
+-		else if(column.equals(CZECHNAME)) setCzechName((String)value);
+-		else if(column.equals(SYNONYMS)) setSynonyms((String)value);
+-		else if(column.equals(NOTE)) setNote((String)value);
++		else if(column.equalsIgnoreCase(SURVEYTAXID)) setSurveyTaxId((String)value);
++		else if(column.equalsIgnoreCase(TAXON)) setTaxon((String)value);
++		else if(column.equalsIgnoreCase(GENUS)) setGenus((String)value);
++		else if(column.equalsIgnoreCase(SPECIES)) setSpecies((String)value);
++		else if(column.equalsIgnoreCase(SCIENTIFICNAMEAUTHOR)) setScientificNameAuthor((String)value);
++		else if(column.equalsIgnoreCase(CZECHNAME)) setCzechName((String)value);
++		else if(column.equalsIgnoreCase(SYNONYMS)) setSynonyms((String)value);
++		else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -71,32 +71,32 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(COLLECTIONNAME)) setCollectionName((String)value);
+-		else if(column.equals(COLLECTIONYEARPUBLICATION)) { 
++		else if(column.equalsIgnoreCase(COLLECTIONNAME)) setCollectionName((String)value);
++		else if(column.equalsIgnoreCase(COLLECTIONYEARPUBLICATION)) { 
+ 			if (value != null &amp;&amp; value instanceof String)
+ 				setCollectionYearPublication(Integer.parseInt((String) value));
+ 			else 
+ 				setCollectionYearPublication((Integer)value);
+ 		}
+-		else if(column.equals(JOURNALNAME)) setJournalName((String)value);
+-		else if(column.equals(JOURNALAUTHORNAME)) setJournalAuthorName((String)value);
+-		else if(column.equals(REFERENCECITATION)) setReferenceCitation((String)value);
+-		else if(column.equals(REFERENCEDETAIL)) setReferenceDetail((String)value);
+-		else if(column.equals(URL)) setUrl((String)value);
+-		else if(column.equals(DELETED)) {
++		else if(column.equalsIgnoreCase(JOURNALNAME)) setJournalName((String)value);
++		else if(column.equalsIgnoreCase(JOURNALAUTHORNAME)) setJournalAuthorName((String)value);
++		else if(column.equalsIgnoreCase(REFERENCECITATION)) setReferenceCitation((String)value);
++		else if(column.equalsIgnoreCase(REFERENCEDETAIL)) setReferenceDetail((String)value);
++		else if(column.equalsIgnoreCase(URL)) setUrl((String)value);
++		else if(column.equalsIgnoreCase(DELETED)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setDeleted(Integer.parseInt((String) value));
+ 			else 
+ 				setDeleted((Integer)value);
+ 		}
+-		else if(column.equals(CREATEDWHO)) setCreatedWho((User)value);                
+-		else if(column.equals(NOTE)) setNote((String)value);
++		else if(column.equalsIgnoreCase(CREATEDWHO)) setCreatedWho((User)value);                
++		else if(column.equalsIgnoreCase(NOTE)) setNote((String)value);
+     }
+     
+     @Override 
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -111,7 +111,7 @@
+ 	 * @return	The subrecord of the specified type.
+ 	 */
+ 	public Record findSubrecord(Class type) {
+-		return getClass().equals(type) ? this : findSubrecord(this, type);
++		return findSubrecord(this, type);
+ 	}
+ 
+ 	/**
+@@ -121,7 +121,9 @@
+ 	 * @param type	The type of the subrecord.
+ 	 * @return	The subrecord of the specified type.
+ 	 */
+-	public Record findSubrecord(Record base, Class type) {
++	public static Record findSubrecord(Record base, Class type) {
++		if(base.getClass().equals(type))
++			return base;
+ 		for(String key : base.getForeignKeys()) {
+ 			Record sub = (Record)base.getValue(key);
+ 			if(sub == null) continue; // As a matter of fact this can happen - Publication can be NULL.
+@@ -132,6 +134,27 @@
+ 		return null;
+ 	}
+ 	
++	
++	public Record findSubrecord(String name) {
++		return findSubrecord(this, name);
++	}
++	
++	public static Record findSubrecord(Record base, String name) {
++		if( base.getClass().getSimpleName().equalsIgnoreCase(name) )
++			return base;
++		for(String key : base.getForeignKeys()) {
++			Record sub = (Record) base.getValue(key);
++			if(sub == null) 
++				continue;
++			if(sub.getClass().getSimpleName().equalsIgnoreCase(name)) 
++				return sub;
++			sub = findSubrecord(sub, name);
++			if(sub != null)
++				return sub;
++		}
++		return null;
++	}
++	
+ 	/**
+ 	 * The name of the package where all records (holder objects) dwell.
+ 	 */
+@@ -166,10 +189,18 @@
+ 	 * @param value	The value to be set to that column.
+ 	 */
+ 	public void setValue(Class table, String column, Object value) {
+-		Record subrecord = (  getClass().equals(table) ? this : findSubrecord(this, table)  );
+-		if(subrecord != null) subrecord.setValue(column, value);
++		Record subrecord = findSubrecord(table);
++		if(subrecord != null) 
++			subrecord.setValue(column, value);
+ 	}
+ 	
++	
++	public void setValue(String table, String column, Object value) {
++		Record subrecord = findSubrecord(table);
++		if(subrecord != null) 
++			subrecord.setValue(column, value);
++	}
++	
+ 	/**
+ 	 * Set the value in the specified column.
+ 	 * 
+@@ -384,15 +415,18 @@
+ 	 */
+ 	@Override
+ 	public String toString() {
++		
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+ 			sigma.append(getClass().getSimpleName()).append('.').
+-			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;&quot;);
++			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;\n&quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+ 			if(subrecord != null)	sigma.append( subrecord.toString() );
+ 		}
+ 		return sigma.toString();
++		
++		//return this.getClass().getSimpleName();
+ 	}
+ 	                
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -37,13 +37,13 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(NAME)) setName((String)value);
++		else if(column.equalsIgnoreCase(NAME)) setName((String)value);
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-08-17 18:41:45 UTC (rev 530)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-08-19 20:29:55 UTC (rev 531)
+@@ -37,13 +37,13 @@
+     	if(value instanceof String &amp;&amp; &quot;&quot;.equals(value))
+         	value = null;
+     	
+-		if(column.equals(ID)) {
++		if(column.equalsIgnoreCase(ID)) {
+ 			if(value != null &amp;&amp; value instanceof String)
+ 				setId(Integer.parseInt((String)value));
+ 			else
+ 				setId((Integer)value);
+ 		}
+-		else if(column.equals(NAME)) setName((String)value);
++		else if(column.equalsIgnoreCase(NAME)) setName((String)value);
+     }
+     
+     /** Creates a new instance of Village */
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000727.html">[Plantlore-dev] [Bug #8467] Throws exception on resize while	loading data
+</A></li>
+	<LI>Next message: <A HREF="000729.html">[Plantlore-dev] [Bug #8480] Search query is wrong!!
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#728">[ date ]</a>
+              <a href="thread.html#728">[ thread ]</a>
+              <a href="subject.html#728">[ subject ]</a>
+              <a href="author.html#728">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

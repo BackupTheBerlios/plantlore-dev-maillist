@@ -1,0 +1,356 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r292 - in trunk/src/net/sf/plantlore: client/export common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r292%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20common/record&In-Reply-To=%3C200605180945.k4I9jJMn009986%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000343.html">
+   <LINK REL="Next"  HREF="000346.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r292 - in trunk/src/net/sf/plantlore: client/export common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r292%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20common/record&In-Reply-To=%3C200605180945.k4I9jJMn009986%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r292 - in trunk/src/net/sf/plantlore: client/export common/record">krater at berlios.de
+       </A><BR>
+    <I>Thu May 18 11:45:19 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000343.html">[Plantlore-dev] r291 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+        <LI>Next message: <A HREF="000346.html">[Plantlore-dev] r293 - in trunk/src/net/sf/plantlore: client/export client/imports common common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#344">[ date ]</a>
+              <a href="thread.html#344">[ thread ]</a>
+              <a href="subject.html#344">[ subject ]</a>
+              <a href="author.html#344">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-18 11:45:17 +0200 (Thu, 18 May 2006)
+New Revision: 292
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+The DefaultDirector reconstructs records from values.
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-17 23:25:53 UTC (rev 291)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-18 09:45:17 UTC (rev 292)
+@@ -2,8 +2,10 @@
+ 
+ import java.io.IOException;
+ import java.rmi.RemoteException;
++import java.util.List;
+ import java.util.Observable;
+ 
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.exception.ExportException;
+@@ -54,10 +56,16 @@
+ 	private DBLayer database;
+ 	private int result;
+ 	
++	private boolean ignoreDead = true;
++	
+ 	private boolean aborted = false;
+ 	private boolean useProjections = false;
+ 	
++	private List&lt;Pair&lt;Class, String&gt;&gt; description;
++	
+ 	private int count = 0;
++	
++	private Class rootTable;
+ 
+ 
+ 	/**
+@@ -90,11 +98,20 @@
+ 	 * @param database	The database layer that will quench the Director's thirst for more results.
+ 	 * @param selection	The set of selected records.
+ 	 * @param useProjections	Use projections instead of standard records.
++	 * @param description	The list of [Table, Column] - values of these columns will be returned 
++	 * by the database layer if projections are used
+ 	 */
+-	public DefaultDirector(Builder builder, int result, DBLayer database, Selection selection, boolean useProjections) 
++	public DefaultDirector(Builder builder, int result, DBLayer database, Selection selection, 
++			boolean useProjections, List&lt;Pair&lt;Class, String&gt;&gt; description, Class rootTable) 
+ 	throws ExportException {
+ 		this(builder, result, database, selection);
+ 		this.useProjections = useProjections;
++		this.description = description;
++		this.rootTable = rootTable;
++		if(rootTable != null) try { 
++			torso = (Record)rootTable.newInstance();
++			torso.createTorso();
++		} catch (Exception e) {}
+ 	}
+ 	
+ 	
+@@ -155,6 +172,15 @@
+ 		this.selection = selection.clone();
+ 	}
+ 	
++	/**
++	 * Set whether records marked as dead should be omited. Default is true.
++	 * 
++	 * @param ignore	True if dead records should be omited.
++	 */
++	public void ignoreDead(boolean ignore) {
++		this.ignoreDead = ignore;
++	}
++	
+ 	/** 
+ 	 * How many records have been exported.
+ 	 * 
+@@ -192,6 +218,7 @@
+ 			Object[] pulp = database.more( resultId, i, i );
+ 			AuthorOccurrence ao = (AuthorOccurrence) ((Object[])pulp[0])[0];
+ 			ao.setOccurrence( null ); // cut off the way back to the occurrence
++			if(ao.isDead() &amp;&amp; ignoreDead) continue;
+ 			
+ 			logger.debug(&quot;New author-occurence record: &quot; + ao);
+ 			
+@@ -219,10 +246,13 @@
+ 				
+ 				logger.info(&quot;Fetching a new record from the database.&quot;);
+ 				
+-				// Abandon the database.nect() Object[] records = database.next( result );
+-				Object[] records = database.more( result, i, i );
+-				Record record = (Record) ((Object[])records[0])[0]; // [0][0] since we use `more`
++				Record record;
++				if(useProjections) 
++					record = reconstruct( (Object[])database.more( result, i, i )[0] );
++				else
++					record = (Record)((Object[])database.more( result, i, i )[0])[0];
+ 				
++				
+ 				logger.debug(&quot;New record No. &quot;+i+&quot; fetched: &quot;+record);
+ 				if( !selection.contains( record ) ) continue; // Is the record selected?
+ 				
+@@ -263,5 +293,16 @@
+ 	public void abort() {
+ 		aborted = true;
+ 	}
++	
++	
++	private Record torso;
++	
++	private Record reconstruct(Object[] values) {
++		for(int i = 0; i &lt; description.size(); i++ ) {
++			Pair&lt;Class, String&gt; d = description.get(i);
++			torso.setValue(d.getFirst(), d.getSecond(), values[i]);
++		}
++		return torso;
++	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-17 23:25:53 UTC (rev 291)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-18 09:45:17 UTC (rev 292)
+@@ -94,6 +94,7 @@
+ 		
+ 	
+ 	protected boolean useProjections = false;
++	protected Class rootTable;
+ 	
+ 	
+ 	/**
+@@ -185,6 +186,18 @@
+ 		this.useProjections = useProjections;
+ 	}
+ 	
++	
++	synchronized public void setRootTable(Class rootTable) 
++	throws ExportException {
++		if(isExportInProgress()) {
++			logger.warn(&quot;Cannot change the Root Table while Export is still in progress!&quot;);
++			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
++		}
++		this.rootTable = rootTable;
++	}
++	
++	
++	
+ 	/**
+ 	 * Set a new DBLayer.
+ 	 * &lt;b&gt;Forget the current result set identificator AND/OR selection query&lt;/b&gt;
+@@ -374,7 +387,7 @@
+ 			builder = new TrainingBuilder(template);
+ 
+ 		// Create a new Director and run it in a separate thread.
+-		director = new DefaultDirector(builder, resultId, db, select, useProjections);
++		director = new DefaultDirector(builder, resultId, db, select, useProjections, template.getDescription(), rootTable);
+ 		director.addObserver(this);
+ 		
+ 		current = new Thread( director, &quot;Export&quot; );
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-17 23:25:53 UTC (rev 291)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-18 09:45:17 UTC (rev 292)
+@@ -3,7 +3,9 @@
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
++import java.util.List;
+ 
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import static net.sf.plantlore.common.PlantloreConstants.PROJ_PROPERTY;
+@@ -126,16 +128,24 @@
+ 	}
+ 	
+ 	
++	private List&lt;Pair&lt;Class, String&gt;&gt; plan;
+ 	
++	public List&lt;Pair&lt;Class, String&gt;&gt; getDescription() {
++		return plan;
++	}
++	
+ 	/**
+ 	 * Add projections to the query according to the selected columns.
+ 	 * 
+ 	 * @param q	The query to be modified.
+ 	 * @param tables	The important tables. The first table is considered the root table.
++	 * @return The column description.
+ 	 */
+-	public void addProjections(SelectQuery q, Class...tables) {
++	public List&lt;Pair&lt;Class, String&gt;&gt; addProjections(SelectQuery q, Class...tables) {
++		plan = new ArrayList&lt;Pair&lt;Class,String&gt;&gt;(20);
+ 		for(int i = 0; i &lt; tables.length; i++)
+ 			addProjections(q, tables[i], i == 0);
++		return plan;
+ 	}
+ 	
+ 	
+@@ -143,8 +153,10 @@
+ 		try {
+ 			Record r = (Record)table.newInstance();
+ 			for(String property : r.getProperties())
+-				if( isSet(table, property) )
++				if( isSet(table, property) ) {
+ 					q.addProjection(PROJ_PROPERTY, (omitAlias ? property : Record.alias(table)+&quot;.&quot;+property));
++					plan.add(new Pair&lt;Class, String&gt;(table, property));
++				}
+ 		} catch(Exception e) {}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-17 23:25:53 UTC (rev 291)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-18 09:45:17 UTC (rev 292)
+@@ -60,11 +60,17 @@
+ 			catch(InstantiationException e) { e.printStackTrace(); }
+ 	}
+ 
+-	
++	/**
++	 * @return	Alias used for this table.
++	 */
+ 	public String alias() {
+ 		return alias( getClass() );
+ 	}
+-	
++
++	/**
++	 * @param table	The table whose alias we need.
++	 * @return	The alias for that table.
++	 */
+ 	public static String alias(Class table) {
+ 		return &quot;A&quot; + table.getSimpleName();
+ 	}
+@@ -95,8 +101,15 @@
+ 		Record subrecord = (  getClass().equals(table) ? this : findSubrecord(this, table)  );
+ 		return (subrecord == null) ? null : subrecord.getValue(column);
+ 	}
+-	
+-	private Record findSubrecord(Record base, Class type) {
++
++	/**
++	 * Return the subrecord of the base record of the specified type.
++	 * 
++	 * @param base	The base record.
++	 * @param type	The type of the subrecord.
++	 * @return	The subrecord of the specified type.
++	 */
++	public Record findSubrecord(Record base, Class type) {
+ 		for(String key : base.getForeignKeys()) {
+ 			Record sub = (Record)base.getValue(key);
+ 			if(sub == null) continue; // As a matter of fact this can happen - Publication can be NULL.
+@@ -108,6 +121,32 @@
+ 	}
+ 	
+ 	
++	private final static String pckg = Record.class.getPackage().getName() + &quot;.&quot;; 
++	
++	public Record createTorso() {
++		StringBuilder className;
++		for(String key : getForeignKeys()) {
++			if(key.equals(Habitat.NEARESTVILLAGE))
++				className = new StringBuilder(&quot;Village&quot;);
++			else {
++				className = new StringBuilder(key);
++				className.setCharAt(0, Character.toUpperCase(className.charAt(0)));
++			}
++			try {
++				Record subrecord = (Record)Class.forName(pckg+className).newInstance();
++				subrecord.createTorso();
++				setValue(key, subrecord);
++			} catch (Exception e) { e.printStackTrace(); }
++		}
++		return null;
++	}
++	
++	
++	public void setValue(Class table, String column, Object value) {
++		Record subrecord = (  getClass().equals(table) ? this : findSubrecord(this, table)  );
++		if(subrecord != null) subrecord.setValue(column, value);
++	}
++	
+ 	/**
+ 	 * Set the value in the specified column.
+ 	 * 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000343.html">[Plantlore-dev] r291 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+	<LI>Next message: <A HREF="000346.html">[Plantlore-dev] r293 - in trunk/src/net/sf/plantlore: client/export client/imports common common/record
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#344">[ date ]</a>
+              <a href="thread.html#344">[ thread ]</a>
+              <a href="subject.html#344">[ subject ]</a>
+              <a href="author.html#344">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

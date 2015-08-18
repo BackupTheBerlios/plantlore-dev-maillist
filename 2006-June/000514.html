@@ -1,0 +1,155 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r418 - trunk/src/net/sf/plantlore/client/imports/table
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r418%20-%20trunk/src/net/sf/plantlore/client/imports/table&In-Reply-To=%3C200606011512.k51FCkvL016793%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000513.html">
+   <LINK REL="Next"  HREF="000515.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r418 - trunk/src/net/sf/plantlore/client/imports/table</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r418%20-%20trunk/src/net/sf/plantlore/client/imports/table&In-Reply-To=%3C200606011512.k51FCkvL016793%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r418 - trunk/src/net/sf/plantlore/client/imports/table">krater at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 17:12:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000513.html">[Plantlore-dev] r417 - trunk/src/net/sf/plantlore/client/imports/table
+</A></li>
+        <LI>Next message: <A HREF="000515.html">[Plantlore-dev] r419 - in trunk/src/biocase/DataproBioCASE: configuration/datasources/plantLore configuration/datasources/plantLorePSWD configuration/querytool/skins/default configuration/querytool/skins/plantlore configuration/querytool/skins/plantlorePSWD www www/querytool/plantlore www/querytool/plantlore/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#514">[ date ]</a>
+              <a href="thread.html#514">[ thread ]</a>
+              <a href="subject.html#514">[ subject ]</a>
+              <a href="author.html#514">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-06-01 17:12:46 +0200 (Thu, 01 Jun 2006)
+New Revision: 418
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+Log:
+TableImport simplified - insert/update/delete do not share that one global transaction. This had to be done because when I started a transaction, inserted a record A that was not in the database, and tried to update the record A to a record B later, I got myself an exception from the database layer. The problem was with saving the history of such record. It seems that hibernate cannot update a record that has not been commited previously (or maybe hibernate can, but our db layer cannot :).
+
+Modified: trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-06-01 14:59:14 UTC (rev 417)
++++ trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-06-01 15:12:46 UTC (rev 418)
+@@ -95,8 +95,7 @@
+ 	 */
+ 	public Object task() throws Exception {
+ 		SelectQuery q = null;
+-		boolean transactionInProgress =  false;
+-		
++
+ 		logger.info(&quot;Import into &quot;+table+&quot; begins...&quot;);
+ 		
+ 		setLength( parser.getNumberOfRecords() );
+@@ -118,9 +117,7 @@
+ 			db.closeQuery( q );
+ 			q = null;
+ 			
+-			transactionInProgress = db.beginTransaction();
+-			if( ! transactionInProgress )
+-				throw new ImportException(L10n.getString(&quot;Error.TransactionRaceConditions&quot;));
++			
+ 						
+ 			while( !isCanceled() &amp;&amp; parser.hasNext() ) {
+ 				DataHolder data = null;
+@@ -198,14 +195,13 @@
+ 
+ 			
+ 			if( !isCanceled() ) {
+-				transactionInProgress = ! db.commitTransaction();
+ 				logger.info(&quot;Import completed. &quot;+count+&quot; records processed (&quot;+
+ 						inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+ 				setStatusMessage(L10n.getString(&quot;Import.Completed&quot;));
+ 			}
+ 			else {
+-				transactionInProgress = ! db.rollbackTransaction();
+-				logger.info(&quot;Import aborted. Nothing will be stored in the database.&quot;);
++				logger.info(&quot;Import aborted. &quot;+count+&quot; records processed (&quot;+
++						inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+ 				setStatusMessage(L10n.getString(&quot;Import.Aborted&quot;));
+ 			}
+ 			
+@@ -213,8 +209,6 @@
+ 			try {
+ 				if(q != null) 
+ 					db.closeQuery( q );
+-				if(transactionInProgress) 
+-					transactionInProgress = ! db.rollbackTransaction();
+ 			} catch(Exception re) {}
+ 			
+ 			logger.fatal(&quot;Import ended prematurely. &quot;+count+&quot; records processed (&quot;+
+@@ -267,7 +261,7 @@
+ 	 */
+ 	protected void insert(Record record) 
+ 	throws RemoteException, DBLayerException {
+-		db.executeInsertInTransaction( record );
++		db.executeInsert( record );
+ 
+ 	}
+ 	
+@@ -276,12 +270,10 @@
+ 	protected void update(Record current, Record replacement) 
+ 	throws RemoteException, DBLayerException {
+ 		
+-		for(String property : current.getProperties()) {
+-			System.out.println(&quot;                 replacing &quot;+property);
++		for(String property : current.getProperties())
+ 			current.setValue(property, replacement.getValue(property));
+-		}
+ 		
+-		db.executeUpdateInTransaction( current );
++		db.executeUpdate( current );
+ 	}
+ 		
+ 	/**
+@@ -294,7 +286,7 @@
+ 				logger.error(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
+ 				throw new ImportException(L10n.getFormattedString(&quot;Error.DeletingSharedRecord&quot;, record, sharers));
+ 			}
+-			db.executeDeleteInTransaction( record );
++			db.executeDelete( record );
+ 		}
+ 	}
+ 	
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000513.html">[Plantlore-dev] r417 - trunk/src/net/sf/plantlore/client/imports/table
+</A></li>
+	<LI>Next message: <A HREF="000515.html">[Plantlore-dev] r419 - in trunk/src/biocase/DataproBioCASE: configuration/datasources/plantLore configuration/datasources/plantLorePSWD configuration/querytool/skins/default configuration/querytool/skins/plantlore configuration/querytool/skins/plantlorePSWD www www/querytool/plantlore www/querytool/plantlore/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#514">[ date ]</a>
+              <a href="thread.html#514">[ thread ]</a>
+              <a href="subject.html#514">[ subject ]</a>
+              <a href="author.html#514">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

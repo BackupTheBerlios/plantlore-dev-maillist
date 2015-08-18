@@ -1,0 +1,374 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r666 - in trunk/src/net/sf/plantlore: client	client/overview client/settings config
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r666%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/settings%20config&In-Reply-To=%3C200609041837.k84IbMdX006433%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000925.html">
+   <LINK REL="Next"  HREF="000927.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r666 - in trunk/src/net/sf/plantlore: client	client/overview client/settings config</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r666%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/settings%20config&In-Reply-To=%3C200609041837.k84IbMdX006433%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r666 - in trunk/src/net/sf/plantlore: client	client/overview client/settings config">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 20:37:22 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000925.html">[Plantlore-dev] r665 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+        <LI>Next message: <A HREF="000927.html">[Plantlore-dev] r667 - trunk/src/net/sf/plantlore/client/settings
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#926">[ date ]</a>
+              <a href="thread.html#926">[ thread ]</a>
+              <a href="subject.html#926">[ subject ]</a>
+              <a href="author.html#926">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-04 20:37:08 +0200 (Mon, 04 Sep 2006)
+New Revision: 666
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/settings/SettingsView.form
+   trunk/src/net/sf/plantlore/client/settings/SettingsView.java
+   trunk/src/net/sf/plantlore/config/log4j.properties
+Log:
+Removed SwingUtilities call from AppCoreView.update() ... hope it will help in the fight against freezing.
+Disabled the dynamic page size feature. It only causes problems and JTable doesn't seem to be built for such usage.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-04 18:37:08 UTC (rev 666)
+@@ -80,7 +80,7 @@
+     private Pair&lt;String, Integer&gt;[] publications = null;
+     private Pair&lt;String, Integer&gt;[] projects = null;
+     
+-    protected boolean dynamicPageLoading;
++    protected boolean dynamicPageLoading = false;
+     
+     /** Creates a new instance of AppCore */
+     public AppCore(MainConfig mainConfig)
+@@ -224,6 +224,16 @@
+         }
+     }
+ 
++    public void setRecordsPerPageNotNotify(int recordsPerPage) throws RemoteException, DBLayerException {        
++        if (tableSorter != null)
++        {
++            logger.info(&quot;Setting records per page NN to &quot;+recordsPerPage);
++            if (recordsPerPage == -1)
++                throw new IllegalArgumentException(&quot;KURVA&quot;);
++            tableSorter.setPageSize(recordsPerPage);
++        }
++    }
++
+     public void nextPage() throws DBLayerException, RemoteException {
+         if (tableSorter != null)
+         {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-04 18:37:08 UTC (rev 666)
+@@ -9,6 +9,7 @@
+ 
+ import java.awt.Component;
+ import java.awt.Cursor;
++import java.awt.Dimension;
+ import java.awt.EventQueue;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+@@ -35,6 +36,7 @@
+ import javax.swing.AbstractAction;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
++import javax.swing.JTable;
+ import javax.swing.KeyStroke;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.SwingUtilities;
+@@ -1577,7 +1579,7 @@
+                         //must be done to prevent problems when this listener would send commands to load data for a query
+                         //that doesn't exist, or when the dblayer doesn't exist..
+                         //it's again installed in the DatabaseChange bridge
+-                        view.overviewScrollPane.removeComponentListener(overviewResizeListener);
++//                        view.overviewScrollPane.removeComponentListener(overviewResizeListener);
+ 
+                         model.logout();
+                     
+@@ -1728,7 +1730,7 @@
+                                 //this can't be done earlier. must be done after the query is created
+                                 //otherwise this listener would give the overview table model commands to load data
+                                 //for a query that doesn't exist yet
+-                                view.overviewScrollPane.addComponentListener(overviewResizeListener);
++//                                view.overviewScrollPane.addComponentListener(overviewResizeListener);
+ 
+                                 /*-------------------------------------------------------------------
+                                  *  This may no longer be necessary:
+@@ -1917,25 +1919,31 @@
+ 		}// update()
+ 	}// class ManagerBridge
+ 
+-        /** Handles resizing of Plantlore's main window.
++        /** NOT USED, ONLY CAUSES PROBLEMS.
+          *
++         * JTable simply doesn't seem to be suited for this kind of manipulation. 
++         * 
++         * Handles resizing of Plantlore's main window.
++         *
+          * Computes and changes the page size if needed.
+          */
+ 	class OverviewResizeListener implements ComponentListener {
+ 		private final static int sub = 20; // height of the header row perhaps
+ 
+-		public void componentResized(ComponentEvent e) {
++		public synchronized void componentResized(ComponentEvent e) {
+ 			if (!model.loggedIn() || !model.dynamicPageLoading)
+ 				return;
+ 			Component c = e.getComponent();
+ 			int tableHeight = c.getSize().height - sub; // height of the row
++			//int tableHeight = ((JTable)c).getPreferredScrollableViewportSize().height;
+ 														// part of JTable ( --&gt;
+ 														// without header)
++                        
+ 			int rowHeight = view.overview.getRowHeight();
+ 			int newRecordsCount = tableHeight / rowHeight;
+ 			try {
+-				model.setRecordsPerPage(newRecordsCount);
+-				view.recordsPerPage.setValue(newRecordsCount);
++				model.setRecordsPerPageNotNotify(newRecordsCount);
++				//view.recordsPerPage.setValue(newRecordsCount);
+                         } catch (RemoteException ex) {
+                             DefaultExceptionHandler.handle(view,ex);
+                             return;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-04 18:37:08 UTC (rev 666)
+@@ -537,7 +537,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;439&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;403&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-04 18:37:08 UTC (rev 666)
+@@ -443,8 +443,6 @@
+     }
+ 
+     public void update(final Observable observable, final Object object) {
+-        SwingUtilities.invokeLater( new Runnable() {
+-            public void run() {
+                 if (object != null &amp;&amp; object instanceof String) {
+                     String arg = (String) object;
+                     if (arg.equals(&quot;PAGE_CHANGED&quot;)||arg.equals(&quot;RECORDS_PER_PAGE&quot;)) {
+@@ -479,8 +477,6 @@
+                         overview.getSelectionModel().setSelectionInterval(model.getSelectedRowNumber(),model.getSelectedRowNumber());
+                     }
+                 }//if instanceof String        
+-            }//run()
+-        });//invokeLater()
+     }//update()
+ 
+     private void setPreferredColumnSizes() {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/overview/OverviewTableModel.java	2006-09-04 18:37:08 UTC (rev 666)
+@@ -295,7 +295,7 @@
+     }
+     
+     public int getResultId() {
+-        System.out.println(&quot;returning resultid &quot;+resultId);
++        logger.debug(&quot;returning resultid &quot;+resultId);
+         return resultId;
+     }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/settings/SettingsView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/settings/SettingsView.form	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/settings/SettingsView.form	2006-09-04 18:37:08 UTC (rev 666)
+@@ -10,6 +10,7 @@
+   &lt;/SyntheticProperties&gt;
+   &lt;AuxValues&gt;
+     &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_layoutCodeTarget&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
+     &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
+@@ -502,7 +503,7 @@
+             &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+-        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel7&quot;&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;generalPanel&quot;&gt;
+           &lt;Constraints&gt;
+             &lt;Constraint layoutClass=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout&quot; value=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription&quot;&gt;
+               &lt;JTabbedPaneConstraints tabName=&quot;General&quot;&gt;
+@@ -528,7 +529,7 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jPanel8&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;159&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;160&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/settings/SettingsView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/settings/SettingsView.java	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/client/settings/SettingsView.java	2006-09-04 18:37:08 UTC (rev 666)
+@@ -72,7 +72,8 @@
+         headerTwoField.setText(model.getHeaderTwo());
+         
+         //--- GENERAL TAB
+-        dynamicPageCheckBox.setSelected(model.isDynamicPageLoading());
++        //dynamicPageCheckBox.setSelected(model.isDynamicPageLoading());
++        generalPanel.setVisible(false); //contains only the dynamic page size option which only causes many problems
+     }
+     
+     
+@@ -137,7 +138,7 @@
+         headerOneLabel = new javax.swing.JLabel();
+         headerTwoLabel = new javax.swing.JLabel();
+         headerTwoField = new javax.swing.JTextField();
+-        jPanel7 = new javax.swing.JPanel();
++        generalPanel = new javax.swing.JPanel();
+         jPanel8 = new javax.swing.JPanel();
+         dynamicPageCheckBox = new javax.swing.JCheckBox();
+         cancelButton = new javax.swing.JButton();
+@@ -387,23 +388,23 @@
+                 .addContainerGap(73, Short.MAX_VALUE))
+         );
+ 
+-        org.jdesktop.layout.GroupLayout jPanel7Layout = new org.jdesktop.layout.GroupLayout(jPanel7);
+-        jPanel7.setLayout(jPanel7Layout);
+-        jPanel7Layout.setHorizontalGroup(
+-            jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(jPanel7Layout.createSequentialGroup()
++        org.jdesktop.layout.GroupLayout generalPanelLayout = new org.jdesktop.layout.GroupLayout(generalPanel);
++        generalPanel.setLayout(generalPanelLayout);
++        generalPanelLayout.setHorizontalGroup(
++            generalPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(generalPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel8, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+-        jPanel7Layout.setVerticalGroup(
+-            jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(jPanel7Layout.createSequentialGroup()
++        generalPanelLayout.setVerticalGroup(
++            generalPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(generalPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel8, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(159, Short.MAX_VALUE))
++                .addContainerGap(160, Short.MAX_VALUE))
+         );
+-        jTabbedPane1.addTab(L10n.getString(&quot;Settings.GeneralTab&quot;), jPanel7);
++        jTabbedPane1.addTab(L10n.getString(&quot;Settings.GeneralTab&quot;), generalPanel);
+ 
+         cancelButton.setText(&quot;Cancel&quot;);
+         cancelButton.setActionCommand(&quot;CANCEL&quot;);
+@@ -473,6 +474,7 @@
+     protected javax.swing.JButton downButton;
+     protected javax.swing.JCheckBox dynamicPageCheckBox;
+     protected javax.swing.JRadioButton englishRadioButton;
++    private javax.swing.JPanel generalPanel;
+     protected javax.swing.JTextField headerOneField;
+     protected javax.swing.JLabel headerOneLabel;
+     protected javax.swing.JTextField headerTwoField;
+@@ -484,7 +486,6 @@
+     private javax.swing.JPanel jPanel4;
+     private javax.swing.JPanel jPanel5;
+     private javax.swing.JPanel jPanel6;
+-    private javax.swing.JPanel jPanel7;
+     private javax.swing.JPanel jPanel8;
+     private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JScrollPane jScrollPane2;
+
+Modified: trunk/src/net/sf/plantlore/config/log4j.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/config/log4j.properties	2006-09-04 12:51:20 UTC (rev 665)
++++ trunk/src/net/sf/plantlore/config/log4j.properties	2006-09-04 18:37:08 UTC (rev 666)
+@@ -1,5 +1,5 @@
+ ### set log levels - for more verbose logging change 'info' to 'debug' ###
+-log4j.rootLogger=debug, stdout
++log4j.rootLogger=info, stdout
+ 
+ ### direct log messages to stdout ###
+ log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+@@ -16,16 +16,16 @@
+ log4j.logger.org.apache.commons = info
+ 
+ #log4j.logger.org.hibernate=info
+-log4j.logger.org.hibernate=info
++log4j.logger.org.hibernate=error
+ 
+ ### log HQL query parser activity
+ #log4j.logger.org.hibernate.hql.ast.AST=debug
+ 
+ ### log just the SQL
+-log4j.logger.org.hibernate.SQL=info
++log4j.logger.org.hibernate.SQL=error
+ 
+ ### log JDBC bind parameters ###
+-log4j.logger.org.hibernate.type=info
++log4j.logger.org.hibernate.type=error
+ #log4j.logger.org.hibernate.type=debug
+ 
+ ### log schema export/update ###
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000925.html">[Plantlore-dev] r665 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+	<LI>Next message: <A HREF="000927.html">[Plantlore-dev] r667 - trunk/src/net/sf/plantlore/client/settings
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#926">[ date ]</a>
+              <a href="thread.html#926">[ thread ]</a>
+              <a href="subject.html#926">[ subject ]</a>
+              <a href="author.html#926">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

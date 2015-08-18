@@ -1,0 +1,929 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r310 - in trunk/src/net/sf/plantlore/client: . export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r310%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20export&In-Reply-To=%3C200605201354.k4KDsWlX014984%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000359.html">
+   <LINK REL="Next"  HREF="000361.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r310 - in trunk/src/net/sf/plantlore/client: . export</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r310%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20export&In-Reply-To=%3C200605201354.k4KDsWlX014984%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r310 - in trunk/src/net/sf/plantlore/client: . export">krater at berlios.de
+       </A><BR>
+    <I>Sat May 20 15:54:32 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000359.html">[Plantlore-dev] r307 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+        <LI>Next message: <A HREF="000361.html">[Plantlore-dev] r311 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#362">[ date ]</a>
+              <a href="thread.html#362">[ thread ]</a>
+              <a href="subject.html#362">[ subject ]</a>
+              <a href="author.html#362">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-20 15:54:28 +0200 (Sat, 20 May 2006)
+New Revision: 310
+
+Added:
+   trunk/src/net/sf/plantlore/client/export/ExportTask.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+Log:
+Template is more flexible now, commands can be queued like this: template.set().set().setAllProperties().setAllNN()...
+
+Export Manager behaves a little bit lazily now. The previous code tended to be too difficult to manage - setters were complicated and threw too many exceptions. The Export manager deals very easily with changes of &quot;parameters&quot; like Template, SelectQuery, Selection, and others. The SelectQuery is treated more carefully - the Export Manager makes sure that EVERY supplied SelectQuery is properly closed, so that the DBLayer is not overflowed with unused (unexecuted) SelectQueries.
+
+ExportTask is a new class responsible for executing the Export and its management. ExportProgressView observes the current ExportTask instead of  ExportManager (minor changes must have been done to ExportMngCtrlA and ExportMngCtrlB as well).
+
+
+The current state of things concerning the ExportQuery. ( &quot;-&gt;&quot; means &quot;clicks&quot; or &quot;calls&quot; )
+User -&gt; AppCoreMenu.Export -&gt; q = searchModel.constructExportQuery() /* on demand */, exportModel.setSelectQuery(q)
+(exportModel.setSelectQuery(q) closes the previous ExportQuery and stores the new one (but doesn't execute it)).
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -404,17 +404,17 @@
+             if(exportView == null) {
+             	try {
+             		exportModel = new ExportMng(model.getDatabase());
+-            		exportProgressView = new ExportProgressView(exportModel);
+-            		exportProgressCtrl = new ExportProgressCtrl(exportModel, exportProgressView);
++            		exportProgressView = new ExportProgressView(null);
++            		exportProgressCtrl = new ExportProgressCtrl(null, exportProgressView);
+             		exportView = new ExportMngViewA(exportModel);
+-            		exportCtrl = new ExportMngCtrlA(exportModel, exportView, exportProgressView);
++            		exportCtrl = new ExportMngCtrlA(exportModel, exportView, exportProgressView, exportProgressCtrl);
+             	} catch(ExportException e) {
+             		logger.error(&quot;Export MVC cannot be created. &quot; + e.getMessage());
+             		return;
+             	}
+             }
+             // Display the progress view if an export is already running.
+-            if(exportModel.isExportInProgress())
++            if(exportModel.isAnExportInProgress())
+         		exportProgressView.setVisible(true);
+             // Display the Export dialog.
+             else {
+@@ -437,7 +437,6 @@
+             		
+             	} catch (Exception ex) {
+             		JOptionPane.showMessageDialog(view, ex);
+-            		ex.printStackTrace();
+             		return;
+             	}
+             	exportCtrl.setVisible(true);
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -5,8 +5,10 @@
+ import java.io.IOException;
+ import java.io.Writer;
+ import java.rmi.RemoteException;
++import java.util.HashSet;
+ import java.util.Observable;
+ import java.util.Observer;
++import java.util.Set;
+ 
+ import net.sf.plantlore.client.export.builders.*;
+ import net.sf.plantlore.client.export.component.XFilter;
+@@ -42,21 +44,6 @@
+  * 					and is used to determine which &lt;i&gt;builder&lt;/i&gt; will be used
+  * 					to produce the output.&lt;/li&gt;
+  * &lt;/ul&gt;
+- * &lt;br/&gt;
+- * It is strongly recommended to &lt;b&gt;use one of the constructors&lt;/b&gt;
+- * instead of creating the object partially using setters!
+- * The participating entities may depend on each other and
+- * therefore their setters must be called in a specific order.
+- * &lt;br/&gt;
+- * The most important is the order of these entities:
+- * &lt;ol&gt;
+- * &lt;li&gt;UseProjections&lt;/li&gt;
+- * &lt;li&gt;RootTable&lt;/li&gt;
+- * &lt;li&gt;DBLayer&lt;/li&gt;
+- * &lt;li&gt;SelectQuery&lt;/li&gt;
+- * &lt;li&gt;Template&lt;/li&gt;
+- * &lt;/ol&gt;
+- * The first two steps may be omited if projections are not to be used.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-29 
+@@ -64,7 +51,7 @@
+  * @see net.sf.plantlore.client.export.DefaultDirector
+  * @see net.sf.plantlore.client.export.Builder
+  */
+-public class ExportMng extends Observable implements Observer {
++public class ExportMng implements Observer {
+ 	
+ 	/**
+ 	 * List of all filters the Export Manager is capable to handle.
+@@ -82,21 +69,10 @@
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	private DBLayer db ;
+ 	private Template template;
+-	private Selection select;
++	private Selection selection;
+ 	private XFilter filter;
+ 	private String filename;
+-	private Integer resultId;
+-	private DefaultDirector director;
+-	private Builder builder;
+-	private boolean aborted = false, exportInProgress = false;
+-	private int results = -1, selectedResults = -1;
+ 	private SelectQuery query = null;
+-	private boolean queryClosed = true;
+-	
+-	private Writer writer;
+-	private Thread current;
+-		
+-	
+ 	private boolean useProjections = false;
+ 	private Class rootTable = Occurrence.class;
+ 	
+@@ -137,10 +113,7 @@
+ 	 */
+ 	public ExportMng(DBLayer dblayer, SelectQuery query) 
+ 	throws ExportException, DBLayerException, RemoteException {
+-		setDBLayer(dblayer);
+-		setSelectQuery(query);
+-		setTemplate(null);
+-		setSelection(null);
++		this(dblayer, query, null, null, null, null, false, null);
+ 	}
+ 	
+ 	
+@@ -178,18 +151,9 @@
+ 	
+ 	
+ 	/**
+-	 * Sadly, some database engines cannot deal with bigger queries,
+-	 * which is why the Export Manager has to use projections.
+-	 * 
+ 	 * @param useProjections	True if the Export manager shall use projections instead of regular records.
+-	 * @throws ExportException	If the export is already in progress.
+ 	 */
+-	synchronized public void useProjections(boolean useProjections) 
+-	throws ExportException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change the usage of Projections while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
++	synchronized public void useProjections(boolean useProjections) {
+ 		this.useProjections = useProjections;
+ 	}
+ 	
+@@ -198,113 +162,40 @@
+ 	 * The default root table is the Occurrence table.
+ 	 * 
+ 	 * @param rootTable	The root table (the table the query started with). 
+-	 * @throws ExportException	If the export is already in progress.
+ 	 */
+-	synchronized public void setRootTable(Class rootTable) 
+-	throws ExportException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change the Root Table while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
++	synchronized public void setRootTable(Class rootTable) {
+ 		this.rootTable = rootTable;
+ 	}
+ 	
+-	
+-	
+ 	/**
+ 	 * Set a new DBLayer.
+-	 * &lt;b&gt;Forget the current result set identificator AND/OR selection query&lt;/b&gt;
+-	 * - those objects most probably refered to a result set of the previous dblayer! 
+ 	 */
+-	synchronized public void setDBLayer(DBLayer dblayer)
+-	throws ExportException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change DBLayer while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
+-		if(dblayer == null) { 
+-			logger.error(&quot;The database layer is null!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidDBLayer&quot;));
+-		}
++	synchronized public void setDBLayer(DBLayer dblayer) {
++		if(query != null) try {
++			db.closeQuery(query);
++		} catch(RemoteException e) {}
+ 		db = dblayer;
+-		results = selectedResults = resultId = -1;
+ 	}
+ 	
+ 	/**
+-	 * Store a copy of the &lt;code&gt;template&lt;/code&gt;.
+-	 * &lt;b&gt;Null means everything is selected!&lt;/b&gt;
+-	 * &lt;br/&gt;
+-	 * If projections are used, they will be added to the SelectQuery and
+-	 * the SelectQuery will be executed here.
+-	 * 
+-	 * @throws ExportException	If the export is already in progress.
++	 * Store a copy of the &lt;code&gt;template&lt;/code&gt;. 
++	 * Null means all columns are selected.
+ 	 */
+-	synchronized public void setTemplate(Template template) 
+-	throws ExportException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change the Template while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
+-		if(query == null &amp;&amp; useProjections) {
+-			logger.warn(&quot;Cannot set the Template before the Query is specified!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.InvalidSelectQuery&quot;));
+-		}
+-		if(template == null) {
+-			logger.info(&quot;The list of selected columns is empty! Creating a new Template where every column is selected.&quot;);
+-			this.template = new Template();
+-			this.template.setEverything();
+-		}
++	synchronized public void setTemplate(Template template) {
++		if(template == null)
++			this.template = null;
+ 		else this.template = template.clone();
+-		
+-		
+-		
+-		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-		 * 
+-		 * 		The Template defines the projections. 
+-		 * 		It is vital that setSelectQuery is called PRIOR to the setTemplate!
+-		 * 
+-		 * 		The SelectQuery will be executed here, since it cannot be executed
+-		 * 		unless the projections are added. 
+-		 * 
+-		 * 				We love you, Firebird!
+-		 * 
+-		 *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+-		
+-		if(useProjections) {
+-			if( rootTable == AuthorOccurrence.class || rootTable == Author.class )
+-				this.template.addProjections( query, AuthorOccurrence.class, Author.class ); // USE THIS.TEMPLATE!
+-			else
+-				this.template.addProjections( query, 
+-					Occurrence.class, Plant.class, Metadata.class, Publication.class, 
+-					Habitat.class, Territory.class, Village.class, Phytochorion.class );
+-			//Execute the SelectQuery and update the resultId and the number of results.
+-			try {
+-				resultId = db.executeQuery( query );
+-				results = db.getNumRows( resultId );
+-				if(select != null) selectedResults = select.size( results );
+-			} catch(Exception e) {}
+-		}
+ 	}
+ 	
+ 	/**
+ 	 * Store a copy of the &lt;code&gt;selection&lt;/code&gt;.
++	 * Null means all rows are selected.
+ 	 */
+-	synchronized public void setSelection(Selection selection)
+-	throws ExportException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change the Selection while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
+-		if(selection == null || selection.isEmpty()) {
+-			logger.info(&quot;The list of selected records is empty! Creating a new Selection where everything is selected.&quot;);
+-			select = new Selection();
+-			select.all();
+-		}
+-		else select = selection.clone();
+-
+-		selectedResults = -1;
+-		if(resultId &gt;= 0 &amp;&amp; results &gt;= 0)
+-			selectedResults = selection.size(results);
++	synchronized public void setSelection(Selection selection) {
++		if(selection == null)
++			this.selection = null;
++		else 
++			selection = selection.clone();
+ 	}
+ 	
+ 	/**
+@@ -314,8 +205,6 @@
+ 	 * filter represents). 
+ 	 */
+ 	synchronized public void setActiveFileFilter(XFilter filter) {
+-		if(filter == null)
+-			logger.warn(&quot;The filter is set to null!&quot;);
+ 		this.filter = filter; 
+ 	}
+ 	
+@@ -324,8 +213,6 @@
+ 	 * spit its output. 
+ 	 */
+ 	synchronized public void setSelectedFile(String filename) { 
+-		if(filename == null || filename.length() == 0)
+-			logger.warn(&quot;The supplied file name is either null or an empty string!&quot;);
+ 		this.filename = filename; 
+ 	}
+ 	
+@@ -336,69 +223,72 @@
+ 	 * On the other hand, if Projections are used, it is the &lt;code&gt;setTemplate()&lt;/code&gt;
+ 	 * that executes the query after it adds desired projections.
+ 	 */
+-	synchronized public void setSelectQuery(SelectQuery query) 
+-	throws ExportException, DBLayerException, RemoteException {
+-		if(isExportInProgress()) {
+-			logger.warn(&quot;Cannot change the SelectQuery while Export is still in progress!&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.CannotChangeDuringExport&quot;));
+-		}
+-		if(query == null)
+-			logger.warn(&quot;The select query is not valid - it is null!&quot;);
+-
+-		// Discontinue using the previous query
+-		if(!queryClosed &amp;&amp; this.query != null) {
+-			db.closeQuery(this.query);
+-			queryClosed = true;
+-		}
++	synchronized public void setSelectQuery(SelectQuery query) { 
++		// Close the previous query!
++		if(this.query != null) try {
++			db.closeQuery(this.query); 
++		} catch (RemoteException e) {}
+ 		this.query = query;
+-		
+-		if(this.query != null) {
+-			results = selectedResults = -1;
+-			if(useProjections) 
+-				resultId = null;
+-			else {
+-				resultId = db.executeQuery( query );
+-				results = db.getNumRows( resultId );
+-				if(select != null) selectedResults = select.size( results );
+-			}
+-		}
+ 	}
+ 	
+ 	
++	
++	
++	
++	private Set&lt;ExportTask&gt; exportTasks = new HashSet&lt;ExportTask&gt;(8);
++	
++	
+ 	/**
+ 	 * Start the export procedure. The export will run in its own thread.
+ 	 * 
+ 	 * @throws ExportException	If information provided is not complete.
+ 	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
+ 	 */
+-	synchronized public void start() 
+-	throws ExportException, IOException {
+-		// Check if we have all necessary components ready.
++	synchronized public ExportTask startExport() 
++	throws ExportException, IOException, DBLayerException {
++		if( exportTasks.size() &gt; 4 )
++			throw new ExportException(L10n.getString(&quot;Error.TooManyTasks&quot;));
++		// Check if all necessary components are valid.
+ 		if( db == null )
+-			throw new ExportException(L10n.getString(&quot;error.InvalidDBLayer&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidDBLayer&quot;));
++		if( query == null)
++			throw new ExportException(L10n.getString(&quot;Error.InvalidQuery&quot;));
+ 		if( filter == null ) 
+-			throw new ExportException(L10n.getString(&quot;error.InvalidFilter&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidFilter&quot;));
+ 		if( filename == null || filename.length() == 0 ) 
+-			throw new ExportException(L10n.getString(&quot;error.MissingFileName&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.MissingFileName&quot;));
+ 		if( useProjections &amp;&amp; rootTable == null)
+-			throw new ExportException(L10n.getString(&quot;error.InvalidRootTable&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.InvalidRootTable&quot;));
++		if(template == null)
++			template = new Template().setEverything();
++		if(selection == null)
++			selection = new Selection().all();
+ 			
+ 		
+ 		logger.debug(&quot;Initializing the export environment.&quot;);
+-		aborted = false;
+ 		
+-		// Create a new file.
+-		File file = new File( filter.suggestName(filename) );
+-		boolean append = ! file.createNewFile();
++		// Prepare the query for projections.
++		if(useProjections) {
++			if( rootTable == AuthorOccurrence.class || rootTable == Author.class )
++				template.addProjections( query, AuthorOccurrence.class, Author.class );
++			else
++				template.addProjections( query, 
++					Occurrence.class, Plant.class, Metadata.class, Publication.class, 
++					Habitat.class, Territory.class, Village.class, Phytochorion.class );
++		}
+ 		
+-		// Create a new writer.
+-		writer = new FileWriter( file, append );
++		// Execute the query.
++		Integer resultId = db.executeQuery( query );
++		
++		// Create a new file and writer (wrapper).
++		Writer writer = new FileWriter( new File( filter.suggestName(filename) ) );
+ 		if(writer == null) {
+ 			logger.fatal(&quot;Unable to create a new Writer.&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.WriterNotCreated&quot;));
++			throw new ExportException(L10n.getString(&quot;Error.WriterNotCreated&quot;));
+ 		}
+ 		
+ 		// Create a new builder according to the selected format.
++		Builder builder;
+ 		if(filter.getDescription().equals(L10n.getString(&quot;FilterCSV&quot;)))
+ 			builder = new CSVBuilder(writer, template);
+ 		else if(filter.getDescription().equals(L10n.getString(&quot;FilterXML&quot;)))
+@@ -407,110 +297,60 @@
+ 			builder = new TrainingBuilder(template);
+ 
+ 		// Create a new Director and run it in a separate thread.
+-		director = new DefaultDirector(
+-				builder, resultId, db, select, useProjections, 
++		DefaultDirector director = new DefaultDirector(
++				builder, resultId, db, selection, useProjections, 
+ 				template.getDescription(), rootTable);
+ 		director.ignoreDead( filter.ignoreDead() );
+-		director.addObserver(this);
+ 		
+-		current = new Thread( director, &quot;Export&quot; );
+-		if(current == null) {
+-			logger.fatal(&quot;Unable to create a new thread.&quot;);
+-			throw new ExportException(L10n.getString(&quot;error.ThreadFailed&quot;));
+-		}
+-		current.start();
++		// Start a new task.
++		ExportTask t = new ExportTask(db, query, director, writer, selection.size(0));
++		exportTasks.add(t);
++		t.addObserver(this);
++		t.execute();
+ 		
+-		exportInProgress = true;
++		// Reset variables.
++		query = null;
++		template = null;
++		selection = null;
++		filter = null;
++		filename = null;
++		useProjections = false;
++		rootTable = Occurrence.class;
+ 		
+-		// Register a cleanup procedure
+-		Thread monitor = new Thread(new Runnable() {
+-			public void run() {
+-				// Sleep until the thread is really dead.
+-				while( !sunExploded )
+-					try {
+-						current.join();
+-						break;
+-					}catch(InterruptedException e) {}
+-				// Dispose of the writer.
+-				try {
+-					writer.close();
+-				}catch(IOException e) {}
+-				exportInProgress = false;
+-				// Dispose of the query.
+-				try {
+-				if(!queryClosed &amp;&amp; query != null) { 
+-					db.closeQuery( query );
+-					queryClosed = true;
+-				}
+-				}catch(RemoteException e) {}
+-				logger.debug(&quot;Environment cleaned up.&quot;);
+-				// Notify observers the export has ended.
+-				update(null, null);
+-				
+-			}
+-		}, &quot;ExportMonitor&quot;);
+-		monitor.start();
++		return t;
+ 	}
+ 	
+ 	
+-	/** Something that will not be true for a long time, at least the mankind hopes so. */
+-	private final boolean sunExploded = false;
+-	
+-
++		
+ 	/**
+-	 * Abort the current export. 
++	 * Abort every running Export. 
+ 	 */
+-	synchronized public void abort() {
+-		if(!exportInProgress) return;
+-		aborted = true; exportInProgress = false;
+-		if(director != null) director.abort();
+-		setChanged(); notifyObservers();
++	synchronized public void abortAllTasks() {
++		for(ExportTask task : exportTasks) {
++			task.abort();
++			task.deleteObserver(this);
++		}
++		exportTasks.clear();
+ 	}
+ 	
+-	/**
+-	 * @return True if the export was aborted.
+-	 */
+-	public boolean isAborted() {
+-		return aborted;
+-	}
+ 	
+-	/**
+-	 * @return True if an export procedure already runs.
+-	 */
+-	public boolean isExportInProgress() {
+-		return exportInProgress;
++	synchronized public boolean isAnExportInProgress() {
++		return exportTasks.size() != 0;
+ 	}
+ 	
+ 	/**
+-	 * @return The total number of results to be exported.
+-	 */
+-	public int getNumberOfResults() {
+-		return selectedResults;
+-	}
+-	
+-	/**
+-	 * @return The number of results that have already been exported.
+-	 */
+-	public int getNumberOfExported() {
+-		if(director == null) return 0;
+-		return director.exportedRecords();
+-	}
+-	
+-	/**
+ 	 * @return The list of filters describing formats this Export Manager can handle.
+ 	 */
+ 	public XFilter[] getFilters() {
+ 		return filters.clone();
+ 	}
+ 
+-	
+-	/**
+-	 * Notify the observers - some of our components has changed its state.
+-	 * The parameter can carry either information about progress
+-	 * or an exception that has to be dealt with.
+-	 */
+-	public void update(Observable source, Object parameter) {
+-		setChanged(); notifyObservers( parameter );
+-	}
+ 
++	synchronized public void update(Observable source, Object arg) {
++		if( !((ExportTask)source).isExportInProgress() ) {
++			exportTasks.remove( source );
++			source.deleteObserver(this);
++		}
++	}
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -15,12 +15,15 @@
+ 	private ExportMngViewB viewB;
+ 	//private ExportMngCtrlB ctrlB;
+ 
+-	private ExportProgressView  progressView;
++	private ExportProgressView progressView;
++	private ExportProgressCtrl progressCtrl;
+ 	
+-	public ExportMngCtrlA(ExportMng model, ExportMngViewA view, ExportProgressView progressView) {
+-		this.model = model; this.view = view; this.progressView = progressView;
++	public ExportMngCtrlA(ExportMng model, ExportMngViewA view, 
++			ExportProgressView progressView, ExportProgressCtrl progressCtrl) {
++		this.model = model; this.view = view; 
++		this.progressView = progressView; this.progressCtrl = progressCtrl;
+ 		viewB = new ExportMngViewB();
+-		/*ctrlB = */new ExportMngCtrlB(model, viewB, progressView);
++		/*ctrlB = */new ExportMngCtrlB(model, viewB, progressView, progressCtrl);
+ 	}
+ 	
+ 	public void setVisible(boolean visible) {
+@@ -43,7 +46,9 @@
+ 				if( filter.isColumnSelectionEnabled() )
+ 					viewB.setVisible(true);
+ 				else try {
+-					model.start();
++					ExportTask task = model.startExport();
++					progressCtrl.setModel(task); 
++					progressView.setModel(task);
+ 					progressView.setVisible(true);
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -15,9 +15,12 @@
+ 	private ExportMng model;
+ 	private ExportMngViewB view;
+ 	private ExportProgressView progressView;
++	private ExportProgressCtrl progressCtrl;
+ 	
+-	public ExportMngCtrlB(ExportMng model, ExportMngViewB view, ExportProgressView progressView) {
+-		this.model = model; this.view = view; this.progressView = progressView;
++	public ExportMngCtrlB(ExportMng model, ExportMngViewB view, 
++			ExportProgressView progressView,  ExportProgressCtrl progressCtrl) {
++		this.model = model; this.view = view; 
++		this.progressView = progressView; this.progressCtrl = progressCtrl;
+ 		view.next.addActionListener( new Next() );
+ 	}
+ 	
+@@ -34,7 +37,11 @@
+ 				view.setVisible(false);
+ 				try {
+ 					model.setTemplate( t ); // Set the new template.
+-					model.start();
++
++					ExportTask task = model.startExport();
++					progressCtrl.setModel(task); 
++					progressView.setModel(task);
++					
+ 					progressView.setVisible(true);
+ 				}
+ 				catch(Exception e) {
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -11,19 +11,23 @@
+ 
+ public class ExportProgressCtrl {
+ 	
+-	private ExportMng model;
++	private ExportTask model;
+ 	private ExportProgressView view;
+ 	
++	
++	public void setModel(ExportTask newModel) {
++		model = newModel;
++	}
+ 		
+ 	
+-	public ExportProgressCtrl(ExportMng model, ExportProgressView view) {
+-		this.model = model; this.view = view;
++	public ExportProgressCtrl(ExportTask model, ExportProgressView view) {
++		setModel(model); this.view = view;
+ 		view.abort.addActionListener( new Abort() );
+ 	}
+ 	
+ 	class Abort extends AbstractAction {
+ 		public void actionPerformed(ActionEvent arg0) {
+-			if(model.isExportInProgress()) {
++			if(model != null &amp;&amp; model.isExportInProgress()) {
+ 				int response =
+ 					JOptionPane.showOptionDialog(view,
+ 							L10n.getString(&quot;question.AbortImport&quot;),
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -17,16 +17,24 @@
+  */
+ public class ExportProgressView extends javax.swing.JFrame implements Observer {
+ 	
+-	private ExportMng model;
++	private ExportTask model;
+ 	private int total, count;
++	
++	
++	public void setModel(ExportTask newModel) {
++		if(model != null) 
++			model.deleteObserver(this);
++		model = newModel;
++		if(model != null)
++			model.addObserver(this);
++	}
++	
+     
+     /** Creates new form ExportProgressView */
+-    public ExportProgressView(ExportMng model) {
+-    	this.model = model;
++    public ExportProgressView(ExportTask model) {
++    	setModel(model);
+         initComponents();
+         setLocationRelativeTo(null); // center of the screen
+-        
+-        model.addObserver(this);
+     }
+     
+     /** This method is called from within the constructor to
+
+Added: trunk/src/net/sf/plantlore/client/export/ExportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportTask.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/ExportTask.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -0,0 +1,81 @@
++package net.sf.plantlore.client.export;
++
++import java.io.Writer;
++import java.util.Observable;
++
++import org.apache.log4j.Logger;
++
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
++
++
++public class ExportTask extends Observable {
++	
++	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
++	private DBLayer dblayer;
++	private SelectQuery exportQuery;
++	private DefaultDirector director;
++	private Writer writer;
++	private Thread execution, monitor;
++	private boolean exportInProgress = false, aborted = false;
++	private int results;
++	
++	
++	public ExportTask(DBLayer dblayer, SelectQuery query, DefaultDirector director, Writer writer, int results) {
++		this.dblayer = dblayer; this.exportQuery = query; this.director = director; this.writer = writer; this.results = results;
++	}
++	
++	public boolean isExportInProgress() {
++		return exportInProgress;
++	}
++	
++	public boolean isAborted() {
++		return aborted;
++	}
++	
++	public int getNumberOfExported() {
++		return director.exportedRecords();
++	}
++	
++	public int getNumberOfResults() {
++		return results;
++	}
++	
++	public void abort() {
++		if(!exportInProgress) return;
++		aborted = true; exportInProgress = false;
++		director.abort();
++		setChanged(); notifyObservers(this);
++	}
++	
++	public void execute() {
++		if(execution == null) {
++			execution = new Thread( director, &quot;Export&quot; );
++			exportInProgress = true;
++			execution.start();
++			
++			monitor = new Thread(new Runnable() {
++				public void run() {
++					// Sleep until the thread is really dead.
++					while( true ) try {
++						execution.join(); 
++						break;
++					} catch(InterruptedException e) {}
++					// Perform the final cleanup.
++					exportInProgress = false;
++					try {
++						writer.close();
++					} catch(Exception e) {}
++					try {
++						dblayer.closeQuery( exportQuery );
++					} catch(Exception e) {}
++					
++					logger.debug(&quot;Environment cleaned up.&quot;);
++					setChanged(); notifyObservers(this);
++					deleteObservers();
++				}
++			}, &quot;ExportMonitor&quot;);
++			monitor.start();
++		}
++	}
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-20 11:25:41 UTC (rev 309)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-20 13:54:28 UTC (rev 310)
+@@ -56,15 +56,15 @@
+ 	
+ 	
+ 	/** Select the &lt;code&gt;table.column&lt;/code&gt;. */
+-	public void set(Class table, String column) { 
++	public Template set(Class table, String column) { 
+ 		columns.add(table.getSimpleName()+ (column == null ? &quot;&quot; : &quot;.&quot;+column));
+-		//System.out.println(&quot; + &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
++		return this;
+ 	}
+ 	
+ 	/** Unselect the &lt;code&gt;table.column&lt;/code&gt;. */
+-	public void unset(Class table, String column) { 
++	public Template unset(Class table, String column) { 
+ 		columns.remove(table.getSimpleName()+ (column == null ? &quot;&quot; : &quot;.&quot;+column));
+-		//System.out.println(&quot; - &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
++		return this;
+ 	}
+ 	
+ 	/** @return true if the &lt;code&gt;table.column&lt;/code&gt; is set.*/
+@@ -73,14 +73,16 @@
+ 	}
+ 	
+ 	/** Unselect all columns of all tables. */
+-	public void unsetEverything() { 
+-		columns.clear(); 
++	public Template unsetEverything() { 
++		columns.clear();
++		return this;
+ 	}
+ 	
+ 	/** Select all columns (properties) of all tables. */
+-	public void setEverything() {
++	public Template setEverything() {
+ 		for(Class table : Record.BASIC_TABLES)
+ 			setAllProperties(table);
++		return this;
+ 	}
+ 	
+ 	/** Select all not null columns (properties). */
+@@ -89,24 +91,24 @@
+ 	}
+ 	
+ 	/** Select all properties of this &lt;code&gt;table&lt;/code&gt;. */
+-	public void setAllProperties(Class table) {
++	public Template setAllProperties(Class table) {
+ 		try {
+ 			for( String column : ((Record)table.newInstance()).getProperties() )
+ 				set(table, column);
+-		} catch(IllegalAccessException e) {}
+-		catch(InstantiationException e) {}
++		} catch(Exception e) {}
++		return this;
+ 	}
+ 	
+ 	/** Select all not-null properties of the specified &lt;code&gt;table&lt;/code&gt;. */
+-	public void setAllNN(Class table) {
++	public Template setAllNN(Class table) {
+ 		try {
+ 			Record record = ((Record)table.newInstance());
+ 			List&lt;String&gt; nnProperties = record.getNN();
+ 			nnProperties.removeAll(record.getForeignKeys());
+ 			for( String column :  nnProperties )
+ 				set(table, column);
+-		} catch(IllegalAccessException e) {}
+-		catch(InstantiationException e) {}
++		} catch(Exception e) {}
++		return this;
+ 	}
+ 	
+ 	/**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000359.html">[Plantlore-dev] r307 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+	<LI>Next message: <A HREF="000361.html">[Plantlore-dev] r311 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#362">[ date ]</a>
+              <a href="thread.html#362">[ thread ]</a>
+              <a href="subject.html#362">[ subject ]</a>
+              <a href="author.html#362">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

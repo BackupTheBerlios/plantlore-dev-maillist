@@ -1,0 +1,673 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r700 - in trunk/src/net/sf/plantlore/client: .	overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r700%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview&In-Reply-To=%3C200609052344.k85Ni9OW021299%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000967.html">
+   <LINK REL="Next"  HREF="000969.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r700 - in trunk/src/net/sf/plantlore/client: .	overview</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r700%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview&In-Reply-To=%3C200609052344.k85Ni9OW021299%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r700 - in trunk/src/net/sf/plantlore/client: .	overview">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Wed Sep  6 01:44:09 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000967.html">[Plantlore-dev] r699 - in trunk/src/net/sf/plantlore: client	client/checklist client/createdb client/export client/login	common server/manager
+</A></li>
+        <LI>Next message: <A HREF="000969.html">[Plantlore-dev] r701 -	trunk/src/net/sf/plantlore/client/overview/detail
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#968">[ date ]</a>
+              <a href="thread.html#968">[ thread ]</a>
+              <a href="subject.html#968">[ subject ]</a>
+              <a href="author.html#968">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-06 01:44:01 +0200 (Wed, 06 Sep 2006)
+New Revision: 700
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+Log:
+Removed load gps from file stuff from AddEdit.
+Fixed the altitude, latitude, longitude value entering.
+
+Overview table now has white background.
+Fixed exception handling in AddAction.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-05 23:44:01 UTC (rev 700)
+@@ -228,8 +228,6 @@
+         if (tableSorter != null)
+         {
+             logger.info(&quot;Setting records per page NN to &quot;+recordsPerPage);
+-            if (recordsPerPage == -1)
+-                throw new IllegalArgumentException(&quot;KURVA&quot;);
+             tableSorter.setPageSize(recordsPerPage);
+         }
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 23:44:01 UTC (rev 700)
+@@ -7,6 +7,7 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.awt.Color;
+ import java.awt.Component;
+ import java.awt.Cursor;
+ import java.awt.Dimension;
+@@ -409,8 +410,14 @@
+ 	}
+ 
+ 	private void setDatabaseDependentCommandsEnabled(boolean enabled) {
+-		if( enabled )
++		if( enabled ) {
+ 			view.overviewScrollPane.setViewportView( view.overview );
++                        view.overviewScrollPane.getViewport().setBackground(Color.WHITE);        
++                } else {
++                    view.overviewScrollPane.getViewport().setBackground(Color.LIGHT_GRAY);    
++                    //javax.swing.UIManager.getDefaults().getColor(&quot;Button.background&quot;)
++                }
++
+ 		settingsAction.setEnabled(enabled);
+ 		printAction.setEnabled(enabled);
+ 		exportAction.setEnabled(enabled);
+@@ -698,12 +705,8 @@
+ 					return;
+ 				}
+ 			} catch (RemoteException ex) {
+-				JOptionPane.showMessageDialog(view, L10n
+-						.getString(&quot;Error.RemoteException&quot;)
+-						+ &quot;\n&quot; + ex.getMessage(), L10n
+-						.getString(&quot;Error.RemoteExceptionTitle&quot;),
+-						JOptionPane.WARNING_MESSAGE);
+-				logger.error(ex);
++                            DefaultExceptionHandler.handle(view, ex);
++                            return;
+ 			}
+ 			addModel.clear();
+ 			addView.setVisible(true);
+@@ -1464,7 +1467,7 @@
+ 				if (i &gt; MAX_RECORDS_PER_PAGE) {
+ 					JOptionPane.showMessageDialog(view, L10n
+ 							.getString(&quot;Overview.Warning.MaxRecordsPerPage&quot;)
+-							+ &quot; &quot; + MAX_RECORDS_PER_PAGE);
++							+ &quot; &quot; + MAX_RECORDS_PER_PAGE, L10n.getString(&quot;Overview.Warning.MaxRecordsPerPageTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
+ 					Object obj = e.getOldValue();                                        
+ 					if (obj != null) 
+ 						tf.setValue(obj);
+@@ -1680,7 +1683,7 @@
+ 			 * Do some more work here (switch the enabled/disabled menu items,
+ 			 * etc.)
+ 			 */
+-
++                        
+                         setDatabaseDependentCommandsEnabled(false);
+ 		}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-05 23:44:01 UTC (rev 700)
+@@ -537,7 +537,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;367&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;295&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-05 23:44:01 UTC (rev 700)
+@@ -6,21 +6,30 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.awt.Color;
+ import java.awt.Dimension;
+ import java.awt.event.ActionListener;
+ import java.beans.PropertyChangeListener;
+ import java.rmi.RemoteException;
++import java.text.ParseException;
+ import java.util.Observable;
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+ import javax.swing.Action;
++import javax.swing.JFormattedTextField;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.SwingUtilities;
+ import javax.swing.event.ListSelectionListener;
+ import javax.swing.table.TableColumn;
++import javax.swing.text.AttributeSet;
++import javax.swing.text.BadLocationException;
++import javax.swing.text.DefaultFormatterFactory;
++import javax.swing.text.MaskFormatter;
++import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.overview.*;
+ import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.DocumentSizeFilter;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.StatusBarManager;
+ import net.sf.plantlore.l10n.L10n;
+@@ -60,7 +69,7 @@
+         progressBar.setVisible(false);
+         progressBar.setBorderPainted(false);
+     }
+-    
++
+     /** This method is called from within the constructor to
+      * initialize the form.
+      * WARNING: Do NOT modify this code. The content of this method is
+@@ -255,7 +264,7 @@
+         );
+         overviewPanelLayout.setVerticalGroup(
+             overviewPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 439, Short.MAX_VALUE)
++            .add(overviewScrollPane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 295, Short.MAX_VALUE)
+         );
+ 
+         recordsCount.setText(&quot;-&quot;);
+@@ -517,6 +526,7 @@
+         recordsPerPage.setValue(new Integer(model.getRecordsPerPage()));  
+         overview.getSelectionModel().setSelectionInterval(0,0);
+         overview.setAutoCreateColumnsFromModel(true);
++        overviewScrollPane.getViewport().setBackground(Color.WHITE);        
+     }
+ 
+     /** Returns the main window &lt;code&gt;StatusBarManager&lt;/code&gt;.
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-05 23:44:01 UTC (rev 700)
+@@ -286,6 +286,7 @@
+             oldColor = view.altitudeTextField.getForeground();
+             nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
+             nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
++            nf.setGroupingUsed(false);
+         }
+ 
+         public void processEvent(DocumentEvent e) {
+@@ -340,10 +341,10 @@
+             oldColor = view.latitudeTextField.getForeground();
+             nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
+             nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
++            nf.setGroupingUsed(false);
+         }
+ 
+         public void processEvent(DocumentEvent e) {
+-            System.out.println(&quot;LATITUDE old COLOR = &quot;+oldColor);
+             if (e.getDocument().getLength() == 0) {
+                 model.setLatitude(null);
+                 return;
+@@ -395,6 +396,7 @@
+             oldColor = view.longitudeTextField.getForeground();
+             nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
+             nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
++            nf.setGroupingUsed(false);
+         }
+ 
+         public void processEvent(DocumentEvent e) {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-09-05 23:44:01 UTC (rev 700)
+@@ -4,6 +4,43 @@
+   &lt;NonVisualComponents&gt;
+     &lt;Component class=&quot;javax.swing.ButtonGroup&quot; name=&quot;convertCoordinatesGroup&quot;&gt;
+     &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;gpsLoadButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Load&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;gpsShowButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Show&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;gpsSymbolTextField&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;gpsSymbolLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Symbol:&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;gpsTableLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;GPS table:&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
+   &lt;/NonVisualComponents&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
+@@ -86,7 +123,7 @@
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;jPanel7&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;3&quot;/&gt;
+-                              &lt;Component id=&quot;jPanel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; pref=&quot;914&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;jPanel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+@@ -169,7 +206,7 @@
+                                                       &lt;EmptySpace min=&quot;-2&quot; pref=&quot;434&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;561&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                                      &lt;Component id=&quot;jScrollPane2&quot; pref=&quot;572&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                               &lt;/Group&gt;
+@@ -378,43 +415,27 @@
+                               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;gpsLoadButton&quot; linkSize=&quot;16&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;gpsShowButton&quot; linkSize=&quot;16&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;/Group&gt;
+-                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;gpsSymbolLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;gpsSymbolTextField&quot; linkSize=&quot;18&quot; pref=&quot;80&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;39&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;latitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;4&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                          &lt;Component id=&quot;latitudeTextField&quot; linkSize=&quot;22&quot; min=&quot;-2&quot; pref=&quot;153&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                       &lt;/Group&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;gpsTableLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;155&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;/Group&gt;
++                                      &lt;Component id=&quot;coordinateSystemLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                          &lt;Component id=&quot;latitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;21&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                           &lt;Component id=&quot;longitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;longitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;altitudeTextField&quot; linkSize=&quot;18&quot; min=&quot;-2&quot; pref=&quot;80&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                          &lt;Component id=&quot;longitudeTextField&quot; linkSize=&quot;22&quot; min=&quot;-2&quot; pref=&quot;144&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                       &lt;/Group&gt;
+-                                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+-                                          &lt;Component id=&quot;coordinateSystemLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                                          &lt;Component id=&quot;gpsChangeButton&quot; linkSize=&quot;16&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                      &lt;/Group&gt;
++                                      &lt;Component id=&quot;gpsChangeButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                   &lt;/Group&gt;
+-                                  &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;32&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;altitudeTextField&quot; linkSize=&quot;22&quot; pref=&quot;165&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                           &lt;/Group&gt;
+                         &lt;/DimensionLayout&gt;
+@@ -422,22 +443,17 @@
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;gpsLoadButton&quot; linkSize=&quot;17&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;gpsSymbolLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;gpsSymbolTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;longitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;gpsShowButton&quot; linkSize=&quot;17&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;gpsTableLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;gpsChangeButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;coordinateSystemLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;gpsChangeButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                               &lt;/Group&gt;
+                           &lt;/Group&gt;
+@@ -493,43 +509,6 @@
+                             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+                           &lt;/AuxValues&gt;
+                         &lt;/Component&gt;
+-                        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;gpsLoadButton&quot;&gt;
+-                          &lt;Properties&gt;
+-                            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Load&quot;/&gt;
+-                          &lt;/Properties&gt;
+-                          &lt;AuxValues&gt;
+-                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-                          &lt;/AuxValues&gt;
+-                        &lt;/Component&gt;
+-                        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;gpsShowButton&quot;&gt;
+-                          &lt;Properties&gt;
+-                            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Show&quot;/&gt;
+-                          &lt;/Properties&gt;
+-                          &lt;AuxValues&gt;
+-                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-                          &lt;/AuxValues&gt;
+-                        &lt;/Component&gt;
+-                        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;gpsSymbolTextField&quot;&gt;
+-                          &lt;AuxValues&gt;
+-                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-                          &lt;/AuxValues&gt;
+-                        &lt;/Component&gt;
+-                        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;gpsSymbolLabel&quot;&gt;
+-                          &lt;Properties&gt;
+-                            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Symbol:&quot;/&gt;
+-                          &lt;/Properties&gt;
+-                          &lt;AuxValues&gt;
+-                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-                          &lt;/AuxValues&gt;
+-                        &lt;/Component&gt;
+-                        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;gpsTableLabel&quot;&gt;
+-                          &lt;Properties&gt;
+-                            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;GPS table:&quot;/&gt;
+-                          &lt;/Properties&gt;
+-                          &lt;AuxValues&gt;
+-                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-                          &lt;/AuxValues&gt;
+-                        &lt;/Component&gt;
+                         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;coordinateSystemLabel&quot;&gt;
+                           &lt;Properties&gt;
+                             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Coordinate system:&quot;/&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-09-05 23:11:49 UTC (rev 699)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-09-05 23:44:01 UTC (rev 700)
+@@ -75,6 +75,7 @@
+         
+         numberFormat.setMaximumFractionDigits(AddEditCtrl.MAXIMUM_FRACTION_DIGITS);
+         numberFormat.setMaximumIntegerDigits(AddEditCtrl.MAXIMUM_INTEGER_DIGITS);
++        numberFormat.setGroupingUsed(false);
+         this.model = model;
+         model.addObserver(this);
+         this.inEditMode = edit;
+@@ -108,6 +109,11 @@
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+     private void initComponents() {
+         convertCoordinatesGroup = new javax.swing.ButtonGroup();
++        gpsLoadButton = new javax.swing.JButton();
++        gpsShowButton = new javax.swing.JButton();
++        gpsSymbolTextField = new javax.swing.JTextField();
++        gpsSymbolLabel = new javax.swing.JLabel();
++        gpsTableLabel = new javax.swing.JLabel();
+         jScrollPane8 = new javax.swing.JScrollPane();
+         topPanel = new javax.swing.JPanel();
+         basicPanel = new javax.swing.JPanel();
+@@ -133,11 +139,6 @@
+         altitudeTextField = new javax.swing.JTextField();
+         latitudeTextField = new javax.swing.JTextField();
+         longitudeTextField = new javax.swing.JTextField();
+-        gpsLoadButton = new javax.swing.JButton();
+-        gpsShowButton = new javax.swing.JButton();
+-        gpsSymbolTextField = new javax.swing.JTextField();
+-        gpsSymbolLabel = new javax.swing.JLabel();
+-        gpsTableLabel = new javax.swing.JLabel();
+         coordinateSystemLabel = new javax.swing.JLabel();
+         gpsChangeButton = new javax.swing.JButton();
+         locationNoteLabel = new javax.swing.JLabel();
+@@ -184,6 +185,11 @@
+         jScrollPane6 = new javax.swing.JScrollPane();
+         occurrenceTable = new javax.swing.JTable();
+ 
++        gpsLoadButton.setText(&quot;Load&quot;);
++        gpsShowButton.setText(&quot;Show&quot;);
++        gpsSymbolLabel.setText(&quot;Symbol:&quot;);
++        gpsTableLabel.setText(&quot;GPS table:&quot;);
++
+         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+         jScrollPane8.setPreferredSize(new java.awt.Dimension(920, 685));
+         topPanel.setLayout(new java.awt.BorderLayout());
+@@ -236,14 +242,6 @@
+ 
+         latitudeTextField.setNextFocusableComponent(longitudeTextField);
+ 
+-        gpsLoadButton.setText(&quot;Load&quot;);
+-
+-        gpsShowButton.setText(&quot;Show&quot;);
+-
+-        gpsSymbolLabel.setText(&quot;Symbol:&quot;);
+-
+-        gpsTableLabel.setText(&quot;GPS table:&quot;);
+-
+         coordinateSystemLabel.setText(&quot;Coordinate system:&quot;);
+ 
+         gpsChangeButton.setText(&quot;Change&quot;);
+@@ -255,65 +253,43 @@
+             .add(gpsPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(gpsLoadButton)
+-                    .add(gpsShowButton))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(gpsPanelLayout.createSequentialGroup()
+-                        .add(gpsSymbolLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(gpsSymbolTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 80, Short.MAX_VALUE)
+-                        .add(39, 39, 39)
+                         .add(latitudeLabel)
+-                        .add(4, 4, 4))
++                        .add(4, 4, 4)
++                        .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 153, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(coordinateSystemLabel))
++                .add(21, 21, 21)
++                .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(gpsPanelLayout.createSequentialGroup()
+-                        .add(gpsTableLabel)
+-                        .add(155, 155, 155)))
+-                .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                    .add(gpsPanelLayout.createSequentialGroup()
+-                        .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(longitudeLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(altitudeLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 80, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                    .add(gpsPanelLayout.createSequentialGroup()
+-                        .add(coordinateSystemLabel)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                        .add(gpsChangeButton)))
++                        .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 144, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(gpsChangeButton))
++                .add(32, 32, 32)
++                .add(altitudeLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(altitudeTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 165, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+ 
+-        gpsPanelLayout.linkSize(new java.awt.Component[] {gpsChangeButton, gpsLoadButton, gpsShowButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++        gpsPanelLayout.linkSize(new java.awt.Component[] {altitudeTextField, latitudeTextField, longitudeTextField}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+ 
+-        gpsPanelLayout.linkSize(new java.awt.Component[] {altitudeTextField, gpsSymbolTextField, latitudeTextField, longitudeTextField}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+-
+         gpsPanelLayout.setVerticalGroup(
+             gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(gpsPanelLayout.createSequentialGroup()
+                 .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(gpsLoadButton)
+-                    .add(gpsSymbolLabel)
+-                    .add(gpsSymbolTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(altitudeLabel)
++                    .add(latitudeLabel)
+                     .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(longitudeLabel)
+                     .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(altitudeLabel)
+-                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(latitudeLabel))
++                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(gpsPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(gpsShowButton)
+-                    .add(gpsTableLabel)
+-                    .add(gpsChangeButton)
+-                    .add(coordinateSystemLabel)))
++                    .add(coordinateSystemLabel)
++                    .add(gpsChangeButton)))
+         );
+ 
+-        gpsPanelLayout.linkSize(new java.awt.Component[] {gpsLoadButton, gpsShowButton}, org.jdesktop.layout.GroupLayout.VERTICAL);
+-
+         locationNoteLabel.setText(&quot;Location note:&quot;);
+ 
+         locationNoteArea.setColumns(20);
+@@ -366,7 +342,7 @@
+                                         .add(placeDescriptionLabel)
+                                         .add(434, 434, 434))
+                                     .add(jPanel5Layout.createSequentialGroup()
+-                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 541, Short.MAX_VALUE)
++                                        .add(jScrollPane2, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 572, Short.MAX_VALUE)
+                                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                                     .add(locationNoteLabel)
+@@ -558,10 +534,10 @@
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jPanel7Layout.createSequentialGroup()
+                                 .add(checklistButton)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 340, Short.MAX_VALUE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 232, Short.MAX_VALUE)
+                                 .add(clearOccurrenceButton))
+                             .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+-                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 658, Short.MAX_VALUE))
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel7Layout.createSequentialGroup()
+@@ -572,11 +548,11 @@
+                             .add(herbariumLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 146, Short.MAX_VALUE)
+-                            .add(publicationCombo, 0, 146, Short.MAX_VALUE)
+-                            .add(projectCombo, 0, 146, Short.MAX_VALUE)
++                            .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 132, Short.MAX_VALUE)
++                            .add(publicationCombo, 0, 132, Short.MAX_VALUE)
++                            .add(projectCombo, 0, 132, Short.MAX_VALUE)
+                             .add(jPanel7Layout.createSequentialGroup()
+-                                .add(sourceCombo, 0, 146, Short.MAX_VALUE)
++                                .add(sourceCombo, 0, 132, Short.MAX_VALUE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
+                         .add(19, 19, 19))
+                     .add(jPanel7Layout.createSequentialGroup()
+@@ -680,7 +656,7 @@
+                 .add(settingsButton)
+                 .add(64, 64, 64)
+                 .add(requiredInfoLabel)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 436, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 350, Short.MAX_VALUE)
+                 .add(okButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(cancelButton)
+@@ -699,7 +675,7 @@
+                     .add(cancelButton)
+                     .add(okButton)
+                     .add(requiredInfoLabel))
+-                .addContainerGap(16, Short.MAX_VALUE))
++                .addContainerGap(13, Short.MAX_VALUE))
+         );
+ 
+         buttonPanelLayout.linkSize(new java.awt.Component[] {cancelButton, helpButton, okButton}, org.jdesktop.layout.GroupLayout.VERTICAL);
+@@ -742,7 +718,7 @@
+             extendedPanelLayout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(extendedPanelLayout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 905, Short.MAX_VALUE)
++                .add(jScrollPane6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 906, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         extendedPanelLayout.setVerticalGroup(
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000967.html">[Plantlore-dev] r699 - in trunk/src/net/sf/plantlore: client	client/checklist client/createdb client/export client/login	common server/manager
+</A></li>
+	<LI>Next message: <A HREF="000969.html">[Plantlore-dev] r701 -	trunk/src/net/sf/plantlore/client/overview/detail
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#968">[ date ]</a>
+              <a href="thread.html#968">[ thread ]</a>
+              <a href="subject.html#968">[ subject ]</a>
+              <a href="author.html#968">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

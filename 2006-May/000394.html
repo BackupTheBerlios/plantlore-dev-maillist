@@ -1,0 +1,1796 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r344 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r344%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605242356.k4ONuJ1h014063%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000393.html">
+   <LINK REL="Next"  HREF="000395.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r344 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r344%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605242356.k4ONuJ1h014063%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r344 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Thu May 25 01:56:19 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000393.html">[Plantlore-dev] r343 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html
+</A></li>
+        <LI>Next message: <A HREF="000395.html">[Plantlore-dev] r345 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#394">[ date ]</a>
+              <a href="thread.html#394">[ thread ]</a>
+              <a href="subject.html#394">[ subject ]</a>
+              <a href="author.html#394">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-25 01:56:05 +0200 (Thu, 25 May 2006)
+New Revision: 344
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.form
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/SearchView.form
+   trunk/src/net/sf/plantlore/client/SearchView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Proper handling of user entered data - forcing him to enter all NN items, not storing data he didn't fill in or didn't want to store.
+I had to change FormattedTextFields to ordinary JTextFields to do that. So a little more clever locale handling is now implemented in these fields.
+Add should work fine(although it doesn't show newly added occurrence record in overview on my computer, even after Plantlore restart), Edit could have some problems thanks to these changes. I'll test that tomorrow.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-24 23:56:05 UTC (rev 344)
+@@ -34,6 +34,7 @@
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.Village;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.common.exception.DBLayerException;
+@@ -47,6 +48,8 @@
+     public static final int WGS84 = 1;
+     public static final int S42 = 2;
+     public static final int SJTSK = 3;
++    public static final String EMPTY_STRING = L10n.getString(&quot;Common.ComboboxNothingSelected&quot;);
++    public static final Pair&lt;String,Integer&gt; EMPTY_PAIR = new Pair&lt;String,Integer&gt;(EMPTY_STRING,-1);
+     
+     private Logger logger;
+     private DBLayer database;      
+@@ -69,23 +72,23 @@
+     
+     private String habitatDescription;
+     private Integer year;
+-    private String habitatNote;
+-    private String occurrenceNote;
++    private String habitatNote = null;
++    private String occurrenceNote = null;
+     private Pair&lt;String, Integer&gt; territoryName;
+     private Pair&lt;String, Integer&gt; phytName;
+     private Pair&lt;String, Integer&gt; phytCode;
+     private String phytCountry;
+-    private String quadrant;
+-    private Double altitude;
+-    private Double longitude;
+-    private Double latitude;
+-    private String source;
++    private String quadrant = null;
++    private Double altitude = null;
++    private Double longitude = null;
++    private Double latitude = null;
++    private String source = null;
+     private Pair&lt;String,Integer&gt; publication;
+-    private String herbarium;
++    private String herbarium = null;
+     private Pair&lt;String,Integer&gt; project;
+-    private Integer month;
+-    private Integer day;
+-    private Date time;
++    private Integer month = null;
++    private Integer day = null;
++    private Date time = null;
+     private Occurrence[] habitatSharingOccurrences = null;
+     
+     private Pair&lt;String, Integer&gt;[] plants = null;
+@@ -386,6 +389,8 @@
+     public void setMonth(Integer month) {
+         this.month = month;
+         logger.debug(&quot;Month set to &quot;+month);
++        setChanged();
++        notifyObservers(&quot;updateDayChooser&quot;);
+     }
+ 
+     public Integer getDay() {
+@@ -478,50 +483,57 @@
+         occ = new Occurrence();
+         
+         m = new Metadata();
+-        if (project != null)
+-            m = (Metadata)dlu.getObjectFor(project.getSecond(),Metadata.class);
++        m = (Metadata)dlu.getObjectFor(project.getSecond(),Metadata.class);
++        occ.setMetadata(m);
+ 
+         plant = new Plant();
+         Integer id = lookupPlant(taxon);
+         if (!id.equals(-1))
+             plant = (Plant)dlu.getObjectFor(id,Plant.class);
+ 
+-        publ = new Publication();
+-        if (publication != null &amp;&amp; !publication.getSecond().equals(-1))
++        if (publication != null &amp;&amp; !publication.getSecond().equals(-1)) {
+             publ = (Publication)dlu.getObjectFor(publication.getSecond(),Publication.class);
++            occ.setPublication(publ);
++        }
+             
+-        occ.setDayCollected(day);
++        if (day != null) occ.setDayCollected(day);
+         occ.setHabitat(h);
+-        occ.setHerbarium(herbarium);
++        if (herbarium != null) occ.setHerbarium(herbarium);
+         
+         //cIsoDateTimeBegin construction
+         Calendar c = Calendar.getInstance();
+         c.set(Calendar.YEAR, year);
+-        c.set(Calendar.MONTH, month);
+-        c.set(Calendar.DAY_OF_MONTH,day);
+-        Calendar temp = Calendar.getInstance();
+-        temp.setTime(time);
+-        c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
+-        c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        if (!month.equals(12)) { //there is empty string at the 12th position in the monthChooser
++            c.set(Calendar.MONTH, month);
++            c.set(Calendar.DAY_OF_MONTH,day);
++        } else {
++            c.set(Calendar.MONTH, 0);
++            c.set(Calendar.DAY_OF_MONTH,1);
++        }
++
++        if (time != null) {
++            //set the time itself
++            occ.setTimeCollected(time);
++            
++            //and prepare it for cIsoDateTimeBegin
++            Calendar temp = Calendar.getInstance();
++            temp.setTime(time);
++            c.set(Calendar.HOUR_OF_DAY,temp.get(Calendar.HOUR_OF_DAY));
++            c.set(Calendar.MINUTE,temp.get(Calendar.MINUTE));
++        } else {
++            c.set(Calendar.HOUR_OF_DAY,0);
++            c.set(Calendar.MINUTE,1); //so that we avoid possible problems with strong inequality when searching - we set the from minute in search by default to 0
++        }
+         occ.setIsoDateTimeBegin(c.getTime());
+         
+-        occ.setMetadata(m);
+-        occ.setMonthCollected(month);
+-        occ.setNote(occurrenceNote);
++        if (!month.equals(12)) occ.setMonthCollected(month); // 12 ... see a few lines above
++        if (occurrenceNote != null) occ.setNote(occurrenceNote);
+         occ.setPlant(plant);
+-        if (publication != null)
+-            occ.setPublication(publ);
+-        occ.setTimeCollected(time);
+         occ.setYearCollected(year);
+         
+         occ.setDeleted(0);
+         
+-        //#### 2BE REMOVED
+-        occ.setCreatedWhen(new Date());
+-        occ.setUpdatedWhen(new Date());
+-        occ.setCreatedWho((User) dlu.getObjectFor(2,User.class));
+-        occ.setUpdatedWho((User) dlu.getObjectFor(2,User.class));        
+-        //----------
++        //FIXME #### 2BE REMOVED
+         occ.setUnitIdDb(&quot;docasna unitIdDb&quot;);
+         occ.setUnitValue(&quot;docasna unit value&quot;);
+         //####        
+@@ -842,15 +854,15 @@
+                     v = (Village)dlu.getObjectFor(village.getSecond(),Village.class);
+                     p = (Phytochorion)dlu.getObjectFor(phytCode.getSecond(),Phytochorion.class);
+                     t = (Territory)dlu.getObjectFor(territoryName.getSecond(),Territory.class);                    
+-                    h.setAltitude(altitude);
+-                    h.setCountry(phytCountry);
+-                    h.setDescription(habitatDescription);
+-                    h.setLatitude(latitude);
+-                    h.setLongitude(longitude);
++                    if (altitude != null) h.setAltitude(altitude);
++                    if (phytCountry != null) h.setCountry(phytCountry);
++                    if (habitatDescription != null) h.setDescription(habitatDescription);
++                    if (latitude != null) h.setLatitude(latitude);
++                    if (longitude != null) h.setLongitude(longitude);
+                     h.setNearestVillage(v);
+-                    h.setNote(habitatNote);
++                    if (habitatNote != null)h.setNote(habitatNote);
+                     h.setPhytochorion(p);
+-                    h.setQuadrant(quadrant);
++                    if (quadrant != null) h.setQuadrant(quadrant);
+                     h.setTerritory(t);
+                     h.setDeleted(0);
+                     logger.info(&quot;Creating a shared habitat&quot;);
+@@ -912,9 +924,14 @@
+     }
+     
+     public Pair&lt;Boolean,String&gt; checkData() {
+-        //TODO: check that the author set contains reasonable (not null) values
+         if (authorList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one author!&quot;);
++        else {
++            for (Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author : authorList) {
++                if (author.getFirst().getFirst().equals(&quot;&quot;))
++                    return new Pair&lt;Boolean,String&gt;(false, &quot;Some of the authors is empty. Enter it or remove it please.&quot;);
++            }
++        }
+         if (taxonList == null || taxonList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one taxon!&quot;);
+         
+@@ -1194,22 +1211,22 @@
+     public void clear() {
+         logger.debug(&quot;Clearing add model&quot;);
+         clearAuthors();
+-        habitatDescription = &quot;&quot;;
++        habitatDescription = null;
+         year = Calendar.getInstance().get(Calendar.YEAR);
+-        habitatNote = &quot;&quot;;
+-        occurrenceNote = &quot;&quot;;
+-        phytCountry = &quot;&quot;;
+-        quadrant = &quot;&quot;;
+-        altitude = 0.0;
+-        longitude = 0.0;
+-        latitude = 0.0;
+-        source = &quot;&quot;;
+-        publication = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
+-        herbarium = &quot;&quot;;
++        habitatNote = null;
++        occurrenceNote = null;
++        phytCountry = null;
++        quadrant = null;
++        altitude = null;
++        longitude = null;
++        latitude = null;
++        source = null;
++        publication = null;//new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
++        herbarium = null;
+         
+         month = Calendar.getInstance().get(Calendar.MONTH);
+         day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+-        time = new Date(0);
++        time = null;
+     }
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-24 23:56:05 UTC (rev 344)
+@@ -19,8 +19,13 @@
+ import java.awt.event.MouseEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.text.DateFormat;
++import java.text.NumberFormat;
++import java.text.ParseException;
+ import java.util.ArrayList;
++import java.util.Calendar;
+ import java.util.Date;
++import java.util.Locale;
+ 
+ import javax.swing.AbstractAction;
+ import javax.swing.DefaultCellEditor;
+@@ -78,10 +83,9 @@
+         //------- TextFields --------        
+         view.herbariumTextField.addFocusListener(new HerbariumListener());
+         view.quadrantTextField.addFocusListener(new QuadrantListener());
+-        view.altitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new AltitudeListener());
+-        view.longitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new LongitudeListener());
+-        view.latitudeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new LatitudeListener());
+-        view.timeFormattedTextField.addPropertyChangeListener(&quot;value&quot;,new TimeListener());
++        view.altitudeTextField.addFocusListener(new AltitudeListener());
++        view.longitudeTextField.addFocusListener(new LongitudeListener());
++        view.latitudeTextField.addFocusListener(new LatitudeListener());
+         
+         //------- TextAreas --------        
+         view.taxonTextArea.addFocusListener(new TaxonAreaListener());
+@@ -91,8 +95,9 @@
+ 
+         //------- Spinners --------
+         view.yearSpinner.addChangeListener(new YearListener());
+-        view.monthSpinner.addChangeListener(new MonthListener());
+-        view.daySpinner.addChangeListener(new DayListener());
++        view.monthChooser.addPropertyChangeListener(&quot;month&quot;, new MonthChangeListener());
++        view.dayChooser.addPropertyChangeListener(&quot;day&quot;, new DayChangeListener());
++        view.timeTextField.addFocusListener(new TimeListener());
+         
+         //------- RadioButtons --------
+         view.WGS84Button.addActionListener(new CoordinateSystemListener());
+@@ -267,34 +272,159 @@
+             model.setYear((Integer)s.getValue());
+         }
+     }//YearListener
+-    
+-    class AltitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setAltitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
++
++    class AltitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setAltitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setAltitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    model.setAltitude(value);
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                } catch (ParseException ex2) {
++                    if (model.getAltitude() != null) {
++                        tf.setText(&quot;&quot;+nf.format(model.getAltitude()));
++                    } else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
+     }//AltitudeListener
+ 
+-    class LongitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setLongitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
+-    }//LongitudeListener
++    class LatitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
+ 
+-    class LatitudeListener implements PropertyChangeListener {
+-        public void propertyChange(PropertyChangeEvent evt) {
+-            if (evt.getNewValue() != null)
+-                model.setLatitude(((Number)evt.getNewValue()).doubleValue());
+-        }        
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setLatitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setLatitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                    model.setLatitude(value);                    
++                } catch (ParseException ex2) {
++                    if (model.getLatitude() != null)
++                        tf.setText(&quot;&quot;+model.getLatitude());
++                    else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
+     }//LatitudeListener
+ 
+-    class TimeListener implements PropertyChangeListener {
++    class LongitudeListener implements FocusListener {
++        NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setLongitude(null);
++                return;
++            }
++            
++            Double value;
++            try {
++                value = nf.parse(tf.getText()).doubleValue();
++                String s = nf.format(value);
++                if (!s.equals(tf.getText().trim()))
++                    throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
++                model.setLongitude(value);
++            } catch (ParseException ex) {
++                try {
++                    value = nfUS.parse(tf.getText()).doubleValue();
++                    tf.setText(nf.format(value)); //print the number using proper decimal point
++                    model.setLongitude(value);                    
++                } catch (ParseException ex2) {
++                    if (model.getLongitude() != null)
++                        tf.setText(&quot;&quot;+model.getLongitude());
++                    else
++                        tf.setText(&quot;&quot;);
++                    return;
++                }
++            }
++        }
++    }//LongitudeListener
++    
++    class TimeListener implements FocusListener {
++        DateFormat df = DateFormat.getTimeInstance(DateFormat.SHORT);
++        Calendar c = Calendar.getInstance();
++        
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            JTextField tf = (JTextField) e.getSource();
++            if (tf.getText().trim().equals(&quot;&quot;)) {
++                model.setTime(null);
++                return;
++            }
++            
++            Date value;
++            try {
++                value = df.parse(tf.getText());
++                model.setTime(value);
++            } catch (ParseException ex) {
++                if (model.getTime() != null) {
++                    c.setTime(model.getTime());
++                    tf.setText(&quot;&quot;+c.get(Calendar.HOUR_OF_DAY)+&quot;:&quot;+Calendar.MINUTE);
++                } else
++                    tf.setText(&quot;&quot;);
++                return;
++            }
++        }
++    }//TimeListener
++    
++    class MonthChangeListener implements PropertyChangeListener {
+         public void propertyChange(PropertyChangeEvent evt) {
+-            model.setTime((Date)evt.getNewValue());
+-        }        
+-    }//AltitudeListener
++            model.setMonth((Integer) evt.getNewValue());
++        } 
++    }
+     
++    class DayChangeListener implements PropertyChangeListener {
++        public void propertyChange(PropertyChangeEvent evt) {
++            model.setDay((Integer) evt.getNewValue());
++        } 
++    }
++    
+     class ExtendedButtonListener extends MouseAdapter {
+         public void mouseClicked(MouseEvent e) {
+             view.switchExtended();
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/AddEditView.form	2006-05-24 23:56:05 UTC (rev 344)
+@@ -278,10 +278,10 @@
+           &lt;/Border&gt;
+         &lt;/Property&gt;
+         &lt;Property name=&quot;minimumSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-          &lt;Dimension value=&quot;[800, 395]&quot;/&gt;
++          &lt;Dimension value=&quot;[800, 480]&quot;/&gt;
+         &lt;/Property&gt;
+         &lt;Property name=&quot;preferredSize&quot; type=&quot;java.awt.Dimension&quot; editor=&quot;org.netbeans.beaninfo.editors.DimensionEditor&quot;&gt;
+-          &lt;Dimension value=&quot;[800, 395]&quot;/&gt;
++          &lt;Dimension value=&quot;[800, 480]&quot;/&gt;
+         &lt;/Property&gt;
+       &lt;/Properties&gt;
+       &lt;Constraints&gt;
+@@ -293,27 +293,27 @@
+       &lt;Layout&gt;
+         &lt;DimensionLayout dim=&quot;0&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;12&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jPanel4&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;442&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;102&quot; attributes=&quot;1&quot;&gt;
+                                   &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jPanel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;/Group&gt;
+-                              &lt;Component id=&quot;jPanel5&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;jPanel5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jPanel7&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;jPanel9&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;jPanel7&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+@@ -324,23 +324,21 @@
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jPanel5&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Component id=&quot;jPanel7&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;jPanel5&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;jPanel1&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;Component id=&quot;jPanel9&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel9&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel6&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;jPanel1&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;382&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jPanel4&quot; min=&quot;-2&quot; pref=&quot;163&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Component id=&quot;requiredInfoLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;288&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -366,45 +364,47 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;monthLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;monthLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;timeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;monthSpinner&quot; linkSize=&quot;11&quot; min=&quot;-2&quot; pref=&quot;39&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;timeTextField&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Component id=&quot;monthChooser&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;dayLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;daySpinner&quot; linkSize=&quot;11&quot; min=&quot;-2&quot; pref=&quot;36&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;timeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;timeFormattedTextField&quot; min=&quot;-2&quot; pref=&quot;69&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;44&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dayChooser&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+             &lt;DimensionLayout dim=&quot;1&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;monthLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;timeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;monthSpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;dayLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;daySpinner&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;timeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;monthLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;monthChooser&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;/Group&gt;
++                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                                  &lt;Component id=&quot;timeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;timeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;/Group&gt;
++                          &lt;/Group&gt;
++                          &lt;Component id=&quot;dayLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;dayChooser&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+           &lt;/Layout&gt;
+           &lt;SubComponents&gt;
+-            &lt;Component class=&quot;javax.swing.JSpinner&quot; name=&quot;monthSpinner&quot;&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((SpinnerNumberModel)monthSpinner.getModel()).setMinimum(1);&amp;#xa;((SpinnerNumberModel)monthSpinner.getModel()).setMaximum(12);&amp;#xa;&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;monthLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Month:&quot;/&gt;
+@@ -421,24 +421,25 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JSpinner&quot; name=&quot;daySpinner&quot;&gt;
++            &lt;Component class=&quot;com.toedter.calendar.JMonthChooser&quot; name=&quot;monthChooser&quot;&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((SpinnerNumberModel)daySpinner.getModel()).setMinimum(1);&amp;#xa;((SpinnerNumberModel)daySpinner.getModel()).setMaximum(31);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);&amp;#xa;monthChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
++            &lt;Component class=&quot;com.toedter.calendar.JDayChooser&quot; name=&quot;dayChooser&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;dayChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;timeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Time:&quot;/&gt;
+               &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;timeFormattedTextField&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;timeTextField&quot;&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(DateFormat.getTimeInstance(DateFormat.SHORT,L10n.getCurrentLocale()));&amp;#xa;&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;timeFormattedTextField.setActionCommand(&quot;timeFormattedTextField&quot;);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -462,25 +463,24 @@
+           &lt;Layout&gt;
+             &lt;DimensionLayout dim=&quot;0&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;countryLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;countryLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;phytCountryCombo&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                  &lt;Component id=&quot;phytNameCombo&quot; alignment=&quot;0&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;phytCountryCombo&quot; linkSize=&quot;14&quot; pref=&quot;206&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                                  &lt;Component id=&quot;phytNameCombo&quot; linkSize=&quot;14&quot; alignment=&quot;0&quot; pref=&quot;206&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                               &lt;/Group&gt;
+                           &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+-                              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;territoryNameLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;territoryNameCombo&quot; pref=&quot;177&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;territoryNameCombo&quot; linkSize=&quot;14&quot; min=&quot;-2&quot; pref=&quot;206&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -496,6 +496,7 @@
+                           &lt;/Group&gt;
+                           &lt;Component id=&quot;phytCodeCombo&quot; linkSize=&quot;10&quot; alignment=&quot;0&quot; pref=&quot;90&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;/Group&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -504,14 +505,14 @@
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;territoryNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;territoryNameCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;territoryNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;phytNameCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;phytCodeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -520,10 +521,10 @@
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;phytCountryCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;quadrantLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;quadrantTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+@@ -615,7 +616,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getCountries(), false); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);&amp;#xa;phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -660,7 +661,7 @@
+                           &lt;Component id=&quot;herbariumTextField&quot; alignment=&quot;0&quot; pref=&quot;113&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;0&quot; pref=&quot;171&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;76&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -671,7 +672,7 @@
+                           &lt;Component id=&quot;sourceLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;sourceCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;12&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;publicationLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;publicationCombo&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -738,7 +739,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getSources(), false); &quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;sourceCombo.setActionCommand(&quot;sourceCombo&quot;);&amp;#xa;sourceCombo.insertItemAt(model.EMPTY_STRING,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -750,7 +751,7 @@
+               &lt;/Properties&gt;
+               &lt;AuxValues&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoComboBoxNG3(model.getPublications(), true);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;publicationCombo.setActionCommand(&quot;publicationCombo&quot;);&amp;#xa;publicationCombo.insertItemAt(model.EMPTY_PAIR,0);&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -788,7 +789,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;219&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane4&quot; pref=&quot;295&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -845,19 +846,17 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;103&quot; alignment=&quot;1&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
++                          &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;longitudeFormattedTextField&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;Component id=&quot;latitudeFormattedTextField&quot; alignment=&quot;1&quot; min=&quot;0&quot; pref=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                          &lt;Component id=&quot;altitudeFormattedTextField&quot; alignment=&quot;1&quot; min=&quot;-2&quot; pref=&quot;63&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;latitudeTextField&quot; linkSize=&quot;15&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Component id=&quot;altitudeTextField&quot; linkSize=&quot;15&quot; alignment=&quot;0&quot; pref=&quot;51&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;Component id=&quot;longitudeTextField&quot; linkSize=&quot;15&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;25&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;S42Button&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;WGS84Button&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -871,32 +870,24 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;altitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;latitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;longitudeFormattedTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;WGS84Button&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;S42Button&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;SJTSKButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;WGS84Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+-                      &lt;EmptySpace pref=&quot;42&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;S42Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;SJTSKButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;longitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                      &lt;EmptySpace pref=&quot;48&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -910,31 +901,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;altitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;latitudeFormattedTextField&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;NumberFormat nf = NumberFormat.getNumberInstance(L10n.getCurrentLocale());&amp;#xa;nf.setMaximumFractionDigits(3);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;altitudeFormattedTextField.setActionCommand(&quot;altitudeFormattedTextField&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;latitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;longitudeFormattedTextField&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;latitudeFormattedTextField.setActionCommand(&quot;latitudeFormattedTextField&quot;);&amp;#xa;&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;latitudeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Latitude:&quot;/&gt;
+@@ -951,18 +917,6 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;longitudeFormattedTextField&quot;&gt;
+-              &lt;Properties&gt;
+-                &lt;Property name=&quot;nextFocusableComponent&quot; type=&quot;java.awt.Component&quot; editor=&quot;org.netbeans.modules.form.ComponentChooserEditor&quot;&gt;
+-                  &lt;ComponentRef name=&quot;WGS84Button&quot;/&gt;
+-                &lt;/Property&gt;
+-              &lt;/Properties&gt;
+-              &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(nf);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;longitudeFormattedTextField.setActionCommand(&quot;longitudeFormattedTextField&quot;);&quot;/&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-              &lt;/AuxValues&gt;
+-            &lt;/Component&gt;
+             &lt;Component class=&quot;javax.swing.JRadioButton&quot; name=&quot;WGS84Button&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;buttonGroup&quot; type=&quot;javax.swing.ButtonGroup&quot; editor=&quot;org.netbeans.modules.form.RADComponent$ButtonGroupPropertyEditor&quot;&gt;
+@@ -1035,6 +989,21 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;altitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;latitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
++            &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;longitudeTextField&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++              &lt;/AuxValues&gt;
++            &lt;/Component&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
+         &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel9&quot;&gt;
+@@ -1057,7 +1026,7 @@
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;219&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;295&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1065,7 +1034,7 @@
+             &lt;DimensionLayout dim=&quot;1&quot;&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;105&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane5&quot; pref=&quot;115&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -1093,6 +1062,11 @@
+             &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;requiredInfoLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;requiredInfoLabel&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel8&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-24 23:56:05 UTC (rev 344)
+@@ -8,6 +8,7 @@
+ 
+ import java.awt.Dimension;
+ import java.text.DateFormat;
++import java.text.MessageFormat;
+ import java.text.NumberFormat;
+ import java.text.SimpleDateFormat;
+ import java.util.Calendar;
+@@ -31,13 +32,16 @@
+ import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
+ 
+ /**
+  *
+  * @author  reimei
+  */
+ public class AddEditView extends javax.swing.JDialog implements Observer {
+-    private static final int DIALOG_WIDTH = 930;
++    private Logger logger;
++    private static final int DIALOG_WIDTH = 890;
++    private static final String REQUIRED_STRING  = &quot;(*)&quot;;
+     private boolean visible=false;
+     private AddEdit model;
+     private boolean inEditMode = false;
+@@ -47,6 +51,8 @@
+     /** Creates new form AddEdit2 */
+     public AddEditView(java.awt.Frame parent, boolean modal, AddEdit model, boolean edit) {
+         super(parent, modal);
++        logger = Logger.getLogger(this.getClass().getPackage().getName());                
++
+         this.model = model;
+         model.addObserver(this);
+         this.inEditMode = edit;
+@@ -97,13 +103,12 @@
+         authorTable = new javax.swing.JTable();
+         jPanel3 = new javax.swing.JPanel();
+         jPanel4 = new javax.swing.JPanel();
+-        monthSpinner = new javax.swing.JSpinner();
+         monthLabel = new javax.swing.JLabel();
+         dayLabel = new javax.swing.JLabel();
+-        daySpinner = new javax.swing.JSpinner();
++        monthChooser = new com.toedter.calendar.JMonthChooser();
++        dayChooser = new com.toedter.calendar.JDayChooser();
+         timeLabel = new javax.swing.JLabel();
+-        timeFormattedTextField = new JFormattedTextField(DateFormat.getTimeInstance(DateFormat.SHORT,L10n.getCurrentLocale()));
+-
++        timeTextField = new javax.swing.JTextField();
+         jPanel5 = new javax.swing.JPanel();
+         quadrantLabel = new javax.swing.JLabel();
+         countryLabel = new javax.swing.JLabel();
+@@ -129,19 +134,18 @@
+         locationNoteArea = new javax.swing.JTextArea();
+         jPanel1 = new javax.swing.JPanel();
+         altitudeLabel = new javax.swing.JLabel();
+-        NumberFormat nf = NumberFormat.getNumberInstance(L10n.getCurrentLocale());
+-        nf.setMaximumFractionDigits(3);
+-        altitudeFormattedTextField = new JFormattedTextField(nf);
+-        latitudeFormattedTextField = new JFormattedTextField(nf);
+         latitudeLabel = new javax.swing.JLabel();
+         longitudeLabel = new javax.swing.JLabel();
+-        longitudeFormattedTextField = new JFormattedTextField(nf);
+         WGS84Button = new javax.swing.JRadioButton();
+         S42Button = new javax.swing.JRadioButton();
+         SJTSKButton = new javax.swing.JRadioButton();
++        altitudeTextField = new javax.swing.JTextField();
++        latitudeTextField = new javax.swing.JTextField();
++        longitudeTextField = new javax.swing.JTextField();
+         jPanel9 = new javax.swing.JPanel();
+         jScrollPane5 = new javax.swing.JScrollPane();
+         occurrenceNoteArea = new javax.swing.JTextArea();
++        requiredInfoLabel = new javax.swing.JLabel();
+         jPanel8 = new javax.swing.JPanel();
+         cancelButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+@@ -264,57 +268,54 @@
+         getContentPane().add(jPanel2, java.awt.BorderLayout.NORTH);
+ 
+         jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.ExtendedData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+-        jPanel3.setMinimumSize(new java.awt.Dimension(800, 395));
+-        jPanel3.setPreferredSize(new java.awt.Dimension(800, 395));
++        jPanel3.setMinimumSize(new java.awt.Dimension(800, 480));
++        jPanel3.setPreferredSize(new java.awt.Dimension(800, 480));
+         jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.TimePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+-        ((SpinnerNumberModel)monthSpinner.getModel()).setMinimum(1);
+-        ((SpinnerNumberModel)monthSpinner.getModel()).setMaximum(12);
+-
+         monthLabel.setText(&quot;Month:&quot;);
+ 
+         dayLabel.setText(&quot;Day:&quot;);
+ 
+-        ((SpinnerNumberModel)daySpinner.getModel()).setMinimum(1);
+-        ((SpinnerNumberModel)daySpinner.getModel()).setMaximum(31);
++        ((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);
++        monthChooser.setLocale(L10n.getCurrentLocale());
+ 
++        dayChooser.setLocale(L10n.getCurrentLocale());
++
+         timeLabel.setText(&quot;Time:&quot;);
+ 
+-        timeFormattedTextField.setActionCommand(&quot;timeFormattedTextField&quot;);
+-
+         org.jdesktop.layout.GroupLayout jPanel4Layout = new org.jdesktop.layout.GroupLayout(jPanel4);
+         jPanel4.setLayout(jPanel4Layout);
+         jPanel4Layout.setHorizontalGroup(
+             jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel4Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(monthLabel)
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(monthLabel)
++                    .add(timeLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(monthSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 39, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(timeTextField)
++                    .add(monthChooser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(dayLabel)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(daySpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 36, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(timeLabel)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(timeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 69, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(44, Short.MAX_VALUE))
++                .add(dayChooser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+-
+-        jPanel4Layout.linkSize(new java.awt.Component[] {daySpinner, monthSpinner}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+-
+         jPanel4Layout.setVerticalGroup(
+             jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel4Layout.createSequentialGroup()
+-                .addContainerGap()
+-                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(monthLabel)
+-                    .add(timeLabel)
+-                    .add(monthSpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel4Layout.createSequentialGroup()
++                        .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(monthLabel)
++                            .add(monthChooser, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(jPanel4Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                            .add(timeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                            .add(timeLabel)))
+                     .add(dayLabel)
+-                    .add(daySpinner, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(timeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(dayChooser, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap())
+         );
+ 
+         jPanel5.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.LocationPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+@@ -335,6 +336,7 @@
+         phytCodeCombo.setActionCommand(&quot;phytCodeCombo&quot;);
+ 
+         phytCountryCombo.setActionCommand(&quot;phytCountryCombo&quot;);
++        phytCountryCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+         quadrantTextField.setActionCommand(&quot;quadrantTextField&quot;);
+ 
+@@ -351,13 +353,12 @@
+                             .add(phytNameLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(phytCountryCombo, 0, 177, Short.MAX_VALUE)
+-                            .add(phytNameCombo, 0, 177, Short.MAX_VALUE)))
+-                    .add(jPanel5Layout.createSequentialGroup()
+-                        .add(19, 19, 19)
++                            .add(phytCountryCombo, 0, 206, Short.MAX_VALUE)
++                            .add(phytNameCombo, 0, 206, Short.MAX_VALUE)))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel5Layout.createSequentialGroup()
+                         .add(territoryNameLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(territoryNameCombo, 0, 177, Short.MAX_VALUE)))
++                        .add(territoryNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 206, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, quadrantLabel)
+@@ -366,10 +367,13 @@
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createSequentialGroup()
+                         .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                        .addContainerGap())
+-                    .add(phytCodeCombo, 0, 90, Short.MAX_VALUE)))
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED))
++                    .add(phytCodeCombo, 0, 90, Short.MAX_VALUE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
++        jPanel5Layout.linkSize(new java.awt.Component[] {phytCountryCombo, phytNameCombo, territoryNameCombo}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
+         jPanel5Layout.linkSize(new java.awt.Component[] {phytCodeCombo, quadrantTextField}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+ 
+         jPanel5Layout.setVerticalGroup(
+@@ -377,22 +381,22 @@
+             .add(jPanel5Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(territoryNameLabel)
+-                    .add(territoryNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(territoryNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(territoryNameLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                        .add(phytNameLabel)
+-                        .add(phytNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                        .add(phytNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(phytNameLabel))
+                     .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                         .add(phytCodeLabel)
+                         .add(phytCodeCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(countryLabel)
+                     .add(phytCountryCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                     .add(quadrantLabel)
+-                    .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(countryLabel))
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+@@ -408,8 +412,10 @@
+         sourceLabel.setText(&quot;Source:&quot;);
+ 
+         sourceCombo.setActionCommand(&quot;sourceCombo&quot;);
++        sourceCombo.insertItemAt(model.EMPTY_STRING,0);
+ 
+         publicationCombo.setActionCommand(&quot;publicationCombo&quot;);
++        publicationCombo.insertItemAt(model.EMPTY_PAIR,0);
+ 
+         projectCombo.setActionCommand(&quot;projectCombo&quot;);
+ 
+@@ -430,7 +436,7 @@
+                     .add(publicationCombo, 0, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(herbariumTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 113, Short.MAX_VALUE)
+                     .add(sourceCombo, 0, 171, Short.MAX_VALUE))
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .addContainerGap(76, Short.MAX_VALUE))
+         );
+         jPanel6Layout.setVerticalGroup(
+             jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+@@ -438,7 +444,7 @@
+                 .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(sourceLabel)
+                     .add(sourceCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 12, Short.MAX_VALUE)
+                 .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(publicationLabel)
+                     .add(publicationCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+@@ -466,7 +472,7 @@
+             jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel7Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 219, Short.MAX_VALUE)
++                .add(jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 295, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel7Layout.setVerticalGroup(
+@@ -479,19 +485,10 @@
+         jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.GPSPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 10)));
+         altitudeLabel.setText(&quot;Altitude:&quot;);
+ 
+-        altitudeFormattedTextField.setNextFocusableComponent(latitudeFormattedTextField);
+-        altitudeFormattedTextField.setActionCommand(&quot;altitudeFormattedTextField&quot;);
+-
+-        latitudeFormattedTextField.setNextFocusableComponent(longitudeFormattedTextField);
+-        latitudeFormattedTextField.setActionCommand(&quot;latitudeFormattedTextField&quot;);
+-
+         latitudeLabel.setText(&quot;Latitude:&quot;);
+ 
+         longitudeLabel.setText(&quot;Longitude:&quot;);
+ 
+-        longitudeFormattedTextField.setNextFocusableComponent(WGS84Button);
+-        longitudeFormattedTextField.setActionCommand(&quot;longitudeFormattedTextField&quot;);
+-
+         convertCoordinatesGroup.add(WGS84Button);
+         WGS84Button.setText(&quot;WGS84&quot;);
+         WGS84Button.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+@@ -525,46 +522,43 @@
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                        .add(altitudeLabel)
+-                        .add(latitudeLabel))
+-                    .add(longitudeLabel))
++                    .add(latitudeLabel)
++                    .add(longitudeLabel)
++                    .add(altitudeLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING, false)
+-                    .add(longitudeFormattedTextField)
+-                    .add(latitudeFormattedTextField, 0, 0, Short.MAX_VALUE)
+-                    .add(altitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 63, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .add(25, 25, 25)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(latitudeTextField)
++                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 51, Short.MAX_VALUE)
++                    .add(longitudeTextField))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(S42Button)
+                     .add(WGS84Button)
+                     .add(SJTSKButton))
+                 .addContainerGap())
+         );
++
++        jPanel1Layout.linkSize(new java.awt.Component[] {altitudeTextField, latitudeTextField, longitudeTextField}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
+         jPanel1Layout.setVerticalGroup(
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(altitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(altitudeLabel))
+-                        .add(6, 6, 6)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(latitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(latitudeLabel))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(longitudeFormattedTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(longitudeLabel)))
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(WGS84Button)
+-                        .add(6, 6, 6)
+-                        .add(S42Button)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(SJTSKButton)))
+-                .addContainerGap(42, Short.MAX_VALUE))
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(WGS84Button)
++                    .add(altitudeLabel)
++                    .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .add(6, 6, 6)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(S42Button)
++                    .add(latitudeLabel)
++                    .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(SJTSKButton)
++                    .add(longitudeLabel)
++                    .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(48, Short.MAX_VALUE))
+         );
+ 
+         jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.OccurrenceNotePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+@@ -580,56 +574,57 @@
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 219, Short.MAX_VALUE)
++                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 295, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+         jPanel9Layout.setVerticalGroup(
+             jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel9Layout.createSequentialGroup()
+-                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 105, Short.MAX_VALUE)
++                .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 115, Short.MAX_VALUE)
+                 .addContainerGap())
+         );
+ 
++        requiredInfoLabel.setText(&quot;requiredInfoLabel&quot;);
++
+         org.jdesktop.layout.GroupLayout jPanel3Layout = new org.jdesktop.layout.GroupLayout(jPanel3);
+         jPanel3.setLayout(jPanel3Layout);
+         jPanel3Layout.setHorizontalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+-                .addContainerGap()
++                .add(12, 12, 12)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
+-                        .add(jPanel4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                        .add(442, 442, 442))
+                     .add(jPanel3Layout.createSequentialGroup()
++                        .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                        .add(requiredInfoLabel))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel3Layout.createSequentialGroup()
++                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+                             .add(jPanel3Layout.createSequentialGroup()
+                                 .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(jPanel6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                                .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                             .add(jPanel5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                            .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                            .add(org.jdesktop.layout.GroupLayout.LEADING, jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
++                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                            .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                 .addContainerGap())
+         );
+         jPanel3Layout.setVerticalGroup(
+             jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel3Layout.createSequentialGroup()
+-                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                    .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jPanel5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(jPanel7, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel3Layout.createSequentialGroup()
+-                        .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                    .add(jPanel9, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .add(382, 382, 382))
++                    .add(jPanel9, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(jPanel6, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                .add(jPanel3Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(jPanel4, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 163, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(requiredInfoLabel))
++                .add(288, 288, 288))
+         );
+         getContentPane().add(jPanel3, java.awt.BorderLayout.CENTER);
+ 
+@@ -759,54 +754,53 @@
+         phytCountryCombo.setSelectedItem(model.getPhytCountry());
+         quadrantTextField.setText(model.getQuadrant());
+         
+-        altitudeFormattedTextField.setValue(model.getAltitude());
+-        longitudeFormattedTextField.setValue(model.getLongitude());
+-        latitudeFormattedTextField.setValue(model.getLatitude());
++        altitudeTextField.setText(&quot;&quot;+model.getAltitude());
++        longitudeTextField.setText(&quot;&quot;+model.getLongitude());
++        latitudeTextField.setText(&quot;&quot;+model.getLatitude());
+         sourceCombo.setSelectedItem(model.getSource());
+         publicationCombo.setSelectedItem(model.getPublication());
+         herbariumTextField.setText(model.getHerbarium());
+         
+-        monthSpinner.setValue(model.getMonth());
+-        daySpinner.setValue(model.getDay());
+-        timeFormattedTextField.setValue(model.getTime());
++        monthChooser.setMonth(model.getMonth());
++        dayChooser.setDay(model.getDay());     
++        dayChooser.setMonth(model.getMonth());
+     }
+     
+     public void clearComponentData() {
+         resetAuthorModel(); initAuthorTable();
+         townComboBox.setSelectedIndex(-1);
+         taxonTextArea.setText(&quot;&quot;);
+-        descriptionArea.setText(model.getHabitatDescription());
+-        yearSpinner.setValue(model.getYear());
++        descriptionArea.setText(&quot;&quot;);
++        yearSpinner.setValue(Calendar.getInstance().get(Calendar.YEAR));
+         
+-        locationNoteArea.setText(model.getHabitatNote());
+-        occurrenceNoteArea.setText(model.getOccurrenceNote());
++        locationNoteArea.setText(&quot;&quot;);
++        occurrenceNoteArea.setText(&quot;&quot;);
+         territoryNameCombo.setSelectedIndex(-1);
+         phytNameCombo.setSelectedIndex(-1);
+         phytCodeCombo.setSelectedIndex(-1);
+-        phytCountryCombo.setSelectedIndex(-1);
+-        quadrantTextField.setText(model.getQuadrant());
++        phytCountryCombo.setSelectedIndex(0);
++        quadrantTextField.setText(&quot;&quot;);
+         
+-        altitudeFormattedTextField.setValue(model.getAltitude());
+-        longitudeFormattedTextField.setValue(model.getLongitude());
+-        latitudeFormattedTextField.setValue(model.getLatitude());
+-        sourceCombo.setSelectedIndex(-1);
+-        publicationCombo.setSelectedIndex(-1);
+-        herbariumTextField.setText(model.getHerbarium());
++        altitudeTextField.setText(&quot;&quot;);
++        longitudeTextField.setText(&quot;&quot;);
++        latitudeTextField.setText(&quot;&quot;);
++        sourceCombo.setSelectedIndex(0);
++        publicationCombo.setSelectedIndex(0);
++        herbariumTextField.setText(&quot;&quot;);
+         
+-        monthSpinner.setValue(Calendar.getInstance().get(Calendar.MONTH));
+-        daySpinner.setValue(Calendar.getInstance().get(Calendar.DAY_OF_MONTH));
+-        timeFormattedTextField.setValue(new Date());        
++        ((JComboBox)monthChooser.getComboBox()).setSelectedIndex(12);
++        dayChooser.setDay(Calendar.getInstance().get(Calendar.DAY_OF_MONTH));
+     }
+     
+     private void setLabels() {
+-        townLabel.setText(L10n.getString(&quot;AddEdit.TownLabel&quot;));
++        townLabel.setText(L10n.getString(&quot;AddEdit.TownLabel&quot;)+REQUIRED_STRING);
+         placeDescriptionLabel.setText(L10n.getString(&quot;AddEdit.PlaceDescriptionLabel&quot;));
+-        yearLabel.setText(L10n.getString(&quot;AddEdit.YearLabel&quot;));
+-        taxonLabel.setText(L10n.getString(&quot;AddEdit.TaxonLabel&quot;));
++        yearLabel.setText(L10n.getString(&quot;AddEdit.YearLabel&quot;)+REQUIRED_STRING);
++        taxonLabel.setText(L10n.getString(&quot;AddEdit.TaxonLabel&quot;)+REQUIRED_STRING);
+         
+-        territoryNameLabel.setText(L10n.getString(&quot;AddEdit.TerritoryNameLabel&quot;));
+-        phytNameLabel.setText(L10n.getString(&quot;AddEdit.PhytNameLabel&quot;));
+-        phytCodeLabel.setText(L10n.getString(&quot;AddEdit.PhytCodeLabel&quot;));
++        territoryNameLabel.setText(L10n.getString(&quot;AddEdit.TerritoryNameLabel&quot;)+REQUIRED_STRING);
++        phytNameLabel.setText(L10n.getString(&quot;AddEdit.PhytNameLabel&quot;)+REQUIRED_STRING);
++        phytCodeLabel.setText(L10n.getString(&quot;AddEdit.PhytCodeLabel&quot;)+REQUIRED_STRING);
+         quadrantLabel.setText(L10n.getString(&quot;AddEdit.QuadrantLabel&quot;));
+         countryLabel.setText(L10n.getString(&quot;AddEdit.CountryLabel&quot;));
+         
+@@ -817,7 +811,7 @@
+         sourceLabel.setText(L10n.getString(&quot;AddEdit.SourceLabel&quot;));
+         publicationLabel.setText(L10n.getString(&quot;AddEdit.PublicationLabel&quot;));
+         herbariumLabel.setText(L10n.getString(&quot;AddEdit.HerbariumLabel&quot;));
+-        projectLabel.setText(L10n.getString(&quot;AddEdit.ProjectLabel&quot;));
++        projectLabel.setText(L10n.getString(&quot;AddEdit.ProjectLabel&quot;)+REQUIRED_STRING);
+         
+         monthLabel.setText(L10n.getString(&quot;AddEdit.MonthLabel&quot;));
+         dayLabel.setText(L10n.getString(&quot;AddEdit.DayLabel&quot;));
+@@ -826,6 +820,15 @@
+         helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
+         okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
+         cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++        
++        MessageFormat mf = new MessageFormat(L10n.getString(&quot;AddEdit.RequiredInfoLabel&quot;));
++        try {
++            Object[] arg = {REQUIRED_STRING};
++            requiredInfoLabel.setText(mf.format(arg));
++        } catch (IllegalArgumentException ex) {
++            requiredInfoLabel.setText(&quot;&quot;);//pretend nothing happend
++            logger.warn(&quot;Property AddEdit.RequiredInfoLabel has probably wrong format.&quot;);
++        }
+     }
+     
+     public void switchExtended() {
+@@ -848,25 +851,34 @@
+     }
+ 
+     public void update(Observable o, Object arg) {
+-        String s = ((Pair&lt;String,Integer&gt;)arg).getFirst();
+-        int i = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
+-        if (s.equals(&quot;updateCode&quot;))
+-            phytCodeCombo.setSelectedItem(model.getPhytCode());
+-        if (s.equals(&quot;updateName&quot;))
+-            phytNameCombo.setSelectedItem(model.getPhytName());
+-        if (s.equals(&quot;addAuthorRow&quot;)) {
+-            tableModel.addRow();
+-            /*
+-            DefaultCellEditor dce = (DefaultCellEditor) authorTable.getCellEditor(0,0);
+-            Object o = dce.getCellEditorValue();
+-             */            
+-        }             
+-        if (s.equals(&quot;removeAuthorRow&quot;)) {
+-            tableModel.removeRow(i);
+-            //unfortunately have to set up the editors and renderers again because of the
+-            //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
+-            //initAuthorTable();            
++        if (arg instanceof Pair) {
++            String s = ((Pair&lt;String,Integer&gt;)arg).getFirst();
++            int i = ((Pair&lt;String,Integer&gt;)arg).getSecond(); 
++            if (s.equals(&quot;updateCode&quot;))
++                phytCodeCombo.setSelectedItem(model.getPhytCode());
++            if (s.equals(&quot;updateName&quot;))
++                phytNameCombo.setSelectedItem(model.getPhytName());
++            if (s.equals(&quot;addAuthorRow&quot;)) {
++                tableModel.addRow();
++                /*
++                DefaultCellEditor dce = (DefaultCellEditor) authorTable.getCellEditor(0,0);
++                Object o = dce.getCellEditorValue();
++                 */            
++            }             
++            if (s.equals(&quot;removeAuthorRow&quot;)) {
++                tableModel.removeRow(i);
++                //unfortunately have to set up the editors and renderers again because of the
++                //fireTableStructureChanged() in the tableModel.removeRow() ... :-/
++                //initAuthorTable();            
++            }
+         }
++        
++        if (arg instanceof String) {
++            String s = (String)arg;
++            if (s.equals(&quot;updateDayChooser&quot;)) {
++                dayChooser.setMonth(model.getMonth());
++            }
++        }
+     }
+         
+     
+@@ -874,15 +886,15 @@
+     protected javax.swing.JRadioButton S42Button;
+     protected javax.swing.JRadioButton SJTSKButton;
+     protected javax.swing.JRadioButton WGS84Button;
+-    protected javax.swing.JFormattedTextField altitudeFormattedTextField;
+     protected javax.swing.JLabel altitudeLabel;
++    protected javax.swing.JTextField altitudeTextField;
+     protected javax.swing.JTable authorTable;
+     protected javax.swing.JButton cancelButton;
+     protected javax.swing.JButton checklistButton;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
+     protected javax.swing.JLabel countryLabel;
++    protected com.toedter.calendar.JDayChooser dayChooser;
+     protected javax.swing.JLabel dayLabel;
+-    protected javax.swing.JSpinner daySpinner;
+     protected javax.swing.JTextArea descriptionArea;
+     protected javax.swing.JToggleButton extendedButton;
+     protected javax.swing.JButton helpButton;
+@@ -902,13 +914,13 @@
+     private javax.swing.JScrollPane jScrollPane3;
+     private javax.swing.JScrollPane jScrollPane4;
+     private javax.swing.JScrollPane jScrollPane5;
+-    protected javax.swing.JFormattedTextField latitudeFormattedTextField;
+     protected javax.swing.JLabel latitudeLabel;
++    protected javax.swing.JTextField latitudeTextField;
+     protected javax.swing.JTextArea locationNoteArea;
+-    protected javax.swing.JFormattedTextField longitudeFormattedTextField;
+     protected javax.swing.JLabel longitudeLabel;
++    protected javax.swing.JTextField longitudeTextField;
++    protected com.toedter.calendar.JMonthChooser monthChooser;
+     protected javax.swing.JLabel monthLabel;
+-    protected javax.swing.JSpinner monthSpinner;
+     protected javax.swing.JTextArea occurrenceNoteArea;
+     protected javax.swing.JButton okButton;
+     protected javax.swing.JComboBox phytCodeCombo;
+@@ -923,14 +935,15 @@
+     protected javax.swing.JLabel publicationLabel;
+     protected javax.swing.JLabel quadrantLabel;
+     protected javax.swing.JTextField quadrantTextField;
++    private javax.swing.JLabel requiredInfoLabel;
+     protected javax.swing.JComboBox sourceCombo;
+     protected javax.swing.JLabel sourceLabel;
+     protected javax.swing.JLabel taxonLabel;
+     protected javax.swing.JTextArea taxonTextArea;
+     protected javax.swing.JComboBox territoryNameCombo;
+     protected javax.swing.JLabel territoryNameLabel;
+-    protected javax.swing.JFormattedTextField timeFormattedTextField;
+-    protected javax.swing.JLabel timeLabel;
++    private javax.swing.JLabel timeLabel;
++    protected javax.swing.JTextField timeTextField;
+     protected javax.swing.JComboBox townComboBox;
+     protected javax.swing.JLabel townLabel;
+     protected javax.swing.JLabel yearLabel;
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-24 23:56:05 UTC (rev 344)
+@@ -574,8 +574,8 @@
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.PHYTOCHORION,&quot;phyt&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.NEARESTVILLAGE,&quot;vill&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.TERRITORY,&quot;territory&quot;);
+-                sq.addOrder(PlantloreConstants.DIRECT_ASC, &quot;occ.&quot;+Occurrence.YEARCOLLECTED); //setridit podle roku
+-                sq.addRestriction(PlantloreConstants.RESTR_NE, &quot;occ.&quot;+Occurrence.DELETED, null, 1, null);
++                sq.addOrder(PlantloreConstants.DIRECT_DESC, &quot;occ.&quot;+Occurrence.YEARCOLLECTED); //setridit podle roku
++                //sq.addRestriction(PlantloreConstants.RESTR_EQ, &quot;occ.&quot;+Occurrence.DELETED, null, 0, null);
+                 
+                 for (Column column : columns) {
+                     switch (column.type) {
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-24 23:56:05 UTC (rev 344)
+@@ -363,11 +363,13 @@
+           &lt;SubComponents&gt;
+             &lt;Component class=&quot;com.toedter.calendar.JDateChooser&quot; name=&quot;fromDateChooser&quot;&gt;
+               &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;fromDateChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+             &lt;Component class=&quot;com.toedter.calendar.JDateChooser&quot; name=&quot;toDateChooser&quot;&gt;
+               &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;toDateChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+@@ -389,7 +391,7 @@
+             &lt;/Component&gt;
+             &lt;Component class=&quot;com.toedter.calendar.JMonthChooser&quot; name=&quot;monthChooser&quot;&gt;
+               &lt;AuxValues&gt;
+-                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);&amp;#xa;&quot;/&gt;
++                &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);&amp;#xa;monthChooser.setLocale(L10n.getCurrentLocale());&quot;/&gt;
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-24 23:56:05 UTC (rev 344)
+@@ -227,12 +227,16 @@
+         jPanel3.setMinimumSize(new java.awt.Dimension(800, 395));
+         jPanel3.setPreferredSize(new java.awt.Dimension(800, 415));
+         jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Time&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        fromDateChooser.setLocale(L10n.getCurrentLocale());
+ 
++        toDateChooser.setLocale(L10n.getCurrentLocale());
++
+         fromLabel.setText(&quot;From:&quot;);
+ 
+         toLabel.setText(&quot;To:&quot;);
+ 
+         ((JComboBox)monthChooser.getComboBox()).addItem(&quot;&quot;);
++        monthChooser.setLocale(L10n.getCurrentLocale());
+ 
+         monthLabel.setText(&quot;Month:&quot;);
+ 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-24 23:56:05 UTC (rev 344)
+@@ -802,3 +802,7 @@
+ Settings.SchedaTab=Scheda
+ 
+ Settings.SchedaTabHeaders=Headers
++
++Common.ComboboxNothingSelected=-- NOTHING SELECTED --
++
++AddEdit.RequiredInfoLabel=The symbol {0} marks required items.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-24 23:56:05 UTC (rev 344)
+@@ -334,3 +334,7 @@
+ Settings.SchedaTab=Scheda
+ 
+ Settings.SchedaTabHeaders=Nadpisy
++
++Common.ComboboxNothingSelected=-- NEZAD\u00C1NO --
++
++AddEdit.RequiredInfoLabel={0} - ozna\u010Duje povinnou polo\u017Eku
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-24 23:38:54 UTC (rev 343)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-24 23:56:05 UTC (rev 344)
+@@ -652,3 +652,7 @@
+ Settings.SchedaTab=Scheda
+ 
+ Settings.SchedaTabHeaders=Headers
++
++Common.ComboboxNothingSelected=-- NOTHING SELECTED --
++
++AddEdit.RequiredInfoLabel=The symbol {0} marks required items.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000393.html">[Plantlore-dev] r343 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html
+</A></li>
+	<LI>Next message: <A HREF="000395.html">[Plantlore-dev] r345 - in trunk/src/net/sf/plantlore/help: cs/html cs/html/picture en/html/images
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#394">[ date ]</a>
+              <a href="thread.html#394">[ thread ]</a>
+              <a href="subject.html#394">[ subject ]</a>
+              <a href="author.html#394">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

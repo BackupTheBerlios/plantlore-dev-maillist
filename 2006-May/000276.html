@@ -1,0 +1,1202 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r235 - in trunk/src/net/sf/plantlore: client/imports common/exception common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r235%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20common/exception%20common/record&In-Reply-To=%3C200605081749.k48HnlNn012926%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000275.html">
+   <LINK REL="Next"  HREF="000277.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r235 - in trunk/src/net/sf/plantlore: client/imports common/exception common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r235%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20common/exception%20common/record&In-Reply-To=%3C200605081749.k48HnlNn012926%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r235 - in trunk/src/net/sf/plantlore: client/imports common/exception common/record">krater at berlios.de
+       </A><BR>
+    <I>Mon May  8 19:49:47 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000275.html">[Plantlore-dev] r234 - in trunk/src/net/sf/plantlore: common/record config/hibernate
+</A></li>
+        <LI>Next message: <A HREF="000277.html">[Plantlore-dev] r236 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#276">[ date ]</a>
+              <a href="thread.html#276">[ thread ]</a>
+              <a href="subject.html#276">[ subject ]</a>
+              <a href="author.html#276">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-08 19:49:28 +0200 (Mon, 08 May 2006)
+New Revision: 235
+
+Added:
+   trunk/src/net/sf/plantlore/common/exception/ParserException.java
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/Parser.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+Occurrence data Import framework.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -4,6 +4,7 @@
+ import java.util.ArrayList;
+ import java.util.Calendar;
+ import java.util.Date;
++import java.util.Hashtable;
+ import java.util.Observable;
+ 
+ import org.apache.log4j.Logger;
+@@ -12,6 +13,7 @@
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_IS_NULL;
+ import net.sf.plantlore.server.DBLayerException;
+ import net.sf.plantlore.common.exception.ImportException;
++import net.sf.plantlore.common.exception.ParserException;
+ import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -20,8 +22,13 @@
+ 
+ 
+ /**
+- * The Director for the import of the Occurrence data.
++ * The Director for the import of the &lt;b&gt;Occurrence data&lt;/b&gt;.
+  * &lt;br/&gt;
++ * Warning: &lt;b&gt;This Director is NOT meant for import of simple
++ * records, such as Plants.&lt;/b&gt; The Import's Default Director is
++ * less versatile than the Export's Default Director.
++ * 
++ * &lt;br/&gt;
+  * The Director continually fetches records from the &lt;code&gt;Parser&lt;/code&gt;
+  * i.e. from a file, and stores them in the database.
+  * The &lt;code&gt;Parser&lt;/code&gt; is responsible for reading and re-creating 
+@@ -29,7 +36,8 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-05-06
+- * @version alpha
++ * @version beta
++ * @see net.sf.plantlore.client.imports.Parser
+  */
+ public class DefaultDirector extends Observable implements Runnable {
+ 	
+@@ -47,10 +55,10 @@
+ 	private boolean 
+ 		useLastDecision = false,
+ 		doNotAskAboutDateAgain = false,
+-		aborted = false;
++		aborted = false,
++		cacheEnabled = true;
+ 	
+ 	private User user;
+-	private Calendar now = Calendar.getInstance();
+ 	
+ 	private Record 
+ 		recordFromFile = null,
+@@ -104,6 +112,17 @@
+ 	}
+ 	
+ 	/**
++	 * Limit the usage of a cache memory.
++	 * It is recommended to leave the cache enabled since it may
++	 * significantly boost the performance of the import.
++	 * 
++	 * @param use	Set to &lt;b&gt;false&lt;/b&gt; if you no longer want the cache to be used.
++	 */
++	public void useCache(boolean use) {
++		cacheEnabled = use;
++	}
++	
++	/**
+ 	 * Set a new database layer.
+ 	 * 
+ 	 * @param db	The database layer to be set.
+@@ -165,8 +184,6 @@
+ 	 * An extra thread that performs the notification of all observers.
+ 	 */
+ 	private class ObserverNotifier extends Thread {
+-		//protected Record problematicRecord = null;
+-		
+ 		public void run() {
+ 			setChanged(); notifyObservers( problematicRecord );
+ 		}
+@@ -179,14 +196,17 @@
+ 	 * Ask the User to make his decision about the current operation.
+ 	 * Sometimes the User must be contacted in order to resolve some
+ 	 * conflicts or problems that occur during the import process.
++	 * &lt;br/&gt;
++	 * The notification of Observers is performed by a separate thread.
+ 	 * 
+ 	 * @param about The record that caused the problem.
+ 	 * @return	The decision the User has made.
++	 * @see #observerNotifier
+ 	 */
+ 	synchronized protected Action expectDecision(Record about) {
+ 		lastDecision = Action.UNKNOWN;
+ 		problematicRecord = about;
+-		observerNotifier.start();
++		observerNotifier.start(); // must be another thread
+ 		while( lastDecision == Action.UNKNOWN &amp;&amp; !aborted ) {
+ 			try { wait(); } catch( InterruptedException e ) {}
+ 		}
+@@ -226,21 +246,25 @@
+ 			count = imported = 0;
+ 			
+ 			// Go through the whole file.
+-			while( !aborted &amp;&amp; parser.hasNext() ) {
++			while( !aborted &amp;&amp; parser.hasNextRecord() ) {
++				logger.info(&quot;Fetching a new record.&quot;);
++				// What is supposed to happen with the occurrence.
++				Action intention = parser.fetchNextRecord(); 
+ 				// Get a new Occurrence.
+-				Occurrence occ = (Occurrence) parser.next();
++				Occurrence occ;
++				try {
++					count++;
++					occ = (Occurrence) parser.nextPart(Occurrence.class);
++				} catch( ParserException e) {
++					logger.warn(&quot;The record is not valid (probably incomplete). &quot; +e);
++					continue;
++				}
+ 				recordFromFile = occ;
+-				logger.debug(&quot;New record fetched: &quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue());
+-				// What is supposed to happen with the occurrence. 
+-				Action intention = parser.intentedFor();
++				
++				logger.debug(&quot;New record No. &quot;+count+&quot; fetched: &quot;+occ);
+ 				logger.debug(&quot;Intention: &quot; + intention);
+ 				
+-				count++;
+-				boolean isValid = 
+-					(intention == Action.DELETE) ? 
+-							occ.getUnitIdDb() != null &amp;&amp; occ.getUnitValue() != null : 
+-							occ.areAllNNSet();
+-				
++				boolean isValid = occ.areAllNNSet();
+ 				if( !isValid ) {
+ 					logger.info(&quot;The record No. &quot;+count+&quot; is not valid! Some of the not-null values are not specified!&quot;);
+ 					continue;
+@@ -248,25 +272,25 @@
+ 				logger.debug(&quot;The record is valid = all necessary columns are set.&quot;);
+ 				
+ 				
++				
+ 				/*----------------------------------------------------------
+ 				 * Try to find this Occurrence record in the database.
+ 				 *----------------------------------------------------------*/
+ 				SelectQuery q = db.createQuery(Occurrence.class);
+ 				q.addRestriction(RESTR_EQ, Occurrence.UNITIDDB, null, occ.getUnitIdDb(), null);
+ 				q.addRestriction(RESTR_EQ, Occurrence.UNITVALUE, null, occ.getUnitValue(), null);
+-				int resultId = db.executeQuery( q ), rows = db.getNumRows( resultId );
++				int resultId = db.executeQuery( q );
++				int rows = db.getNumRows( resultId );
+ 				boolean isInDB = (rows != 0);
+ 				if(rows &gt; 1)
+ 					logger.error(&quot;The database is not in a consistent state - there are &quot; + rows + &quot; Occurrence &quot; +
+ 							&quot;records with the same Unique Identifier (&quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue()+&quot;)!&quot;);
+ 				Occurrence
+-				occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 1, 1)[0])[0]  :  null;
++				occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
+ 				recordInDatabase = occInDB;
+ 				db.closeQuery(q); resultId = -1;
+ 				boolean isDead = isInDB ? occInDB.isDead() : false;
+ 
+-				logger.debug(&quot;The record is in the database already: &quot; + 
+-						occInDB.getUnitIdDb() + &quot;-&quot; + occInDB.getUnitValue());
+ 				
+ 				
+ 				/*----------------------------------------------------------
+@@ -274,6 +298,8 @@
+ 				 * a newer record.
+ 				 *----------------------------------------------------------*/
+ 				if( isInDB ) {
++					logger.debug(&quot;The record is in the database already!&quot;);
++					
+ 					Date 
+ 						updateInDBOccurred = occInDB.getUpdatedWhen(),
+ 						updateInFile = occ.getUpdatedWhen();
+@@ -281,133 +307,219 @@
+ 					// The record in the database is newer than the record in the file.
+ 					if(updateInDBOccurred.after(updateInFile)) {
+ 						logger.debug(&quot;The record in the file is OLDER than the record stored in the database.&quot;);
+-						if( !doNotAskAboutDateAgain ) 
+-							dateDecision = expectDecision( occInDB );
++//						if( !doNotAskAboutDateAgain ) 
++//							dateDecision = expectDecision( occInDB );
+ 						
+ 						if( dateDecision != Action.UPDATE &amp;&amp; dateDecision != Action.INSERT ) 
+ 							continue;
+ 					}
+ 				}
+ 				
+-				logger.debug(&quot;Performing the requested operation.&quot;);
++				logger.debug(&quot;About to perform the requested operation.&quot;);
+ 				
+ 				try {
+-				/*----------------------------------------------------------
+-				 * The `occ` IS in the database as `occInDB` already.  
+-				 *----------------------------------------------------------*/
+-				if( isInDB ) {
+-					if( isDead )
++					/*----------------------------------------------------------
++					 * The `occ` IS in the database as `occInDB` already.  
++					 *----------------------------------------------------------*/
++					if( isInDB ) {
++						if( isDead )
++							switch(intention) {
++							case DELETE:
++								// Nothing to be done, the record is already dead.
++								break;
++							default:
++								occInDB = (Occurrence) update( occInDB, occ );
++							}
++						else
++							switch(intention) {
++							case DELETE:
++								occInDB = (Occurrence) delete( occInDB );
++								// By a common decision: If the habitat is not shared it should be marked as deleted, too.
++								if( !isShared(occInDB.getHabitat(), Occurrence.class, Occurrence.HABITAT) )
++									delete( occInDB.getHabitat() );
++								break;
++							default:
++								occInDB = (Occurrence) update( occInDB, occ );
++							}
++					}
++					/*----------------------------------------------------------
++					 * The `occ` is NOT in the database. 
++					 *----------------------------------------------------------*/
++					else 
+ 						switch(intention) {
+-						case DELETE:
+-							// Nothing to be done.
++						case DELETE:	
++							// There's nothing to delete.
+ 							break;
+ 						default:
+-							occInDB = (Occurrence) update( occInDB, occ );
+-							break;
++							occInDB = (Occurrence) insert( occ );
+ 						}
+-					else
+-						switch(intention) {
+-						case DELETE:
+-							occInDB = (Occurrence) delete( occInDB );
+-							break;
+-						default:
+-							occInDB = (Occurrence) update( occInDB, occ );
+-							break;
+-						}
+ 				}
+-				/*----------------------------------------------------------
+-				 * The `occ` is NOT in the database. 
+-				 *----------------------------------------------------------*/
+-				else 
+-					switch(intention) {
+-					case DELETE:	
+-						break;
+-					default:
+-						occInDB = (Occurrence) insert( occ );
+-						break;
+-					}
+-				}
+ 				catch(ImportException ie) {
+ 					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
+-					logger.error(&quot;The exception occured during insert/update: &quot; + ie);
+-					// The user cannot do a thing. Should he be informed?					
++					logger.error(&quot;The exception occured during insert/update/delete: &quot; + ie);
++					// The user cannot do a thing. Should he be informed?
++					continue;
+ 				}
+ 				
+ 				
+-				imported++;
++				logger.debug(&quot;Adding the associated information about Authors.&quot;);
+ 				
+-				logger.debug(&quot;Adding the associated information about Users.&quot;);
++				// The original intention with the Occurrence record.
++				Action masterPlan = intention;
+ 				
+ 				/*----------------------------------------------------------
+ 				 * Now, deal with Authors associated with this Occurrence.
+ 				 *----------------------------------------------------------*/
+-				while( parser.hasNextPart(AuthorOccurrence.class) ) 
++				while( parser.hasNextPart(AuthorOccurrence.class) ) {
++					
++					AuthorOccurrence ao;
++					logger.info(&quot;Fetching associated data (Author, AuthorOccurrene).&quot;);
+ 					try {
+-						AuthorOccurrence ao = (AuthorOccurrence)parser.nextPart(AuthorOccurrence.class);
+-						intention = parser.intentedFor();
+-						
+-						logger.debug(&quot;New author-occurence.&quot;);
+-						logger.debug(&quot;Intented for: &quot; + intention);
+-						
+-						Record aoInDB = findMatchInDB( ao );
+-
+-						logger.debug(&quot;Performing the requested operation.&quot;);
+-						// The AuthorOccurrence is not in the database.
+-						if( aoInDB == null ) {
+-							switch(intention) {
+-							case DELETE:
+-								break;
+-							default:
+-								aoInDB = insert( ao );
++						ao = (AuthorOccurrence)parser.nextPart(AuthorOccurrence.class);
++					} catch (ParserException e) {
++						logger.warn(&quot;The record is not valid. &quot; + e);
++						continue;
++					}
++					
++					ao.setOccurrence(null);
++					if( ao.getAuthor() == null ) {
++						logger.warn(&quot;The record is incomplete - the Author is missing!&quot;);
++						continue;
++					}
++					
++					// Override the original intention if the Occurrence was supposed to be deleted.
++					intention = (masterPlan == Action.DELETE) ? Action.DELETE : parser.intentedFor();
++					
++					logger.debug(&quot;New author-occurence record: &quot; + ao);
++					logger.debug(&quot;Intention: &quot; + intention);
++					
++					// The Occurrence `occInDB` is in the database, that is for sure.
++					// The ao.Occurrence, however, is NOT from the database -
++					// which is why the findMatchInDB would surely cause an exception:
++					// ao.Occurrence doesn't have the ID set (and even shouldn't!).
++					ao.setOccurrence( occInDB ); // now it's fine
++					
++					Record counterpart = findMatchInDB( ao.getAuthor() );
++					Author authorInDB = (counterpart == null) ? null : (Author)counterpart;
++					
++					// If the author is not in the database the AO cannot be there either.
++					if(intention == Action.DELETE &amp;&amp; authorInDB == null)
++						continue;
++					
++					// The Author is not in the database - we shall add him.
++					if(authorInDB == null) {
++						authorInDB = ao.getAuthor(); // technically, it is the authorToBeInDB
++						Integer newId = db.executeInsertHistory( authorInDB );
++						authorInDB.setId(newId);
++					}
++					// Set the correct author in the AO.
++					ao.setAuthor(authorInDB);
++					
++					// Is this AuthorOccurrence in the database already?
++					counterpart = findMatchInDB( ao );
++					AuthorOccurrence aoInDB = (counterpart != null) ? (AuthorOccurrence)counterpart : null;
++					
++					// AO is not in the database.
++					if(aoInDB == null)
++						switch(intention) {
++						case DELETE:
+ 							break;
+-							}
++						default:
++							db.executeInsertHistory(ao);	
+ 						}
+-						// The AuthorOccurrence is in the database already.
+-						else {
+-							switch(intention) {
+-							case DELETE:
+-								aoInDB = (AuthorOccurrence) delete( (AuthorOccurrence) aoInDB );
+-								break;
+-							default:
+-								aoInDB = update( aoInDB, ao );
++					// AO is in the database already.
++					else
++						switch(intention) {
++						case DELETE:
++							delete(aoInDB);
+ 							break;
+-							}
++						case UNKNOWN:
++						case INSERT:
++						case UPDATE:
++							// AO is already in the database (with the same properties a FKs!)
++							break;
+ 						}
+-						
+-						logger.debug(&quot;Author-occurence processed.&quot;);
+-						
+-					} catch(ImportException ie) {
+-						logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
+-						logger.error(&quot;The exception occured during insert/update: &quot; + ie);
+-					}
++					
++					logger.debug(&quot;Author-occurence processed.&quot;);
++				}
++					
++				imported++;
+ 			}
+ 		} 
+ 		catch(DBLayerException e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+ 			logger.error(&quot;The exception was caused by the DBLayer: &quot; + e);
++			/*e.printStackTrace();*/
+ 			setChanged(); notifyObservers(e);
+ 		}
+ 		catch(RemoteException e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+ 			logger.error(&quot;The exception was caused by the the transport layer (RMI): &quot; + e);
++			/*e.printStackTrace();*/
+ 			setChanged(); notifyObservers(e);
+ 		}
+-		logger.info(&quot;Import ended. &quot; + imported + &quot; records have been imported (out of &quot; + count + &quot;).&quot;);
++		logger.info(&quot;Import ended. &quot; + imported + &quot; records were imported (out of &quot; + count + &quot;).&quot;);
+ 	}
+ 	
+ 	
+ 	/**
++	 * Find out whether the record is shared by some more records.
++	 * &lt;br/&gt;
++	 * 
++	 * @param record	The instance of some record
++	 * @param father	The table that contains records possibly sharing the &lt;code&gt;record&lt;/code&gt;.
++	 * @param column	The name of the foreign key.	
++	 * @return	True if the &lt;code&gt;record&lt;/code&gt; 
++	 * is shared by more than one records from the &lt;code&gt;father&lt;/code&gt; table.
++	 */
++	public boolean isShared(Record record, Class father, String column) 
++	throws RemoteException, DBLayerException {
++		SelectQuery q = db.createQuery(father);
++		q.addRestriction(RESTR_EQ, column, null, record, null);
++		int resultset = db.executeQuery(q), 
++		rows = db.getNumRows(resultset);
++		db.closeQuery(q);
++		return rows &gt; 1;
++	}
++	
++	/**
++	 * A simple cache of records (one for each table).
++	 * It is higly likely, due to the properties of the export procedure,
++	 * that records sharing the same subrecords will come together.
++	 * &lt;br/&gt;
++	 * For example:
++	 * There are occurrences &lt;i&gt;A&lt;/i&gt; and &lt;i&gt;B&lt;/i&gt;. The &lt;i&gt;B&lt;/i&gt;
++	 * goes right after &lt;i&gt;A&lt;/i&gt;.
++	 * The probability, that both occurrence will share the same
++	 * Phytochorion, Territory, Village, Publication, or Metadata,
++	 * is quite high. 
++	 * &lt;br/&gt;
++	 * The cache may save up to 5 select queries per one Occurrence 
++	 * record.
++	 */
++	private Hashtable&lt;Class, Record&gt; cache = new Hashtable&lt;Class, Record&gt;(50);
++	
++	
++	/**
+ 	 * Try to find a record, that has exactly the same &lt;b&gt;properties&lt;/b&gt;
+ 	 * and &lt;b&gt;foreign keys&lt;/b&gt;. The ID of the record doesn't matter.
+ 	 * 
+ 	 * @param record	The record we are looking for in the database.
+ 	 * @return	The matching record from the database, or null if no such record exists.
+ 	 */
+-	protected Record findMatchInDB(Record record) 
++	public Record findMatchInDB(Record record) 
+ 	throws RemoteException, DBLayerException {
+ 		if(record == null) return null;
+ 		// Get the table.
+ 		Class table = record.getClass();
++		
++		// Look in the cache.
++		if(cacheEnabled) {
++			Record cachedRecord = cache.remove(table);
++			if(record.equals(cachedRecord))
++				return cachedRecord; // hooray, one select has been saved!
++		}
++				
+ 		// Create a query that will look for the record with the same properties.
+ 		SelectQuery query = db.createQuery( table );
+ 
+@@ -415,14 +527,14 @@
+ 		for(String property : record.getProperties()) {
+ 			Object value = record.getValue(property);
+ 			if( value == null ) // use the database null
+-				query.addRestriction(RESTR_EQ, property, null, RESTR_IS_NULL, null);
++				query.addRestriction(RESTR_IS_NULL, property, null, null, null);
+ 			else
+ 				query.addRestriction(RESTR_EQ, property, null, value, null);
+ 		}
+ 		// Equal foreign keys (by their ID's)!
+ 		for(String key : record.getForeignKeys() ) {
+ 			Record subrecord = (Record) record.getValue(key);
+-			query.addRestriction(RESTR_EQ, key, null, subrecord.getId(), null);
++			query.addRestriction(RESTR_EQ, key, null, subrecord, null);
+ 		}
+ 		
+ 		// Is there such record?
+@@ -437,6 +549,12 @@
+ 			record = (Record)((Object[])(db.more(results, 0, 0)[0]))[0];
+ 		
+ 		db.closeQuery( query );
++		
++		// Update the cache appropriately - store the record for future generations.
++		if( record != null &amp;&amp; cacheEnabled ) 
++			cache.put(table, record);
++		
++		
+ 		return record;
+ 	}
+ 	
+@@ -454,7 +572,7 @@
+ 	 */
+ 	public Record insert(Record record) 
+ 	throws RemoteException, DBLayerException, ImportException {
+-		logger.debug(&quot;INSERTING&quot;);
++		logger.debug(&quot;Inserting &quot;+record+&quot; into the database.&quot;);
+ 		
+ 		// Is this part of the record from an immutable table?
+ 		boolean immutable = user.isAdmin() ?
+@@ -467,7 +585,7 @@
+ 			logger.debug(&quot;Processing an immutable table &quot;+record.getClass().getSimpleName());
+ 			Record counterpart = findMatchInDB( record );
+ 			if( counterpart == null ) {
+-				logger.warn(&quot;The counterpart for the record (in the immutable table &quot; +
++				logger.fatal(&quot;The counterpart for the record (in the immutable table &quot; +
+ 						record.getClass().getSimpleName()	+ &quot;) was not found!&quot;);
+ 				throw new ImportException(L10n.getString(&quot;errorNotInAnImmutableTable&quot;), record);
+ 			}
+@@ -475,7 +593,7 @@
+ 		} 
+ 		// The part of the record is from a common table.
+ 		else {
+-			logger.debug(&quot;Processing a common table.&quot;);
++			logger.debug(&quot;Processing a common table &quot;+record.getClass().getSimpleName());
+ 			// Insert all of its sub-records.
+ 			ArrayList&lt;String&gt; keys = record.getForeignKeys();
+ 			// Inserting a new AuthorOccurrence MUSTN'T cause the insertion of the Occurrence.
+@@ -486,17 +604,9 @@
+ 			
+ 			Record counterpart = null;
+ 			
+-			// If the record is the Occurrence itself, update some additional columns.
+-			if( record instanceof Occurrence ) {
+-				Occurrence occ = (Occurrence) record;
+-				occ.setCreatedWhen(now.getTime());
+-				occ.setCreatedWho(user);
+-				occ.setUpdatedWhen(now.getTime());
+-				occ.setUpdatedWho(user);
+-			}
+ 			// Try to find its counterpart (if it is in the database already).
+ 			// (The Habitat table is special, the relationship Occ-&gt;Habitat should always be 1:1.)
+-			else if( !(record instanceof Habitat) ) {
++			if( !(record instanceof Habitat) ) {
+ 				counterpart = findMatchInDB( record );
+ 			}
+ 			
+@@ -504,16 +614,13 @@
+ 			if(counterpart == null) {
+ 				logger.debug(&quot;The record is not in the database. It will be inserted.&quot;);
+ 				// Insert it!
+-				Integer newId = db.executeInsert(record);
++				Integer newId = db.executeInsertHistory(record);
+ 				record.setId( newId );
+-				logger.info(&quot;Inserting into &quot; + record.getClass().getSimpleName() + &quot; takes place. &quot; +
+-						&quot;The inserted record is ID = &quot; + newId);
+ 				return record;
+ 			}
+ 			// The record is in the database.
+ 			else {
+-				logger.debug(&quot;The record is in the database already (ID = &quot; +
+-						counterpart.getId() + &quot;). It will be used.&quot;);
++				logger.debug(&quot;The record is in the database already. It will be reused.&quot;);
+ 				// Do not insert anything, use that record instead.
+ 				return counterpart;
+ 			}
+@@ -538,8 +645,18 @@
+ 	 */
+ 	public Record update(Record current, Record replacement) 
+ 	throws RemoteException, DBLayerException, ImportException {
+-		logger.debug(&quot;UPDATING&quot;);
+ 		
++		return update(current, replacement, null, null);
++	}
++		
++		
++		
++		
++		
++	private Record update(Record current, Record replacement, Class father, String foreignKey) 
++		throws RemoteException, DBLayerException, ImportException {		
++		logger.debug(&quot;Updating &quot;+current+&quot; with &quot;+replacement+&quot;.&quot;);
++		
+ 		boolean immutable = user.isAdmin() ?
+ 				Record.IMMUTABLE.contains( current.getClass() ) :
+ 				current instanceof Plant;
+@@ -556,7 +673,7 @@
+ 			// Try to find that record in the database.
+ 			Record counterpart = findMatchInDB( replacement );
+ 			if( counterpart == null ) {
+-				logger.warn(&quot;The counterpart for the record (in the immutable table &quot; +
++				logger.fatal(&quot;The counterpart for the record (in the immutable table &quot; +
+ 						current.getClass().getSimpleName()	+ &quot;) was not found!&quot;);
+ 				throw new ImportException(L10n.getString(&quot;errorNotInAnImmutableTable&quot;), replacement);
+ 			}
+@@ -570,7 +687,7 @@
+ 			ArrayList&lt;String&gt; keys = replacement.getForeignKeys();
+ 			boolean propertiesMatch = doPropertiesMatch(current, replacement);
+ 			
+-			logger.debug(&quot;Updating a record from a common table.&quot;);
++			logger.debug(&quot;Updating a record from a common table &quot;+current.getClass().getSimpleName());
+ 			
+ 			// [A] There are no foreign keys.
+ 			// (Publication)
+@@ -594,22 +711,27 @@
+ 				// update the existing one risking that we will (possibly) affect some other records
+ 				// that share the `current`.
+ 				
+-				// This is up to the User.
+-				insertUpdateDecision = lastDecision;
+-				if(!useLastDecision) // ASK THE USER!
+-					insertUpdateDecision = expectDecision( replacement );
++				if( isShared(current, father, foreignKey) ) {
++					// This is up to the User.
++					logger.info(&quot;The record &quot;+current+&quot; is shared!&quot;);
++					insertUpdateDecision = lastDecision;
++//					if(!useLastDecision) // ASK THE USER!
++//						insertUpdateDecision = expectDecision( replacement );
++				}
++				else
++					insertUpdateDecision = Action.UPDATE;
+ 				
+ 				if( insertUpdateDecision == Action.UPDATE ) { // update the current record
+-					logger.debug(&quot;Updating the current record...&quot;);
++					logger.debug(&quot;Updating the current record.&quot;);
+ 					// Replace the values with new ones - fortunately, there are no FK involved.
+ 					current.replaceWith( replacement );
+-					db.executeUpdate( current );
++					db.executeUpdateHistory( current );
+ 					return current;
+ 				}
+ 				else /*if( decision == Action.INSERT )*/ {
+-					logger.debug(&quot;Inserting a new record...&quot;);
++					logger.debug(&quot;Inserting a new record.&quot;);
+ 					// Insert the replacement as a new record [DEFAULT OPERATION].
+-					Integer newId = db.executeInsert(replacement);
++					Integer newId = db.executeInsertHistory(replacement);
+ 					replacement.setId( newId );
+ 					return replacement;
+ 				}
+@@ -617,7 +739,7 @@
+ 			// [B] There are some foreign keys.
+ 			// (Habitat, Occurrence)
+ 			else {
+-				logger.debug(&quot;Updating a record from a table with Foreign Keys.&quot;);
++				logger.debug(&quot;Table with foreign keys.&quot;);
+ 				
+ 				// Indicate, whether the record needed some changes.
+ 				boolean dirty = false;
+@@ -634,7 +756,11 @@
+ 						throw new ImportException(L10n.getString(&quot;errorFKCannotBeNull&quot;));
+ 					
+ 					Record 
+-						suggestion =  update( (Record)currentSubrecord, (Record)replacementSubrecord );
++						suggestion =  update( 
++								(Record)currentSubrecord, 
++								(Record)replacementSubrecord,
++								current.getClass(), key);
++					
+ 					// The sub-record doesn't have to be changed.
+ 					if( currentSubrecord == suggestion ) // == suffices (there's no need for equals()).
+ 						continue;
+@@ -651,14 +777,35 @@
+ 				
+ 				// Update the record in the database.
+ 				if( dirty || !propertiesMatch ) {
+-					if( current instanceof Occurrence ) {
+-						// Set some additional information.
+-						Occurrence occ = (Occurrence) current;
+-						occ.setUpdatedWhen(now.getTime());
+-						occ.setUpdatedWho(user);
++					logger.debug(&quot;Updating the current record.&quot;);
++					// Occurrences are always UPDATED
++					if( current instanceof Occurrence )
++						db.executeUpdateHistory(current);
++					else {
++						boolean shared = isShared(current, father, foreignKey);
++						// If the record is not shared, it is safe to performt he udpate.
++						if( !shared ) 
++							db.executeUpdateHistory(current);
++						// If the shared record is Habitat, a new record will be created.
++						// Required by: Lada and the DB Model demands.
++						else if( current instanceof Habitat ) {
++							Integer newId = db.executeInsertHistory(current);
++							current.setId(newId);
++						} else {
++							// If the shared record is something else, the User's intervention may be needed.
++							insertUpdateDecision = lastDecision;
++//							if(!useLastDecision) 
++//								insertUpdateDecision = expectDecision( replacement );
++							if(insertUpdateDecision == Action.UPDATE) 
++								// User decided to update (potentially dangerous).
++								db.executeUpdateHistory(current);
++							else {
++								// User decided to insert new copy (safer).
++								Integer newId = db.executeInsertHistory(current);
++								current.setId(newId);
++							}
++						}
+ 					}
+-					logger.debug(&quot;Updating the current record.&quot;);
+-					db.executeUpdate(current);
+ 				}
+ 				// Return the current record (updated).
+ 				return current;
+@@ -667,7 +814,8 @@
+ 	}
+ 	
+ 	/**
+-	 * Compare two records &lt;code&gt;a&lt;/code&gt; and &lt;code&gt;b&lt;/code&gt;.
++	 * Compare two records &lt;code&gt;a&lt;/code&gt; and &lt;code&gt;b&lt;/code&gt;
++	 * by their properties.
+ 	 * 
+ 	 * @param a	The first record.
+ 	 * @param b	The second record.
+@@ -692,20 +840,19 @@
+ 	/**
+ 	 * Delete the specified record.
+ 	 * (Technically: mark the record as deleted = make it appear dead.)
++	 * &lt;br/&gt;
+ 	 * 
+ 	 * @param record	The record that will be deleted. Do not forget this record has
+ 	 * to belong to the database layer (ie. it must be something previously
+ 	 * obtained directly from the database layer).
+ 	 */
+-	public Deletable delete(Deletable record) 
++	public Record delete(Record record) 
+ 	throws RemoteException, DBLayerException {
+-		record.setDeleted(1);
+-		if( record instanceof Occurrence ) {
+-			Occurrence occ = (Occurrence) record;
+-			occ.setUpdatedWhen(now.getTime());
+-			occ.setUpdatedWho(user);
++		if(record instanceof Deletable) {
++			logger.info(&quot;Deleting &quot;+record+&quot; from the database.&quot;);
++			((Deletable)record).setDeleted(1);
++			db.executeUpdateHistory( record );
+ 		}
+-		db.executeUpdate( record );
+ 		return record;
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/imports/Parser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -1,23 +1,128 @@
+ package net.sf.plantlore.client.imports;
+ 
+-import java.io.Reader;
++import net.sf.plantlore.common.exception.ParserException;
+ import net.sf.plantlore.common.record.*;
+ 
++
++/**
++ * The parser is responsible for reading the input (a file for instance)
++ * and re-creating the records stored in the file.
++ * 
++ * &lt;br/&gt;
++ * The intented usage (Import of Occurrence data).
++ * &lt;pre&gt;
++ * Parser parser = new ParserImpl();
++ * parser.initialize();
++ * 
++ * while( parser.hasNextRecord() ) {
++ *   Action intention = parser.fetchNextRecord();
++ *   Occurrence occ = parser.nextPart(Occurrence.class);
++ *   dealWithOccurrenceRecord( occ, intention );
++ *   
++ *   while( parser.hasNextPart(AuthorOccurrence.class) ) {
++ *     AuthorOccurrence ao = parser.nextPart(AuthorOccurrence.class);
++ *     intention = parser.intendedFor();
++ *     dealWithAssociatedAuthorOccurrence( ao, intention );
++ *   } 
++ * }
++ * parser.cleanup();
++ * &lt;/pre&gt;
++ * Another example (Import of Plants).
++ * &lt;pre&gt;
++ * Parser parser = new ParserImpl();
++ * parser.initialize();
++ * 
++ * while( parser.hasNextRecord() ) {
++ *   Action intention = parser.fetchNextRecord();
++ *   Plant plant = (Plant)parsers.nextPart(Plant.class);
++ *   dealWithPlant( plant, intention );
++ * }
++ * parser.cleanup();
++ * &lt;/pre&gt;
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-05-08
++ * @version 1.0
++ */
+ public interface Parser {
+ 	
++	/**
++	 * Some record may have been intended for a certain action.
++	 * These can be:
++	 * &lt;ul&gt;
++	 * &lt;li&gt;&lt;b&gt;UNKNOWN&lt;/b&gt; - usually means the default action,&lt;/li&gt;
++	 * &lt;li&gt;&lt;b&gt;INSERT&lt;/b&gt; - the record should be inserted, or updated if it is already in the database,&lt;/li&gt;
++	 * &lt;li&gt;&lt;b&gt;UPDATE&lt;/b&gt; - the record should be updated, or inserted if it is not in the database,&lt;/li&gt;
++	 * &lt;li&gt;&lt;b&gt;DELETE&lt;/b&gt; - the record should be deleted.&lt;/li&gt;
++	 * &lt;/ul&gt;
++	 * The Default Director may use this information to perform a certain action
++	 * more cleanly.
++	 * 
++	 * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++	 * @since 2006-05-08
++	 */
+ 	public enum Action { UNKNOWN, INSERT, DELETE, UPDATE };
++
++	/**
++	 * Initialize the parser - 
++	 * verify headers, prepare for the fetching of records. 
++	 * 
++	 * @throws ParserException	If the format is not valid or suspicious at least.
++	 * The exception should contain a brief explanation.
++	 */
++	void initialize() throws ParserException;
+ 	
+-	boolean initialize(Reader reader);
+-	
++	/**
++	 * Perform the final cleanup. 
++	 */
+ 	void cleanup();
+ 	
+-	boolean hasNext();
++	/**
++	 * The file may contain several records.
++	 * 
++	 * @return	True if there are other records.
++	 */
++	boolean hasNextRecord();
+ 	
+-	Record next();
++	/**
++	 * Instruct the parser, that another &quot;whole&quot; record should be fetched.
++	 * The whole record may comprise several parts - these should be
++	 * obtained via &lt;code&gt;nextPart()&lt;/code&gt;.
++	 * 
++	 * @return	The action the whole record is supposed to undergo.
++	 * @see #nextPart(Class)
++	 */
++	Action fetchNextRecord();
+ 	
+-	Action intentedFor(); 
++	/**
++	 * Get a part of the whole record. 
++	 * The part must contain all foreign keys as well.
++	 * &lt;br/&gt;
++	 * For example: nextPart(Occurrence.class) must return
++	 * the Occurrence and its Plant, Publication, Metadata,
++	 * Habitat and also Habitat's Territory, Village, and Phytochorion. 
++	 * 
++	 * @param table	The table from which the record comes.
++	 * @return	The next part of the whole record, or null if there is none.
++	 * @throw ParserException if the record is not valid.
++	 */
++	Record nextPart(Class table) throws ParserException;
+ 	
+-	Record nextPart(Class table);
++	/**
++	 * Are there any other subrecords of this type (from this table)?
++	 * &lt;br/&gt;
++	 * For example: &lt;code&gt;hasNextPart(AuthorOccurrence.class)&lt;/code&gt;
++	 * will return true if the whole record (the occurrence in this case)
++	 * contains other AuthorOccurrences that are associated with it.
++	 * @param table	The table from which the record comes.
++	 * @return	True if there are more subrecords belonging to the specified table.
++	 */
++	boolean hasNextPart(Class table);
+ 	
+-	boolean hasNextPart(Class table);
++	/**
++	 * What is the this part of the record intended for.
++	 * 
++	 * @return	The operation the last subrecord should undergo. 
++	 */
++	Action intentedFor();
+ }
+
+Added: trunk/src/net/sf/plantlore/common/exception/ParserException.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/exception/ParserException.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/exception/ParserException.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -0,0 +1,9 @@
++package net.sf.plantlore.common.exception;
++
++public class ParserException extends PlantloreException {
++
++	public ParserException() { super(); }
++	
++	public ParserException(String message) { super(message); }
++
++}
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -66,7 +66,9 @@
+     
+     @Override 
+     public boolean isDead() {
+-    	return getDeleted() != 0;
++    	Integer c = getDeleted();
++    	if( c == null ) return false;
++    	else return c != 0;
+     }
+     
+     /**
+@@ -228,7 +230,7 @@
+      *   @see getDeleted
+      */
+     public void setDeleted(Integer deleted) {
+-        this.deleted = deleted;
++    	this.deleted = deleted;
+     }       
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -56,7 +56,9 @@
+     
+     @Override
+     public boolean isDead() {
+-    	return getDeleted() != 0;
++    	Integer c = getDeleted();
++    	if( c == null ) return false;
++    	else return c != 0;
+     }
+     
+     /**
+@@ -162,7 +164,7 @@
+      *   @see setDeleted
+      */
+     public Integer getDeleted() {
+-        return this.deleted;
++    	return this.deleted;
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -59,7 +59,9 @@
+     
+     @Override 
+     public boolean isDead() {
+-    	return getDeleted() != 0;
++    	Integer c = getDeleted();
++    	if( c == null ) return false;
++    	else return c != 0;
+     }
+     
+     @Override
+@@ -272,7 +274,7 @@
+      *   @see setDeleted
+      */
+     public Integer getDeleted() {
+-        return this.deleted;
++    	return this.deleted;
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -67,13 +67,13 @@
+     	return list( TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, TECHNICALCONTACTNAME,
+     			CONTENTCONTACTADDRESS, CONTENTCONTACTEMAIL, CONTENTCONTACTNAME,
+     			DATASETDETAILS, DATASETTITLE, SOURCEID, SOURCEINSTITUTIONID,
+-    			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, VERSIONPLANTSFILE,
+-    			DATECREATE, DATEMODIFIED ); // Damn this table!
++    			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, VERSIONPLANTSFILE/*,
++    			DATECREATE,*//* DATEMODIFIED*/ ); // Damn this table!
+     }
+     
+     public ArrayList&lt;String&gt; getNN() {
+     	return list(TECHNICALCONTACTNAME, CONTENTCONTACTNAME, DATASETTITLE, 
+-    			SOURCEINSTITUTIONID, SOURCEID, DATECREATE, DATEMODIFIED);
++    			SOURCEINSTITUTIONID, SOURCEID/*, DATECREATE*//*, DATEMODIFIED*/);
+     }
+     
+     @Override
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -73,14 +73,14 @@
+     public ArrayList&lt;String&gt; getColumns() {
+     	return list( UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED,
+     			MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, ISODATETIMEBEGIN,
+-    			DATASOURCE, PUBLICATION, HERBARIUM, CREATEDWHEN, 
+-    			UPDATEDWHEN, METADATA, NOTE );
++    			DATASOURCE, PUBLICATION, HERBARIUM, /*CREATEDWHEN,*/ 
++    			/*UPDATEDWHEN,*/ METADATA, NOTE );
+     }
+     
+     public ArrayList&lt;String&gt; getNN() {
+     	ArrayList&lt;String&gt; nn = getForeignKeys();
+     	nn.remove(PUBLICATION);
+-    	nn.addAll( list(UNITIDDB, UNITVALUE, YEARCOLLECTED, CREATEDWHEN, UPDATEDWHEN) );
++    	nn.addAll( list(UNITIDDB, UNITVALUE, YEARCOLLECTED/*, CREATEDWHEN*//*, UPDATEDWHEN*/) );
+     	return nn;
+     }
+     
+@@ -108,7 +108,9 @@
+     
+     @Override 
+     public boolean isDead() {
+-    	return getDeleted() != 0;
++    	Integer c = getDeleted();
++    	if( c == null ) return false;
++    	else return c != 0;
+     }
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -73,7 +73,9 @@
+     
+     @Override 
+     public boolean isDead() {
+-    	return getDeleted() != 0;
++    	Integer c = getDeleted();
++    	if( c == null ) return false;
++    	else return c != 0;
+     }
+     
+     /**
+@@ -126,7 +128,7 @@
+      *   @param collectionYearPublication year when the collection was published
+      *   @see getCollectionYearPublication
+      */
+-    public void setCollectionYearPublication(int collectionYearPublication) {
++    public void setCollectionYearPublication(Integer collectionYearPublication) {
+         this.collectionYearPublication = collectionYearPublication;
+     }
+     
+@@ -226,7 +228,7 @@
+      *   @see setDeleted
+      */
+     public Integer getDeleted() {
+-        return this.deleted;
++    	return this.deleted;
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-08 17:32:50 UTC (rev 234)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-08 17:49:28 UTC (rev 235)
+@@ -63,8 +63,8 @@
+ 					// And store their getters. 
+ 					getters.put(table.getSimpleName()+&quot;.&quot;+column, getter(table, column));
+ 			} 
+-			catch(IllegalAccessException e) {}
+-			catch(InstantiationException e) {}
++			catch(IllegalAccessException e) { e.printStackTrace(); }
++			catch(InstantiationException e) { e.printStackTrace(); }
+ 	}
+ 
+ 
+@@ -77,7 +77,10 @@
+ 	public Object getValue(String column) {
+ 		try {
+ 			return getters.get(getClass().getSimpleName()+&quot;.&quot;+column).invoke(this, new Object[0]);
+-		} catch (Exception e) { return null; }
++		} catch (Exception e) {
++			e.printStackTrace();
++			return null; 
++		}
+ 	}
+ 	
+ 	/**
+@@ -181,6 +184,7 @@
+ 	public boolean areAllNNSet() {
+ 		for( String column : getNN() ) { 
+ 			Object value = getValue(column);
++			System.out.println(&quot; # &quot;+this.getClass().getSimpleName()+&quot;.&quot;+column+&quot; = [&quot;+value+&quot;].&quot;);
+ 			if( value == null ) return false;
+ 			if( value instanceof Record &amp;&amp; !((Record)value).areAllNNSet() ) return false;
+ 		}
+@@ -244,4 +248,18 @@
+ 		return null;
+ 	}
+ 	
++	
++	@Override
++	public String toString() {
++		StringBuilder sigma = new StringBuilder();
++		for(String property : this.getProperties()) {
++			sigma.append(property);
++			sigma.append(&quot; = &quot;);
++			sigma.append(this.getValue(property));
++			sigma.append(&quot;; &quot;);
++		}
++		
++		return sigma.toString();
++	}
++	
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000275.html">[Plantlore-dev] r234 - in trunk/src/net/sf/plantlore: common/record config/hibernate
+</A></li>
+	<LI>Next message: <A HREF="000277.html">[Plantlore-dev] r236 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#276">[ date ]</a>
+              <a href="thread.html#276">[ thread ]</a>
+              <a href="subject.html#276">[ subject ]</a>
+              <a href="author.html#276">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

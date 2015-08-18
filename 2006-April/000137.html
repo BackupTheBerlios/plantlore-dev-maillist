@@ -1,0 +1,287 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r133 - in trunk/src/net/sf/plantlore: client/login common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r133%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20common&In-Reply-To=%3C200604121511.k3CFBCM4004725%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000136.html">
+   <LINK REL="Next"  HREF="000138.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r133 - in trunk/src/net/sf/plantlore: client/login common</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r133%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20common&In-Reply-To=%3C200604121511.k3CFBCM4004725%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r133 - in trunk/src/net/sf/plantlore: client/login common">krater at berlios.de
+       </A><BR>
+    <I>Wed Apr 12 17:11:12 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000136.html">[Plantlore-dev] r132 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000138.html">[Plantlore-dev] r134 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#137">[ date ]</a>
+              <a href="thread.html#137">[ thread ]</a>
+              <a href="subject.html#137">[ subject ]</a>
+              <a href="author.html#137">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-12 17:11:11 +0200 (Wed, 12 Apr 2006)
+New Revision: 133
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/common/AutoComboBox.java
+Log:
+Very nasty bug in AutoComboBox fixed (adding new elements to the autocombobox while it was not visible on the screen caused an exception).
+Authview uses the AutoComboBox now.
+Login contains a bug that is yet to be found :(
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-12 15:08:29 UTC (rev 132)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-12 15:11:11 UTC (rev 133)
+@@ -11,6 +11,8 @@
+ 
+ import javax.swing.JDialog;
+ 
++import net.sf.plantlore.common.AutoComboBox;
++
+ /**
+  *
+  * @author  yaa
+@@ -37,7 +39,7 @@
+     private void initComponents() {
+         jLabel1 = new javax.swing.JLabel();
+         jLabel2 = new javax.swing.JLabel();
+-        user = new javax.swing.JComboBox();
++        user = new AutoComboBox();
+         password = new javax.swing.JPasswordField();
+         next = new javax.swing.JButton();
+ 
+@@ -45,7 +47,9 @@
+         jLabel1.setText(&quot;Username:&quot;);
+ 
+         jLabel2.setText(&quot;Password:&quot;);
+-
++        
++        user.setStrict(false);
++        
+         next.setText(&quot;Authorize&quot;);
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+@@ -91,11 +95,9 @@
+     public void update(Observable arg0, Object arg1) {
+ 		DBInfo selected = model.getSelected();
+ 		if(selected == null) return;
++		System.out.println(&quot;selected = &quot; + selected);
+ 		user.removeAllItems();
+-		String[] u = selected.users;
+-		int i = 0;
+-		for (; i &lt; u.length &amp;&amp; u[i] != null; i++)	user.addItem(u[i]);
+-		if (i &gt; 0)	user.setSelectedIndex(0);
++		user.addItems(selected.users);
+ 	}
+     
+     
+@@ -104,7 +106,7 @@
+     protected javax.swing.JLabel jLabel1;
+     protected javax.swing.JLabel jLabel2;
+     protected javax.swing.JPasswordField password;
+-    protected javax.swing.JComboBox user;
++    protected AutoComboBox user;
+     // End of variables declaration//GEN-END:variables
+ 
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 15:08:29 UTC (rev 132)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-12 15:11:11 UTC (rev 133)
+@@ -54,6 +54,7 @@
+ 	 *
+ 	 */
+ 	protected void load() {
++		logger.debug(&quot;Loading the stored list of databases.&quot;);
+ 		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
+ 		dbinfo.add(new DBInfo(&quot;# Testovac&#237; datab&#225;ze #&quot;, &quot;&quot;, -1,
+ 				&quot;jdbc:firebirdsql:natalka.kolej.mff.cuni.cz/3050:/mnt/data/temp/plantloreHIBdata.fdb&quot;, 
+@@ -63,7 +64,9 @@
+ 	}
+ 	
+ 	protected void save() {
++		logger.debug(&quot;Saving the list of databases.&quot;);
+ 		// TODO: JAKUB: ulozit kolekci dbinfo zpatky do XML souboru se jmenem `file`.
++		
+ 	}
+ 	
+ 
+@@ -79,6 +82,7 @@
+ 	public void createRecord(String alias, String host, int port, String db) {
+ 		DBInfo r = new DBInfo(alias, host, port, db, new String[5]);
+ 		dbinfo.add(r);
++		logger.debug(&quot;New database record has been created &quot; + r);
+ 		save();
+ 		setChanged(); notifyObservers();
+ 	}
+@@ -89,6 +93,8 @@
+ 	 */
+ 	public void deleteSelectedRecord() {
+ 		dbinfo.remove(selected);
++		logger.debug(&quot;The selected record has been removed &quot; + selected);
++		selected = null;
+ 		save();
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+@@ -106,6 +112,7 @@
+ 		selected.host = host;
+ 		selected.port = port;
+ 		selected.db = db;
++		logger.debug(&quot;The selected record has been updated &quot; + selected);
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+@@ -125,7 +132,8 @@
+ 	 * @param index	The index of the selected record. Zero means first. Negative means nothing gets selected.
+ 	 */
+ 	public void setSelected(int index) {
+-		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;	
++		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;
++		logger.debug(&quot;Another record has been selected &quot; + selected);
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+@@ -138,10 +146,20 @@
+ 	
+ 	
+ 	public DBLayer connectToSelected(String name, String password) throws NotBoundException, RemoteException, DBLayerException {
+-		if(selected == null) return null;
++		if(selected == null) {
++			logger.debug(&quot;The System cannot create a connection when nothing was selected!&quot;);
++			return null;
++		}
++		selected.promoteUser(name);
++		
++		// Create a new database layer.
++		logger.info(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + selected.host + &quot;:&quot; + selected.port);
+ 		dblayer = factory.create(selected.host, selected.port);
++		// Initialize the database layer.
++		logger.info(&quot;Initializing that DBLayer...&quot;);
+ 		dblayer.initialize(selected.db,name, password);
+-		selected.promoteUser(name);
++		logger.info(&quot;DBLayer initialized.&quot;);
++		// Save the current state.
+ 		save();
+ 		// Everything went fine.
+ 		this.setChanged(); this.notifyObservers(dblayer);
+
+Modified: trunk/src/net/sf/plantlore/common/AutoComboBox.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-12 15:08:29 UTC (rev 132)
++++ trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-12 15:11:11 UTC (rev 133)
+@@ -34,7 +34,7 @@
+  * record &quot;------&quot; or &quot;not specified&quot; instead.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+- * @version 1.1
++ * @version 1.2
+  * @since The beginning of time.
+  */
+ public class AutoComboBox extends JComboBox {
+@@ -42,6 +42,10 @@
+ 	protected boolean allowNew = false;
+ 	protected int capacity = 32;
+ 	
++	
++	public AutoComboBox() {
++		this(new String[] { null });		
++	}
+ 
+ 	/**
+ 	 * Create the AutoComboBox with given array of choices.
+@@ -49,12 +53,13 @@
+ 	 * @param choices	&lt;b&gt;Sorted&lt;/b&gt; list of available choices (items).
+ 	 */
+ 	public AutoComboBox(Object[] choices) {
+-		super(choices); // base class constructor
+ 		setEditable(true);
++
++		addItems(choices);
+ 		
+ 		JTextField editor = (JTextField)getEditor().getEditorComponent();
+ 		AutoDocument a = new AutoDocument(); // change the model ~~&gt; AutoDocument 
+-		editor.setDocument(a); editor.addKeyListener(a); editor.addFocusListener(a);
++		editor.setDocument(a); editor.addKeyListener(a); editor.addFocusListener(a);;
+ 	}
+ 	
+ 	/**
+@@ -71,8 +76,15 @@
+ 	 */
+ 	public void setCapacity(int capacity) { this.capacity = capacity; }
+ 	
++		
++	public void addItems(Object[] items) {
++		for(Object item : items)
++			if(item != null) 
++				this.addItem(item);
++	}
+ 	
+ 	
++	
+ 	private class AutoDocument extends PlainDocument implements KeyListener, FocusListener {
+ 		
+ 		/** Prevent entering the setMatch method recursively. */
+@@ -87,7 +99,16 @@
+ 		synchronized private void setMatch(String prefix, boolean popup) {
+ 			if (!prevent) {
+ 				prevent = true;
+-				setPopupVisible(popup); // make sure popup is/isn't visible
++				/*----------------------------------------------------------------
++				 * Another amazing example of hyperactivity of this component.
++				 * When someone calls addItem(), that item gets automatically selected.
++				 * This means insertString() and setMatch() are called.
++				 * 
++				 * The problem is, that this method is likely to show the popup
++				 * part of the ComboBox; if the AutoComboBox is not currently
++				 * visible on the screen, that call will throw an exception.
++				 *----------------------------------------------------------------*/
++				if(isShowing()) setPopupVisible(popup); // make sure popup is/isn't visible
+ 				try {
+ 					boolean noMatch = true;
+ 					if (prefix == null) prefix = getText(0, getLength());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000136.html">[Plantlore-dev] r132 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000138.html">[Plantlore-dev] r134 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#137">[ date ]</a>
+              <a href="thread.html#137">[ thread ]</a>
+              <a href="subject.html#137">[ subject ]</a>
+              <a href="author.html#137">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

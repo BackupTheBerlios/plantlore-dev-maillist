@@ -1,0 +1,200 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r380 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r380%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605290049.k4T0nDqD025414%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000434.html">
+   <LINK REL="Next"  HREF="000436.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r380 - trunk/src/net/sf/plantlore/server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r380%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605290049.k4T0nDqD025414%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r380 - trunk/src/net/sf/plantlore/server">krater at berlios.de
+       </A><BR>
+    <I>Mon May 29 02:49:13 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000434.html">[Plantlore-dev] r379 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+        <LI>Next message: <A HREF="000436.html">[Plantlore-dev] r381 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#435">[ date ]</a>
+              <a href="thread.html#435">[ thread ]</a>
+              <a href="subject.html#435">[ subject ]</a>
+              <a href="author.html#435">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-29 02:49:04 +0200 (Mon, 29 May 2006)
+New Revision: 380
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fixed a bug that caused the NullPointerException when the history of an Occurrence record was saved. (Twice the size, double the clarity!)
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-28 22:25:13 UTC (rev 379)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-29 00:49:04 UTC (rev 380)
+@@ -13,6 +13,8 @@
+ import java.rmi.server.UnicastRemoteObject;
+ import java.rmi.server.Unreferenced;
+ import java.util.Hashtable;
++import java.util.List;
++
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+@@ -1672,37 +1674,53 @@
+                 Occurrence origRec = (Occurrence)original[0];
+                 Occurrence newRec = (Occurrence)data;
+                 // Save the historyChange
+-                sess.save(historyChange);                
+-                ArrayList cols = (ArrayList)origRec.getHistoryColumns();
+-                for (int i=0;i&lt;cols.size();i++) {
+-                    if (!origRec.getValue((String)cols.get(i)).equals(newRec.getValue((String)cols.get(i)))) {
+-                        System.out.println(&quot;COLUMN: &quot;+(String)cols.get(i));
+-                        // Read record from THISTORYCOLUMN first
+-                        res = sess.createCriteria(HistoryColumn.class)
+-                            .add(Restrictions.eq(HistoryColumn.TABLENAME, PlantloreConstants.ENTITY_OCCURRENCE))
+-                            .add(Restrictions.eq(HistoryColumn.COLUMNNAME, (String)cols.get(i)))
+-                            .scroll();
+-                        if (!res.next()) {
+-                            logger.error(&quot;tHistoryColumn doesn't contain required data&quot;);
+-                            DBLayerException ex = new DBLayerException(&quot;tHistoryColumn doesn't contain required data&quot;);
+-                            ex.setError(ex.ERROR_DB, PlantloreConstants.ENTITY_OCCURRENCE);
+-                            throw ex;                                
+-                        }
+-                        Object[] colNames = res.get();
+-                        // Save OldRecordId if neccessary
+-                        
+-// TODO: Save oldRecordId                        
+-//                        if ((((String)cols.get(i)).equals(Occurrence.PLANT)) || (((String)cols.get(i)).equals(Occurrence.PUBLICATION))) {
+-//                            historyChange.setOldRecordId((Integer)newRec.getValue((String)cols.get(i)));
+-//                        }
+-                        // Save record into THISTORY
+-                        HistoryRecord hist = new HistoryRecord();
+-                        hist.setHistoryChange(historyChange);
+-                        hist.setHistoryColumn((HistoryColumn)colNames[0]);                            
+-                        hist.setOldValue(origRec.getValue((String)cols.get(i)).toString());
+-                        hist.setNewValue(newRec.getValue((String)cols.get(i)).toString());
+-                        sess.save(hist);
+-                    }
++                sess.save(historyChange);
++                
++                // Seeing is believing.
++                List&lt;String&gt; cols = origRec.getHistoryColumns();
++                for(String columnName : cols) {
++                	
++                	Object 
++                	origValue = origRec.getValue(columnName),
++                	newValue = newRec.getValue(columnName);
++                	
++                	if( origValue == null &amp;&amp; newValue == null)
++                		continue;
++                	
++                	if( origValue == null || newValue == null ||
++                			!origValue.equals(newValue) ) {
++                		System.out.println(&quot; &gt;&gt; DIFFERENT_COLUMN: &quot; + columnName);
++                		// Read record from THISTORYCOLUMN first
++                		res = sess.createCriteria(HistoryColumn.class).
++                		add(Restrictions.eq(HistoryColumn.TABLENAME, PlantloreConstants.ENTITY_OCCURRENCE)).
++                		add(Restrictions.eq(HistoryColumn.COLUMNNAME, columnName)).
++                		scroll();
++                		if ( !res.next() ) {
++                			logger.error(&quot;tHistoryColumn doesn't contain the required data (&quot;+columnName+&quot;).&quot;);
++                			DBLayerException ex = new DBLayerException(&quot;Error.CorruptedDatabase&quot;);
++                			ex.setError(DBLayerException.ERROR_DB, PlantloreConstants.ENTITY_OCCURRENCE);
++                			throw ex;
++                		}
++                		Object[] colNames = res.get();
++                		// Save OldRecordId if neccessary
++                		
++                		// TODO: Save oldRecordId
++                		// if ((((String)cols.get(i)).equals(Occurrence.PLANT))
++                		// ||
++                		// (((String)cols.get(i)).equals(Occurrence.PUBLICATION)))
++                		// {
++                		// historyChange.setOldRecordId((Integer)newRec.getValue((String)cols.get(i)));
++                		// }
++                		// Save record into THISTORY
++                		HistoryRecord historyRecord = new HistoryRecord();
++                		historyRecord.setHistoryChange(historyChange);
++                		historyRecord.setHistoryColumn((HistoryColumn) colNames[0]);
++                		String origValueString = (origValue == null) ? null : origValue.toString(),
++                				newValueString = (newValue == null) ? null : newValue.toString();
++                		historyRecord.setOldValue(origValueString);
++                		historyRecord.setNewValue(newValueString);
++                		sess.save(historyRecord);
++                	}
+                 }
+             }
+         }
+@@ -1710,19 +1728,17 @@
+     
+     
+     /**
+-     * This method is intended for final cleanup. &lt;b&gt;Do not call this method yourself!
+-     * The proper way for you to get rid of a DBLayer is to call DBLayer.destroy() method!&lt;/b&gt;
+-     * &lt;br/&gt;
+-     * Terminate all processes running in this DBLayer,
+-     * disconnect from the database and 
+-     * destroy all objects created by this DBLayer.
+-     * &lt;br/&gt;
+-     * &lt;b&gt;After this the DBLayer will not be capable of carrying out its duties.&lt;/b&gt;
+-     * &lt;br/&gt;
+-     * This method is supposed to be used by the DBLayerFactory exclusively.
+-     * 
+-     * FIXME Think of a better mechanism that will hide it from users yet keep it accessible to the DBLF.
+-     */
++	 * This method is intended for final cleanup. &lt;b&gt;Do not call this method
++	 * yourself! The proper way for you to get rid of a DBLayer is to call
++	 * DBLayer.destroy() method!&lt;/b&gt; &lt;br/&gt; Terminate all processes running in
++	 * this DBLayer, disconnect from the database and destroy all objects
++	 * created by this DBLayer. &lt;br/&gt; &lt;b&gt;After this the DBLayer will not be
++	 * capable of carrying out its duties.&lt;/b&gt; &lt;br/&gt; This method is supposed to
++	 * be used by the DBLayerFactory exclusively.
++	 * 
++	 * FIXME Think of a better mechanism that will hide it from users yet keep
++	 * it accessible to the DBLF.
++	 */
+     public void shutdown() /* throws RemoteException */ {
+     	
+     	if(undertaker != null) 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000434.html">[Plantlore-dev] r379 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+	<LI>Next message: <A HREF="000436.html">[Plantlore-dev] r381 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#435">[ date ]</a>
+              <a href="thread.html#435">[ thread ]</a>
+              <a href="subject.html#435">[ subject ]</a>
+              <a href="author.html#435">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

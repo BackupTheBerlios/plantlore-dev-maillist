@@ -1,0 +1,806 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r653 - in trunk/src/net/sf/plantlore: client	client/createdb client/history client/metadata	client/overview/tree client/publications common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r653%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/createdb%20client/history%20client/metadata%0A%09client/overview/tree%20client/publications%20common&In-Reply-To=%3C200609040044.k840iSrk017531%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000910.html">
+   <LINK REL="Next"  HREF="000912.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r653 - in trunk/src/net/sf/plantlore: client	client/createdb client/history client/metadata	client/overview/tree client/publications common</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r653%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/createdb%20client/history%20client/metadata%0A%09client/overview/tree%20client/publications%20common&In-Reply-To=%3C200609040044.k840iSrk017531%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r653 - in trunk/src/net/sf/plantlore: client	client/createdb client/history client/metadata	client/overview/tree client/publications common">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 02:44:28 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000910.html">[Plantlore-dev] Database - zruseni jednoho NN
+</A></li>
+        <LI>Next message: <A HREF="000912.html">[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#911">[ date ]</a>
+              <a href="thread.html#911">[ thread ]</a>
+              <a href="subject.html#911">[ subject ]</a>
+              <a href="author.html#911">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-04 02:44:12 +0200 (Mon, 04 Sep 2006)
+New Revision: 653
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/createdb/CreateDBAuthCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+   trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java
+   trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java
+   trunk/src/net/sf/plantlore/common/Dispatcher.java
+Log:
+Modified most of the application to use the Dispatcher and PostTaskAction instead of (Default)ProgressBar and task.start().
+
+Now you should never call task.start() yourself unless you are very sure about what you're doing!
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -745,8 +745,20 @@
+                             setStatusMessage(L10n.getString(&quot;Overview.LoadingOccurrenceRecord&quot;));
+                             return editModel.loadRecord((Integer) row[row.length - 1]);
+                         }
+-                    };
+-
++                    };                    
++                    t.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            SwingUtilities.invokeLater(new Runnable() {
++                                public void run() {
++                                    editView.loadComponentData();
++                                    editView.setVisible(true);    
++                                }
++                            });
++                        }                        
++                    });
++                    Dispatcher.getDispatcher().dispatch(t, view, false);
++                    
++                    /*
+                     new DefaultProgressBar(t, view, true) {
+                         public void afterStopping() {
+                             SwingUtilities.invokeLater(new Runnable() {
+@@ -757,7 +769,7 @@
+                             });
+                         }
+                     };
+-                    t.start();
++                    t.start(); */
+ 		}//actionPerformed()
+ 	}//EditAction
+ 
+@@ -814,7 +826,16 @@
+                                 logger.info(&quot;Deleting &quot; + arg[0] + &quot; records.&quot;);
+                                 
+                                 Task task = model.deleteSelected();
++                                task.setPostTaskAction(new PostTaskAction() {
++                                    public void afterStopped(Object value) {
++                                        refreshOverview(false); // false -&gt; do not create task,
++                                        // refresh the overview directly
++                                        // in this thread
++                                    }                                    
++                                });
++                                Dispatcher.getDispatcher().dispatch(task, view, false);
+                                 
++                                /*
+                                 ProgressBar progressBar = new DefaultProgressBar(task, view, true) {                                    
+                                     public void afterStopped(Object value) {
+                                         refreshOverview(false); // false -&gt; do not create task,
+@@ -822,7 +843,7 @@
+                                         // in this thread
+                                     }
+                                 };                                
+-                                task.start();
++                                task.start(); */
+                                 break;
+                         }// switch
+ 		}//actionPerformed
+@@ -1257,6 +1278,15 @@
+ 				historyModel.addObserver(managerBridge);
+ 			}
+ 			Task task = historyModel.initialize(model.getSelectedOccurrence());
++                        task.setPostTaskAction(new PostTaskAction() {
++                            public void afterStopped(Object value) {
++                                            if (! historyModel.isFinishedTask()) return;
++                                            historyModel.setInfoFinishedTask(false);
++                                                historyView.setVisible(true);		
++                            }                            
++                        });
++                        Dispatcher.getDispatcher().dispatch(task, view, false);
++                        /*
+ 			new DefaultProgressBar(task, view, true) {
+ 				@Override
+ 	 	    	public void afterStopping() {
+@@ -1265,7 +1295,7 @@
+                                             historyView.setVisible(true);		
+ 	 	    	}				
+ 			};			
+-			task.start();							
++			task.start();	*/						
+ 		}
+ 	}
+ 
+@@ -1285,6 +1315,15 @@
+ 				wholeHistoryModel.addObserver(managerBridge);
+ 			}
+ 			Task task = wholeHistoryModel.initializeWH();
++                        task.setPostTaskAction(new PostTaskAction() {
++                            public void afterStopped(Object value) {	
++                                            if (! wholeHistoryModel.isFinishedTask()) return;
++                                            wholeHistoryModel.setInfoFinishedTask(false);
++                                            wholeHistoryView.setVisible(true);
++                            }
++                        });
++                        Dispatcher.getDispatcher().dispatch(task, view, false);
++                        /*
+ 			new DefaultProgressBar(task, view, true) {
+ 				@Override
+ 	 	    	public void afterStopping() {	
+@@ -1293,7 +1332,7 @@
+                                         wholeHistoryView.setVisible(true);
+ 	 	    	}
+ 			};			
+-			task.start();							
++			task.start();							 */
+ 		}
+ 	}
+ 	
+@@ -1315,6 +1354,16 @@
+ 				metadataManagerModel.addObserver(managerBridge);								
+ 			}
+ 			Task task = metadataManagerModel.searchMetadata(true);
++                        task.setPostTaskAction(new PostTaskAction() {
++                            public void afterStopped(Object value) {	
++                                            if (! metadataManagerModel.isFinishedTask()) return;
++                                            metadataManagerModel.setInfoFinishedTask(false);
++                                            metadataManagerCtrl.reloadData(1, MetadataManager.DEFAULT_DISPLAY_ROWS);
++                                            metadataManagerView.setVisible(true);
++                            }
++                        });
++                        Dispatcher.getDispatcher().dispatch(task, view, false);
++                        /*
+ 			new DefaultProgressBar(task, view, true) {
+ 				@Override
+ 	 	    	public void afterStopping() {	
+@@ -1325,6 +1374,7 @@
+ 	 	    	}
+ 			};			
+ 			task.start();						
++                         **/
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/createdb/CreateDBAuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/createdb/CreateDBAuthCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/createdb/CreateDBAuthCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -4,6 +4,7 @@
+ 
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultProgressBar;
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.common.Task;
+ 
+@@ -30,8 +31,10 @@
+ 				String user = view.user.getText();
+ 
+ 				Task creation = model.createCreationTask(user, new String(view.password.getPassword()));
++                                Dispatcher.getDispatcher().dispatch(creation, view, false);
++                                /*
+ 				new DefaultProgressBar(creation, view, true);
+-				creation.start();
++				creation.start(); */
+ 				
+ 				view.password.setText(&quot;&quot;);
+ 			}
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -10,6 +10,8 @@
+ import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ 
+@@ -222,7 +224,23 @@
+             	   //Button OK was press
+             	   logger.debug(&quot;Button OK was press.&quot;);
+             	   Task task = model.commitUpdate(model.getResultRows(), true);  
+-            	   
++            	   task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                                try {
++                                   if (! model.isFinishedTask()) return;
++                                   model.setInfoFinishedTask(false);	
++                                   model.searchEditHistory(model.getData());
++                                   reloadData(1,model.getDisplayRows());			   	            	          
++                                   view.setCountResutl(model.getResultRows());
++                                }catch (Exception ex) {                                   
++                                   ex.printStackTrace();
++                                   DefaultExceptionHandler.handle(view, ex);                                   
++                                   return;
++                                } 
++                        }                       
++                   });
++                   Dispatcher.getDispatcher().dispatch(task, view, false);
++                   /*
+             	   new DefaultProgressBar(task, view, true) {                       
+                         @Override
+                         public void afterStopping() {
+@@ -239,7 +257,7 @@
+                                 } 
+                         } 		   					
+                   };		   					                   	                   
+-	          task.start();     	                   
++	          task.start();     	    */               
+                } else {            	  
+             	   logger.debug(&quot;Button Cancle was press.&quot;); 
+                }  
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -18,6 +18,8 @@
+ import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ 
+@@ -234,7 +236,24 @@
+ 	                   //Button OK was press
+ 	                   logger.debug(&quot;Button OK was press.&quot;);    
+ 	                   Task task = model.commitUpdate(toResult, false);
+-	                   
++	                   task.setPostTaskAction(new PostTaskAction() {
++                                    public void afterStopped(Object value) {
++                                        logger.debug(&quot;Load Data&quot;);	   
++                                        try {
++                                           if (! model.isFinishedTask()) return;
++                                           model.setInfoFinishedTask(false);	
++                                           model.searchWholeHistoryData();
++                                           reloadData(1,model.getDisplayRows());
++                                           view.setCountResult(model.getResultRows());
++                                        } catch (Exception ex) {                                                                   
++                                           ex.printStackTrace();
++                                           DefaultExceptionHandler.handle(view, ex);                                                                   
++                                           return;
++                                        } 
++                                    }                               
++                           });
++                           Dispatcher.getDispatcher().dispatch(task, view, false);
++                           /*
+ 	                   new DefaultProgressBar(task, view, true) {		   										
+                                 @Override
+                                     public void afterStopping() {
+@@ -252,7 +271,7 @@
+                                         } 
+                                     }
+                             };		   					                   	                  
+-	                    task.start();
++	                    task.start(); */
+ 	                   
+ 	               } else {	                       	                     
+ 	                       logger.debug(&quot;Button Cancle was press.&quot;);
+@@ -327,7 +346,21 @@
+            logger.debug(&quot;Button OK was press.&quot;);  
+            // delete records whit contition cdelete &gt; 0
+            Task task = model.clearDatabase();
+-
++           task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {
++                //load data
++                try {
++                        model.searchWholeHistoryData();
++                        reloadData(1,model.getDisplayRows());
++                        view.totalResultValueLabel.setText(&quot;0&quot;);
++                        } catch (Exception ex) {                                                                                    
++                            ex.printStackTrace();
++                            DefaultExceptionHandler.handle(view, ex);                                                                                  		   	               
++                        }
++                }               
++           });
++           Dispatcher.getDispatcher().dispatch(task, view, false);
++           /*
+            new DefaultProgressBar(task, view, true) {
+                 @Override
+                 public void afterStopping() {
+@@ -342,7 +375,7 @@
+                         }
+                 }
+            };		   					                   	                   
+-           task.start();	                                                         
++           task.start();	      */                                                   
+            }
+        }
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -23,6 +23,8 @@
+ import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ 
+@@ -247,7 +249,23 @@
+            model.setUsedClose(true);        	
+            //save new record Metadata into database
+            Task task = model.addMetedataRecord();
++           task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {
++                   if (! model.isFinishedTask()) return;
++                   model.setInfoFinishedTask(false);
++                   //load metadata
++    	           model.searchMetadata(false);
++    	           if (model.isError()) {
++    	        	   DefaultExceptionHandler.handle(view, model.getException());
++                           model.setError(null);
++    	        	   return;
++    	           }    	           
++    	           reloadData(1, model.getDisplayRows());    	                   
++               } 		   		               
++           });
++           Dispatcher.getDispatcher().dispatch(task, view, false);
+            
++           /*
+            new DefaultProgressBar(task, view, true) {		   							 
+                 @Override
+                 public void afterStopping() {
+@@ -263,7 +281,7 @@
+     	           reloadData(1, model.getDisplayRows());    	                   
+                } 		   		
+    		};   		               	                   
+-        task.start();                                       
++        task.start();                                       */
+        }
+     }
+     
+@@ -302,8 +320,18 @@
+                if (model.usedClose()) return;
+                //Update metadata               
+                Task task = model.editMetadataRecord();
++               task.setPostTaskAction(new PostTaskAction() {
++                    public void afterStopped(Object value) {
++                         if (! model.isFinishedTask()) return;
++                         model.setInfoFinishedTask(false);
++                       //load metadata          				
++                        if (model.isError()) return;
++                        view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                         
++                     } 		   					                   
++               });
++               Dispatcher.getDispatcher().dispatch(task, view, false);
+                
+-               new DefaultProgressBar(task, view, true) {
++    /*           new DefaultProgressBar(task, view, true) {
+             	   @Override
+                 public void afterStopping() {
+                      if (! model.isFinishedTask()) return;
+@@ -313,7 +341,7 @@
+                     view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                         
+                      } 		   					
+           		};          		                 	                   
+-                task.start();                                       
++                task.start();                                       */
+               }
+        }
+     }
+@@ -389,8 +417,24 @@
+                 	   logger.debug(&quot;Button OK was press.&quot;);
+ 		               //delete selected record
+ 		               Task task = model.deleteMetadataRecord();
+-		               
+-		             new DefaultProgressBar(task, view, true) {		   								  		   				
++		               task.setPostTaskAction(new PostTaskAction() {
++                                     public void afterStopped(Object value) {
++                                            if (! model.isFinishedTask()) return;
++                                            model.setInfoFinishedTask(false);
++                                            // load metadata
++                                           model.searchMetadata(false);  
++                                           if (model.isError()) {
++                                               DefaultExceptionHandler.handle(view, model.getException());
++                                                model.setError(null);
++                                                model.setException(null);
++                                               return;
++                                           }
++                                           reloadData(1, model.getDisplayRows());		   	              		   	               
++        		                }//afterStopped 		   					                                   
++                               });
++                               Dispatcher.getDispatcher().dispatch(task, view, false);
++                               
++		             /*new DefaultProgressBar(task, view, true) {		   								  		   				
+                                     @Override						
+                                      public void afterStopping() {
+                                         if (! model.isFinishedTask()) return;
+@@ -406,7 +450,7 @@
+ 		   	               reloadData(1, model.getDisplayRows());		   	              		   	               
+ 		                } 		   					
+ 		   			};		   			                   	                   
+-		            task.start();                                                                  
++		            task.start(); */                                                                 
+ 		          }else {
+ 		        	  logger.debug(&quot;Button Cancle was press.&quot;);
+ 		          }
+@@ -439,7 +483,22 @@
+            }          
+            //Load metadata with specific conditions
+            Task task = model.searchMetadata(true);   
+-           
++           task.setPostTaskAction(new PostTaskAction() {
++        	   public void afterStopped(Object value) {
++                       if (! model.isFinishedTask()) return;
++                       model.setInfoFinishedTask(false);
++                       if (model.getDisplayRows() &lt;= 0) {
++                       model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
++                       }
++                       //No record in result - show message to user
++                       if (model.getResultRows() &lt; 1) {
++                           view.showInfoMessage(MetadataManager.INFORMATION_RESULT_TITLE,MetadataManager.INFORMATION_RESULT);
++                       }
++                       reloadData(1, model.getDisplayRows());		           		           
++               } 		   					               
++           });
++           Dispatcher.getDispatcher().dispatch(task, view, false);
++           /*
+            new DefaultProgressBar(task, view, true) {		   								  			
+ 			   @Override 
+         	   public void afterStopping() {
+@@ -455,7 +514,7 @@
+                        reloadData(1, model.getDisplayRows());		           		           
+                } 		   					
+ 			};			                  	                   
+-            task.start();                                                                  
++            task.start();    */                                                              
+        }
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -25,6 +25,8 @@
+ import net.sf.plantlore.client.resources.Resource;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+@@ -79,10 +81,18 @@
+                 Task task = new Task() {
+                     @Override
+                     public Object task() throws DBLayerException, RemoteException {
++                        setStatusMessage(L10n.getString(&quot;Overview.Tree.LoadingHabitats&quot;));
+                         model.addHabitats(node,nodeInfo.getId());
+                         return null;
+                     }
+                 };
++                task.setPostTaskAction(new PostTaskAction() {
++                    public void afterStopped(Object value) {
++                        model.getTreeModel().nodeStructureChanged(node);                        
++                    }                    
++                });
++                Dispatcher.getDispatcher().dispatch(task, view, false);
++                /*
+                 DefaultProgressBar dpb = new DefaultProgressBar(task,view,true) {
+                     @Override
+                     public void afterStopping() {
+@@ -90,7 +100,7 @@
+                     }
+                 };
+                 
+-                task.start();
++                task.start(); */
+         }
+     }
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/publications/AddPublicationCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -10,6 +10,8 @@
+ import java.rmi.RemoteException;
+ import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+@@ -73,7 +75,28 @@
+             if (view.checkCompulsory()) {
+                 if (model.getEditPublication() == null) {                    
+                     // Save new publication
+-                    Task task = model.savePublication();                
++                    Task task = model.savePublication();     
++                    task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            model.searchPublication(false);
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
++                            model.reloadCache();
++                        }                        
++                    });
++                    Dispatcher.getDispatcher().dispatch(task, view, false);
++                    /*
+                     DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                         @Override
+                         public void afterStopped(Object value) {
+@@ -93,13 +116,33 @@
+                             }
+                             model.reloadCache();
+                         }
+-                    };
+-                    dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+-                    task.start();
++                    };*/
++                    //dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
++                    //task.start();
+                 } else {                    
+                     // Edit existing publication
+                     Task task = model.editPublication();
+-                    DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
++                    task.setPostTaskAction(new PostTaskAction() {
++                        public void afterStopped(Object value) {
++                            model.searchPublication(false);
++                            try {
++                                model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                            } catch (RemoteException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            } catch (DBLayerException ex) {
++                                logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                                ex.printStackTrace();
++                                DefaultExceptionHandler.handle(view, ex);
++                                return;                    
++                            }
++                            model.reloadCache();                            
++                        }                        
++                    });
++                    Dispatcher.getDispatcher().dispatch(task, view, false);
++/*                    DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                         @Override
+                         public void afterStopped(Object value) {
+                             model.searchPublication(false);
+@@ -120,7 +163,7 @@
+                         }
+                     };
+                     dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Save&quot;));
+-                    task.start();                    
++                    task.start();                    */
+                 }
+                 // Close the add dialog when save finished
+                 view.close();
+
+Modified: trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/client/publications/PublicationManagerCtrl.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -60,6 +60,26 @@
+         view.sortDirectionAddFocusListener(new SortDirectionRadioFocusListener());
+         // Display all publication when Publication manager is opened using the Task
+         Task task = model.searchPublication(true);
++        task.setPostTaskAction(new PostTaskAction() {
++            public void afterStopped(Object value) {
++                model.setCurrentFirstRow(1);
++                try {
++                    model.processResults(1, model.getDisplayRows());
++                } catch (RemoteException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                } catch (DBLayerException ex) {
++                    logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                    ex.printStackTrace();
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;                    
++                }
++            }            
++        });
++        Dispatcher.getDispatcher().dispatch(task, view, false);
++        /*
+         DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+             // After Task is finished, display the results
+             @Override
+@@ -81,7 +101,7 @@
+             }
+         };
+         dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Search&quot;));
+-        task.start();
++        task.start(); */
+     }
+     
+     
+@@ -231,6 +251,27 @@
+             model.setPublicationIndex(index);
+             // Delete is executed in a separate thread using Task
+             Task task = model.deletePublication();
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {                    
++                    model.searchPublication(false);
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }
++                    model.reloadCache();
++                }                
++            });
++            Dispatcher.getDispatcher().dispatch(task, view, false);
++            /*
+             DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                 // Refresh the list of publications after a delete
+                 @Override
+@@ -253,7 +294,7 @@
+                 }
+             };
+             dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Delete&quot;));
+-            task.start();
++            task.start(); */
+         }
+     }    
+ 
+@@ -264,7 +305,25 @@
+         public void actionPerformed(ActionEvent e) {
+             // Run DB search. The operation is executed in a separate thread
+             Task task = model.searchPublication(true);
+-
++            task.setPostTaskAction(new PostTaskAction() {
++                public void afterStopped(Object value) {
++                    try {
++                        model.processResults(model.getCurrentFirstRow(), model.getDisplayRows());
++                    } catch (RemoteException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    } catch (DBLayerException ex) {
++                        logger.error(&quot;RemoteException caught while processing search results. Details: &quot;+ex.getMessage());
++                        ex.printStackTrace();
++                        DefaultExceptionHandler.handle(view, ex);
++                        return;                    
++                    }                        
++                }                
++            });
++            Dispatcher.getDispatcher().dispatch(task, view, false);
++            /*
+             DefaultProgressBar dpb = new DefaultProgressBar(task, view, true) {
+                 // Display the results of a search
+                 @Override
+@@ -285,7 +344,7 @@
+                 }
+             };
+             dpb.setTitle(L10n.getString(&quot;Publications.ProgressBar.Search&quot;));
+-            task.start();
++            task.start(); */
+         }
+     }        
+     
+
+Modified: trunk/src/net/sf/plantlore/common/Dispatcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-03 23:47:47 UTC (rev 652)
++++ trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-04 00:44:12 UTC (rev 653)
+@@ -34,7 +34,7 @@
+  
+     public synchronized boolean dispatch(Task task, JFrame parent, boolean stoppable) {
+         if (taskRunning) {
+-            System.out.println(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
++            logger.debug(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
+             return false;
+         }
+         
+@@ -51,6 +51,25 @@
+         return true;
+     }
+ 
++    public synchronized boolean dispatch(Task task, JDialog parent, boolean stoppable) {
++        if (taskRunning) {
++            logger.debug(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
++            return false;
++        }
++        
++        taskRunning = true;
++        this.task = task;
++        //dpb = new DefaultProgressBarNew(task, parent, true);
++
++        pbm.initialize();
++        pbm.setParent(parent);
++        pbm.setTask(task);
++        
++        task.start();
++        
++        return true;
++    }
++
+     /** Tells the dispatcher that the progressbar and task finished.
+      *
+      * This tells the dispatcher that it is safe to dispatch another task.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000910.html">[Plantlore-dev] Database - zruseni jednoho NN
+</A></li>
+	<LI>Next message: <A HREF="000912.html">[Plantlore-dev] r654 - in trunk/src/net/sf/plantlore: common server	server/manager
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#911">[ date ]</a>
+              <a href="thread.html#911">[ thread ]</a>
+              <a href="subject.html#911">[ subject ]</a>
+              <a href="author.html#911">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

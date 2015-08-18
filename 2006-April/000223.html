@@ -1,0 +1,731 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r199 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/export/component common/record server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r199%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/export/component%20common/record%20server&In-Reply-To=%3C200604302006.k3UK6UJg030130%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000222.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r199 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/export/component common/record server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r199%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20client/export/component%20common/record%20server&In-Reply-To=%3C200604302006.k3UK6UJg030130%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r199 - in trunk/src/net/sf/plantlore: client/export client/export/builders client/export/component common/record server">krater at berlios.de
+       </A><BR>
+    <I>Sun Apr 30 22:06:30 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000222.html">[Plantlore-dev] r198 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#223">[ date ]</a>
+              <a href="thread.html#223">[ thread ]</a>
+              <a href="subject.html#223">[ subject ]</a>
+              <a href="author.html#223">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-30 22:06:28 +0200 (Sun, 30 Apr 2006)
+New Revision: 199
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngViewA.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+   trunk/src/net/sf/plantlore/client/export/component/XFilter.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+The whole Export (framework + GUI).
+Features:
+* the export runs in a separate thread (hell of a feature!)
+* the procedure can be aborted
+* the selection of columns is available for some formats
+
+Things to create: XMLBuilder, DCBuilder, ABCDBuilder.
+Things to finish: CSVBuilder must export a header as well.
+
+
+The HibernateDBLayer.java's BUG FIXED:
+ the more() method returned the same records for (from, to) = (1,1) and (0,0). Now it works properly.
+
+Modified: trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -48,7 +48,6 @@
+ 	 * @param template The new template. &lt;b&gt;Mustn't be &lt;i&gt;null&lt;/i&gt;&lt;/b&gt;.
+ 	 */
+ 	public void setTemplate(Template template) {
+-		assert(template != null);
+ 		this.template = template.clone();
+ 		
+ 		// Store all getters of all selected columns.
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -31,7 +31,7 @@
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- * @version 0.9 might still slightly change
++ * @version 1.0 BETA - might still slightly change
+  *
+  * @see net.sf.plantlore.client.common.Selection
+  * @see net.sf.plantlore.client.export.Builder
+@@ -62,10 +62,6 @@
+ 	 * @param selection	The set of selected records.
+ 	 */
+ 	public DefaultDirector(Builder builder, int result, DBLayer database, Selection selection) {
+-		assert(database != null);
+-		assert(builder != null);
+-		assert(selection != null);
+-		
+ 		this.build = builder; this.result = result; this.database = database;
+ 		this.selection = selection.clone(); 
+ 	}
+@@ -121,8 +117,11 @@
+ 			// Iterate over the result of the query.
+ 			int rows = database.getNumRows( result );
+ 			for(int i = 0; i &lt; rows &amp;&amp; !aborted; i++) {
+-				Object[] records = database.next( result );
+-				Record record = (Record) records[0];
++				
++				// Abandon the database.nect() Object[] records = database.next( result );
++				Object[] records = database.more( result, i, i );
++				
++				Record record = (Record) ((Object[])records[0])[0]; // [0][0] since we use `more`
+ 				if( !selection.contains( record ) ) continue; // Is the record selected?
+ 			
+ 				count++;
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -49,11 +49,11 @@
+ 	 * List of all filters the Export Manager is capable to handle.
+ 	 */
+ 	private XFilter[] filters = new XFilter[] {
+-		new XFilter(L10n.getString(&quot;FilterDC&quot;), &quot;.xml&quot;),
+-		new XFilter(L10n.getString(&quot;FilterABCD&quot;), &quot;.xml&quot;),
+-		new XFilter(L10n.getString(&quot;FilterCSV&quot;), &quot;.txt&quot;, &quot;.csv&quot;),
+-		new XFilter(L10n.getString(&quot;FilterXML&quot;), &quot;.xml&quot;),
+-		new XFilter(L10n.getString(&quot;FilterPlantloreNative&quot;), &quot;.xml&quot;, &quot;.pln&quot;)
++			new XFilter(L10n.getString(&quot;FilterPlantloreNative&quot;), &quot;.xml&quot;, &quot;.pln&quot;),
++			new XFilter(L10n.getString(&quot;FilterXML&quot;), true, &quot;.xml&quot;),
++			new XFilter(L10n.getString(&quot;FilterCSV&quot;), true, &quot;.txt&quot;, &quot;.csv&quot;),	
++			new XFilter(L10n.getString(&quot;FilterABCD&quot;), &quot;.xml&quot;),	
++			new XFilter(L10n.getString(&quot;FilterDC&quot;), &quot;.xml&quot;)
+ 	};
+ 	
+ 	
+@@ -62,7 +62,7 @@
+ 	private Template template;
+ 	private Selection select;
+ 	private XFilter filter;
+-	private File file;
++	private String filename;
+ 	private Integer resultId;
+ 	private DefaultDirector director;
+ 	private Builder builder;
+@@ -78,8 +78,8 @@
+ 	 * 
+ 	 * @param dblayer The database layer mediating the access to the database.
+ 	 * @param result	The result set identificator which is to be iterated over.
+-	 * @param selection	The list of selected records. Shouldn't be empty.
+-	 * @param template	The list of selected columns.
++	 * @param selection	The list of selected records. 
++	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+ 	 */
+ 	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template) {
+ 		setDBLayer(dblayer);
+@@ -89,7 +89,7 @@
+ 	}
+ 
+ 	/**
+-	 * Create a new Export manager and &lt;b&gt;mark all records as selected&lt;/b&gt;.
++	 * Create a new Export manager and &lt;b&gt;mark all records AND columns as selected&lt;/b&gt;.
+ 	 * 
+ 	 * @param dblayer	The database layer mediating the access to the database.
+ 	 * @param result	The result set identificator which is to be iterated over.
+@@ -104,10 +104,10 @@
+ 	}
+ 	
+ 	/**
+-	 * Create a new Export manager.
++	 * Create a new Export manager and &lt;b&gt;mark all columns as selected&lt;/b&gt;.
+ 	 * 
+-	 * @param dblayer	The database layer mediating the access to the database. Shouldn't be empty.
+-	 * @param result	The result set identificator which is to be iterated over. Shouldn't be empty.
++	 * @param dblayer	The database layer mediating the access to the database. 
++	 * @param result	The result set identificator which is to be iterated over.
+ 	 * @param selection	The list of selected records. Shouldn't be empty.
+ 	 */
+ 	public ExportMng(DBLayer dblayer, int result, Selection selection) {
+@@ -120,13 +120,13 @@
+ 	 * @param dblayer	The database layer mediating the access to the database. Shouldn't be empty.
+ 	 * @param result	The result set identificator which is to be iterated over. Shouldn't be empty.
+ 	 * @param selection	The list of selected records. Shouldn't be empty.
+-	 * @param template	The list of selected columns.
++	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+ 	 * @param filter	The filter which will be used to determine the appropriate builder of the output.
+-	 * @param file	The file where the output will be written.
++	 * @param file	The name of the file where the output will be written.
+ 	 */
+-	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template, XFilter filter, File file) {
++	public ExportMng(DBLayer dblayer, int result, Selection selection, Template template, XFilter filter, String filename) {
+ 		this(dblayer, result, selection, template);
+-		setSelectedFile(file);
++		setSelectedFile(filename);
+ 		setActiveFileFilter(filter);
+ 	}
+ 	
+@@ -144,9 +144,13 @@
+ 	
+ 	/**
+ 	 * Store a copy of the &lt;code&gt;template&lt;/code&gt;.
++	 * &lt;b&gt;Null means everything is selected!&lt;/b&gt;
+ 	 */
+ 	synchronized public void setTemplate(Template template) {
+-		if(template == null) this.template = null;
++		if(template == null) {
++			this.template = new Template();
++			this.template.setEverything();
++		}
+ 		else this.template = template.clone();
+ 	}
+ 	
+@@ -181,10 +185,10 @@
+ 	 * Set the selected file. Into this file the builder will 
+ 	 * spit its output. 
+ 	 */
+-	synchronized public void setSelectedFile(File file) { 
+-		if(file == null)
++	synchronized public void setSelectedFile(String filename) { 
++		if(filename == null)
+ 			logger.warn(&quot;The selected file is null!&quot;);
+-		this.file = file; 
++		this.filename = filename; 
+ 	}
+ 	
+ 	/**
+@@ -208,14 +212,14 @@
+ 	 * @throws ExportException	If the information provided is not complete.
+ 	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
+ 	 */
+-	synchronized public void start(boolean append) throws ExportException, IOException {
++	synchronized public void start() throws ExportException, IOException {
+ 		// Check if we have all necessary components ready.
+ 		if( db == null )
+ 			throw new ExportException(&quot;There is no point in starting an export - the DBLayer is not set!&quot;);
+ 		if( filter == null ) 
+ 			throw new ExportException(&quot;The Filter is not set!&quot;);
+-		if( file == null ) 
+-			throw new ExportException(&quot;The File is not set!&quot;);
++		if( filename == null ) 
++			throw new ExportException(&quot;The Filename is not set!&quot;);
+ 		if( select.isEmpty() )
+ 			throw new ExportException(&quot;There is no point in starting an export - the list of selected records is empty!&quot;);
+ 			
+@@ -223,8 +227,13 @@
+ 		logger.debug(&quot;Initializing the export environment.&quot;);
+ 		aborted = false;
+ 		
++		// Create a new file.
++		File file = new File( filter.suggestName(filename) );
++		System.out.println( &quot;&gt;&gt;&gt; &quot; + file );
++		boolean append = ! file.createNewFile();
++		
+ 		// Create a new writer.
+-		writer = new FileWriter( filter.suggestName(file), append );
++		writer = new FileWriter( file, append );
+ 		if(writer == null) {
+ 			logger.fatal(&quot;Unable to create a new Writer.&quot;);
+ 			throw new ExportException(&quot;Unable to create a new Writer.&quot;);
+@@ -241,6 +250,7 @@
+ 		// Create a new Director and run it in a separate thread.
+ 		director = new DefaultDirector(builder, resultId, db, select);
+ 		director.addObserver(this);
++		
+ 		current = new Thread( director, &quot;Export&quot; );
+ 		if(current == null) {
+ 			logger.fatal(&quot;Unable to create a new thread.&quot;);
+@@ -260,6 +270,8 @@
+ 					writer.close();
+ 					exportInProgress = false;
+ 					logger.debug(&quot;Environment cleaned up.&quot;);
++					// Notify observers the export has ended.
++					update(null, null);
+ 				}catch(Exception e) {}
+ 			}
+ 		}, &quot;ExportMonitor&quot;);
+@@ -303,6 +315,7 @@
+ 	 * @return The number of results that have already been exported.
+ 	 */
+ 	public int getNumberOfExported() {
++		if(director == null) return 0;
+ 		return director.exportedRecords();
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -1,6 +1,7 @@
+ package net.sf.plantlore.client.export;
+ 
+ import javax.swing.JFileChooser;
++import javax.swing.JOptionPane;
+ 
+ import net.sf.plantlore.client.export.component.XFilter;
+ 
+@@ -25,14 +26,30 @@
+ 		if(visible) {
+ 			int result = view.choice.showDialog(null, &quot;Export&quot;);
+ 			if( result == JFileChooser.APPROVE_OPTION ) {
+-				model.setSelectedFile( view.choice.getSelectedFile() );
++				
++				if(view.choice.getSelectedFile() == null) {
++					JOptionPane.showMessageDialog(null,
++							&quot;You must insert a name!&quot;,
++						    &quot;Nothing selected...&quot;,
++						    JOptionPane.WARNING_MESSAGE);
++					return;
++				}
++				
++				model.setSelectedFile( view.choice.getSelectedFile().getAbsolutePath() );
+ 				XFilter filter = (XFilter) view.choice.getFileFilter();
+ 				model.setActiveFileFilter( filter );
+ 				
+ 				if( filter.isColumnSelectionEnabled() )
+ 					viewB.setVisible(true);
+-				else
++				else try {
++					model.start();
+ 					progressView.setVisible(true);
++				} catch(Exception e) {
++					JOptionPane.showMessageDialog(null,
++							&quot;Unable to start the export procedure!\n&quot; + e,
++						    &quot;Export failed...&quot;,
++						    JOptionPane.WARNING_MESSAGE);
++				}
+ 			}
+ 		}
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -32,7 +32,7 @@
+ 				view.setVisible(false);
+ 				model.setTemplate( t ); // Set the new template.
+ 				try {
+-					model.start(true);
++					model.start();
+ 					progressView.setVisible(true);
+ 				}
+ 				catch(Exception e) {
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngViewA.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngViewA.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngViewA.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -19,10 +19,10 @@
+ 
+ 	
+ 	private void initComponents() {
+-		JFileChooser chooser = new JFileChooser();
+-		chooser.setAcceptAllFileFilterUsed(false);
++		choice = new JFileChooser();
++		choice.setAcceptAllFileFilterUsed(false);
+ 		for( FileFilter filter: model.getFilters() )
+-			chooser.addChoosableFileFilter(filter);
++			choice.addChoosableFileFilter(filter);
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressCtrl.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -1,20 +1,28 @@
+ package net.sf.plantlore.client.export;
+ 
+ import java.awt.event.ActionEvent;
++import java.util.Observable;
++import java.util.Observer;
+ 
+ import javax.swing.AbstractAction;
++import javax.swing.Action;
+ import javax.swing.JOptionPane;
+ 
+ //import net.sf.plantlore.l10n.L10n;
+ 
+-public class ExportProgressCtrl {
++public class ExportProgressCtrl implements Observer {
+ 	
+ 	private ExportMng model;
+ 	private ExportProgressView view;
+ 	
++	private Action abort = new Abort(), close = new Close(), current = close;
++	
++	
++	
+ 	public ExportProgressCtrl(ExportMng model, ExportProgressView view) {
+ 		this.model = model; this.view = view;
+-		view.abort.addActionListener( new Abort() );
++		view.abort.addActionListener( current );
++		model.addObserver(this);
+ 	}
+ 	
+ 	class Abort extends AbstractAction {
+@@ -33,5 +41,31 @@
+ 				}
+ 		}
+ 	}
++	
++	class Close extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			view.setVisible(false);		
++		}
++	}
+ 
++	/**
++	 * Switch the behaviour of the abort button appropriatelly.
++	 */
++	public void update(Observable source, Object parameter) {
++		boolean runs = model.isExportInProgress();
++		if(runs &amp;&amp; current == close) {
++			view.abort.removeActionListener(current);
++			current = abort;
++			view.abort.addActionListener(current);
++			view.abort.setText(&quot;Abort&quot;);
++		} else if(!runs &amp;&amp; current == abort) {
++			view.abort.removeActionListener(current);
++			current = close;
++			view.abort.addActionListener(current);
++			view.abort.setText(&quot;Close&quot;);
++		}
++		
++		
++	}
++
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -23,6 +23,8 @@
+     	this.model = model;
+         initComponents();
+         setLocationRelativeTo(null); // center of the screen
++        
++        model.addObserver(this);
+     }
+     
+     /** This method is called from within the constructor to
+@@ -101,18 +103,32 @@
+     
+     
+ 	public void update(Observable source, Object parameter) {
+-		if(model.isAborted()) 
++		if(model.isAborted()) {
+ 			status.setText(&quot;Aborting...&quot;);
++		}
++		if(!model.isExportInProgress()) {
++			setTitle(&quot;Export completed&quot;);
++			status.setText(&quot;Completed...&quot;);
++			progress.setMaximum(100);
++			progress.setValue(100);
++			progress.setString(&quot;100%&quot;);
++			
++		}
+ 		else if( this.isVisible() ) {
+ 			int count = model.getNumberOfExported();
+ 			if(count &gt;= 0) {
+ 				progress.setValue( count );
+-				if(total &gt; 0) { 
+-					progress.setString( Integer.toString(100*count / total) );
++				if(total &gt; 0) {
++					String percent = Integer.toString(100*count / total) + &quot;%&quot;;
++					progress.setString( percent );
+ 					status.setText(&quot;Exporting &quot; + count + &quot;. of &quot; + total);
++					setTitle(&quot;Exported &quot; + percent);
+ 				}
+-				else
++				else {
+ 					status.setText(&quot;Exporting &quot; + count + &quot;.&quot;);
++					setTitle(&quot;Exported &quot; + count);
++				}
++				
+ 			}
+ 		}
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -17,11 +17,18 @@
+  * &lt;br/&gt;
+  * Note: The template doesn't know anything about the structure
+  * (mapping) of the database.  
+- *  
++ * &lt;br/&gt;
++ * A little dictionary:
++ * &lt;ul&gt;
++ * &lt;li&gt;&lt;i&gt;foreign key&lt;/i&gt; a column of a table that refers to another table,&lt;/li&gt;
++ * &lt;li&gt;&lt;i&gt;property&lt;/i&gt; a column of a table that contains a (possibly null) value,
++ * but doesn't refer to another table&lt;/li&gt;
++ * &lt;li&gt;&lt;i&gt;nn&lt;/i&gt; a property that cannot be null (defined in the db model)&lt;/li&gt;
++ * &lt;/ul&gt;
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-22
+- * @version 1.0
++ * @version 1.1
+  */
+ public class Template {
+ 	
+@@ -53,7 +60,7 @@
+ 		return new Template(this);
+ 	}
+ 	
+-	
++		
+ 	/** The list of all getters (of all properties of all tables). */
+ 	private static Hashtable&lt;String,Method&gt; getters = new Hashtable&lt;String, Method&gt;(100);
+ 	
+@@ -105,13 +112,13 @@
+ 	/** Select the &lt;code&gt;table.column&lt;/code&gt;. */
+ 	public void set(Class table, String column) { 
+ 		columns.add(table.getSimpleName()+ (column == null ? &quot;&quot; : &quot;.&quot;+column));
+-		System.out.println(&quot; + &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
++		//System.out.println(&quot; + &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
+ 	}
+ 	
+ 	/** Unselect the &lt;code&gt;table.column&lt;/code&gt;. */
+ 	public void unset(Class table, String column) { 
+ 		columns.remove(table.getSimpleName()+ (column == null ? &quot;&quot; : &quot;.&quot;+column));
+-		System.out.println(&quot; - &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
++		//System.out.println(&quot; - &quot; + table.getSimpleName() + (column == null ? &quot;&quot; : &quot;.&quot; + column));
+ 	}
+ 	
+ 	/** @return true if the &lt;code&gt;table.column&lt;/code&gt; is set.*/
+@@ -124,6 +131,38 @@
+ 		columns.clear(); 
+ 	}
+ 	
++	/** Select all columns (properties) of all tables. */
++	public void setEverything() {
++		for(Class table : BASIC_TABLES)
++			setAllProperties(table);
++	}
++	
++	/** Select all not null columns (properties). */
++	public void setEverythingNN() {
++		
++	}
++	
++	/** Select all properties of this &lt;code&gt;table&lt;/code&gt;. */
++	public void setAllProperties(Class table) {
++		try {
++			for( String column : ((Record)table.newInstance()).getProperties() )
++				set(table, column);
++		} catch(IllegalAccessException e) {}
++		catch(InstantiationException e) {}
++	}
++	
++	/** Select all not-null properties of the specified &lt;code&gt;table&lt;/code&gt;. */
++	public void setAllNN(Class table) {
++		try {
++			Record record = ((Record)table.newInstance());
++			ArrayList&lt;String&gt; nnProperties = record.getNN();
++			nnProperties.removeAll(record.getForeignKeys());
++			for( String column :  nnProperties )
++				set(table, column);
++		} catch(IllegalAccessException e) {}
++		catch(InstantiationException e) {}
++	}
++	
+ 	/**
+ 	 * @return true if nothing is selected.
+ 	 */
+@@ -141,5 +180,6 @@
+ 	public boolean match(Template t) { 
+ 		return columns.containsAll(t.columns); 
+ 	}
+-
++	
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -106,7 +106,7 @@
+ 	 *  @return The converted value.
+ 	 */ 
+ 	protected String convertToValidCSV(Object value) throws IOException {
+-		if( value == null ) return null; // no value means no output 
++		if( value == null ) return &quot;&quot;; // no value means no output 
+ 		
+ 		StringBuilder r = new StringBuilder( value.toString() );
+ 		boolean containsDoubleQuote = r.indexOf(DOUBLEQUOTE) &gt;= 0, 
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/builders/TrainingBuilder.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -49,7 +49,7 @@
+ 	}
+ 	
+ 	protected void output(Class table, String column, Object value) throws IOException {
+-		System.out.println(&quot;   &quot; + table.getName() + &quot;.&quot; + column + &quot; = &quot; + value.toString());
++		System.out.println(&quot;   &quot; + table.getSimpleName() + &quot;.&quot; + column + &quot; = &quot; + value);
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/component/XFilter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/component/XFilter.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/client/export/component/XFilter.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -84,13 +84,13 @@
+ 	 * A valid extension is an extension that belongs to
+ 	 * the list of extensions of this format.
+ 	 * 
+-	 * @param file	The file to be tested.
++	 * @param filename	The file to be tested.
+ 	 * @return	True if the file has a valid extension of this format.
+ 	 */
+-	public boolean hasExtension(File file) {
+-		int dot = file.getName().lastIndexOf(&quot;.&quot;);
++	public boolean hasExtension(String filename) {
++		int dot = filename.lastIndexOf(&quot;.&quot;);
+ 		if(dot &lt; 0) return false;
+-		if(extensions.contains( file.getName().substring(dot) )) return true;
++		if(extensions.contains( filename.substring(dot) )) return true;
+ 		return false;
+ 	}
+ 	
+@@ -99,13 +99,13 @@
+ 	 * If the file already has an extension, the name is not changed.
+ 	 * An extension is added, if the file has not a valid extension. 
+ 	 * 
+-	 * @param file	The file the name will be derived from.
++	 * @param filename	The name of the file.
+ 	 * @return The suggested name for this file.
+-	 * @see net.sf.plantlore.client.export.component.XFilter#hasExtension(File)
++	 * @see net.sf.plantlore.client.export.component.XFilter#hasExtension(String)
+ 	 */
+-	public String suggestName(File file) {
+-		if(hasExtension(file)) return file.getName();
+-		else return file.getName() + extensions.get(0);
++	public String suggestName(String filename) {
++		if(hasExtension(filename)) return filename;
++		else return filename + extensions.get(0);
+ 	}
+ 	
+ }
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -38,7 +38,10 @@
+ 		return properties;
+ 	}
+ 	
+-	
++	/**
++	 * 
++	 * @return All not-null columns (including foreign keys).
++	 */
+ 	public ArrayList&lt;String&gt; getNN() {
+ 		ArrayList&lt;String&gt; nn = getForeignKeys();
+ 		return nn;
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-30 17:06:44 UTC (rev 198)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-30 20:06:28 UTC (rev 199)
+@@ -125,7 +125,9 @@
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot build Hibernate session factory. Details: &quot;+e.getMessage());
+             throw new DBLayerException(&quot;Cannot build Hibernate session factory. Details: &quot;+e.getMessage());
+-        }        
++        }   
++        
++/* ===== SWITCH OFF THE SILLY AUTHENTICATION ===========================================        
+         // Authenticate user
+         try {
+             SelectQuery sq = this.createQuery(User.class);            
+@@ -146,6 +148,7 @@
+             this.rights = clientUser.getRight();           
+             this.plantloreUser = clientUser;
+         }
++*/
+         return rights;
+     }    
+     
+@@ -478,7 +481,7 @@
+         // Move ResultSet to the first row we want to read. In case we want to read the first row,
+         // move the pointer before the first row, else move it to the given position
+         try {
+-            if (from &gt; 1) {
++            if (from &gt;= 1) {
+                 res.setRowNumber(from-1);
+             } else {
+                 res.beforeFirst();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000222.html">[Plantlore-dev] r198 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#223">[ date ]</a>
+              <a href="thread.html#223">[ thread ]</a>
+              <a href="subject.html#223">[ subject ]</a>
+              <a href="author.html#223">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,320 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r386 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r386%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605291849.k4TInXfU029750%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000497.html">
+   <LINK REL="Next"  HREF="000444.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r386 - trunk/src/net/sf/plantlore/server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r386%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605291849.k4TInXfU029750%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r386 - trunk/src/net/sf/plantlore/server">kovo at berlios.de
+       </A><BR>
+    <I>Mon May 29 20:49:33 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000497.html">[Plantlore-dev]Re:[Plantlore-dev] Plant.scientificNameAuthor
+</A></li>
+        <LI>Next message: <A HREF="000444.html">[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#443">[ date ]</a>
+              <a href="thread.html#443">[ thread ]</a>
+              <a href="subject.html#443">[ subject ]</a>
+              <a href="author.html#443">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-29 20:49:30 +0200 (Mon, 29 May 2006)
+New Revision: 386
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Fix problem with unclosed sessions in DBLayer. All sessions should now be closed properly. TODO:implement forced closing of sessions in case we have too many open SelectQueries. 
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-29 14:14:31 UTC (rev 385)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-29 18:49:30 UTC (rev 386)
+@@ -139,9 +139,6 @@
+         }
+         // TODO: this should be loaded from a configuration file on the server
+         // We are temporarily using this for DB authetication and user athentication as well
+-        System.out.println(&quot;USER: &quot;+user);        
+-        System.out.println(&quot;PASSWORD: &quot;+password);
+-        // password = &quot;test&quot;;
+         cfg.setProperty(&quot;hibernate.connection.url&quot;, dbID);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, user);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, password);
+@@ -164,6 +161,7 @@
+             .scroll();
+         if (!sr.next()) {
+             // Authentication failed, close DB connection
++            sess.close();
+             sessionFactory.close();
+             sessionFactory = null;
+             logger.warn(&quot;Authentication of user &quot;+user+&quot; failed!&quot;);
+@@ -175,6 +173,7 @@
+             User clientUser = (User)userinfo[0];            
+             this.rights = clientUser.getRight();           
+             this.plantloreUser = clientUser;
++            sess.close();
+         }
+         Object[] retValue = new Object[2];
+         retValue[0] = this.plantloreUser;
+@@ -723,8 +722,8 @@
+             throw ex;
+         }
+         Transaction tx = null;
++        Session session = sessionFactory.openSession();
+         try {
+-            Session session = sessionFactory.openSession();
+             tx = session.beginTransaction();
+             Query hqlQuery;
+             String hqlDelete = &quot;delete &quot;+tableClass.getName(); 
+@@ -743,13 +742,14 @@
+             }
+             deletedEntities = hqlQuery.executeUpdate();
+             tx.commit();
+-            session.close();                    
+         } catch (HibernateException e) {
+             logger.fatal(&quot;Cannot execute conditional delete on table &quot;+tableClass.getName());
+             DBLayerException ex = new DBLayerException(&quot;Cannot execute conditional delete on table &quot;+tableClass.getName());
+             ex.setError(ex.ERROR_DELETE, tableClass.getName());
++            session.close();
+             throw ex;
+         }
++        session.close();
+         return deletedEntities;
+     }
+     
+@@ -857,6 +857,24 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setCreatedWhen(new java.util.Date());
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setCreatedWho(this.plantloreUser);
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }
++        if (data instanceof Publication) {
++            Publication pub = (Publication)data;
++            pub.setCreatedWho(this.plantloreUser);
++            data = pub;
++        }
++        if (data instanceof Author) {
++            Author aut = (Author)data;
++            aut.setCreatedWho(this.plantloreUser);
++            data = aut;
++        }        
+         // Check whether we have rights for this operation
+         checkRights(data, INSERT);
+         
+@@ -895,6 +913,13 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        // Modify the input data - UPDATEWHEN and UPDATEWHO where applicable
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }        
+         // Check whether we have rights for this operation
+         checkRights(data, UPDATE);
+         
+@@ -946,22 +971,23 @@
+                     logger.error(&quot;To-be-updated/deleted author not found in the database. Author ID:&quot;+((Author)data).getId());
+                     ex = new DBLayerException(&quot;To-be-updated/deleted author not found in the database. Author ID:&quot;+((Author)data).getId());
+                     ex.setError(ex.ERROR_OTHER, null);
++                    sess.close();
+                     throw ex;                                        
+                 }
+                 Object[] res = sc.get();
+                 Author aut = (Author)res[0];
+                 boolean equal = false;
++                // Close the session
++                sess.close();
+                 // Check for administrator rights
+                 if (this.plantloreUser.getRight().getAdministrator() == 1) {
+                     equal = true;
+                     System.out.println(&quot;USER IS ADMIN&quot;);                    
+                 }                
+-                // Check for direct ownership first                
++                // Check for direct ownership first. We have to compare IDs since equals doesn't work
++                // for User object
+                 if (aut.getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
+-                    System.out.println(&quot;USER IS OWNER&quot;);
+-                    System.out.println(&quot;USERNAME: &quot;+aut.getCreatedWho().getLogin());
+-                    System.out.println(&quot;LOGGED IN NAME: &quot;+this.plantloreUser.getLogin());
+                 }
+                 // Then check for indirect (group) ownership
+                 if (this.rights.getEditGroup() != null) {
+@@ -969,7 +995,6 @@
+                     String strId = aut.getCreatedWho().getId().toString();
+                     for (int i=0;i&lt;group.length;i++) {
+                         if (strId.equals(group[i])) {
+-                            System.out.println(&quot;USER IS IN THE GROUP&quot;);
+                             equal = true;
+                             break;
+                         }
+@@ -978,7 +1003,7 @@
+                 if (equal == false) {
+                     logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+                     ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
+-                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOR);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOR);                    
+                     throw ex;                    
+                 }
+             }
+@@ -1056,15 +1081,17 @@
+                 // If we haven't found the publication in the database, raise exception
+                 if (!sc.next()) {
+                     logger.error(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());
+-                    ex = new DBLayerException(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());
++                    ex = new DBLayerException(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());                    
+                     ex.setError(ex.ERROR_OTHER, null);
++                    sess.close();
+                     throw ex;                                        
+                 }
+                 Object[] res = sc.get();
+                 Publication pub = (Publication)res[0];
+                 boolean equal = false;
++                sess.close();
+                 // Check for direct ownership first                
+-                if (pub.getCreatedWho().equals(this.plantloreUser)) {
++                if (pub.getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
+                 }
+                 // Check for administrator rights
+@@ -1112,13 +1139,15 @@
+                     logger.error(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
+                     ex = new DBLayerException(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
+                     ex.setError(ex.ERROR_OTHER, null);
++                    sess.close();
+                     throw ex;                                        
+                 }
+                 Object[] res = sc.get();
+                 Occurrence occ = (Occurrence)res[0];
+                 boolean equal = false;
++                sess.close();
+                 // Check for direct ownership first                
+-                if (occ.getCreatedWho().equals(this.plantloreUser)) {
++                if (occ.getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
+                 }
+                 // Check for administrator rights
+@@ -1166,6 +1195,7 @@
+                     logger.error(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
+                     ex = new DBLayerException(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
+                     ex.setError(ex.ERROR_OTHER, null);
++                    sess.close();
+                     throw ex;                                        
+                 }
+                 Object[] res = sc.get();
+@@ -1182,11 +1212,13 @@
+                     logger.error(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());
+                     ex = new DBLayerException(&quot;No occurrence references selected habitat. Habitat ID:&quot;+hab.getId());
+                     ex.setError(ex.ERROR_DB, null);
++                    sess.close();
+                     throw ex;                          
+                 }    
+                 res = sc.get();
+                 Occurrence occ = (Occurrence)res[0];
+-                if (occ.getCreatedWho().equals(this.plantloreUser)) {
++                sess.close();
++                if (occ.getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
+                 }       
+                 // Check for administrator rights
+@@ -1235,13 +1267,15 @@
+                     logger.error(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
+                     ex = new DBLayerException(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
+                     ex.setError(ex.ERROR_OTHER, null);
++                    sess.close();
+                     throw ex;                                        
+                 }
+                 Object[] res = sc.get();
+                 AuthorOccurrence ao = (AuthorOccurrence)res[0];
+                 boolean equal = false;
++                sess.close();
+                 // Check for direct ownership first                
+-                if (ao.getOccurrence().getCreatedWho().equals(this.plantloreUser)) {
++                if (ao.getOccurrence().getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
+                 }
+                 // Check for administrator rights
+@@ -1303,6 +1337,7 @@
+                 logger.error(&quot;Occurrence record for the given Metadata not found&quot;);
+                 DBLayerException ex = new DBLayerException(&quot;Occurrence record for the given Metadata not found&quot;);
+                 ex.setError(ex.ERROR_OTHER, null);
++                tmpSess.close();
+                 throw ex;                    
+             }
+             Object[] res = sr.get();
+@@ -1483,6 +1518,7 @@
+                     logger.error(&quot;To-be-updated record was not found in the database. Type: &quot;+updated.getName()+&quot; ID:&quot;+updatedId);
+                     DBLayerException ex = new DBLayerException(&quot;To-be-updated record was not found in the database. Type: &quot;+updated.getName()+&quot; ID:&quot;+updatedId);
+                     ex.setError(ex.ERROR_UPDATE, updated.getName());
++                    tempSess.close();
+                     throw ex;
+                 }
+                 Object[] original = res.get();
+@@ -1667,6 +1703,7 @@
+                     logger.error(&quot;To-be-updated Occurrence was not found in the database. ID:&quot;+((Occurrence)data).getId());
+                     DBLayerException ex = new DBLayerException(&quot;To-be-updated Occurrence was not found in the database. ID:&quot;+((Occurrence)data).getId());
+                     ex.setError(ex.ERROR_UPDATE, Occurrence.class.getName());
++                    tempSess.close();
+                     throw ex;
+                 }
+                 Object[] original = res.get();
+@@ -1675,7 +1712,6 @@
+                 Occurrence newRec = (Occurrence)data;
+                 // Save the historyChange
+                 sess.save(historyChange);
+-                
+                 // Seeing is believing.
+                 List&lt;String&gt; cols = origRec.getHistoryColumns();
+                 for(String columnName : cols) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000497.html">[Plantlore-dev]Re:[Plantlore-dev] Plant.scientificNameAuthor
+</A></li>
+	<LI>Next message: <A HREF="000444.html">[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#443">[ date ]</a>
+              <a href="thread.html#443">[ thread ]</a>
+              <a href="subject.html#443">[ subject ]</a>
+              <a href="author.html#443">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

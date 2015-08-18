@@ -1,0 +1,246 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r398 - in trunk/src/net/sf/plantlore/client: history metadata
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r398%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20history%20metadata&In-Reply-To=%3C200605301906.k4UJ64FX012686%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000455.html">
+   <LINK REL="Next"  HREF="000457.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r398 - in trunk/src/net/sf/plantlore/client: history metadata</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r398%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20history%20metadata&In-Reply-To=%3C200605301906.k4UJ64FX012686%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r398 - in trunk/src/net/sf/plantlore/client: history metadata">lada at berlios.de
+       </A><BR>
+    <I>Tue May 30 21:06:04 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000455.html">[Plantlore-dev] r397 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000457.html">[Plantlore-dev] r399 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#456">[ date ]</a>
+              <a href="thread.html#456">[ thread ]</a>
+              <a href="subject.html#456">[ subject ]</a>
+              <a href="author.html#456">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-30 21:06:02 +0200 (Tue, 30 May 2006)
+New Revision: 398
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+Log:
+History, MetadataManager - Create Array with constants (PlantlorConstants.ENTITY_...) of changing object and call methods setChanged(), notifyObservers(arrayOfType).
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-30 18:51:41 UTC (rev 397)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-30 19:06:02 UTC (rev 398)
+@@ -18,6 +18,7 @@
+ import java.util.GregorianCalendar;
+ import java.util.HashSet;
+ import java.util.Hashtable;
++import java.util.Observable;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+@@ -42,7 +43,7 @@
+  *
+  * @author Lada
+  */
+-public class History {
++public class History extends Observable {
+     
+       /** Instance of a logger */
+     private Logger logger;      
+@@ -63,7 +64,7 @@
+     /** List of data (results of a search query) displayed in the table */
+     private ArrayList&lt;HistoryRecord&gt; historyDataList = new ArrayList();     
+     // seznam editovanych objektu (potrebny pro hromadne potvrzeni update)
+-    private ArrayList&lt;Record&gt; editObjectList = new ArrayList&lt;Record&gt;();
++    private ArrayList&lt;Record&gt; editObjectList = new ArrayList&lt;Record&gt;();    
+     // informace pro uzivatele o record undo
+     private String messageUndo;
+ 
+@@ -126,6 +127,7 @@
+     private Hashtable&lt;String, Integer&gt; habitatHash;
+     private Hashtable&lt;String, Integer&gt; metadataHash;
+     private Hashtable&lt;String, Integer&gt; publicationHash;
++    private Hashtable&lt;String, String&gt; editTypeHash;
+     //pro territory, village a phytochorion neni treba tvorit mapovani
+     
+         
+@@ -1250,22 +1252,51 @@
+      *  ..... pri whole history se bude do promennych occurrence, atd. nacitat vice ruznych objektu s jinym ID
+      *  ....Musim si ty jednotlive objekty pamatovat --&gt; pole objektu, kde budou jednotlive editovane objekty
+      */
+-    public void commitUpdate() {
+-    	
+-    	int count = editObjectList.size();
++    public void commitUpdate() {    	                
++        
++        ArrayList&lt;String&gt; editType = new ArrayList();
++        String type;
++        String key;
++        initEditTypeHash();
++        
++    	int count = editObjectList.size();        
+     	for (int i=0; i&lt; count; i++) {
+     		try {
+-    			logger.debug(&quot;Object for update: &quot;+editObjectList.get(i));
++    			logger.debug(&quot;Object for update: &quot;+editObjectList.get(i).getId()); 
++                        
++                        type = editObjectList.get(i).getClass().getSimpleName();
++                         if (editTypeHash.containsKey(type)) {
++                                 key = (String)editTypeHash.get(type); 
++                                 if(!editType.contains(key))
++                                     editType.add(key);
++                        }                         
++                            
+                         database.executeUpdateHistory(editObjectList.get(i));
+ 	        } catch (RemoteException e) {
+ 	                logger.error(&quot;CommitUpdate - RemoteException: &quot;+e.toString());
+ 	        } catch (DBLayerException e) {
+ 	                logger.error(&quot;CommitUpdate - DBLayerException: &quot;+e.toString());
+-	        }
++	        }                
+        }    	
++       
++        informMethod(editType);
+     }
+     
+     /**
++     *  Metoda vytvori pole typu editovanych objektu a preda je v parametru notifyObserver
++     */
++    public void informMethod(ArrayList&lt;String&gt; editType) {
++        int count = editType.size();
++        String[] editTypeArray = new String[count];
++        for(int i=0; i &lt; count; i++) {
++            logger.debug(&quot;Type of editing object (array for appcore): &quot; + editType.get(i));
++            editTypeArray[i] = editType.get(i);
++        }
++        setChanged(); 
++        notifyObservers(editTypeArray);
++    }
++    
++    /**
+      *  vycisteni seznamu editovany objektu: 
+      */
+     public void clearEditObjectList() {
+@@ -1675,6 +1706,18 @@
+         authorHash.put(Author.NOTE, 7);        
+     }              
+     
++    private void initEditTypeHash() {
++        editTypeHash = new Hashtable&lt;String, String&gt;(5);
++        editTypeHash.put(&quot;Occurrence&quot;, PlantloreConstants.ENTITY_OCCURRENCE);                
++        editTypeHash.put(&quot;Habitat&quot;, PlantloreConstants.ENTITY_OCCURRENCE);
++        editTypeHash.put(&quot;AuthorOccurrence&quot;, PlantloreConstants.ENTITY_OCCURRENCE);                
++        editTypeHash.put(&quot;Author&quot;, PlantloreConstants.ENTITY_AUTHOR);
++        editTypeHash.put(&quot;Metadata&quot;, PlantloreConstants.ENTITY_METADATA);
++        editTypeHash.put(&quot;Publication&quot;, PlantloreConstants.ENTITY_PUBLICATION);
++        editTypeHash.put(&quot;Village&quot;, PlantloreConstants.ENTITY_VILLAGE);
++        editTypeHash.put(&quot;Territory&quot;, PlantloreConstants.ENTITY_TERRITORY);
++        editTypeHash.put(&quot;Phytochorion&quot;, PlantloreConstants.ENTITY_PHYTOCHORION);        
++    }
+        
+     //****************************//
+     //****Get and set metods*****//
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-30 18:51:41 UTC (rev 397)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-30 19:06:02 UTC (rev 398)
+@@ -11,6 +11,7 @@
+ 
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
++import java.util.Observable;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.middleware.DBLayer;
+@@ -22,7 +23,7 @@
+  *
+  * @author Lada
+  */
+-public class MetadataManager {
++public class MetadataManager  extends Observable {
+     
+     /** Instance of a logger */
+     private Logger logger;      
+@@ -50,8 +51,9 @@
+     //Vyvrany zaznam v tabulce s metadaty
+     private Metadata selectedRecord;
+     
++    private String[] editTypeArray = new String[]{PlantloreConstants.ENTITY_METADATA};
+     
+-    //*********************Search - promenne podle,kterych se vyhledava************//
++    //*********************Search************//
+     /** Field to be used for sorting search query results */
+     private int sortField = 0;
+     /** Direction of sorting. 0 = ASC, 1 = DESC. Default is ASC */
+@@ -211,6 +213,8 @@
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         }
++        setChanged(); 
++        notifyObservers(editTypeArray);
+     }
+     
+     public void editMetadataRecord() {       
+@@ -221,6 +225,8 @@
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         }
++        setChanged(); 
++        notifyObservers(editTypeArray);
+     }
+     
+     public void deleteMetadataRecord() {
+@@ -232,6 +238,8 @@
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         }
++        setChanged(); 
++        notifyObservers(editTypeArray);
+     }
+     
+            
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000455.html">[Plantlore-dev] r397 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000457.html">[Plantlore-dev] r399 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#456">[ date ]</a>
+              <a href="thread.html#456">[ thread ]</a>
+              <a href="subject.html#456">[ subject ]</a>
+              <a href="author.html#456">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

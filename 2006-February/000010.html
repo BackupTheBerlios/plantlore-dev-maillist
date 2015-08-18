@@ -1,0 +1,200 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Java RMI - jak si to stoji
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Java%20RMI%20-%20jak%20si%20to%20stoji&In-Reply-To=%3Cf4dc39b90602180317g1c8a03bcvba4d5cdbbc9669b%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000009.html">
+   <LINK REL="Next"  HREF="000011.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Java RMI - jak si to stoji</H1>
+    <B>Erik Kratochvil</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Java%20RMI%20-%20jak%20si%20to%20stoji&In-Reply-To=%3Cf4dc39b90602180317g1c8a03bcvba4d5cdbbc9669b%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Java RMI - jak si to stoji">discontinuum at gmail.com
+       </A><BR>
+    <I>Sat Feb 18 12:17:20 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000009.html">[Plantlore-dev] r29 - trunk/documentation
+</A></li>
+        <LI>Next message: <A HREF="000011.html">[Plantlore-dev] Re: Java RMI - jak si to stoji
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#10">[ date ]</a>
+              <a href="thread.html#10">[ thread ]</a>
+              <a href="subject.html#10">[ subject ]</a>
+              <a href="author.html#10">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Zdravim vsechny, protoze to vypada, ze (skoro) nic nedelam, musim se
+podelit o svoje poznatky o RMI.
+
+Po dlouhym zkoumani jsem - doufam - trochu porozumel podivnostem
+javovsky implementace. Co je problem?
+
+Pokud napiseme PL a rozdistribuuje se, v podstate zadnej problem
+nebude - vsichni budou mit aktualni verzi a bude to pohoda.
+
+Problem nastane v okamziku, kdy nekdo &quot;neco&quot; zmeni - ono neco je
+konkretni implementace nektereho z objektu, ktery prochazi pres
+DBLayer interface, napr. QueryResult nebo DBLayerException.
+
+&lt;mala odbocka&gt;
+Definice: codebase je neco jako remote classpath, tj. kdyz nemas k
+dispozici tridy z classpath, zkus jeste codebase (tj. codebase by melo
+byt misto, kde se nachazi tridy, ktere klient nebo server nema a
+potrebuje pro beh). Pisu to sem proto, ze ne vsichni cetli ten RMI
+priklad a ve vykladu dal ten termin pouzivam, tak abyste se nedivili,
+co to kecam.
+&lt;/mala odbocka&gt;
+
+Proc je to problem: RMI totiz potrebuje, aby ty tridy, ktery si ma
+posilat mezi klientem a serverem, meli k dispozici oba: jak klient,
+tak server, a navic, aby je meli oba ve &quot;stejne verzi&quot; (minimalne
+treba musi mit stejnou hash). To je problem, protoze v pripade, ze se
+neco zmeni, si server/klient (proste ten, kdo ten objekt vidi poprve),
+pokusi tridy neznameho objektu opatrit. Prave to &quot;opatrit si tridy&quot; je
+dost problem.
+
+Normalne bych cekal, ze RMI bude natolik chytry, aby si ty tridy
+neznamejch objektu dokazalo poslat samo. No, to sem se teda mejlil!
+Pri posilani/prijimani nastupuje masinerie javy zahrnujici
+SecurityManager/Policy. Bohuzel se zadnym *jednoduchym* zpusobem neda
+zaridit, aby si napr. klient automaticky obstaral tridy ze serveru.
+Bavime se o tridach, ne o stubech remote objektu - ty totiz posila ten
+rmiregistry, tam problem neni.
+
+Na to, aby si klient umel vzit ze serveru tridy, musi je server
+zpristupnit bud na &gt;&gt; ftp nebo webserveru &lt;&lt;, jinak to nejde. Klient
+si pak tridy umi stahnout, pokud ma nastavenou codebase na ten
+http/ftp server, tj. musi vedet, *kde* si je ma stahnout.
+
+Hledal sem, jak se to da obejit, zda nelze to RMI prinutit, aby to
+nejak chytre provedlo samo, ale nikde nic. A uz na to jebu.
+
+Cili: pokud zmenime neco na serveru (coz je i celkem rozumny, ze se
+casem na serveru implementace nejakejch inkriminovanejch trid zmeni),
+automaticky s tim serverem prestanou komunikovat *vsichni*
+neaktualizovani klienti (u tech lokalnich by se to dalo jednoducho
+ojebat), POKUD ovsem nebudeme chtit, aby si teda klienti umeli sami
+spravne stahovat novy kod ze serveru (to lze napsat teda celkem
+rozumne, je ale teda zapotrebi mit spustenej nejakej ten http server,
+aby si z nej ten klient kod stahl).
+
+Opacna situace muze nastat ovsem taky - upravi se napr. implementace
+SelectQuery. Protoze SelectQuery je vyraben na klientovi, musi se
+tudiz rozsirit jeho trida mezi klienty. Problem je, kdyz se takovy
+klient pokusi pripojit k serveru, ktery &quot;novy&quot; SelectQuery nezna -&gt;
+aby ho mohl zkonstruovat, potrebuje si ho stahnout, no a mame presne
+to, co pred chvilkou, jenze klienta a server jsou ted v obracene
+pozici. Tzn. http server by &quot;obcas&quot; musel bezet i na klientovi, aby si
+z neho server mohl stahnout pozadovany tridy. ZDE je ale takovej
+neprijemnej hacek - protoze to stahovani je &quot;automaticky&quot; (=resi si ho
+RMI), musi to RMI vedet, KDE teda ten klient ma ten server, aby si
+mohlo tridy stahnout. Pak bude asi potreba umet si modifikovat
+codebase dynamicky, cimz by se dalo RMI snad rict, kde muze ty tridy
+najit (je to nechutny, protoze serveru by sakra melo bejt jedno, kde
+klient bezi, ne si zjistovat jeho adresu a navic jeste patrat, kde mu
+tam bezi http server, aby si mohl prijit pro ty tridy).
+
+Nuze, jak vidite, java RMI tezce zklamalo. Misto nakyho chytryho
+posilani trid mezi dvema VM sme se dockali jenom prijemnyho stahovani
+stubu. Pro stahovani trid mezi remote VM je teda nutny pouzit jeste
+nejakou berlicku, ten http server.
+
+Otazka je: chceme mit takovy to chytry chovani, nebo se spolehneme na
+to, ze se vsichni &quot;nejak&quot; dostanou k aktualizacim a nainstaluji si je?
+
+Rekl bych, ze lze spolehat na technickou nezdatnost prirodovedcu a
+tudiz z tohohle pohledu je to chytry chovani nezbytny.
+
+Otazka se meni na: ma chytry chovani smysl, kdyz to stejne bude behat
+vetsinou izolovane?
+
+Tady je taky odpoved celkem jasna: ma, protoze myslime do budoucna na
+dalsi vyuziti.
+
+Zbejva teda posledni otazka a to Jak vyresit ten problem se
+stahovanim? Reseni jsou 2:
+a) klient i server budou mit k disposici http server (existuje
+malinkatej http server od sunu delanej presne a pouze pro tenhle
+ucel),
+b) zkusit to nejak obejit pomoci vlastnich classloaderu nebo nejakyho
+aktualizacniho API
+
+Vyhody pristupu
+a) jsou na to priklady, chodi to, sun to tak zamejslel (a navrhl)
+b) neni potreba zadny extra server, aktualizace se stahnou automaticky
+samy a hladce se prejde na pouzivani novych trid
+
+Nevyhody pristupu
+a) poustet servery a hledat je na klientovi/serveru (nezkousel jsem to
+programovat, bude to vopruz - ve vsech prikladech totiz vsichni
+vzdycky vi, KDE PRESNE bude bezet klient i server, proto neni s
+nastavenim codebase problem)
+b) muze se ukazat neresitelny (rekurentni dotazy pri aktualizaci
+aktualizacniho api)nebo neprijemy - minimalne proto, ze to neni nikde
+popsany, muselo by se to nejak vyzkoumat a otestovat (coz sezere dost
+casu).
+
+Rad bych dostal nejaky vyjadreni, abych vedel, jak to mam dal resit -
+tj. co zjistit, jak funguje, napsat priklad apod. Minimalne bych rad
+videl alespon odpoved typu: nic o tom netusim, klidnes ten vyklad mohl
+mit spanelsky, rozhodni si to sam.
+
+
+
+FAQ
+
+1. Jak to ovlivni mou tridu, tj. tridu, co prave pisu?
+
+ No, to je jeste otazka, ja doufam, ze by to zadnej vliv mit nemelo,
+ale to RMI uz me nekolikrat prekvapilo, takze ... no takze doufam, ze
+sem si vybral ty neprijemny prekvapeni a zbyly jen ty prijemny ;)))
+
+2. Nevysereme se na to RMI radsi?
+
+ No to zase neee, protoze takhle to za nas porad aspon resi posilani
+objektu a celkem jednoduchej pristup k serveru.
+
+3. A bude se ta implementace nejak menit?
+
+ No ted asi ne, ale jestli na to nekdo sahne, tak se pak bude divit,
+ze mu to obcas nejede :)
+
+4. A tos delal celej tejden jo?!
+
+ Jo!
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000009.html">[Plantlore-dev] r29 - trunk/documentation
+</A></li>
+	<LI>Next message: <A HREF="000011.html">[Plantlore-dev] Re: Java RMI - jak si to stoji
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#10">[ date ]</a>
+              <a href="thread.html#10">[ thread ]</a>
+              <a href="subject.html#10">[ subject ]</a>
+              <a href="author.html#10">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

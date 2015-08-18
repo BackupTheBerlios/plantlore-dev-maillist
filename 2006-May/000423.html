@@ -1,0 +1,714 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r370 - in trunk: lib src/net/sf/plantlore/client src/net/sf/plantlore/common src/net/sf/plantlore/middleware src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r370%20-%20in%20trunk%3A%20lib%20src/net/sf/plantlore/client%20src/net/sf/plantlore/common%20src/net/sf/plantlore/middleware%20src/net/sf/plantlore/server&In-Reply-To=%3C200605271538.k4RFcGA3007880%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000422.html">
+   <LINK REL="Next"  HREF="000424.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r370 - in trunk: lib src/net/sf/plantlore/client src/net/sf/plantlore/common src/net/sf/plantlore/middleware src/net/sf/plantlore/server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r370%20-%20in%20trunk%3A%20lib%20src/net/sf/plantlore/client%20src/net/sf/plantlore/common%20src/net/sf/plantlore/middleware%20src/net/sf/plantlore/server&In-Reply-To=%3C200605271538.k4RFcGA3007880%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r370 - in trunk: lib src/net/sf/plantlore/client src/net/sf/plantlore/common src/net/sf/plantlore/middleware src/net/sf/plantlore/server">kovo at berlios.de
+       </A><BR>
+    <I>Sat May 27 17:38:16 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000422.html">[Plantlore-dev] r369 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+        <LI>Next message: <A HREF="000424.html">[Plantlore-dev] Upravy v DBLayer
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#423">[ date ]</a>
+              <a href="thread.html#423">[ thread ]</a>
+              <a href="subject.html#423">[ subject ]</a>
+              <a href="author.html#423">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-27 17:36:16 +0200 (Sat, 27 May 2006)
+New Revision: 370
+
+Added:
+   trunk/src/net/sf/plantlore/server/SubQueryImplementation.java
+Modified:
+   trunk/lib/hibernate3.jar
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+Add subqueries to DBLayer, allow OUTER JOIN for select queries. Main overview query for selecting occurrences was updated so that only the first author of the occurrence is displayed and occurrences without associated publication are displayed. In order to use this functionality, Hibernate was updated (now we are using version 3.1.3).
+
+Modified: trunk/lib/hibernate3.jar
+===================================================================
+(Binary files differ)
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -567,16 +567,25 @@
+         
+             //FIXME:
+             try {
++                // Create subquery first
++                SelectQuery subQuery = database.createSubQuery(AuthorOccurrence.class, &quot;ao&quot;);
++                // In the subquery select authors for the given occurrence (occurrence comes from the main query)
++                subQuery.addRestriction(PlantloreConstants.RESTR_EQ_PROPERTY, &quot;ao.&quot;+AuthorOccurrence.OCCURRENCE, &quot;occ.&quot;+Occurrence.ID, null, null);
++                subQuery.addProjection(PlantloreConstants.PROJ_PROPERTY, AuthorOccurrence.AUTHOR);
++                // create the main query
+                 sq = database.createQuery(AuthorOccurrence.class);
+                 sq.createAlias(AuthorOccurrence.AUTHOR,&quot;author&quot;);
+-                sq.createAlias(AuthorOccurrence.OCCURRENCE,&quot;occ&quot;);
++                sq.createAlias(AuthorOccurrence.OCCURRENCE,&quot;occ&quot;);                
+                 sq.createAlias(&quot;occ.&quot;+Occurrence.HABITAT,&quot;habitat&quot;);
+                 sq.createAlias(&quot;occ.&quot;+Occurrence.PLANT,&quot;plant&quot;);
+-                sq.createAlias(&quot;occ.&quot;+Occurrence.PUBLICATION,&quot;publication&quot;);
++                // Add publications using LEFT OUTER JOIN - so that occurrences without a publication are displayed as well
++                sq.createAlias(&quot;occ.&quot;+Occurrence.PUBLICATION,&quot;publication&quot;, PlantloreConstants.LEFT_OUTER_JOIN);
+                 sq.createAlias(&quot;occ.&quot;+Occurrence.METADATA,&quot;metadata&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.PHYTOCHORION,&quot;phyt&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.NEARESTVILLAGE,&quot;vill&quot;);
+                 sq.createAlias(&quot;habitat.&quot;+Habitat.TERRITORY,&quot;territory&quot;);
++                // Add subquery to the query. Compare authoroccurrence.authorid with the result of a subquery (LEALL: &lt;= all(...))
++                sq.addRestriction(PlantloreConstants.SUBQUERY_LEALL, AuthorOccurrence.AUTHOR, null, subQuery, null);                
+                 sq.addOrder(PlantloreConstants.DIRECT_DESC, &quot;occ.&quot;+Occurrence.YEARCOLLECTED); //setridit podle roku
+                 sq.addRestriction(PlantloreConstants.RESTR_EQ, &quot;occ.&quot;+Occurrence.DELETED, null, 0, null);
+                 
+@@ -823,7 +832,6 @@
+                     sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;occ.&quot;+Occurrence.MONTHCOLLECTED,null,month,null);
+                     restrictions.add(new Restriction(RESTR_EQ, Occurrence.MONTHCOLLECTED, month));
+                 }
+-                
+                 int resultId = database.executeQuery(sq);
+                 this.newResultId = resultId;
+                 logger.debug(&quot;Created new query. Number of results: &quot;+database.getNumRows(resultId));
+
+Modified: trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -68,6 +68,9 @@
+     public static final int RESTR_NE            = 19;
+     public static final int RESTR_NE_PROPERTY   = 20;    
+     
++    public static final int SUBQUERY_GEALL      = 30;
++    public static final int SUBQUERY_LEALL      = 31;    
++    
+     /** Constants for projections in select query */
+     public static final int PROJ_AVG            = 40;
+     public static final int PROJ_COUNT          = 41;
+@@ -84,6 +87,12 @@
+     public static final int FETCH_JOIN            = 50;
+     public static final int FETCH_SELECT          = 51;
+     
++    /** Constants for JOIN type in createAlias() */
++    public static final int FULL_JOIN             = 55;
++    public static final int INNER_JOIN            = 56;
++    public static final int LEFT_OUTER_JOIN       = 57;
++    public static final int RIGHT_OUTER_JOIN      = 58;    
++    
+     /** Constants for the direction of results ordering */
+     public static final int DIRECT_ASC            = 60;
+     public static final int DIRECT_DESC           = 61;    
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -131,6 +131,8 @@
+      */
+     public SelectQuery createQuery(Class classname) throws DBLayerException, RemoteException;
+ 
++    public SelectQuery createSubQuery(Class classname, String alias) throws DBLayerException, RemoteException;
++    
+     /**
+      *  Execute constructed SELECT query. Only executes query, for retrieving results use next() and more()
+      *
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -30,6 +30,8 @@
+      */    
+     void createAlias(String propertyName, String aliasName) throws RemoteException;
+ 
++    void createAlias(String propertyName, String aliasName, int joinType) throws RemoteException;    
++    
+     /**
+      *  Make the rows of the results to be distinct from each other. This checks whether whole rows
+      *  are distinct from each other. The check is done by Hibernate after the results are retrieved
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -137,9 +137,12 @@
+         }
+         // TODO: this should be loaded from a configuration file on the server
+         // We are temporarily using this for DB authetication and user athentication as well
++        System.out.println(&quot;USER: &quot;+user);        
++        System.out.println(&quot;PASSWORD: &quot;+password);
++        // password = &quot;test&quot;;
+         cfg.setProperty(&quot;hibernate.connection.url&quot;, dbID);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, user);
+-        cfg.setProperty(&quot;hibernate.connection.password&quot;, password);        
++        cfg.setProperty(&quot;hibernate.connection.password&quot;, password);
+         try {
+             // Build session factory
+             sessionFactory = cfg.buildSessionFactory();
+@@ -637,6 +640,25 @@
+         return stub;
+     }    
+     
++    public SelectQuery createSubQuery(Class classname, String alias) throws DBLayerException, RemoteException {
++        // Check whether we are connected to the database
++        if (sessionFactory == null) {
++            logger.warn(&quot;SessionFactory not avilable. Not connected to the database.&quot;);
++            DBLayerException ex = new DBLayerException(&quot;SessionFactory not available. Not connected to the database.&quot;);
++            ex.setError(ex.ERROR_CONNECT, null);
++            throw ex;
++        }
++        System.out.println(&quot;CREATE NEW SUBQUERY&quot;);
++        SelectQuery query = new SubQueryImplementation(classname, alias), 
++        	stub = query;
++        
++        if(undertaker != null)
++        	stub = (SelectQuery) UnicastRemoteObject.exportObject(query); 
++        
++        queries.put(stub, query);
++        return stub;        
++    }
++    
+     /**
+      *  Execute constructed SELECT query. Only executes query, for retrieving results use next() and more()
+      *
+@@ -644,14 +666,9 @@
+      *  @throws DBLayerException when selecting records from the database fails
+      */
+     public int executeQuery(SelectQuery query) throws DBLayerException, RemoteException {
+-
+-    	SelectQuery selectQuery = queries.remove(query);
++    	SelectQuery selectQuery = queries.get(query);
+     	if(selectQuery == null) throw new DBLayerException(&quot;You can only pass queries created by this DBLayer!&quot;);
+     	
+-    	if(undertaker != null) 
+-    		try { UnicastRemoteObject.unexportObject(selectQuery, true); }
+-                catch(NoSuchObjectException e) {}
+-    	
+     	assert(selectQuery instanceof SelectQueryImplementation);
+     	SelectQueryImplementation sq = (SelectQueryImplementation) selectQuery;
+     	
+@@ -740,9 +757,19 @@
+      *  @param query query we want to close
+      */
+     public void closeQuery(SelectQuery query) throws RemoteException {
+-        Session session = sessions.get(query);
+-        session.close();
+-        sessions.remove(query);
++        
++        // TODO: Problem - we don't have any session for subqueries
++        
++        Session session = sessions.remove(query);
++        session.close();     
++    	// Remove the query from the list of opened queries
++        SelectQuery selectQuery = queries.remove(query);        
++        // Unexport the SelectQuery object
++        if(undertaker != null) {
++            try {
++                UnicastRemoteObject.unexportObject(selectQuery, true);
++            } catch(NoSuchObjectException e) {}
++        }
+     }
+     
+     /**
+@@ -878,6 +905,7 @@
+         if (data instanceof Author) {
+             if ((type == DELETE) || (type == UPDATE)) {
+                 // Only data of the user and those listed in CEDITGROUP
++                System.out.println(&quot;UPDATE or DELETE of AUTHOR&quot;);
+                 sess = this.sessionFactory.openSession();
+                 ScrollableResults sc = sess.createCriteria(Author.class)
+                     .add(Restrictions.eq(Author.ID, ((Author)data).getId()))
+@@ -895,10 +923,14 @@
+                 // Check for administrator rights
+                 if (this.plantloreUser.getRight().getAdministrator() == 1) {
+                     equal = true;
++                    System.out.println(&quot;USER IS ADMIN&quot;);                    
+                 }                
+                 // Check for direct ownership first                
+-                if (aut.getCreatedWho().equals(this.plantloreUser)) {
++                if (aut.getCreatedWho().getId().equals(this.plantloreUser.getId())) {
+                     equal = true;
++                    System.out.println(&quot;USER IS OWNER&quot;);
++                    System.out.println(&quot;USERNAME: &quot;+aut.getCreatedWho().getLogin());
++                    System.out.println(&quot;LOGGED IN NAME: &quot;+this.plantloreUser.getLogin());
+                 }
+                 // Then check for indirect (group) ownership
+                 if (this.rights.getEditGroup() != null) {
+@@ -906,6 +938,7 @@
+                     String strId = aut.getCreatedWho().getId().toString();
+                     for (int i=0;i&lt;group.length;i++) {
+                         if (strId.equals(group[i])) {
++                            System.out.println(&quot;USER IS IN THE GROUP&quot;);
+                             equal = true;
+                             break;
+                         }
+@@ -1227,6 +1260,7 @@
+         ScrollableResults sr;
+         
+         // Update tMetaData.cDateModified for any operation on Occurrences and Habitats
++/*        
+         if (data instanceof Occurrence) {
+             Integer occId = ((Occurrence)data).getId();
+             // Read the associated metadata
+@@ -1246,7 +1280,7 @@
+             occ.getMetadata().setDateModified(new java.util.Date());
+             sess.update(occ.getMetadata());
+         }
+- 
++*/ 
+         // Saving history when new record is inserted
+         if (type == INSERT) {
+             HistoryChange historyChange = new HistoryChange();            
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -28,6 +28,8 @@
+ import org.hibernate.criterion.Projections;
+ import org.hibernate.criterion.Restrictions;
+ import org.hibernate.criterion.SimpleExpression;
++import org.hibernate.criterion.Subqueries;
++import org.hibernate.sql.JoinFragment;
+ 
+ /**
+  * Implemetation of SelectQuery using Hibernate OR Mapping for database querying. Creates Hibernate
+@@ -46,6 +48,7 @@
+     private Criteria criteria;
+     /* List of projections for the query */
+     private ArrayList projections = new ArrayList();
++    
+     /** Creates a new instance of SelectQueryImplementation */
+     public SelectQueryImplementation(Criteria criteria) {
+         this.criteria = criteria;
+@@ -71,6 +74,23 @@
+     public void createAlias(String propertyName, String aliasName) throws RemoteException {
+         criteria.createAlias(propertyName, aliasName);
+     }
++
++    public void createAlias(String propertyName, String aliasName, int joinType) throws RemoteException {
++        switch (joinType) {
++            case PlantloreConstants.FULL_JOIN:
++                criteria.createAlias(propertyName, aliasName, JoinFragment.FULL_JOIN);
++                break;
++            case PlantloreConstants.INNER_JOIN:
++                criteria.createAlias(propertyName, aliasName, JoinFragment.INNER_JOIN);
++                break;
++            case PlantloreConstants.LEFT_OUTER_JOIN:
++                criteria.createAlias(propertyName, aliasName, JoinFragment.LEFT_OUTER_JOIN);
++                break;
++            case PlantloreConstants.RIGHT_OUTER_JOIN:
++                criteria.createAlias(propertyName, aliasName, JoinFragment.RIGHT_OUTER_JOIN);
++                break;                
++        }
++    }
+     
+     /**
+      *  Make the rows of the results to be distinct from each other. This checks whether whole rows
+@@ -155,6 +175,12 @@
+             case PlantloreConstants.RESTR_NE_PROPERTY:
+                 criteria.add(Restrictions.neProperty(firstPropertyName, secondPropertyName));
+                 break;
++            case PlantloreConstants.SUBQUERY_GEALL:
++                criteria.add(Subqueries.propertyGeAll(firstPropertyName, ((SubQueryImplementation)value).getCriteria()));
++                break;
++            case PlantloreConstants.SUBQUERY_LEALL:
++                criteria.add(Subqueries.propertyLeAll(firstPropertyName, ((SubQueryImplementation)value).getCriteria()));
++                break;                
+             default:
+                 
+         }
+@@ -321,7 +347,7 @@
+                 criteria.setFetchMode(associationPath, FetchMode.SELECT);
+                 break;
+             case PlantloreConstants.FETCH_JOIN:
+-                criteria.setFetchMode(associationPath, FetchMode.JOIN);             
++                criteria.setFetchMode(associationPath, FetchMode.JOIN);
+                 break;
+             default:
+                 criteria.setFetchMode(associationPath, FetchMode.DEFAULT);                
+
+Added: trunk/src/net/sf/plantlore/server/SubQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SubQueryImplementation.java	2006-05-27 04:05:42 UTC (rev 369)
++++ trunk/src/net/sf/plantlore/server/SubQueryImplementation.java	2006-05-27 15:36:16 UTC (rev 370)
+@@ -0,0 +1,328 @@
++package net.sf.plantlore.server;
++
++
++import java.rmi.RemoteException;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.HashSet;
++import java.util.Hashtable;
++import java.util.Iterator;
++import java.util.Map;
++import java.util.Set;
++import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.middleware.SelectQuery;
++
++import org.hibernate.Criteria;
++import org.hibernate.FetchMode;
++import org.hibernate.criterion.CriteriaSpecification;
++import org.hibernate.criterion.DetachedCriteria;
++import org.hibernate.criterion.Disjunction;
++import org.hibernate.criterion.Order;
++import org.hibernate.criterion.ProjectionList;
++import org.hibernate.criterion.Projections;
++import org.hibernate.criterion.Property;
++import org.hibernate.criterion.Restrictions;
++import org.hibernate.criterion.SimpleExpression;
++import org.hibernate.sql.JoinFragment;
++
++/**
++ * Implemetation of SubQuery using Hibernate OR Mapping for database querying. Creates Hibernate
++ * &quot;criteria query&quot; and sets projections, restrictions and order by clause. Also allows selecting
++ * data from joined tables. For detailed explanation refer to Plantlore documentation and Hibernate 
++ * reference manual.
++ *
++ *  TODO: Nezapominat generovat stub! (rmic net.sf.plantlore.server.SubQueryImplementation)
++ *  TODO: Update JavaDOC
++ *
++ * @author Tomas Kovarik
++ */
++public class SubQueryImplementation implements SelectQuery {
++    // Hibernate criteria used in criteria query
++    private DetachedCriteria criteria;
++    /* List of projections for the query */
++    private ArrayList projections = new ArrayList();
++    
++    /** Creates a new instance of SelectQueryImplementation */
++    public SubQueryImplementation(Class classname, String alias) {
++        this.criteria = DetachedCriteria.forClass(classname, alias);
++    }
++    
++    /**
++     *  Return instance of Hibernate criteria object representing this query
++     *
++     *  @return insatnce of Hibernate criteria object representing this query
++     */
++    DetachedCriteria getCriteria() {
++        return this.criteria;
++    }
++    
++    /** 
++     *  Create alias for joining tables. Alias can be defined for a foreign key parameter and can be
++     *  used to add restrictions on the table referenced by the foreign key. For thorough explanation
++     *  see documentation.
++     *
++     *  @param propertyName name of the column for which we want to create an alias (foreign key column)
++     *  @param aliasName name of the new alias
++     */
++    public void createAlias(String propertyName, String aliasName) throws RemoteException {
++        criteria.createAlias(propertyName, aliasName);
++    }
++
++    public void createAlias(String propertyName, String aliasName, int joinType) throws RemoteException {
++        throw new RemoteException(&quot;Method not implemented&quot;);
++    }
++    
++    /**
++     *  Make the rows of the results to be distinct from each other. This checks whether whole rows
++     *  are distinct from each other. The check is done by Hibernate after the results are retrieved
++     *  from the database.
++     */
++    public void setDistinct() throws RemoteException {
++        criteria.setResultTransformer(CriteriaSpecification.DISTINCT_ROOT_ENTITY);
++    }
++    
++    /**
++     *  Add restriction to the constructed criteria. Restrictions are parts of the where condition.
++     *  
++     *  @param type type of the restriction (see constants defined in PlantloreConstants)
++     *  @param firstPropertyName argument of restrictions working with one property (table column)
++     *  @param secondPropertyName argument of restrictions wirking with two properties
++     *  @param value value for restrictions containg values
++     *  @param values collection of values for restrictions working with more values (RESTR_IN)
++     */
++    public void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values) throws RemoteException {
++        switch (type) {
++            case PlantloreConstants.RESTR_BETWEEN:
++                Object[] vals = values.toArray();
++                if (vals.length &gt;= 2) {
++                    criteria.add(Restrictions.between(firstPropertyName, vals[0], vals[1]));
++                }
++                break;
++            case PlantloreConstants.RESTR_EQ:
++                criteria.add(Restrictions.eq(firstPropertyName, value));
++                break;
++            case PlantloreConstants.RESTR_EQ_PROPERTY:
++                criteria.add(Restrictions.eqProperty(firstPropertyName, secondPropertyName));                
++                break;
++            case PlantloreConstants.RESTR_GE:
++                criteria.add(Restrictions.ge(firstPropertyName, value));                
++                break;
++            case PlantloreConstants.RESTR_GE_PROPERTY:
++                criteria.add(Restrictions.geProperty(firstPropertyName, secondPropertyName));                
++                break;
++            case PlantloreConstants.RESTR_GT:
++                criteria.add(Restrictions.gt(firstPropertyName, value));                                
++                break;
++            case PlantloreConstants.RESTR_GT_PROPERTY:
++                criteria.add(Restrictions.gtProperty(firstPropertyName, secondPropertyName));
++                break;
++            case PlantloreConstants.RESTR_ILIKE:
++                criteria.add(Restrictions.ilike(firstPropertyName, value));
++                break;
++            case PlantloreConstants.RESTR_IN:
++                criteria.add(Restrictions.in(firstPropertyName, values));                                                
++                break;
++            case PlantloreConstants.RESTR_IS_EMPTY:
++                criteria.add(Restrictions.isEmpty(firstPropertyName));
++                break;
++            case PlantloreConstants.RESTR_IS_NOT_EMPTY:
++                criteria.add(Restrictions.isNotEmpty(firstPropertyName));                
++                break;
++            case PlantloreConstants.RESTR_IS_NULL:
++                criteria.add(Restrictions.isNull(firstPropertyName));                                
++                break;
++            case PlantloreConstants.RESTR_IS_NOT_NULL:
++                criteria.add(Restrictions.isNotNull(firstPropertyName));                                
++                break;
++            case PlantloreConstants.RESTR_LE:
++                criteria.add(Restrictions.le(firstPropertyName, value));                
++                break;
++            case PlantloreConstants.RESTR_LE_PROPERTY:
++                criteria.add(Restrictions.leProperty(firstPropertyName, secondPropertyName));                
++                break;                
++            case PlantloreConstants.RESTR_LIKE:
++                criteria.add(Restrictions.like(firstPropertyName, value));                
++                break;
++            case PlantloreConstants.RESTR_LT:
++                criteria.add(Restrictions.lt(firstPropertyName, value));                                
++                break;
++            case PlantloreConstants.RESTR_LT_PROPERTY:
++                criteria.add(Restrictions.ltProperty(firstPropertyName, secondPropertyName));
++                break;
++            case PlantloreConstants.RESTR_NE:
++                criteria.add(Restrictions.ne(firstPropertyName, value));                
++                break;
++            case PlantloreConstants.RESTR_NE_PROPERTY:
++                criteria.add(Restrictions.neProperty(firstPropertyName, secondPropertyName));
++                break;
++            default:
++                
++        }
++    }   
++    
++    /**
++     *  Connect restrictions with disjunction (OR) in the WHERE clause.
++     *  
++     *  @param items array of objects with the following structure:
++     *               &lt;ul&gt;
++     *                  &lt;li&gt;Index 0: type of the restriction (see PlantloreConstants for constants)&lt;/li&gt;
++     *                  &lt;li&gt;Index 1: first property name (column name). Used to compare column with value&lt;/li&gt;
++     *                  &lt;li&gt;Index 2: second property name (column name). Used when comparing two columns&lt;/li&gt;
++     *                  &lt;li&gt;Index 3: value for the comparison. Used to compare column with value&lt;/li&gt;
++     *              &lt;/ul&gt;
++     *              4 values make one restriction, you can pass unlimited number of restrictions which will
++     *              be grouped together and connected in disjunction.
++     *  @throws IllegalArgumentException in case the input array is not of the correct length 
++     *  (must be at least 4 items and number of items must be divisible by 4)
++     */
++    public void addOrRestriction(Object[] items) throws IllegalArgumentException, RemoteException {
++        int type;
++        SimpleExpression se;
++        Disjunction disj = Restrictions.disjunction();
++        if ((items.length % 4) != 0) {
++            throw new IllegalArgumentException(&quot;Incorrect number of values in the input array&quot;);
++        }
++        int conditions = items.length / 4;        
++        for (int i=0;i&lt;conditions;i++) {
++            type = (Integer)items[0+i*4];            
++            switch (type) {
++                case PlantloreConstants.RESTR_EQ:
++                    disj.add(Restrictions.eq(((String)items[1+i*4]), items[3+i*4]));
++                    break;          
++                case PlantloreConstants.RESTR_GE:
++                    disj.add(Restrictions.ge(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_GT:
++                    disj.add(Restrictions.gt(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_LE:
++                    disj.add(Restrictions.le(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_LIKE:
++                    disj.add(Restrictions.like(((String)items[1+i*4]), items[3+i*4]));
++                    break;
++                case PlantloreConstants.RESTR_LT:
++                    disj.add(Restrictions.lt(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_NE:
++                    disj.add(Restrictions.ne(((String)items[1+i*4]), items[3+i*4]));
++                    break;
++                case PlantloreConstants.RESTR_EQ_PROPERTY:
++                    disj.add(Restrictions.eqProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_GE_PROPERTY:
++                    disj.add(Restrictions.geProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_GT_PROPERTY:
++                    disj.add(Restrictions.gtProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_ILIKE:
++                    disj.add(Restrictions.ilike(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_EMPTY:
++                    disj.add(Restrictions.isEmpty(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_NOT_EMPTY:
++                    disj.add(Restrictions.isNotEmpty(((String)items[1+i*4])));                
++                    break;
++                case PlantloreConstants.RESTR_IS_NULL:
++                    disj.add(Restrictions.isNull(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_NOT_NULL:
++                    disj.add(Restrictions.isNotNull(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_LE_PROPERTY:
++                    disj.add(Restrictions.leProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;                
++                case PlantloreConstants.RESTR_LT_PROPERTY:
++                    disj.add(Restrictions.ltProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_NE_PROPERTY:
++                    disj.add(Restrictions.neProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                default:
++                    disj.add(Restrictions.eq(((String)items[1+i*4]), items[3+i*4]));
++            }
++        }
++        criteria.add(disj);
++    }
++    
++    /**
++     *  Add projection to constructed criteria. Projections are columns we want to select. Only one projection 
++     *  (projected column) is allowed.
++     *  
++     *  @param type type of projection (not only columns, but also aggregate and other functions)
++     *  @param propertyName name of the column for the projection
++     *  @see PlantloreConstants
++     */
++    public void addProjection(int type, String propertyName) throws RemoteException {
++        switch (type) {
++            case PlantloreConstants.PROJ_AVG:
++                criteria.setProjection(Property.forName(propertyName).avg());
++                break;
++            case PlantloreConstants.PROJ_COUNT:
++                criteria.setProjection(Property.forName(propertyName).count());
++                break;
++            case PlantloreConstants.PROJ_GROUP:
++                criteria.setProjection(Property.forName(propertyName).group());
++                break;
++            case PlantloreConstants.PROJ_MAX:
++                criteria.setProjection(Property.forName(propertyName).max());
++                break;
++            case PlantloreConstants.PROJ_MIN:
++                criteria.setProjection(Property.forName(propertyName).min());
++                break;
++            case PlantloreConstants.PROJ_PROPERTY:
++                criteria.setProjection(Property.forName(propertyName));
++                break;
++            case PlantloreConstants.PROJ_ROW_COUNT:
++                criteria.setProjection(Projections.rowCount());
++                break;
++        }
++    }
++    
++    /**
++     *  Set method of fetching the results.
++     *  
++     *  @param associationPath
++     *  @param mode 
++     */
++    public void setFetchMode(String associationPath, int mode) throws RemoteException {
++        switch (mode) {
++            case PlantloreConstants.FETCH_SELECT:
++                criteria.setFetchMode(associationPath, FetchMode.SELECT);
++                break;
++            case PlantloreConstants.FETCH_JOIN:
++                criteria.setFetchMode(associationPath, FetchMode.JOIN);
++                break;
++            default:
++                criteria.setFetchMode(associationPath, FetchMode.DEFAULT);                
++        }
++    }
++    
++    /**
++     *  Add orderby clause to the constructed criteria.
++     *
++     *  @param direction direction of ordering (ASC or DESC)
++     *  @param propertyName property we want to use for ordering the results
++     */
++    public void addOrder(int direction, String propertyName) throws RemoteException {
++        switch (direction) {
++            case PlantloreConstants.DIRECT_ASC: criteria.addOrder(Order.asc(propertyName));                    
++                                break;
++            case PlantloreConstants.DIRECT_DESC:criteria.addOrder(Order.desc(propertyName));
++                                break;
++            default: criteria.addOrder(Order.asc(propertyName));
++        }        
++    }
++    
++    /**
++     *  Add association to the criteria. Association means that given associated record (from a 
++     *  different table) should be loaded as well.
++     *
++     *  @param associationPath path of associated entities
++     */
++    public void addAssociation(String associationPath) throws RemoteException {
++        criteria.createCriteria(associationPath);
++    }
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000422.html">[Plantlore-dev] r369 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+	<LI>Next message: <A HREF="000424.html">[Plantlore-dev] Upravy v DBLayer
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#423">[ date ]</a>
+              <a href="thread.html#423">[ thread ]</a>
+              <a href="subject.html#423">[ subject ]</a>
+              <a href="author.html#423">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

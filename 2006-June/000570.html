@@ -1,0 +1,537 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r449 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r449%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200606051425.k55EPQB5028032%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000569.html">
+   <LINK REL="Next"  HREF="000571.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r449 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r449%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200606051425.k55EPQB5028032%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r449 - in trunk/src/net/sf/plantlore: client common">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon Jun  5 16:25:26 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000569.html">[Plantlore-dev] r448 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+        <LI>Next message: <A HREF="000571.html">[Plantlore-dev] [Bug #7760] Previous selection is not cleared when searching
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#570">[ date ]</a>
+              <a href="thread.html#570">[ thread ]</a>
+              <a href="subject.html#570">[ subject ]</a>
+              <a href="author.html#570">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-05 16:25:23 +0200 (Mon, 05 Jun 2006)
+New Revision: 449
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.form
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+Log:
+Add,Edit and Delete now use transactions. 
+And we have a green progress bar now :-)
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-05 14:25:23 UTC (rev 449)
+@@ -597,11 +597,11 @@
+         h.setTerritory(t);
+         
+         if (updateAllPlants) {
+-            database.executeUpdate(h);
++            database.executeUpdateInTransaction(h);
+         } else {
+             //we've already created and set up a new Habitat now we have to store it into the database
+             h.setDeleted(0);
+-            int habId = database.executeInsert(h);
++            int habId = database.executeInsertInTransaction(h);
+             h.setId(habId);
+         }
+         
+@@ -671,7 +671,7 @@
+         hTmp.setTerritory(o.getHabitat().getTerritory());
+         hTmp.setDeleted(0);
+         
+-        int habId = database.executeInsert(hTmp);
++        int habId = database.executeInsertInTransaction(hTmp);
+         hTmp.setId(habId);
+         
+         occTmp.setDataSource(o.getDataSource());
+@@ -693,34 +693,41 @@
+         return occTmp;
+     }
+         
+-    public void storeRecord(boolean updateAllPlants) {
++    private boolean originalTaxonSurvived() {
++        for (int t = 0; t &lt; taxonList.size(); t++) {
++            if (taxonOriginal.equals(taxonList.get(t))) {
++                return true;
++            }
++        }        
++        return false;
++    }
++    
++    public void storeRecord(boolean updateAllPlants) throws DBLayerException, RemoteException {
+         DBLayerUtils dlu = new DBLayerUtils(database);
+ 
+         logger.info(&quot;Storing occurrence record...&quot;);
+-        //FIXME: exception catching/throwing
+         try {     
+                 if (editMode) {
+-                    boolean originalTaxonSurvived = false;
++                    boolean originalTaxonSurvived = originalTaxonSurvived();
+                     
+-                    for (int t = 0; t &lt; taxonList.size(); t++) {
+-                        if (taxonOriginal.equals(taxonList.get(t))) {
+-                            originalTaxonSurvived = true;
+-                            break;
+-                        }
++                    boolean ok = database.beginTransaction();
++                    if (!ok) {
++                        logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
++                        throw new DBLayerException(&quot;Can't create transaction. Another already running.&quot;);
+                     }
+-
++                                            
+                     prepareOccurrenceUpdate(updateAllPlants);
+                     if (originalTaxonSurvived) {
+                         // update original occurrence
+                         logger.info(&quot;Updating original occurrence&quot;);
+-                        database.executeUpdate(o);
++                        database.executeUpdateInTransaction(o);
+                         logger.debug(&quot;Original occurrence id=&quot;+o.getId()+&quot; updated.&quot;);
+                     } else {
+                         // delete original occurrence and bound author occurrences
+                         logger.info(&quot;Deleting original occurrence and associated author occurrences&quot;);
+                         o.setDeleted(1);
+-                        database.executeUpdate(o);
+-                        dlu.deleteHabitat(o.getHabitat());
++                        database.executeUpdateInTransaction(o);
++                        dlu.deleteHabitatInTransaction(o.getHabitat());
+                         logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
+                         Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
+                         Iterator it = aoSet.iterator();
+@@ -728,7 +735,7 @@
+                             Map.Entry&lt;Integer, AuthorOccurrence&gt; entry = (Entry&lt;Integer, AuthorOccurrence&gt;) it.next();
+                             AuthorOccurrence tmp = entry.getValue();
+                             tmp.setDeleted(2);
+-                            database.executeUpdateHistory(tmp);
++                            database.executeUpdateInTransactionHistory(tmp);
+                             logger.debug(&quot;AuthorOccurrence id &quot;+tmp.getId()+&quot; &quot;+tmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
+                         }
+                         //clear the authorOccurrences so that we don't try to delete them once again further in this method
+@@ -758,7 +765,7 @@
+                         if (!originalSurvived) {
+                             aoTmp = authorOccurrences.get(auth.getFirst());
+                             aoTmp.setDeleted(1);
+-                            database.executeUpdate(aoTmp);
++                            database.executeUpdateInTransaction(aoTmp);
+                             logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+aoTmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
+                         }
+                     }
+@@ -776,7 +783,7 @@
+                             AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getFirst().getSecond());
+                             aoTmp.setRole(pTmp.getSecond());
+                             aoTmp.setNote(resultRevision.get(j));
+-                            database.executeUpdate(aoTmp);
++                            database.executeUpdateInTransaction(aoTmp);
+                             logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+pTmp.getFirst().getFirst()+&quot; updated&quot;);
+                         } 
+                     }
+@@ -794,7 +801,7 @@
+                         logger.info(&quot;Creating a new occurrence for &quot;+taxonList.get(j));
+                         Occurrence occTmp = cloneOccurrence();
+                         occTmp.setPlant((Plant) dlu.getObjectFor(lookupPlant(taxonList.get(j)),Plant.class));
+-                        int occId = database.executeInsert(occTmp);
++                        int occId = database.executeInsertInTransaction(occTmp);
+                         occTmp.setId(occId);
+                         logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occTmp.getId());
+                         Integer id = lookupPlant(taxonList.get(j));
+@@ -812,7 +819,7 @@
+                             aoTmp.setNote(resultRevision.get(k));
+                             aoTmp.setOccurrence(occTmp);
+                             aoTmp.setDeleted(0);
+-                            database.executeInsert(aoTmp);
++                            database.executeInsertInTransaction(aoTmp);
+                             logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());
+                         }
+                     }
+@@ -837,11 +844,13 @@
+                                 aoTmp.setNote(resultRevision.get(k));
+                                 aoTmp.setOccurrence(o);
+                                 aoTmp.setDeleted(0);
+-                                database.executeInsert(aoTmp);    
++                                database.executeInsertInTransaction(aoTmp);    
+                                 logger.debug(&quot;AuthorOccurrence for &quot;+pTmp.getFirst().getFirst()+&quot; inserted. Id=&quot;+aoTmp.getId());                            
+                             }
+                         }
+                     
++                    database.commitTransaction();
++                    
+                 } else { //Add Mode
+                     Village v;
+                     Phytochorion p;
+@@ -861,15 +870,22 @@
+                     if (quadrant != null) h.setQuadrant(quadrant);
+                     h.setTerritory(t);
+                     h.setDeleted(0);
++                    
++                    boolean ok = database.beginTransaction();
++                    if (!ok) {
++                        logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
++                        throw new DBLayerException(&quot;Can't create transaction. Another already running.&quot;);
++                    }
++                    
+                     logger.info(&quot;Creating a shared habitat&quot;);
+-                    int habId = database.executeInsert(h);//insert the shared habitat
++                    int habId = database.executeInsertInTransaction(h);//insert the shared habitat
+                     h.setId(habId);
+                     logger.debug(&quot;Shared habitat created. Id=&quot;+h.getId());
+                         
+                     for (int j = 0; j &lt; taxonList.size(); j++) {
+                         logger.info(&quot;Creating an Occurrence using the shared habitat&quot;);
+                         Occurrence occ = prepareNewOccurrence(taxonList.get(j), h);//share the habitat
+-                        int occId = database.executeInsert(occ);
++                        int occId = database.executeInsertInTransaction(occ);
+                         occ.setId(occId);
+                         logger.debug(&quot;Occurrence for &quot;+taxonList.get(j)+&quot; inserted. Id=&quot;+occ.getId());
+                         
+@@ -882,14 +898,17 @@
+                             aoTmp.setNote(resultRevision.get(k));
+                             aoTmp.setOccurrence(occ);
+                             aoTmp.setDeleted(0);
+-                            database.executeInsert(aoTmp);                            
++                            database.executeInsertInTransaction(aoTmp);                            
+                         }//for authorList
+                     }// for taxonList
++                    
++                    database.commitTransaction();
+                 }//add mode
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+         } catch (DBLayerException ex) {
+-            ex.printStackTrace();
++            database.rollbackTransaction();
++            DBLayerException dbex = new DBLayerException(&quot;Add/Edit was rolled back. Some database problem occurred during processing: &quot;+ex);
++            dbex.setStackTrace(ex.getStackTrace());
++            throw dbex;
+         }        
+     }//createRecord()
+ 
+@@ -933,10 +952,14 @@
+         if (taxonList == null || taxonList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one taxon!&quot;);
+         
+-        if (editMode &amp;&amp; taxonList.size() &gt; 1 &amp;&amp; database.getUserRights().getAdd() != 1) { //the user is not allowed to add new records
++        if (editMode &amp;&amp; taxonList.size() &gt; 1 &amp;&amp; database.getUserRights().getAdd() != 1 &amp;&amp; database.getUserRights().getAdministrator() != 1) { //the user is not allowed to add new records
+             return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.InsufficientAddRights&quot;));
+         }
+         
++        if (editMode &amp;&amp; !originalTaxonSurvived() &amp;&amp; database.getUserRights().getAdd() != 1 &amp;&amp; database.getUserRights().getAdministrator() != 1) { //in case the user replaced original taxon by some other but doesn't have rights for adding
++            return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.InsufficientAddRights&quot;));            
++        }
++        
+         Pair&lt;Pair&lt;String,Integer&gt;,String&gt; ai, aj;
+         for (int i=0; i &lt; authorList.size() ; i++) {
+             ai = authorList.get(i);
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-06-05 14:25:23 UTC (rev 449)
+@@ -19,6 +19,7 @@
+ import java.awt.event.MouseEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.rmi.RemoteException;
+ import java.text.DateFormat;
+ import java.text.MessageFormat;
+ import java.text.NumberFormat;
+@@ -49,6 +50,7 @@
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreHelp;
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+@@ -453,48 +455,59 @@
+         
+         public void mouseClicked(MouseEvent e) {
+             int choice=-1;
+-            Pair&lt;Boolean,String&gt; check = model.checkData();
+-            if (!check.getFirst()) {
+-                JOptionPane.showMessageDialog(view,check.getSecond());
+-                return;
+-            } 
+-            if (inEditMode) {
+-                Occurrence[] sharedOcc = model.getHabitatSharingOccurrences();
+-                if (sharedOcc.length &gt; 1) {
+-                    Object[] arg = {&quot;&quot;+(sharedOcc.length-1)};
+-                    String formattedQuestion = L10n.getFormattedString(&quot;AddEdit.OkQuestion&quot;,arg);
+-                    
+-                    Object[] options = {ALL,JUST_THIS,CANCEL};
+-                    choice = JOptionPane.showOptionDialog(view, 
+-                            formattedQuestion,
+-                            TITLE,
+-                            JOptionPane.YES_NO_CANCEL_OPTION,
+-                            JOptionPane.QUESTION_MESSAGE,
+-                            null,
+-                            options,
+-                            options[0]);
+-                    switch (choice) {
+-                        case 0:
++            try {
++                Pair&lt;Boolean,String&gt; check = model.checkData();
++                if (!check.getFirst()) {
++                    JOptionPane.showMessageDialog(view,check.getSecond());
++                    return;
++                } 
++                if (inEditMode) {
++                    Occurrence[] sharedOcc = model.getHabitatSharingOccurrences();
++                    if (sharedOcc.length &gt; 1) {
++                        Object[] arg = {&quot;&quot;+(sharedOcc.length-1)};
++                        String formattedQuestion = L10n.getFormattedString(&quot;AddEdit.OkQuestion&quot;,arg);
++
++                        Object[] options = {ALL,JUST_THIS,CANCEL};
++                        choice = JOptionPane.showOptionDialog(view, 
++                                formattedQuestion,
++                                TITLE,
++                                JOptionPane.YES_NO_CANCEL_OPTION,
++                                JOptionPane.QUESTION_MESSAGE,
++                                null,
++                                options,
++                                options[0]);
++                        switch (choice) {
++                            case 0:
++                                model.storeRecord(true);
++                                view.setVisible(false);
++                                break;
++                            case 1:
++                                model.storeRecord(false);
++                                view.setVisible(false);
++                                break;
++                            case 2:
++                            default:                        
++                                //we'll do nothing and leave the AddEdit dialog visible
++                        }
++                    } else {
+                             model.storeRecord(true);
+-                            view.setVisible(false);
+-                            break;
+-                        case 1:
+-                            model.storeRecord(false);
+-                            view.setVisible(false);
+-                            break;
+-                        case 2:
+-                        default:                        
+-                            //we'll do nothing and leave the AddEdit dialog visible
++                            view.setVisible(false);                    
+                     }
+-                } else {
+-                        model.storeRecord(true);
+-                        view.setVisible(false);                    
++                } else {//inAddMode
++                    model.storeRecord(true);
++                    view.setVisible(false);
+                 }
+-            } else {//inAddMode
+-                model.storeRecord(true);
+-                view.setVisible(false);
++            } catch (RemoteException ex) {
++                logger.error(&quot;Remote problem: &quot;+ex);
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++            } catch (DBLayerException ex) {
++                logger.error(&quot;Database problem: &quot;+ex);
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
+             }
+-        }
++        }//mouseClicked
++            
+     }//OkButtonListener
+     
+     class CancelButtonListener extends MouseAdapter {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-05 14:25:23 UTC (rev 449)
+@@ -734,30 +734,45 @@
+             public Object task() throws DBLayerException, RemoteException {
+                 DBLayerUtils dlu = new DBLayerUtils(database);
+ 
+-                Collection&lt;Integer&gt; toBeDeleted = getTableModel().getSelection().values();
+-                setLength(toBeDeleted.size()*2); //inform about approx. length of this task
+-                setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
+-                for (Integer i : toBeDeleted) {
+-                    Occurrence occ = (Occurrence) dlu.getObjectFor(i.intValue(), Occurrence.class);
+-                    AuthorOccurrence[] aos = dlu.getAuthorsOf(occ);
++                boolean ok = false;
++                ok = database.beginTransaction();
++                if (!ok) {
++                    logger.debug(&quot;AppCore.deleteSelected(): Can't create transaction. Another is probably already running.&quot;);
++                    throw new DBLayerException(&quot;Can't create transaction. Another already running.&quot;);
++                }
++                
++                try {
++                    Collection&lt;Integer&gt; toBeDeleted = getTableModel().getSelection().values();
++                    setLength(toBeDeleted.size()*2); //inform about approx. length of this task
++                    setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
++                    for (Integer i : toBeDeleted) {
++                        Occurrence occ = (Occurrence) dlu.getObjectFor(i.intValue(), Occurrence.class);
++                        AuthorOccurrence[] aos = dlu.getAuthorsOf(occ);
+ 
+-                    logger.debug(&quot;Deleting occurrence id &quot;+i);
+-                    occ.setDeleted(1);
+-                    database.executeUpdate(occ);
+-                    dlu.deleteHabitat(occ.getHabitat());
+-                    logger.debug(&quot;Occurrence id &quot;+occ.getId()+&quot; &quot;+occ.getPlant().getTaxon()+&quot; deleted.&quot;);
+-                    setPosition(getPosition()+1);
+-                    
+-                    for (AuthorOccurrence authorOcc : aos) {
+-                        authorOcc.setDeleted(2);
+-                        database.executeUpdateHistory(authorOcc);
+-                        logger.debug(&quot;AuthorOccurrence id &quot;+authorOcc.getId()+&quot; &quot;+authorOcc.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                        logger.debug(&quot;Deleting occurrence id &quot;+i);
++                        occ.setDeleted(1);
++                        database.executeUpdateInTransaction(occ);
++                        dlu.deleteHabitatInTransaction(occ.getHabitat());
++                        logger.debug(&quot;Occurrence id &quot;+occ.getId()+&quot; &quot;+occ.getPlant().getTaxon()+&quot; deleted.&quot;);
++                        setPosition(getPosition()+1);
++
++                        for (AuthorOccurrence authorOcc : aos) {
++                            authorOcc.setDeleted(2);
++                            database.executeUpdateInTransactionHistory(authorOcc);
++                            logger.debug(&quot;AuthorOccurrence id &quot;+authorOcc.getId()+&quot; &quot;+authorOcc.getAuthor().getWholeName()+&quot; deleted.&quot;);
++                        }
++                        deleted++;
++                        setPosition(getPosition()+1);
++                        setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
+                     }
+-                    deleted++;
+-                    setPosition(getPosition()+1);
+-                    setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
++                } catch (DBLayerException ex) {
++                    database.rollbackTransaction();
++                    DBLayerException dbex = new DBLayerException(&quot;Delete rolled back. Some database problem occurred: &quot;+ex);
++                    dbex.setStackTrace(ex.getStackTrace());
++                    throw dbex;
+                 }
+-
++                
++                database.commitTransaction();
+                 getTableModel().clearSelection();
+                 fireStopped(null);
+                 return null;
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-06-05 14:25:23 UTC (rev 449)
+@@ -96,6 +96,27 @@
+         db.closeQuery(sq);
+     }
+     
++    /** Deletes Habitat for given Occurrence if needed.
++     *
++     * Will delete Habitat if no live Occurrence point at it.
++     *
++     */
++    public void deleteHabitatInTransaction(Habitat h) throws DBLayerException, RemoteException {
++        SelectQuery sq = db.createQuery(Occurrence.class);        
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.DELETED, null, 0, null);
++        int resultid = db.executeQuery(sq);
++        int resultCount = db.getNumRows(resultid);
++        if (resultCount == 0) {
++            logger.info(&quot;Deleting habitat id=&quot;+h.getId()+&quot; with nearest village &quot;+h.getNearestVillage().getName());
++            h.setDeleted(1);
++            db.executeUpdateInTransaction(h);
++        } else {
++            logger.debug(&quot;Leaving habitat id=&quot;+h.getId()+&quot; live. Live Occurrence records point at it.&quot;);
++        }
++        db.closeQuery(sq);
++    }
++    
+ //    public static void main(String[] args) throws DBLayerException, RemoteException {
+ //        DBLayer db = new HibernateDBLayer();
+ //        db.initialize(&quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreHIBdataUTF.fdb&quot;,&quot;sysdba&quot;,&quot;masterkey&quot;);
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.form
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.form	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.form	2006-06-05 14:25:23 UTC (rev 449)
+@@ -72,6 +72,11 @@
+       &lt;/Layout&gt;
+       &lt;SubComponents&gt;
+         &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;progressBar&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;foreground&quot; type=&quot;java.awt.Color&quot; editor=&quot;org.netbeans.beaninfo.editors.ColorEditor&quot;&gt;
++              &lt;Color blue=&quot;0&quot; green=&quot;ff&quot; id=&quot;green&quot; palette=&quot;1&quot; red=&quot;0&quot; type=&quot;palette&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;statusField&quot;&gt;
+           &lt;Properties&gt;
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-06-05 13:16:24 UTC (rev 448)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-06-05 14:25:23 UTC (rev 449)
+@@ -82,6 +82,7 @@
+         setResizable(false);
+         setUndecorated(true);
+         jPanel1.setBorder(javax.swing.BorderFactory.createCompoundBorder(new javax.swing.border.SoftBevelBorder(javax.swing.border.BevelBorder.RAISED), javax.swing.BorderFactory.createEtchedBorder()));
++        progressBar.setForeground(java.awt.Color.green);
+ 
+         statusField.setBackground(javax.swing.UIManager.getDefaults().getColor(&quot;Panel.background&quot;));
+         statusField.setBorder(null);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000569.html">[Plantlore-dev] r448 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+	<LI>Next message: <A HREF="000571.html">[Plantlore-dev] [Bug #7760] Previous selection is not cleared when searching
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#570">[ date ]</a>
+              <a href="thread.html#570">[ thread ]</a>
+              <a href="subject.html#570">[ subject ]</a>
+              <a href="author.html#570">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

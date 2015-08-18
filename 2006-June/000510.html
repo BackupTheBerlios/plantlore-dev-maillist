@@ -1,0 +1,375 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r416 - in trunk/src/net/sf/plantlore: client client/imports/table client/imports/table/parsers common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r416%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/imports/table%20client/imports/table/parsers%20common/record&In-Reply-To=%3C200606011207.k51C7fOs017652%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000511.html">
+   <LINK REL="Next"  HREF="000512.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r416 - in trunk/src/net/sf/plantlore: client client/imports/table client/imports/table/parsers common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r416%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/imports/table%20client/imports/table/parsers%20common/record&In-Reply-To=%3C200606011207.k51C7fOs017652%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r416 - in trunk/src/net/sf/plantlore: client client/imports/table client/imports/table/parsers common/record">krater at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 14:07:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000511.html">[Plantlore-dev] [Bug #7692] Set a default button for each dialog
+</A></li>
+        <LI>Next message: <A HREF="000512.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#510">[ date ]</a>
+              <a href="thread.html#510">[ thread ]</a>
+              <a href="subject.html#510">[ subject ]</a>
+              <a href="author.html#510">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-06-01 14:07:38 +0200 (Thu, 01 Jun 2006)
+New Revision: 416
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/imports/table/TableImportMngCtrl.java
+   trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+   trunk/src/net/sf/plantlore/client/imports/table/parsers/UnifiedTableParser.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+TableImport - some bugs fixed (improper use of shared records).
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-31 22:59:48 UTC (rev 415)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-01 12:07:38 UTC (rev 416)
+@@ -91,6 +91,8 @@
+ import net.sf.plantlore.client.imports.ImportMngView;
+ import net.sf.plantlore.client.imports.ImportProgressCtrl;
+ import net.sf.plantlore.client.imports.ImportProgressView;
++import net.sf.plantlore.client.imports.table.TableImportMng;
++import net.sf.plantlore.client.imports.table.TableImportMngCtrl;
+ import net.sf.plantlore.client.login.Login;
+ import net.sf.plantlore.client.login.LoginCtrl;
+ import net.sf.plantlore.client.login.LoginView;
+@@ -184,6 +186,10 @@
+     ImportProgressCtrl importProgressCtrl;
+     DecisionView importDecisionView;
+     DecisionCtrl importDecisionCtrl;
++    
++    // Immutable Table Import
++    TableImportMng tableImportModel;
++    TableImportMngCtrl tableImportCtrl;
+ 
+     //Bridges
+     ManagerBridge managerBridge = new ManagerBridge();
+@@ -194,7 +200,7 @@
+     AbstractAction helpContentsAction = new HelpContentsAction();
+     AbstractAction helpAboutAction = new HelpAboutAction();
+     AbstractAction  exportAction = new ExportAction();
+-    AbstractAction importAction = new ImportAction();
++    AbstractAction importAction = new TableImportAction();
+     
+     AbstractAction dataAuthorsAction = new DataAuthorsAction();
+     AbstractAction dataPublicationsAction = new DataPublicationsAction();
+@@ -264,7 +270,7 @@
+         view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+         
+         view.setLoginAction(loginAction);
+-        
++                
+         constructDialogs();                
+                
+         // This is here in order to skip login procedure and connect to the database automatically
+@@ -471,6 +477,30 @@
+         }
+     }
+     
++    
++    class TableImportAction extends AbstractAction {
++        public TableImportAction() {
++            putValue(NAME, L10n.getString(&quot;Overview.TableImport&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.TableImportTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.TableImport&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++        	if(tableImportModel == null) {
++        		try {
++        			tableImportModel = new TableImportMng( model.getDatabase() );
++        			tableImportCtrl = new TableImportMngCtrl( tableImportModel, view );
++        		} catch(ImportException e) {
++        			logger.error(&quot;Import MVC cannot be created. &quot; + e.getMessage());
++        			return;
++        		}
++        	}
++
++        	tableImportCtrl.setVisible( true );
++        }
++    }
++    
++    
+     class ExportAction extends AbstractAction {
+         public ExportAction() {
+             putValue(NAME, L10n.getString(&quot;dataExport&quot;));
+@@ -505,8 +535,10 @@
+             		 * FIXME: Solve this with Jakub.
+             		 *==============================================================*/
+             		SelectQuery query;
+-            		if(searchModel == null) 
++            		if(searchModel == null) {
++            			System.out.println(&quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt; CREATING A FAKE QUERY&quot;);
+             			query = model.getDatabase().createQuery(Occurrence.class); // fake the query
++            		}
+             		else {
+             			Object[] queryParam = searchModel.constructExportQuery();
+             			query = (SelectQuery)queryParam[0];
+@@ -781,7 +813,7 @@
+                 pb.setTitle(L10n.getString(&quot;Scheda.ProgressTitle&quot;));
+                 
+                 task.start();
+-            } catch(JRException ex) {
++            } catch(Exception ex) { // Unreachable CATCH block
+                 logger.error(&quot;Broken report: &quot;+ex);
+                 JOptionPane.showMessageDialog(view,L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/table/TableImportMngCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/table/TableImportMngCtrl.java	2006-05-31 22:59:48 UTC (rev 415)
++++ trunk/src/net/sf/plantlore/client/imports/table/TableImportMngCtrl.java	2006-06-01 12:07:38 UTC (rev 416)
+@@ -3,6 +3,7 @@
+ import javax.swing.JFileChooser;
+ import javax.swing.JOptionPane;
+ 
++import net.sf.plantlore.client.AppCoreView;
+ import net.sf.plantlore.client.export.component.XFilter;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.l10n.L10n;
+@@ -12,12 +13,14 @@
+ 	
+ 	private TableImportMng model;
+ 	private JFileChooser choice;
++	private AppCoreView view;
+ 	
+-	public TableImportMngCtrl(TableImportMng model) {
++	public TableImportMngCtrl(TableImportMng model, AppCoreView view) {
+ 		this.model = model;
++		this.view = view;
+ 		choice = new JFileChooser();
+ 		choice.setAcceptAllFileFilterUsed(false);
+-		choice.addChoosableFileFilter( new XFilter(&quot;Update files (*.xml)&quot;, &quot;*.xml&quot;) );
++		choice.addChoosableFileFilter( new XFilter(&quot;Table update files (*.xml)&quot;, &quot;.xml&quot;) );
+ 	}
+ 	
+ 	public void setVisible(boolean visible) {
+@@ -33,11 +36,11 @@
+ 				}
+ 				try {
+ 					Task task = model.createTableImportTask(choice.getSelectedFile().getAbsolutePath(), null);
+-					new TableImportProgressBar(task, null);
++					new TableImportProgressBar(task, view);
+ 					task.start();
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+-							L10n.getString(&quot;Error.ImportFailed&quot;) + e.getMessage(),
++							L10n.getString(&quot;Error.ImportFailed&quot;) + &quot; &quot; + e.getMessage(),
+ 							L10n.getString(&quot;Import.Failed&quot;),
+ 							JOptionPane.WARNING_MESSAGE);
+ 				}
+
+Modified: trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-05-31 22:59:48 UTC (rev 415)
++++ trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-06-01 12:07:38 UTC (rev 416)
+@@ -6,6 +6,7 @@
+ import org.apache.log4j.Logger;
+ 
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_EQ;
++import net.sf.plantlore.client.imports.table.TableParser.Action;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ImportException;
+@@ -106,7 +107,7 @@
+ 			int resultId = db.executeQuery( q ),
+ 			rows = db.getNumRows( resultId );
+ 			
+-			Set&lt;Record&gt; cache = new HashSet&lt;Record&gt;(rows);
++			Collection&lt;Record&gt; cache = new HashSet&lt;Record&gt;(rows);
+ 			
+ 			for(int i = 0; i &lt; rows; i++) {
+ 				Object[] pulp = db.more(resultId, i, i);
+@@ -142,6 +143,11 @@
+ 					setStatusMessage(L10n.getFormattedString(&quot;Import.IncompleteRecord&quot;, count));					
+ 				}
+ 				
++				logger.debug(data.action+&quot; &quot;+data.record + 
++						((data.action == Action.UPDATE) ? 
++								&quot; ==&gt; &quot; + data.replacement :
++								&quot;&quot;));
++				
+ 				// Take action.
+ 				try {
+ 					switch(data.action) {
+@@ -169,7 +175,7 @@
+ 								update( data.record, data.replacement );
+ 								cache.add( data.replacement );
+ 							}
+-						updated++;
++						updated ++;
+ 						break;
+ 					}
+ 				} catch(ImportException ie) {
+@@ -228,8 +234,13 @@
+ 		SelectQuery q = null;
+ 		int rows = 0;
+ 		try {
+-			q = db.createQuery( parentTable.get(record.getClass()) );
+-			q.addRestriction(RESTR_EQ, parentColumn.get(record.getClass()), null, record, null);
++			Class parent = parentTable.get( record.getClass() );
++			String column = parentColumn.get( record.getClass() );
++			
++			System.out.println(parent.getSimpleName()+&quot;.&quot;+column);
++			
++			q = db.createQuery( parent );
++			q.addRestriction(RESTR_EQ, column, null, record, null);
+ 			int resultset = db.executeQuery(q); 
+ 			rows = db.getNumRows(resultset);
+ 		} catch (DBLayerException e) {
+
+Modified: trunk/src/net/sf/plantlore/client/imports/table/parsers/UnifiedTableParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/table/parsers/UnifiedTableParser.java	2006-05-31 22:59:48 UTC (rev 415)
++++ trunk/src/net/sf/plantlore/client/imports/table/parsers/UnifiedTableParser.java	2006-06-01 12:07:38 UTC (rev 416)
+@@ -16,7 +16,6 @@
+ public class UnifiedTableParser implements TableParser {
+ 	
+ 	private Document document;
+-	private Record current, replacement;
+ 	private DataHolder data = new DataHolder();
+ 	
+ 	private int numberOfRecords = -1;
+@@ -54,11 +53,6 @@
+             }
+             else
+             	throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));
+-            
+-            current = (Record)table.newInstance();
+-			replacement = (Record)table.newInstance();
+-			data.record = current;
+-			data.replacement = replacement;
+ 			
+ 			rootTable = table;
+         } catch (Exception ex) {
+@@ -77,22 +71,29 @@
+ 	throws ParserException {
+ 		if(recIterator == null)
+ 			return null;
+-		
+-		Node node = (Node) recIterator.next();
+-		reconstruct( current, node );
+-		node = node.getParent();
+-		String name = (node == null) ? &quot;add&quot; : node.getName().toLowerCase();
+-		
+-		if( name.startsWith(&quot;add&quot;) )
+-			data.action = Action.INSERT;
+-		else if( name.startsWith(&quot;del&quot;) )
+-			data.action = Action.DELETE;
+-		else if( name.startsWith(&quot;upd&quot;)) {
+-			data.action = Action.UPDATE;
+-			node = (Node) recIterator.next();
+-			if(node == null)
+-				throw new ParserException(&quot;Error.MissingUpdateRecord&quot;);
+-			reconstruct( replacement, node );
++
++		try {
++			data.record = (Record)rootTable.newInstance();
++			
++			Node node = (Node) recIterator.next();
++			reconstruct( data.record, node );
++			node = node.getParent();
++			String name = (node == null) ? &quot;add&quot; : node.getName().toLowerCase();
++			
++			if( name.startsWith(&quot;add&quot;) )
++				data.action = Action.INSERT;
++			else if( name.startsWith(&quot;del&quot;) )
++				data.action = Action.DELETE;
++			else if( name.startsWith(&quot;upd&quot;)) {
++				data.action = Action.UPDATE;
++				node = (Node) recIterator.next();
++				if(node == null)
++					throw new ParserException(&quot;Error.MissingUpdateRecord&quot;);
++				data.replacement = (Record)rootTable.newInstance();
++				reconstruct( data.replacement, node );
++			}
++		} catch(Exception e) {
++			throw new ParserException(&quot;Import.PartialyCorruptedRecord&quot;);
+ 		}
+ 		
+ 		return data;
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-31 22:59:48 UTC (rev 415)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-06-01 12:07:38 UTC (rev 416)
+@@ -351,6 +351,17 @@
+ 		return new ArrayList&lt;String&gt;(Arrays.asList(values));
+ 	}
+ 	
++	@Override
++	public int hashCode() {
++		int hash = 0;
++		for(String property : getProperties()) {
++			Object value = getValue(property);
++			if( value != null)
++				hash ^= value.hashCode(); 
++		}
++		return hash;
++	}
++	
+ 
+ 	/**
+ 	 * Convert the record into a string. 
+@@ -362,7 +373,7 @@
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+ 			sigma.append(getClass().getSimpleName()).append('.').
+-			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;; &quot;);
++			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;\n&quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+ 			if(subrecord != null)	sigma.append( subrecord.toString() );
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000511.html">[Plantlore-dev] [Bug #7692] Set a default button for each dialog
+</A></li>
+	<LI>Next message: <A HREF="000512.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#510">[ date ]</a>
+              <a href="thread.html#510">[ thread ]</a>
+              <a href="subject.html#510">[ subject ]</a>
+              <a href="author.html#510">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

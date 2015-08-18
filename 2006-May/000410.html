@@ -1,0 +1,144 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Osetrovani deletrvajicich operaci aned aby nezamrzaly dialogy.
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Osetrovani%20deletrvajicich%20operaci%20aned%20aby%20nezamrzaly%20dialogy.&In-Reply-To=%3Cf4dc39b90605260517w1b504bb0t7a3c8499a591b167%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000409.html">
+   <LINK REL="Next"  HREF="000411.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Osetrovani deletrvajicich operaci aned aby nezamrzaly dialogy.</H1>
+    <B>Erik Kratochvil</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Osetrovani%20deletrvajicich%20operaci%20aned%20aby%20nezamrzaly%20dialogy.&In-Reply-To=%3Cf4dc39b90605260517w1b504bb0t7a3c8499a591b167%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Osetrovani deletrvajicich operaci aned aby nezamrzaly dialogy.">discontinuum at gmail.com
+       </A><BR>
+    <I>Fri May 26 14:17:04 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000409.html">[Plantlore-dev] r359 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+        <LI>Next message: <A HREF="000411.html">[Plantlore-dev] r360 - trunk/src/net/sf/plantlore/client/checklist
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#410">[ date ]</a>
+              <a href="thread.html#410">[ thread ]</a>
+              <a href="subject.html#410">[ subject ]</a>
+              <a href="author.html#410">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Jak resit problem s deletrvajicimi operacemi v modelech -
+kdyz napr. Login.AuthCtrl zavola login.connectToSelected(), zacne se
+provadet pripojovani k serveru, inicializace databaze a to muze nejakou dobu
+trvat. Mezitim se dialog jevi jako mrtvy - obsah se neprekresluje, nic.
+
+Navrhovane reseni: pouzivat u deletrvajicich operaci SwingWorker - docela
+dobry priklad jsou Kovovy managery (AuthorMng treba), i kdyz zrovna
+zpracovani vyjimek navrhuju trochu jinak (primocareji, viz nize).
+
+Problem je akorat s handlovanim vyjimek - SwingWorker pousti jiny thread a
+tudiz vyjimku by nic nechytlo. Navrhovane reseni:
+
+
+Model (extends Observable)
+
+  public void connectToSelected() {
+
+    final SwingWorker worker = new SwingWorker() {
+
+      public Object construct() {
+        try {
+          // ....
+          // zde probiha vase operace - pripojeni k databazi, vyhledavani a
+tak..
+          // Pokazde, kdy dosahnete nejakeho milniku, hodi se zavolat:
+          setChanged();
+          notifyObservers( param );
+          // param je bud string (nejlepe) lokalizovany, ktery rika, co se
+stalo
+          // &quot;Pripojeni k databazi se zdarilo.&quot; nebo &quot;Probiha nacitani
+autoru.&quot;
+          // nebo nejaky jiny typ, treba int, ze se neceho nacetlo uz 10 a
+tak
+        } catch (Exception e) {
+          setChanged();
+          notifyObservers( e );
+        }
+      };
+
+      worker.start();
+    }
+
+Pokud dojde k chybe, je notifikovan observer, ktery se s tim vyporada, treba
+takto:
+
+View (implements Observer)
+
+  public void update(Observable source, Object arg) {
+    // Neco se stalo, podle typu argumentu lze poznat, co.
+
+    // Nastala vyjimka (source poslal exception) - zareagujeme nastavenim
+status baru a
+    // zobrazenim chyboveho dialogu
+    if(arg instanceof Exception) {
+      status.setText(L10n.getString(&quot;Login.Failed&quot;));
+      JOptionPane.showMessageDialog(this, arg, L10n.getString(&quot;
+Error.LoginFailed&quot;), JOptionPane.ERROR_MESSAGE);
+    }
+    // Nejake jine updatovaci informace - staci treba nastavit jenom status
+bar
+    else if(arg instanceof String)
+      status.setText(&quot;  &quot; + (String)arg);
+  }
+
+Vice kdyztak Login.java a AuthView.java.
+
+
+
+Timto zpusobem pak lze resit i progress bary u nekterych operaci. Hruby
+nacrt:
+
+   1. uzivatel klikne na tlacitko &quot;OK&quot;
+   2. controller prepne dialog do progress bar rezimu [nebo ho skryje a
+   zobrazi nejaky obecny progress dialog]
+   3. controller zavola dlouhotrvajici metodu modelu (~tj. metoda pouziva
+   SwingWorker)
+   4. model neco provadi, v dulezitych bodech vola update (treba posle,
+   ze nacetl 10 z 50 autoru, nebo tak neco)
+   5. progress bar dialog v update metode prenastavi status bar nebo
+   progress bar, pripadne zobrazi nejaky message dialog, ze se neco nepovedlo
+   (treba spadlo pripojeni k databazi a podobne).
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060526/7022a544/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060526/7022a544/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000409.html">[Plantlore-dev] r359 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+	<LI>Next message: <A HREF="000411.html">[Plantlore-dev] r360 - trunk/src/net/sf/plantlore/client/checklist
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#410">[ date ]</a>
+              <a href="thread.html#410">[ thread ]</a>
+              <a href="subject.html#410">[ subject ]</a>
+              <a href="author.html#410">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

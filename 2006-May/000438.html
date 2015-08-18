@@ -1,0 +1,943 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r382 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r382%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/imports/parsers%20common/record%20l10n&In-Reply-To=%3C200605290258.k4T2wGFl018871%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000437.html">
+   <LINK REL="Next"  HREF="000439.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r382 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record l10n</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r382%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/imports%20client/imports/parsers%20common/record%20l10n&In-Reply-To=%3C200605290258.k4T2wGFl018871%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r382 - in trunk/src/net/sf/plantlore: client/imports client/imports/parsers common/record l10n">krater at berlios.de
+       </A><BR>
+    <I>Mon May 29 04:58:16 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000437.html">[Plantlore-dev] Dlouhe vypocty a progress bar - mozne reseni
+</A></li>
+        <LI>Next message: <A HREF="000439.html">[Plantlore-dev] r383 - in trunk/src/net/sf/plantlore: client/history client/metadata client/user l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#438">[ date ]</a>
+              <a href="thread.html#438">[ thread ]</a>
+              <a href="subject.html#438">[ subject ]</a>
+              <a href="author.html#438">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-29 04:58:12 +0200 (Mon, 29 May 2006)
+New Revision: 382
+
+Added:
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/AbstractParser.java
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+   trunk/src/net/sf/plantlore/client/imports/Parser.java
+   trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+Parser interface extended: it can return the number of records in the file.
+AbstractParser: the default implementation added (always returns -1 meaning &quot;unknown&quot;).
+XMLParser fixed: the total number of records is returned correctly.
+
+ImportProgressView: its own form added, information about import is more detailed (number of inserted/updated/deleted/rejected, reasons why the record was rejected). ImportMng modified to conform the requirements of the ProgressView.
+
+DefaultDirector: better notification of the view, several bugfixes that caused problems during import. Mildly tested [insert/update] - more cases should be studied!
+
+Modified: trunk/src/net/sf/plantlore/client/imports/AbstractParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/AbstractParser.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/AbstractParser.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -38,6 +38,10 @@
+ 	public Action intentedFor() {
+ 		return Action.UNKNOWN;
+ 	}
++	
++	public int getNumberOfRecords() {
++		return -1;
++	}
+ 
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -9,7 +9,7 @@
+ import org.apache.log4j.Logger;
+ 
+ import static net.sf.plantlore.common.PlantloreConstants.RESTR_EQ;
+-import static net.sf.plantlore.common.PlantloreConstants.RESTR_IS_NULL;
++//import static net.sf.plantlore.common.PlantloreConstants.RESTR_IS_NULL;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ImportException;
+ import net.sf.plantlore.common.exception.ParserException;
+@@ -49,7 +49,7 @@
+ 
+ 	private Parser parser;
+ 	private DBLayer db;
+-	private int count, imported;
++	private int count = 0, inserted = 0, updated = 0, deleted = 0;
+ 	
+ 	private Action 
+ 		lastDecision = Action.UNKNOWN,
+@@ -248,7 +248,8 @@
+ 			logger.debug(&quot;Import begins...&quot;);
+ 			
+ 			// Reset the counters.
+-			count = imported = 0;
++			count = inserted = updated = deleted = 0;
++			Action takenAction = Action.UNKNOWN;
+ 			
+ 			// Go through the whole file.
+ 			while( !aborted &amp;&amp; parser.hasNextRecord() ) {
+@@ -259,13 +260,19 @@
+ 				// What is supposed to happen with the occurrence.
+ 				Action intention = parser.fetchNextRecord(); 
+ 				// Get a new Occurrence.
+-				Occurrence occ;
++				Occurrence occ = null;
+ 				try {
+ 					count++;
+ 					occ = (Occurrence) parser.getNextPart(Occurrence.class);
+ 				} catch( ParserException e) {
+ 					logger.warn(&quot;The record is not valid (probably incomplete). &quot; + e);
+ 					logger.info(&quot;Skipping the record No. &quot; + count);
++					
++					setChanged();
++					if(occ == null)
++						notifyObservers(L10n.getFormattedString(&quot;Import.CompletelyCorruptedRecord&quot;, count));
++					else
++						notifyObservers(L10n.getFormattedString(&quot;Import.PartialyCorruptedRecord&quot;, count, occ.getUnitIdDb(), occ.getUnitValue()));
+ 					continue;
+ 				}
+ 				recordFromFile = occ;
+@@ -280,6 +287,8 @@
+ 				boolean isValid = occ.areAllNNSet();
+ 				if( !isValid ) {
+ 					logger.info(&quot;Rejecting the record No. &quot;+count+&quot;! Some of the not-null values are not specified!&quot;);
++					setChanged();
++					notifyObservers(L10n.getFormattedString(&quot;Import.IncompleteRecord&quot;, count));
+ 					continue;
+ 				}
+ 				logger.debug(&quot;The record is valid.&quot;);
+@@ -295,9 +304,12 @@
+ 				int resultId = db.executeQuery( q );
+ 				int rows = db.getNumRows( resultId );
+ 				boolean isInDB = (rows != 0);
+-				if(rows &gt; 1)
++				if(rows &gt; 1) {
+ 					logger.error(&quot;The database is not in a consistent state - there are &quot; + rows + &quot; Occurrence &quot; +
+ 							&quot;records with the same Unique Identifier (&quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue()+&quot;)!&quot;);
++					setChanged();
++					notifyObservers(L10n.getFormattedString(&quot;Import.DuplicateRecord&quot;, count, occ.getUnitIdDb(), occ.getUnitValue()));
++				}
+ 				Occurrence
+ 				occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 0, 0)[0])[0]  :  null;
+ 				recordInDatabase = occInDB;
+@@ -318,7 +330,8 @@
+ 						updateInFile = occ.getUpdatedWhen();
+ 					
+ 					// The record in the database is newer than the record in the file.
+-					if(updateInDBOccurred.after(updateInFile)) {
++					if(updateInDBOccurred != null &amp;&amp; updateInFile != null &amp;&amp;
++							updateInDBOccurred.after(updateInFile)) {
+ 						logger.info(&quot;The record in the file is older than the record stored in the database.&quot;);
+ 						if( !doNotAskAboutDateAgain ) 
+ 							dateDecision = expectDecision( occInDB );
+@@ -345,9 +358,12 @@
+ 							switch(intention) {
+ 							case DELETE:
+ 								// Nothing to be done, the record is already dead.
++								takenAction = Action.DELETE;
+ 								break;
+ 							default:
+ 								occInDB = (Occurrence) update( occInDB, occ );
++								takenAction = Action.UPDATE;
++								break;
+ 							}
+ 						else
+ 							switch(intention) {
+@@ -356,9 +372,15 @@
+ 								// By a common decision: If the habitat is not shared it should be marked as deleted, too.
+ 								if( sharedBy(occInDB.getHabitat(), Occurrence.class, Occurrence.HABITAT) &gt; 1 )
+ 									delete( occInDB.getHabitat() );
++								takenAction = Action.DELETE;
+ 								break;
+ 							default:
+-								occInDB = (Occurrence) update( occInDB, occ );
++								if(occInDB.equals(occ))
++									occ = occInDB;
++								else
++									occInDB = (Occurrence) update( occInDB, occ );
++								takenAction = Action.UPDATE;
++								break;
+ 							}
+ 					}
+ 					/*----------------------------------------------------------
+@@ -368,18 +390,25 @@
+ 						switch(intention) {
+ 						case DELETE:	
+ 							// There's nothing to delete.
++							takenAction = Action.DELETE;
+ 							break;
+ 						default:
+ 							occInDB = (Occurrence) insert( occ );
++							takenAction = Action.INSERT;
++							break;
+ 						}
+ 				}
+-				catch(ImportException ie) {
++				catch(Exception ie) {
++					String msg = ie.getMessage();
+ 					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
+-					logger.error(&quot;This exception occured during insert/update/delete: &quot; + ie.getMessage());
++					logger.error(&quot;This exception occured during insert/update/delete: &quot; + msg);
+ 					// Roll back the transaction.
+ 					db.rollbackTransaction();
+ 					transactionInProgress = false;
+ 					// The user cannot do a thing. Should he be informed?
++					String userMsg = L10n.getFormattedString(&quot;Import.ProblematicRecord&quot;, count, occ.getUnitIdDb(), occ.getUnitValue())
++						+ ( (msg == null) ? L10n.getString(&quot;Import.UnknownReason&quot;) : msg );
++					setChanged(); notifyObservers(userMsg);
+ 					continue;
+ 				}
+ 				
+@@ -408,8 +437,10 @@
+ 					// Compute the number of undead authors (authors, that are not marked as deleted) 
+ 					// the Occurrence record has in the database.
+ 					// We must make sure that every Occurrence record has at least one (undead) author! 
+-					for(AuthorOccurrence ao : sharers)
++					for(AuthorOccurrence ao : sharers) {
++						ao.setOccurrence( null ); // simplify the comparison
+ 						if( !ao.isDead() ) numberOfUndeadAuthors++ ;
++					}
+ 					
+ 					while( parser.hasNextPart(AuthorOccurrence.class) ) {
+ 						// Get the AuthorOccurrence from the Parser.
+@@ -427,13 +458,19 @@
+ 							logger.warn(&quot;The AuthorOccurrence is incomplete - the Author is missing or a NN column is not set!&quot;);
+ 							continue;
+ 						}
++
++						// Simplify the comparison (the Occurrence is known...)
++						ao.setOccurrence( null );
+ 						
+ 						// Check if that AuthorOccurrence is already in the database.
+ 						AuthorOccurrence aoInDB = null;
+-						for( AuthorOccurrence alpha : sharers )
++						System.out.println(&quot;INFI ~ &quot; + ao);
++						for( AuthorOccurrence alpha : sharers ) {
++							System.out.println(&quot;INDB ~ &quot; + alpha);
+ 							if( alpha.equals( ao ) ) {
+ 								aoInDB = alpha; break;
+ 							}
++						}
+ 						
+ 						// The intention with this AuthorOccurrence. 
+ 						intention = parser.intentedFor();
+@@ -502,14 +539,26 @@
+ 				else {
+ 					transactionInProgress = ! db.rollbackTransaction();
+ 					logger.warn(&quot;The current Occurrence record was not added - it would not have any Author left in the database!&quot;);
++					setChanged();
++					notifyObservers(L10n.getFormattedString(&quot;Import.NoAuthorsLeft&quot;, count));
+ 				}
+-					
+-				imported++;
+-				setChanged(); notifyObservers( imported );
++
++				switch( takenAction ) {
++				case DELETE:
++					deleted++;
++					break;
++				case UPDATE:
++					updated++;
++					break;
++				case INSERT:
++					inserted++;
++					break;
++				}
++				setChanged(); notifyObservers( takenAction );
+ 			}
+ 		} 
+ 		catch(Exception e) {
+-			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database. &quot; + e.getMessage());
++			logger.error(&quot;The import ended prematurely. &quot;+count+&quot; records processed. &quot; + e.getMessage());
+ 
+ 			e.printStackTrace();
+ 			
+@@ -522,8 +571,7 @@
+ 			return;
+ 		}
+ 		
+-		logger.info(&quot;Import completed. &quot; + imported + &quot; records were imported into the database.&quot;);
+-		logger.info(&quot;(&quot; + (count - imported) + &quot; records rejected)&quot;);
++		logger.info(&quot;Import completed. &quot; + count + &quot; records processed. (&quot;+inserted+&quot; inserted, &quot;+updated+&quot; updated, &quot;+deleted+&quot; deleted).&quot;);
+ 	}
+ 	
+ 	
+@@ -606,11 +654,11 @@
+ 		Class table = record.getClass();
+ 		
+ 		// Look in the cache.
+-//		if(cacheEnabled) {
+-//			Record cachedRecord = cache.remove(table);
+-//			if( cachedRecord != null &amp;&amp; record.equals(cachedRecord))
+-//				return cachedRecord; // hooray, one select has been saved!
+-//		}
++		if(cacheEnabled) {
++			Record cachedRecord = cache.get(table);
++			if( cachedRecord != null &amp;&amp; record.equals(cachedRecord))
++				return cachedRecord; // hooray, one select has been saved!
++		}
+ 				
+ 		// Create a query that will look for the record with the same properties.
+ 		SelectQuery query = db.createQuery( table );
+@@ -618,17 +666,8 @@
+ 		// Equal properties.
+ 		for(String property : record.getProperties()) {
+ 			Object value = record.getValue(property);
+-			
+ //			System.out.println(&quot; + &quot;+table.getSimpleName()+&quot;.&quot;+property+&quot;=&quot;+value);
+-			
+-//			String newValue = null;
+-//			try {
+-//				newValue = new String(value.toString().getBytes(), &quot;UTF-8&quot;);
+-//			}catch(Exception e) {}
+-			
+-			if( value == null ) // use the database null
+-				/*query.addRestriction(RESTR_IS_NULL, property, null, null, null)*/;
+-			else
++			if( value != null ) 
+ 				query.addRestriction(RESTR_EQ, property, null, value, null);
+ 		}
+ 		// Equal foreign keys (by their ID's)!
+@@ -651,8 +690,10 @@
+ 		db.closeQuery( query );
+ 		
+ 		// Update the cache appropriately - store the record for future generations.
+-//		if( record != null &amp;&amp; cacheEnabled ) 
+-//			cache.put(table, record);
++		if( record != null &amp;&amp; cacheEnabled ) {
++			cache.remove(table);
++			cache.put(table, record);
++		}
+ 		
+ 		
+ 		return record;
+@@ -758,8 +799,8 @@
+ 		logger.debug(&quot;Updating [&quot;+current+&quot;] with [&quot;+replacement+&quot;].&quot;);
+ 		
+ 		boolean immutable = user.isAdmin() ?
+-				Record.IMMUTABLE.contains( current.getClass() ) :
+-				current instanceof Plant;
++				current instanceof Plant :
++				Record.IMMUTABLE.contains( current.getClass() ) ;
+ 		/*
+ 		 * We have an immutable table here - 
+ 		 * therefore the replacement must match something 
+@@ -966,18 +1007,30 @@
+ 	}
+ 	
+ 	/**
+-	 * 
+ 	 * @return The number of records that were actually inserted into the database.
+ 	 */
+-	public int importedRecords() {
+-		return imported;
++	public int getNumberOfInserted() {
++		return inserted;
+ 	}
+ 	
+ 	/**
++	 * @return The number of records that were deleted from the database.
++	 */
++	public int getNumberOfDeleted() {
++		return deleted;
++	}
++	
++	/**
++	 * @return The number of records that were updated in the database.
++	 */
++	public int getNumberOfUpdated() {
++		return updated;
++	}
++	
++	/**
+ 	 * @return The total number of loaded records (some of them may have been rejected).
+-	 * @see #importedRecords()
+ 	 */
+-	public int totalRecords() {
++	public int getNumberOfProcessed() {
+ 		return count;
+ 	}
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -298,11 +298,11 @@
+ 	
+ 	
+ 	/**
+-	 * @return The number of results that have already been imported into the database.
++	 * @return The number of results that have been inserted into the database.
+ 	 */
+-	public int getNumberOfImported() {
++	public int getNumberOfInserted() {
+ 		if(director == null) return 0;
+-		return director.importedRecords();
++		return director.getNumberOfInserted();
+ 	}
+ 	
+ 	/**
+@@ -311,11 +311,40 @@
+ 	 */
+ 	public int getNumberOfRejected() {
+ 		if(director == null) return 0;
+-		return director.totalRecords();
++		return director.getNumberOfProcessed() 
++			- director.getNumberOfDeleted() 
++			- director.getNumberOfInserted()
++			- director.getNumberOfUpdated();
+ 	}
+ 	
+ 	/**
+ 	 * 
++	 * @return The number of results that have been updated in the database.
++	 */
++	public int getNumbeOfUpdated() {
++		if(director == null) return 0;
++		return director.getNumberOfUpdated();
++	}
++	
++	/**
++	 * 
++	 * @return The number of results that have been deleted from the database.
++	 */
++	public int getNumbderOfDeleted() {
++		if(director == null) return 0;
++		return director.getNumberOfDeleted();
++	}
++	
++	/**
++	 * @return	The total number of records in the file.
++	 */
++	public int getNumberOfRecords() {
++		if(parser == null) return 0;
++		return parser.getNumberOfRecords();
++	}
++	
++	/**
++	 * 
+ 	 * @return	The record that is currently loaded from the database
+ 	 * and the record loaded from the file.
+ 	 */
+
+Added: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.form	2006-05-29 02:58:12 UTC (rev 382)
+@@ -0,0 +1,93 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;status&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;abort&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;progress&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;status&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;171&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;progress&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;abort&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;status&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;You will see the number of imported records here.&quot;/&gt;
++        &lt;Property name=&quot;verticalAlignment&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;progress&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;abort&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Abort&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;info&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++            &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;font&quot; type=&quot;java.awt.Font&quot; editor=&quot;org.netbeans.beaninfo.editors.FontEditor&quot;&gt;
++              &lt;Font name=&quot;Tahoma&quot; size=&quot;11&quot; style=&quot;0&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++            &lt;Property name=&quot;tabSize&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++            &lt;Property name=&quot;opaque&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++          &lt;/Properties&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -10,7 +10,7 @@
+ public class ImportProgressView  extends javax.swing.JFrame implements Observer {
+ 
+ 	private ImportMng model;
+-	private int count = 0, rejected = 0;
++	private int processed = 0, rejected = 0, total = 0, updated = 0, deleted = 0, inserted = 0;
+     
+     /** Creates new form ExportProgressView */
+     public ImportProgressView(ImportMng model) {
+@@ -31,35 +31,46 @@
+         status = new javax.swing.JLabel();
+         progress = new javax.swing.JProgressBar();
+         abort = new javax.swing.JButton();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        info = new javax.swing.JTextArea();
+ 
+-        setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
+-        status.setText(&quot;Erised stra ehru oyt ube cafru oyt on wohsi&quot;);
++        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
++        status.setText(&quot;You will see the number of imported records here.&quot;);
+         status.setVerticalAlignment(javax.swing.SwingConstants.TOP);
+ 
+         abort.setText(&quot;Abort&quot;);
+-        
+-        progress.setMinimum(0);
+ 
++        info.setColumns(20);
++        info.setEditable(false);
++        info.setFont(new java.awt.Font(&quot;Tahoma&quot;, 0, 11));
++        info.setRows(5);
++        info.setTabSize(2);
++        info.setOpaque(false);
++        jScrollPane1.setViewportView(info);
++
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+         layout.setHorizontalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(progress, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
+-                    .add(status, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, abort))
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, status, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(abort)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, progress, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+         layout.setVerticalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(status, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 84, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .add(status)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 171, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(progress, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(abort)
+                 .addContainerGap())
+         );
+@@ -70,6 +81,8 @@
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     protected javax.swing.JButton abort;
++    private javax.swing.JTextArea info;
++    private javax.swing.JScrollPane jScrollPane1;
+     protected javax.swing.JProgressBar progress;
+     protected javax.swing.JLabel status;
+     // End of variables declaration//GEN-END:variables
+@@ -78,23 +91,70 @@
+     @Override
+     public void setVisible(boolean visible) {
+     	status.setText(L10n.getString(&quot;Import.Initializing&quot;));
+-   		progress.setIndeterminate(true);
+-   		progress.setStringPainted(false);
+     	abort.setText(L10n.getString(&quot;Import.Abort&quot;));
++    	
++    	total = model.getNumberOfRecords();
++    	if(total &lt; 0) {
++    		progress.setStringPainted(false);
++    		progress.setIndeterminate(true);
++    	}
++    	else {
++    		progress.setStringPainted(true);
++    		progress.setIndeterminate(false);
++    		progress.setMaximum(total);
++    	}
++    	
+     	super.setVisible(visible);
+     	update(null, null);
+     }
++
++    /**
++     * Set the initial state of the component.
++     *
++     */
++    public void reset() {
++    	processed =  rejected =  total =  updated =  deleted =  inserted = 0;
++    	exceptionOccured = false;
++    }
+ 	
+ 	
+ 	
+     private boolean exceptionOccured = false;
++    private StringBuilder sigma = new StringBuilder(256);
+     
++    private String getInformation() {
++    	rejected = model.getNumberOfRejected();
++    	updated = model.getNumbeOfUpdated();
++    	deleted = model.getNumbderOfDeleted();
++    	inserted = model.getNumberOfInserted();
++
++    	processed = rejected + updated + deleted + inserted;
++    	
++    	sigma.delete(0, 255);
++    	if(inserted &gt; 0)
++    		sigma.append(inserted).append(' ').append(L10n.getString(&quot;Import.RecordsInserted&quot;)).append(' ');
++    	if(updated &gt; 0)
++    		sigma.append(updated).append(' ').append(L10n.getString(&quot;Import.RecordsUpdated&quot;)).append(' ');
++    	if(deleted &gt; 0)
++    		sigma.append(deleted).append(' ').append(L10n.getString(&quot;Import.RecordsDeleted&quot;)).append(' ');
++    	if(rejected &gt; 0)
++    		sigma.append(rejected).append(' ').append(L10n.getString(&quot;Import.RecordsRejected&quot;));
++    	
++    	return sigma.toString();
++    }
++    
+ 	
+ 	public void update(Observable source, Object parameter) {
+ 		// The final cleanup may overwrite the exception! 
+ 		if(exceptionOccured)
+ 			return;
+ 		
++		String description = getInformation();
++		
++		if( parameter instanceof String ) {
++			info.append(parameter + &quot;\n&quot;);			
++		}
++		
+ 		if( parameter != null &amp;&amp; parameter instanceof Exception ) {
+ 			Exception e = (Exception) parameter;
+ 			setTitle(L10n.getString(&quot;Import.Failed&quot;));
+@@ -106,30 +166,29 @@
+ 		}
+ 		else if(model.isAborted()) {
+ 			setTitle(L10n.getString(&quot;Import.Aborted&quot;));
+-			count = model.getNumberOfImported();
+-			status.setText(count + L10n.getString(&quot;Import.RecordsImported&quot;));
++			status.setText(processed + &quot; &quot; + L10n.getString(&quot;Import.RecordsProcessed&quot;));
+ 			progress.setIndeterminate(false);
+ 			progress.setValue(0);
+ 			abort.setText(L10n.getString(&quot;Import.Hide&quot;));
+ 		} 
+ 		else if(!model.isImportInProgress()) {
+-			count = model.getNumberOfImported();
+-			rejected = model.getNumberOfRejected();
+ 			setTitle(L10n.getString(&quot;Import.Completed&quot;));
+-			status.setText(count + L10n.getString(&quot;Import.RecordsImported&quot;) + &quot;, &quot; 
+-					+ rejected + L10n.getString(&quot;Import.RecordsRejected&quot;));
++			status.setText( description );
+ 			progress.setIndeterminate(false);
+ 			progress.setMaximum(100);
+ 			progress.setValue(100);
+ 			abort.setText(L10n.getString(&quot;Import.Hide&quot;));
+ 		}
+ 		else if( this.isVisible() ) {
+-			count = model.getNumberOfImported();
+-			rejected = model.getNumberOfRejected();
+-			progress.setValue( count );
+-			status.setText(count + L10n.getString(&quot;Import.RecordsImported&quot;) + &quot;, &quot; 
+-					+ rejected + L10n.getString(&quot;Import.RecordsRejected&quot;));
+-			setTitle(count + L10n.getString(&quot;Import.RecordsImported&quot;));
++			progress.setValue( processed );
++			status.setText( description );
++			if(total &lt;= 0)
++				setTitle(processed + L10n.getString(&quot;Import.RecordsImported&quot;));
++			else {
++				String percent = Integer.toString(100*processed/total) + &quot;%&quot;;
++				setTitle(percent + &quot; &quot; + L10n.getString(&quot;Import.Progress&quot;));
++				progress.setString(percent);
++			}
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/imports/Parser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -125,4 +125,12 @@
+ 	 * @return	The operation the last subrecord should undergo. 
+ 	 */
+ 	Action intentedFor();
++	
++	/**
++	 * The file contains several records. The Parser may (or may not)
++	 * know the exact number of records.
++	 * 
++	 * @return	The number of records contained in the file. -1 means &quot;unknown&quot;.
++	 */
++	int getNumberOfRecords();
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/client/imports/parsers/XMLParser.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -25,7 +25,7 @@
+ public class XMLParser extends AbstractParser {
+ 
+     private Document document;
+-    private int occurrences;
++    private int occurrences = -1;
+     private Iterator occIterator, aoIterator;
+     private Node currentOccurrence;
+     
+@@ -38,7 +38,7 @@
+         super(reader);               
+     }
+     
+-    
++    @Override
+     public int getNumberOfRecords() {
+     	return occurrences;
+     }
+@@ -49,7 +49,11 @@
+         try {
+         	SAXReader saxReader = new SAXReader();
+             document = saxReader.read( reader );
+-            occIterator = document.selectNodes(&quot;//occurrence&quot;).iterator();
++            List nodes = document.selectNodes(&quot;//occurrence&quot;);
++            if( nodes != null) {
++            	occurrences = nodes.size();
++            	occIterator = nodes.iterator();
++            }
+         } catch (Exception ex) {
+             throw new ParserException(L10n.getString(&quot;Error.IncorrectXMLFile&quot;));            
+         } 
+@@ -86,7 +90,7 @@
+     	for(String property : part.getProperties()) {
+     		String value = node.valueOf(property.toLowerCase());
+     		if(&quot;&quot;.equals(value)) value = null;
+-    		System.out.println(&quot; &gt; &quot;+part.getClass().getSimpleName()+&quot;.&quot;+property+&quot; = &quot;+value);
++//    		System.out.println(&quot; &gt; &quot;+part.getClass().getSimpleName()+&quot;.&quot;+property+&quot; = &quot;+value);
+     		part.setValue(property, value);
+     	}
+     	
+@@ -125,28 +129,29 @@
+     		return false;
+     }
+     
++ 
+     
+-    public static void main(String[] args) 
+-    throws java.io.IOException, ParserException {
+-    	
+-    	XMLParser p = new XMLParser(
+-    			new java.io.BufferedReader(
+-    					new java.io.InputStreamReader(new java.io.FileInputStream(&quot;c:/documents and settings/yaa/dokumenty/plantlore/this.xml&quot;),
+-    					&quot;UTF-8&quot;))
+-    	);
+-    	p.initialize();
+-    	while(p.hasNextRecord()) {
+-    		System.out.println(&quot;=============&quot;);
+-    		p.fetchNextRecord();
+-    		Record r = p.getNextPart(Occurrence.class);
+-    		System.out.println(r.areAllNNSet());
+-    		for(int i = 0; p.hasNextPart(AuthorOccurrence.class); i++) {
+-    			r = p.getNextPart(AuthorOccurrence.class);
+-    			System.out.print(&quot;(&quot;+i+&quot;)&quot;);
+-    		}
+-    		System.out.println(&quot;&quot;);
+-    	}
+-    	p.cleanup();
+-    }
++//    public static void main(String[] args) 
++//    throws java.io.IOException, ParserException {
++//    	
++//    	XMLParser p = new XMLParser(
++//    			new java.io.BufferedReader(
++//    					new java.io.InputStreamReader(new java.io.FileInputStream(&quot;c:/documents and settings/yaa/dokumenty/plantlore/this.xml&quot;),
++//    					&quot;UTF-8&quot;))
++//    	);
++//    	p.initialize();
++//    	while(p.hasNextRecord()) {
++//    		System.out.println(&quot;=============&quot;);
++//    		p.fetchNextRecord();
++//    		Record r = p.getNextPart(Occurrence.class);
++//    		System.out.println(r.areAllNNSet());
++//    		for(int i = 0; p.hasNextPart(AuthorOccurrence.class); i++) {
++//    			r = p.getNextPart(AuthorOccurrence.class);
++//    			System.out.print(&quot;(&quot;+i+&quot;)&quot;);
++//    		}
++//    		System.out.println(&quot;&quot;);
++//    	}
++//    	p.cleanup();
++//    }
+    
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-05-29 02:58:12 UTC (rev 382)
+@@ -337,7 +337,7 @@
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+ 			sigma.append(getClass().getSimpleName()).append('.').
+-			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;;\n &quot;);
++			append(property).append(&quot; = &quot;).append(this.getValue(property)).append(&quot;; &quot;);
+ 		for(String key : getForeignKeys()) {
+ 			Record subrecord = (Record)getValue(key); 
+ 			if(subrecord != null)	sigma.append( subrecord.toString() );
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 01:05:22 UTC (rev 381)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 02:58:12 UTC (rev 382)
+@@ -355,14 +355,25 @@
+ Import.Completed = Import completed.
+ Import.DecisionExpected = Your intervention is required.
+ Import.RememberDecision = Do not ask me again.
+-Import.RecordsImported = records imported.
++Import.RecordsInserted = records inserted.
++Import.RecordsDeleted = records deleted.
++Import.RecordsUpdated = records updated.
+ Import.RecordsRejected = records rejected.
++Import.RecordsProcessed = records processed.
+ Import.Abort = Abort
+ Import.Hide = Hide
+ Import.Skip = Skip
+ Import.Update = Update
+ Import.Insert = Insert new
+ Import.Replace = Replace
++Import.Progress = completed.
++Import.CompletelyCorruptedRecord = The record No. {0} is corrupted (cannot be parsed).
++Import.PartialyCorruptedRecord = The record No. {0} (UID = {1}:{2}) is corrupted.
++Import.IncompleteRecord = The record No. {0} is incomplete - some parts are missing.
++Import.DuplicateRecord = The record No. {0} (UID = {1}:{2}) is a duplicate.
++Import.ProblematicRecord = The record No. {0} (UID = {1}:{2}) cannot be processed; 
++Import.NoAuthorsLeft = The record No. {0} would have no authors at all.
++Import.UnknownReason = The reason is uknown.
+ 
+ #=============================================================
+ # EXPORT
+@@ -559,6 +570,7 @@
+ Error.InvalidParser = The supplied parser is not valid!
+ Error.InvalidUser =  The supplied user is not valid!
+ Error.InvalidRootTable = The supplied root table is not valid!\n If you want to use projections,\n you must specify the root table.
++Error.InvalidRecord = The record is not valid!
+ 
+ Error.Missing = Missing information.
+ Error.MissingFileName = The file name was not specified.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000437.html">[Plantlore-dev] Dlouhe vypocty a progress bar - mozne reseni
+</A></li>
+	<LI>Next message: <A HREF="000439.html">[Plantlore-dev] r383 - in trunk/src/net/sf/plantlore: client/history client/metadata client/user l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#438">[ date ]</a>
+              <a href="thread.html#438">[ thread ]</a>
+              <a href="subject.html#438">[ subject ]</a>
+              <a href="author.html#438">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

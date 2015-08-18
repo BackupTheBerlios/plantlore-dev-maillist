@@ -1,0 +1,346 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r445 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r445%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606042216.k54MGftd032669%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000560.html">
+   <LINK REL="Next"  HREF="000562.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r445 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r445%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200606042216.k54MGftd032669%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r445 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Mon Jun  5 00:16:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000560.html">[Plantlore-dev] [Bug #7751] Simplify the Add triplet dialog
+</A></li>
+        <LI>Next message: <A HREF="000562.html">[Plantlore-dev] [Bug #7717] Rights not implemented
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#561">[ date ]</a>
+              <a href="thread.html#561">[ thread ]</a>
+              <a href="subject.html#561">[ subject ]</a>
+              <a href="author.html#561">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-05 00:16:39 +0200 (Mon, 05 Jun 2006)
+New Revision: 445
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+User is now informed about insufficient rights to Edit, Delete or Add records.
+This includes adding new occurrences from edit dialog.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-06-04 22:16:39 UTC (rev 445)
+@@ -921,7 +921,7 @@
+             return false;
+     }
+     
+-    public Pair&lt;Boolean,String&gt; checkData() {
++    public Pair&lt;Boolean,String&gt; checkData() throws RemoteException {
+         if (authorList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one author!&quot;);
+         else {
+@@ -933,6 +933,10 @@
+         if (taxonList == null || taxonList.size() &lt; 1)
+             return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one taxon!&quot;);
+         
++        if (editMode &amp;&amp; taxonList.size() &gt; 1 &amp;&amp; database.getUserRights().getAdd() != 1) { //the user is not allowed to add new records
++            return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.InsufficientAddRights&quot;));
++        }
++        
+         Pair&lt;Pair&lt;String,Integer&gt;,String&gt; ai, aj;
+         for (int i=0; i &lt; authorList.size() ; i++) {
+             ai = authorList.get(i);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-04 22:16:39 UTC (rev 445)
+@@ -30,6 +30,7 @@
+ import net.sf.plantlore.common.record.Publication;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.Territory;
++import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.Village;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -760,6 +761,50 @@
+         
+         return task;
+     }
++    
++        public boolean isEditAllowed(int occId) throws RemoteException, DBLayerException {
++            User user = database.getUser();
++            Right rights = database.getUserRights();
++
++            if (rights.getAdministrator() == 1) {
++                logger.debug(&quot;This user is an administrator which allows him to edit this record.&quot;);
++                return true;
++            }
++            
++            if (rights.getEditAll() == 1) {
++                logger.debug(&quot;This user can edit all records which means that this one too.&quot;);
++                return true;               
++            }
++            
++            SelectQuery sq = database.createQuery(Occurrence.class);
++            sq.createAlias(Occurrence.CREATEDWHO,&quot;cw&quot;);
++            sq.addProjection(PlantloreConstants.PROJ_PROPERTY,&quot;cw.&quot;+User.ID);
++            sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.ID, null, occId, null);
++            int resId = database.executeQuery(sq);
++            int resCount = database.getNumRows(resId);
++            assert resCount == 1;
++            if (resCount == 0)
++                throw new DBLayerException(&quot;The record is no longer in the database.&quot;);
++            Object[] obj = database.more(resId, 0, 0);
++            Object[] res = (Object[])obj[0];
++            String userId = &quot;&quot;+res[0];            
++            logger.debug(&quot;Occurrence id &quot;+occId+&quot; was created by user id &quot;+userId);
++            if (user.getId().equals(res[0])) {
++                logger.debug(&quot;It was this user who created the record. Therefore he is allowed to edit it.&quot;);
++                return true;
++            }
++            String[] editableIds = rights.getEditGroup().split(&quot;,&quot;);          
++            for (String id : editableIds) {
++                if (userId.equals(id)) {
++                    logger.debug(&quot;This user is allowed to edit this user's record.&quot;);
++                    return true;
++                } 
++            }
++            
++            logger.debug(&quot;This user is NOT allowed to edit this record.&quot;);
++            return false;                
++        }
++    
+ }
+ 
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-04 22:16:39 UTC (rev 445)
+@@ -10,6 +10,7 @@
+ import java.awt.Component;
+ import java.awt.Cursor;
+ import java.awt.Frame;
++import java.awt.HeadlessException;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusListener;
+@@ -96,6 +97,8 @@
+ import net.sf.plantlore.client.login.Login;
+ import net.sf.plantlore.client.login.LoginCtrl;
+ import net.sf.plantlore.client.login.LoginView;
++import net.sf.plantlore.common.record.Right;
++import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+@@ -581,7 +584,16 @@
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Add&quot;));            
+         } 
+ 
+-        public void actionPerformed(ActionEvent actionEvent) {                
++        public void actionPerformed(ActionEvent actionEvent) {         
++            try {
++                if (model.getDatabase().getUserRights().getAdd() != 1) {
++                    JOptionPane.showMessageDialog(view, L10n.getString(&quot;AddEdit.InsufficientAddRights&quot;),L10n.getString(&quot;AddEdit.InsufficientRightsTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    return;
++                }
++            } catch (RemoteException ex) {
++                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                logger.error(ex);
++            }
+             addModel.clear();
+             addView.setVisible(true);
+         }
+@@ -596,10 +608,15 @@
+             putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_E, ActionEvent.CTRL_MASK));
+             //putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.Edit&quot;));            
+         } 
+-
++        
+         public void actionPerformed(ActionEvent actionEvent) {
+             Object[] row = model.getSelectedRow();
++            
+             try {
++                if (!model.isEditAllowed(model.getSelectedOccurrence())) {
++                    JOptionPane.showMessageDialog(view, L10n.getString(&quot;AddEdit.InsufficientEditRights&quot;),L10n.getString(&quot;AddEdit.InsufficientRightsTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    return;
++                }
+                 editModel.setRecord((Integer) row[row.length-1]);
+             } catch (DBLayerException ex) {
+                 JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
+@@ -628,6 +645,27 @@
+             Selection selection = model.getTableModel().getSelection();
+             Object[] arg = { selection.values().size() };
+             
++            if (arg[0].equals(0)) {
++                JOptionPane.showMessageDialog(view, L10n.getString(&quot;Message.CheckAnOccurrence&quot;),L10n.getString(&quot;Message.CheckAnOccurrenceTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                return;                
++            }
++            
++            try {
++                for (Integer occId : selection.values())
++                    if (!model.isEditAllowed(occId)) {
++                        JOptionPane.showMessageDialog(view, L10n.getString(&quot;Delete.InsufficientRights&quot;), L10n.getString(&quot;Delete.InsufficientRightsTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                        return;
++                    }
++            } catch (RemoteException ex) {  
++                logger.error(&quot;Remote problem: &quot;+ex);
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++            } catch (DBLayerException ex) {
++                logger.error(&quot;Database problem: &quot;+ex);
++                ex.printStackTrace();
++                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++            }
++            
+             int choice = JOptionPane.showConfirmDialog(view, 
+                     L10n.getFormattedString(&quot;Message.DeleteRecords&quot;,arg),
+                     L10n.getString(&quot;Message.DeleteRecordsTitle&quot;),
+@@ -759,7 +797,7 @@
+         public void actionPerformed(ActionEvent actionEvent) {
+             try {
+                 if (model.getTableModel().getSelection().values().size() &lt; 1) {
+-                    JOptionPane.showMessageDialog(view, &quot;Check at least one occurrence, please.&quot;);
++                    JOptionPane.showMessageDialog(view, L10n.getString(&quot;Message.CheckAnOccurrence&quot;),L10n.getString(&quot;Message.CheckAnOccurrenceTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
+                     return;
+                 }
+ 
+@@ -805,6 +843,7 @@
+                 ProgressBar pb = new ProgressBar(task, view, true) {
+                     public void exceptionHandler(final Exception ex) {
+                         logger.error(&quot;Error while filling jasper report in SchedaAction: &quot;+ex);
++                        ex.printStackTrace();
+                         SwingUtilities.invokeLater(new Runnable() {
+                             public void run() {
+                                 JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);            
+@@ -826,6 +865,7 @@
+             } catch(Exception ex) { // Unreachable CATCH block
+                 logger.error(&quot;Broken report: &quot;+ex);
+                 JOptionPane.showMessageDialog(view,L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);
++                ex.printStackTrace();
+             }
+         }
+     }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-04 22:16:39 UTC (rev 445)
+@@ -1275,3 +1275,17 @@
+ Server.Info.Terminated = Server terminated (clients disconnected).
+ 
+ 
++
++AddEdit.InsufficientEditRights=You don't have sufficient rights to edit this record.
++
++AddEdit.InsufficientAddRights=You don't have sufficient rights to add new records.
++
++AddEdit.InsufficientRightsTitle=Insufficient rights
++
++Message.CheckAnOccurrence=Check at least one occurrence, please.
++
++Message.CheckAnOccurrenceTitle=No record checked
++
++Delete.InsufficientRights=You don't have sufficient rights to delete all the checked records.
++
++Delete.InsufficientRightsTitle=Insufficient rights
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-04 22:16:39 UTC (rev 445)
+@@ -827,3 +827,17 @@
+ Detail.HabNoteTitle=Habitat note
+ 
+ Detail.PlaceDescriptionTitle=Place description
++
++AddEdit.InsufficientEditRights=You don't have sufficient rights to edit this record.
++
++AddEdit.InsufficientAddRights=You don't have sufficient rights to add new records.
++
++AddEdit.InsufficientRightsTitle=Insufficient rights
++
++Message.CheckAnOccurrence=Check at least one occurrence, please.
++
++Message.CheckAnOccurrenceTitle=No record checked
++
++Delete.InsufficientRights=You don't have sufficient rights to delete all the checked records.
++
++Delete.InsufficientRightsTitle=Insufficient rights
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-04 21:00:19 UTC (rev 444)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-04 22:16:39 UTC (rev 445)
+@@ -895,3 +895,17 @@
+ Detail.HabNoteTitle=Habitat note
+ 
+ Detail.PlaceDescriptionTitle=Place description
++
++AddEdit.InsufficientEditRights=You don't have sufficient rights to edit this record.
++
++AddEdit.InsufficientAddRights=You don't have sufficient rights to add new records.
++
++AddEdit.InsufficientRightsTitle=Insufficient rights
++
++Message.CheckAnOccurrence=Check at least one occurrence, please.
++
++Message.CheckAnOccurrenceTitle=No record checked
++
++Delete.InsufficientRights=You don't have sufficient rights to delete all the checked records.
++
++Delete.InsufficientRightsTitle=Insufficient rights
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000560.html">[Plantlore-dev] [Bug #7751] Simplify the Add triplet dialog
+</A></li>
+	<LI>Next message: <A HREF="000562.html">[Plantlore-dev] [Bug #7717] Rights not implemented
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#561">[ date ]</a>
+              <a href="thread.html#561">[ thread ]</a>
+              <a href="subject.html#561">[ subject ]</a>
+              <a href="author.html#561">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

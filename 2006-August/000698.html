@@ -1,0 +1,119 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Vyreseni%20neprijemne%20situace%20s%20importem%20nalezovych%0A%09dat&In-Reply-To=%3Cf4dc39b90608140311p5f61cad5rae755f7b9794dcaa%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000697.html">
+   <LINK REL="Next"  HREF="000699.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat</H1>
+    <B>Erik Kratochv&#237;l</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Vyreseni%20neprijemne%20situace%20s%20importem%20nalezovych%0A%09dat&In-Reply-To=%3Cf4dc39b90608140311p5f61cad5rae755f7b9794dcaa%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat">discontinuum at gmail.com
+       </A><BR>
+    <I>Mon Aug 14 12:11:05 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000697.html">[Plantlore-dev] r509 - in trunk/src/net/sf/plantlore:	common/exception middleware server
+</A></li>
+        <LI>Next message: <A HREF="000699.html">[Plantlore-dev] r510 -	trunk/src/net/sf/plantlore/client/export/builders
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#698">[ date ]</a>
+              <a href="thread.html#698">[ thread ]</a>
+              <a href="subject.html#698">[ subject ]</a>
+              <a href="author.html#698">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Vychazi z navrhu rozsekani souboru na mensi kousky. V podstate podobna vec
+se pouziva uz ted u export-builderu.
+
+Konkretni technika:
+
+   1. Soubor s daty se namapuje do pameti. Melo by to jit pomoci tridy
+   java.nio.channels.FileChannel.
+   2. Pre-parsovani namapovaneho souboru; vyhleda se oteviraci a
+   uzaviraci tag  &lt;occurrence&gt;.
+   3. Retezec obsazeny mezi temito tagy se pak predhodi k rozparsovani
+   nasledujicim zpusobem: Document document = DocumentHelper.parseText(
+   text );
+   4. Ze stromku ziska zaznam, musi se provest napojeni na aktualni
+   strukturu.
+
+Problemy:
+
+   - Pre-parsovani by se muselo napsat rucne, tj, muselo by se vyhledavat
+   &lt;occurrence&gt; a &lt;/occurrence&gt; v textu. Nabizi je otazka, jak nakladat s
+   chybnymi XML soubory - napr. takovymi, ktere obsahuji ony dva tagy vzdalene
+   od sebe 5MB ~&gt; zavest nejaka omezeni na max. vzdalenost dvou tagu? Co kdyz
+   bude chybet uzaviraci tag uplne? A podobne radosti. Cili tohle nebude uplne
+   trivka.
+   - Je to reseni &quot;pres ruku&quot;. Nacte se zaznam v textove forme (krok 2),
+   vytvori se z neho XML strom (krok 3) a strom se znova rozebere, aby se z
+   neho vytvorila instance Record (krok 4) - vysledny zaznam. Kdyby se to
+   resilo pomoci SAXu, jak bylo uz drive navrzeno, byl by krok 3 vynechan,
+   vysledny zaznam by se konstruoval primo z vystupu SAXu. Nebylo by
+   lepsi to napsat uz rovnou pomoci SAXu?
+   - Nebude mozne presne urcit pocet zaznamu v souboru ~&gt; progressbar
+   bude pobihat zleva doprava.
+
+Vyhody:
+
+   - Relativne jednoduse by se to asi dalo vclenit do stavajiciho kodu.
+   Zda se, ze by to vyzadovalo akorat jistou &quot;podvrstvu&quot; Parseru.
+   - Neni to zadna extremni casova penalizace - dokument se cte jenom
+   jednou, stejne tak kazdy zaznam je parsovan jenom jednou.
+   - Pametove nenarocne (?) Zalezi, jak se bude chovat ten memory mapper.
+   Taky je otazka, jak se bude chovat GC - bude vznikat strasne moc XML stromku
+   a zaznamu, ktere se okamzite zahodi. Je pravdepodobne, ze to v prubehu
+   importu proste stejne tu maximalni pridelenou pamet spolyka, pak se
+   samosebou bude muset ale volat garbage collection = casove zdrzeni (jak
+   dlouho se bude zametat treba povolenych 512MB pameti?). Na druhou
+   stranu je potreba priznat, ze tim samym problemem bude nutne trpet kazdy
+   reseni.
+   - Nevytvari se zadne dalsi soubory (jak bylo puvodne navrzeno:
+   rozsekat soubor na mensi, coz by stejne vyzadovalo nejakej parsovani, aby se
+   zaznamy nerozsekly v polovine).
+
+
+
+Rad bych znal vas nazor, zda by bylo lepsi / (implementacne) jednodussi /
+rychlejsi pouzit
+a) SAX
+b) Navrhovane reseni?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060814/c40786a6/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060814/c40786a6/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000697.html">[Plantlore-dev] r509 - in trunk/src/net/sf/plantlore:	common/exception middleware server
+</A></li>
+	<LI>Next message: <A HREF="000699.html">[Plantlore-dev] r510 -	trunk/src/net/sf/plantlore/client/export/builders
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#698">[ date ]</a>
+              <a href="thread.html#698">[ thread ]</a>
+              <a href="subject.html#698">[ subject ]</a>
+              <a href="author.html#698">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

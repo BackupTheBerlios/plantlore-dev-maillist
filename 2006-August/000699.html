@@ -1,0 +1,532 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r510 -	trunk/src/net/sf/plantlore/client/export/builders
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r510%20-%0A%09trunk/src/net/sf/plantlore/client/export/builders&In-Reply-To=%3C200608141444.k7EEi3rF022788%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000698.html">
+   <LINK REL="Next"  HREF="000700.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r510 -	trunk/src/net/sf/plantlore/client/export/builders</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r510%20-%0A%09trunk/src/net/sf/plantlore/client/export/builders&In-Reply-To=%3C200608141444.k7EEi3rF022788%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r510 -	trunk/src/net/sf/plantlore/client/export/builders">lada at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 14 16:44:03 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000698.html">[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat
+</A></li>
+        <LI>Next message: <A HREF="000700.html">[Plantlore-dev] r511 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#699">[ date ]</a>
+              <a href="thread.html#699">[ thread ]</a>
+              <a href="subject.html#699">[ subject ]</a>
+              <a href="author.html#699">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-08-14 16:44:03 +0200 (Mon, 14 Aug 2006)
+New Revision: 510
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java
+   trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java
+Log:
+ABCDBuilder and DarwinCoreBuilder can handle files of any size now. 
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java	2006-08-14 09:14:10 UTC (rev 509)
++++ trunk/src/net/sf/plantlore/client/export/builders/ABCDBuilder.java	2006-08-14 14:44:03 UTC (rev 510)
+@@ -2,14 +2,11 @@
+ 
+ import java.io.IOException;
+ import java.io.Writer;
+-import net.sf.plantlore.client.export.AbstractBuilder;
+ import net.sf.plantlore.client.export.Builder;
+-import net.sf.plantlore.client.export.Projection;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+-import org.dom4j.Document;
+ import org.dom4j.DocumentHelper;
+ import org.dom4j.Element;
+ import org.dom4j.io.OutputFormat;
+@@ -24,15 +21,14 @@
+  *
+  */
+ public class ABCDBuilder implements Builder {
+-        
+-    private Document document;  
++            
+     private Writer outputWriter;  
+-    private String projectTitle = &quot;&quot;;
+-    private Element root;
+-    private Element actualUnitsElement;   
+-    private Element actualAgentsElement;
++    private XMLWriter xmlWriter;   
++    private Element element;     
++    private Element actualAgents;    
+     private Occurrence occurrence = null;  
+     private AuthorOccurrence authorOccurrence = null;
++    private String projectTitle = &quot;&quot;;
+     
+     
+     /** 
+@@ -44,52 +40,67 @@
+      *
+      * @param writer	The writer that will create the file.     
+      */
+-    public ABCDBuilder(Writer writer) {                           
+-        document = DocumentHelper.createDocument();        
+-        this.outputWriter = writer;
+-        document.addElement(&quot;dataSets&quot;);
+-        root = document.getRootElement();
++    public ABCDBuilder(Writer writer) {                                           
++        outputWriter = writer;              
+     }
+     
+-    /** Empty. */ 
+-    public void header() throws IOException {	        
++    /**
++     * Generate the header of this format.
++     */
++    public void header() 
++    throws IOException {
++    	outputWriter.write(&quot;&lt;?xml version=\&quot;1.0\&quot; encoding=\&quot;UTF-8\&quot;?&gt;\n&quot;);
++    	outputWriter.write(&quot;\n&lt;dataSets&gt;&quot;);
++    	
++    	OutputFormat format = OutputFormat.createPrettyPrint();
++        xmlWriter = new XMLWriter( outputWriter, format );
+     }
+ 
+-    /*          
++    /**
+      * Generate the footer of this format.
+-     * Save data to XML file in ABCD Schema.
+      */
+-    public void footer() throws IOException {        
+-        OutputFormat format = OutputFormat.createPrettyPrint();
+-        XMLWriter xmlwriter = new XMLWriter( outputWriter, format );
+-        xmlwriter.write( document );
+-        xmlwriter.close();
++    public void footer() 
++    throws IOException {    	
++    	outputWriter.write(&quot;\n&lt;/dataSets&gt;&quot;);
++        xmlWriter.close();
++    }       
++    
++    /**
++     * Begin a new record.
++     */
++    public void startRecord() throws IOException {      	
++    	element = DocumentHelper.createElement(&quot;unit&quot;);       
+     }
+-    /** Empty. */
+-    public void startRecord() throws IOException {            
+-    }
+ 
+-    /** Empty. */
+-    public void finishRecord() throws IOException {    
++    /**
++     * Finish processing of the record.
++     */
++    public void finishRecord() throws IOException {      	      
++    	xmlWriter.write(element);
+     }
+-    
++        
+     /**     
+      *  Decompose the given &lt;code&gt;occurrence&lt;/code&gt;, generate XML document for ABCD Schema and mapping data of occurrence.
+      */
+-    public void outputABCD() {
++    public void outputABCD() throws IOException {
+         if (occurrence == null ) return;
+         String projectName = occurrence.getMetadata().getDataSetTitle();
+         if (!projectTitle.equals(projectName)) {
++        	if (!projectTitle.equals(&quot;&quot;)) {
++        		outputWriter.write(&quot;\n&lt;/units&gt;\n&quot;);
++        		outputWriter.write(&quot;&lt;/dataSet&gt;\n&quot;);
++        	}
+             projectTitle = projectName;
+-            generateDataSet();
++            generateDataSet();            
+         }
+-        Element unit = getActualUnitsElement().addElement(&quot;Unit&quot;);
++        
++        Element unit = element;
+         Element gathering = unit.addElement(&quot;gathering&quot;);
+         Element herbariumUnit = unit.addElement(&quot;herbariumUnit&quot;);
+         Element identifications = unit.addElement(&quot;identifications&quot;);
+         Element unitReferences = unit.addElement(&quot;unitReferences&quot;);
+         
+-        Element agents = gathering.addElement(&quot;agents&quot;);
++        actualAgents = gathering.addElement(&quot;agents&quot;);
+         Element altitude = gathering.addElement(&quot;altitude&quot;);
+         Element country = gathering.addElement(&quot;country&quot;);
+         Element dateTime = gathering.addElement(&quot;dateTime&quot;);
+@@ -127,57 +138,57 @@
+         specificName.addElement(&quot;fullSpecificNameString&quot;).setText(occurrence.getPlant().getSpeciesNN());
+         bacterial.addElement(&quot;genusOrMonomial&quot;).setText(occurrence.getPlant().getGenusNN());        
+         
+-        //FIXME: nutno osetrit polozky, co mohou byt NULL - hlavne FK
+-        unitReference.addElement(&quot;citationDetail&quot;).setText(occurrence.getPublication().getReferenceDetailNN());
+-        unitReference.addElement(&quot;titleCitation&quot;).setText(occurrence.getPublication().getReferenceCitation());
+-        unitReference.addElement(&quot;url&quot;).setText(occurrence.getPublication().getUrlNN());
+-        
+-        //set element AGENTS 
+-        setActualAgentsElement(agents);
++        if ( occurrence.getPublication() != null) {
++	        unitReference.addElement(&quot;citationDetail&quot;).setText(occurrence.getPublication().getReferenceDetailNN());
++	        unitReference.addElement(&quot;titleCitation&quot;).setText(occurrence.getPublication().getReferenceCitation());
++	        unitReference.addElement(&quot;url&quot;).setText(occurrence.getPublication().getUrlNN());
++        }        
+     }
+ 
+     /**
+-     * For each project create elements contains metadata (content contact person, technidal contact person, project descrption,...).
++     * For each occurrence create elements contains metadata (content contact person, technidal contact person, project descrption,...).
+      *
+      */
+-    public void generateDataSet() {
+-        Element contentContacts = root.addElement(&quot;contentContacts&quot;);
+-        Element technicalContacts = root.addElement(&quot;technicalContacts&quot;);
+-        Element metadata = root.addElement(&quot;metadata&quot;);
+-        Element units = root.addElement(&quot;units&quot;);
+-        
+-        Element contentContact = contentContacts.addElement(&quot;contentContacts&quot;);
+-        Element technicalContact = technicalContacts.addElement(&quot;technicalContact&quot;);
+-        Element description = metadata.addElement(&quot;description&quot;);
+-        Element owners = metadata.addElement(&quot;owners&quot;);  //dopsat elementy pro owners      
+-        Element revisionData = metadata.addElement(&quot;revisionData&quot;);
+-        Element representation = description.addElement(&quot;representation&quot;);
+-        
+-        Metadata metadataRecord = occurrence.getMetadata();    
+-        
++    public void generateDataSet() throws IOException {   
++    	Metadata metadataRecord = occurrence.getMetadata();
++    	outputWriter.write(&quot;\n&lt;dataSet&gt;&quot;);    	
++    	
++    	Element elementHelp = null;
++    	
++    	elementHelp = DocumentHelper.createElement(&quot;contentContacts&quot;);            
++        Element contentContact = elementHelp.addElement(&quot;contentContact&quot;);
+         contentContact.addElement(&quot;address&quot;).setText(metadataRecord.getContentContactAddressNN());
+         contentContact.addElement(&quot;email&quot;).setText(metadataRecord.getContentContactEmailNN());
+         contentContact.addElement(&quot;name&quot;).setText(metadataRecord.getContentContactName());
+-        
++        xmlWriter.write(elementHelp);
++    	
++        elementHelp = DocumentHelper.createElement(&quot;technicalContacts&quot;);
++        Element technicalContact = elementHelp.addElement(&quot;technicalContact&quot;);
+         technicalContact.addElement(&quot;address&quot;).setText(metadataRecord.getTechnicalContactAddressNN());
+         technicalContact.addElement(&quot;email&quot;).setText(metadataRecord.getTechnicalContactEmailNN());
+-        technicalContact.addElement(&quot;name&quot;).setText(metadataRecord.getTechnicalContactName());                
++        technicalContact.addElement(&quot;name&quot;).setText(metadataRecord.getTechnicalContactName());    
++        xmlWriter.write(elementHelp);
+         
++        elementHelp = DocumentHelper.createElement(&quot;metadata&quot;);
++        Element description = elementHelp.addElement(&quot;description&quot;);            
++        Element revisionData = elementHelp.addElement(&quot;revisionData&quot;);
++        Element representation = description.addElement(&quot;representation&quot;);
+         representation.addElement(&quot;title&quot;).setText(metadataRecord.getDataSetTitle());
+         representation.addElement(&quot;details&quot;).setText(metadataRecord.getDataSetDetailsNN());
+         revisionData.addElement(&quot;creators&quot;).setText(metadataRecord.getSourceInstitutionId());
+         revisionData.addElement(&quot;creators&quot;).setText(metadataRecord.getSourceId());
+         revisionData.addElement(&quot;dateCreated&quot;).setText(metadataRecord.getDateCreate().toString());
+-        revisionData.addElement(&quot;dateModified&quot;).setText(metadataRecord.getDateModified().toString());
++        revisionData.addElement(&quot;dateModified&quot;).setText(metadataRecord.getDateModified().toString());  
++        xmlWriter.write(elementHelp);
+         
+-        setActualUnitsElement(units);
++        outputWriter.write(&quot;\n&lt;units&gt;\n&quot;);                
+     }
+     
+-    /*
++    /**
+      *  Create elements for author of occurrence.     
+      */
+      public void outputAuthors() {
+-        Element agents = getActualAgentElement();
++        Element agents = actualAgents;
+         Element gatheringAgent = agents.addElement(&quot;gatheringAgent&quot;);
+         Element organization = gatheringAgent.addElement(&quot;organization&quot;);
+         Element name = organization.addElement(&quot;name&quot;);
+@@ -189,36 +200,19 @@
+         representation.addElement(&quot;text&quot;).setText(authorOccurrence.getAuthor().getOrganizationNN());
+     }
+     
+-     /*
++     /**
+       *  Build part of the whole record.
+       */
+     public void part(Record record) throws IOException {
+-        if(record == null) return;        
+-        Class table = record.getClass();
+-        if(table == Occurrence.class) {
++        if(record == null) return;             
++        Class table = record.getClass();              
++        if(table == Occurrence.class) {        	
+             //set occurrence and generate XML
+-            occurrence = (Occurrence)record;
+-            outputABCD();
++            occurrence = (Occurrence)record;            
++            outputABCD();            
+         } else if (table == AuthorOccurrence.class) {
+             authorOccurrence = (AuthorOccurrence)record;
+             outputAuthors();
+-        }               
+-    }    
+-        
+-    public void setActualUnitsElement(Element unitsElement) {
+-        this.actualUnitsElement = unitsElement;
+-    }
+-    
+-    public Element getActualUnitsElement() {
+-        return this.actualUnitsElement;
+-    }
+-
+-    public void setActualAgentsElement(Element agentsElement){
+-        this.actualAgentsElement = agentsElement;
+-    }
+-    
+-    public Element getActualAgentElement(){
+-        return this.actualAgentsElement;
+-    }
+-      
++        }
++    }           
+ }
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java	2006-08-14 09:14:10 UTC (rev 509)
++++ trunk/src/net/sf/plantlore/client/export/builders/DarwinCoreBuilder.java	2006-08-14 14:44:03 UTC (rev 510)
+@@ -12,32 +12,26 @@
+ 
+ import java.io.IOException;
+ import java.io.Writer;
+-import java.util.Date;
+ import net.sf.plantlore.client.export.Builder;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+-import net.sf.plantlore.common.record.Habitat;
+-import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.common.record.Occurrence;
+-import net.sf.plantlore.common.record.Plant;
+ import net.sf.plantlore.common.record.Record;
+-import net.sf.plantlore.common.record.Territory;
+-import net.sf.plantlore.common.record.Village;
+-import org.dom4j.Document;
+ import org.dom4j.DocumentHelper;
+ import org.dom4j.Element;
+ import org.dom4j.io.OutputFormat;
+ import org.dom4j.io.XMLWriter;
+ 
+ /**
+- *
+- * @author Lada
++ *  DarwinCore2 builder
++ *  
++ * @author Lada Oberreiterova
++ * @version 1.0
+  */
+ public class DarwinCoreBuilder implements Builder {
+-
+-    private Document document;   
+-    private Writer outputWriter;        
+-    private Element root;
+-    private Element actualRecordElement;       
++     
++    private Writer outputWriter; 
++    private XMLWriter xmlWriter; 
++    private Element recordElement;         
+     private Occurrence occurrence = null;  
+     private AuthorOccurrence authorOccurrence = null;
+     
+@@ -50,32 +44,46 @@
+      * @param writer	The writer that will create the file.     
+      */
+     public DarwinCoreBuilder(Writer writer) {      
+-        document = DocumentHelper.createDocument(); 
+-        this.outputWriter = writer;
+-        document.addElement(&quot;recordSet&quot;);
+-        root = document.getRootElement();
++    	outputWriter = writer;
+     }
+-
+-    /** Empty. */
+-    public void header() throws IOException {                
++    
++    /**
++     * Generate the header of this format.
++     */
++    public void header() 
++    throws IOException {
++    	outputWriter.write(&quot;&lt;?xml version=\&quot;1.0\&quot; encoding=\&quot;UTF-8\&quot;?&gt;\n&quot;);
++    	outputWriter.write(&quot;\n&lt;recordSet&gt;&quot;);
++    	
++    	OutputFormat format = OutputFormat.createPrettyPrint();
++        xmlWriter = new XMLWriter( outputWriter, format );
+     }
+ 
+-    /*          
++    /**
+      * Generate the footer of this format.
+-     * Save data to XML file in DarwinCore Schema.
+      */
+-    public void footer() throws IOException {        
+-        OutputFormat format = OutputFormat.createPrettyPrint();
+-        XMLWriter xmlwriter = new XMLWriter( outputWriter, format );
+-        xmlwriter.write( document );
+-        xmlwriter.close();
++    public void footer() 
++    throws IOException {
++    	System.out.println(&quot;ABCD - footer.&quot;);
++    	outputWriter.write(&quot;\n&lt;/recordSet&gt;&quot;);
++        xmlWriter.close();
++    }       
++    
++    /**
++     * Begin a new record.
++     */
++    public void startRecord() throws IOException {      	 
++    	recordElement = DocumentHelper.createElement(&quot;record&quot;);       
+     }
+ 
+-    /** Empty. */
+-    public void startRecord() throws IOException {
++    /**
++     * Finish processing of the record.
++     */
++    public void finishRecord() throws IOException {      	       
++    	xmlWriter.write(recordElement);
+     }
+-
+-    /*
++   
++    /**
+      * Build part of the whole record.
+      */
+     public void part(Record record) throws IOException {
+@@ -91,54 +99,41 @@
+         }     
+     }
+ 
+-    /** Empty. */
+-    public void finishRecord() throws IOException {
+-    }
+-
+-    /*
++    /**
+      * Decompose the given &lt;code&gt;occurrence&lt;/code&gt;, generate XML document for Darwin Core and mapping data of occurrence.     
+      */
+-    private void outputDarwinCore() {      
+-        Element record = document.getRootElement().addElement(&quot;record&quot;);
+-        setActualREcordElement(record);                
+-               
+-        record.addElement(&quot;institutionCode&quot;).setText(occurrence.getMetadata().getOwnerOrganizationAbbrevNN());
+-        record.addElement(&quot;collectionCode&quot;).setText(occurrence.getMetadata().getDataSetTitle());
+-        record.addElement(&quot;basisOfRecord&quot;).setText(occurrence.getMetadata().getRecordBasisNN());
+-        record.addElement(&quot;dateLastModified&quot;).setText(occurrence.getMetadata().getDateModified().toString());
++    private void outputDarwinCore() {              
++        recordElement.addElement(&quot;institutionCode&quot;).setText(occurrence.getMetadata().getOwnerOrganizationAbbrevNN());
++        recordElement.addElement(&quot;collectionCode&quot;).setText(occurrence.getMetadata().getDataSetTitle());
++        recordElement.addElement(&quot;basisOfRecord&quot;).setText(occurrence.getMetadata().getRecordBasisNN());
++        recordElement.addElement(&quot;dateLastModified&quot;).setText(occurrence.getMetadata().getDateModified().toString());
+         
+-        record.addElement(&quot;genus&quot;).setText(occurrence.getPlant().getGenusNN());
+-        record.addElement(&quot;identifiedBy&quot;).setText(occurrence.getPlant().getScientificNameAuthor());
+-        record.addElement(&quot;scientificName&quot;).setText(occurrence.getPlant().getTaxon());
+-        record.addElement(&quot;specificNameAuthorYear&quot;).setText(occurrence.getPlant().getScientificNameAuthor());
++        recordElement.addElement(&quot;genus&quot;).setText(occurrence.getPlant().getGenusNN());
++        recordElement.addElement(&quot;identifiedBy&quot;).setText(occurrence.getPlant().getScientificNameAuthor());
++        recordElement.addElement(&quot;scientificName&quot;).setText(occurrence.getPlant().getTaxon());
++        recordElement.addElement(&quot;specificNameAuthorYear&quot;).setText(occurrence.getPlant().getScientificNameAuthor());
+         
+-        record.addElement(&quot;catalogNumber&quot;).setText(occurrence.getId().toString());
+-        record.addElement(&quot;dayCollected&quot;).setText(occurrence.getDayCollectedNN().toString());
+-        record.addElement(&quot;monthCollected&quot;).setText(occurrence.getMonthCollectedNN().toString());
+-        record.addElement(&quot;yearCollected&quot;).setText(occurrence.getYearCollected().toString());
+-        record.addElement(&quot;timeOfDay&quot;).setText(occurrence.getTimeCollectedNN().toString());
+-        record.addElement(&quot;notes&quot;).setText(occurrence.getNoteNN());
++        recordElement.addElement(&quot;catalogNumber&quot;).setText(occurrence.getId().toString());
++        recordElement.addElement(&quot;dayCollected&quot;).setText(occurrence.getDayCollectedNN().toString());
++        recordElement.addElement(&quot;monthCollected&quot;).setText(occurrence.getMonthCollectedNN().toString());
++        recordElement.addElement(&quot;yearCollected&quot;).setText(occurrence.getYearCollected().toString());
++        recordElement.addElement(&quot;timeOfDay&quot;).setText(occurrence.getTimeCollectedNN().toString());
++        recordElement.addElement(&quot;notes&quot;).setText(occurrence.getNoteNN());
+         
+-        record.addElement(&quot;country&quot;).setText(occurrence.getHabitat().getCountryNN());
+-        record.addElement(&quot;county&quot;).setText(occurrence.getHabitat().getNearestVillage().getName());
+-        record.addElement(&quot;stateProvince&quot;).setText(occurrence.getHabitat().getTerritory().getName());
+-        record.addElement(&quot;locality&quot;).setText(occurrence.getHabitat().getDescriptionNN());
+-        record.addElement(&quot;latitude&quot;).setText(occurrence.getHabitat().getLatitudeNN().toString());
+-        record.addElement(&quot;longitude&quot;).setText(occurrence.getHabitat().getLongitudeNN().toString());
+-        record.addElement(&quot;minimumElevation&quot;).setText(occurrence.getHabitat().getAltitudeNN().toString());
++        recordElement.addElement(&quot;country&quot;).setText(occurrence.getHabitat().getCountryNN());
++        recordElement.addElement(&quot;county&quot;).setText(occurrence.getHabitat().getNearestVillage().getName());
++        recordElement.addElement(&quot;stateProvince&quot;).setText(occurrence.getHabitat().getTerritory().getName());
++        recordElement.addElement(&quot;locality&quot;).setText(occurrence.getHabitat().getDescriptionNN());
++        recordElement.addElement(&quot;latitude&quot;).setText(occurrence.getHabitat().getLatitudeNN().toString());
++        recordElement.addElement(&quot;longitude&quot;).setText(occurrence.getHabitat().getLongitudeNN().toString());
++        recordElement.addElement(&quot;minimumElevation&quot;).setText(occurrence.getHabitat().getAltitudeNN().toString());
+   
+     }
+ 
+-    private void outputAuthors() {
+-        Element record = getActualRecordElement();
+-        record.addElement(&quot;collector&quot;).setText(authorOccurrence.getAuthor().getWholeName());
+-    }
+-    
+-   public void setActualREcordElement(Element recordElement) {
+-        this.actualRecordElement = recordElement;
+-    }
+-    
+-    public Element getActualRecordElement() {
+-        return this.actualRecordElement;
+-    }        
++    /**
++     * Create elements for author of occurrence.
++     */
++    private void outputAuthors() {        
++        recordElement.addElement(&quot;collector&quot;).setText(authorOccurrence.getAuthor().getWholeName());
++    }           
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000698.html">[Plantlore-dev] Vyreseni neprijemne situace s importem nalezovych	dat
+</A></li>
+	<LI>Next message: <A HREF="000700.html">[Plantlore-dev] r511 - trunk/src/net/sf/plantlore/client/user
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#699">[ date ]</a>
+              <a href="thread.html#699">[ thread ]</a>
+              <a href="subject.html#699">[ subject ]</a>
+              <a href="author.html#699">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

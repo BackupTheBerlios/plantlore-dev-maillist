@@ -1,0 +1,213 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r254 - trunk/src/net/sf/plantlore/client/imports
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r254%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605101111.k4ABBWI9002415%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000296.html">
+   <LINK REL="Next"  HREF="000300.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r254 - trunk/src/net/sf/plantlore/client/imports</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r254%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605101111.k4ABBWI9002415%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r254 - trunk/src/net/sf/plantlore/client/imports">krater at berlios.de
+       </A><BR>
+    <I>Wed May 10 13:11:32 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000296.html">[Plantlore-dev] r253 - in trunk/src/net/sf/plantlore: client/history client/metadata client/publication client/user l10n
+</A></li>
+        <LI>Next message: <A HREF="000300.html">[Plantlore-dev] r255 - in trunk/src/net/sf/plantlore: client/imports l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#299">[ date ]</a>
+              <a href="thread.html#299">[ thread ]</a>
+              <a href="subject.html#299">[ subject ]</a>
+              <a href="author.html#299">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-10 13:11:30 +0200 (Wed, 10 May 2006)
+New Revision: 254
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DecisionCtrl.java
+   trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+   trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+Log:
+Import Controllers finished. The framework has not been tested as a whole yet. 
+The ImportMng does not know which Parser it should use! This is yet to be specified.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DecisionCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DecisionCtrl.java	2006-05-10 00:37:45 UTC (rev 253)
++++ trunk/src/net/sf/plantlore/client/imports/DecisionCtrl.java	2006-05-10 11:11:30 UTC (rev 254)
+@@ -1,5 +1,13 @@
+ package net.sf.plantlore.client.imports;
+ 
++import java.awt.event.ActionEvent;
++
++import javax.swing.AbstractAction;
++
++import net.sf.plantlore.client.imports.Parser.Action;
++import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.common.record.Record;
++
+ public class DecisionCtrl {
+ 	
+ 	ImportMng model;
+@@ -8,8 +16,46 @@
+ 	
+ 	public DecisionCtrl(ImportMng model, DecisionView view) {
+ 		this.model = model; this.view = view;
+-				
++		view.leave.setAction( new Skip() );
++		view.update.setAction( new Update() );
++		view.remember.setAction( new RememberDecision() );
+ 	}
+ 
+ 	
++	class Skip extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			Object issue = model.getIssue();
++			if(issue instanceof Record)
++				if(issue instanceof Occurrence)
++					model.makeDecision(Action.UNKNOWN);
++				else
++					model.makeDecision(Action.INSERT);
++			view.setVisible(false);
++		}
++	}
++	
++	
++	class Update extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			Object issue = model.getIssue();
++			if(issue instanceof Record)
++				if(issue instanceof Occurrence)
++					model.makeDecision(Action.UPDATE);
++				else
++					model.makeDecision(Action.UPDATE);
++			view.setVisible(false);
++		}
++	}
++	
++	class RememberDecision extends AbstractAction {
++		public void actionPerformed(ActionEvent arg0) {
++			Object issue = model.getIssue();
++			if(issue instanceof Record)
++				if(issue instanceof Occurrence)
++					model.setAskAboutTime( view.remember.isSelected() );
++				else
++					model.setAskAboutInsert( view.remember.isSelected() );
++		}
++	}
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-10 00:37:45 UTC (rev 253)
++++ trunk/src/net/sf/plantlore/client/imports/ImportMng.java	2006-05-10 11:11:30 UTC (rev 254)
+@@ -284,10 +284,17 @@
+ 	 * or an exception that has to be dealt with.
+ 	 */
+ 	public void update(Observable source, Object parameter) {
++		issue = parameter;
+ 		setChanged(); notifyObservers( parameter );
+ 	}
+ 	
++	private Object issue;
+ 	
++	protected Object getIssue() {
++		return issue;
++	}
++	
++	
+ 	private class RecordTable extends AbstractTableModel {
+ 		
+ 		ArrayList&lt;String&gt;[] value;
+
+Modified: trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-10 00:37:45 UTC (rev 253)
++++ trunk/src/net/sf/plantlore/client/imports/ImportProgressView.java	2006-05-10 11:11:30 UTC (rev 254)
+@@ -85,9 +85,42 @@
+ 	
+ 	
+ 	
++    private boolean exceptionOccured = false;
++    
+ 	
+-	public void update(Observable arg0, Object arg1) {
+-		count = model.getNumberOfImported();
++	public void update(Observable source, Object parameter) {
++		// The final cleanup may overwrite the exception! 
++		if(exceptionOccured)
++			return;
++		
++		if( parameter != null &amp;&amp; parameter instanceof Exception ) {
++			Exception e = (Exception) parameter;
++			setTitle(&quot;Import interrupted&quot;);
++			status.setText(&quot;An exception interrupted the import procedure: &quot; + e);
++			progress.setValue(0);
++			abort.setText(&quot;Close&quot;);
++			exceptionOccured = true;
++		}
++		else if(model.isAborted()) {
++			setTitle(&quot;Import aborted&quot;);
++			count = model.getNumberOfImported();
++			status.setText(&quot;Import procedure aborted.\n &quot; + count + &quot; records imported.&quot;);
++			progress.setValue(0);
++			abort.setText(&quot;Close&quot;);
++		} 
++		else if(!model.isImportInProgress()) {
++			setTitle(&quot;Import completed&quot;);
++			status.setText(&quot;Completed...&quot;);
++			progress.setMaximum(100);
++			progress.setValue(100);
++			abort.setText(&quot;Close&quot;);
++		}
++		else if( this.isVisible() ) {
++			count = model.getNumberOfImported();
++			progress.setValue( count );
++			status.setText(&quot;Importing\n &quot; + count + &quot;.&quot;);
++			setTitle(&quot;Imported &quot; + count);
++		}
+ 	}
+ 
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000296.html">[Plantlore-dev] r253 - in trunk/src/net/sf/plantlore: client/history client/metadata client/publication client/user l10n
+</A></li>
+	<LI>Next message: <A HREF="000300.html">[Plantlore-dev] r255 - in trunk/src/net/sf/plantlore: client/imports l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#299">[ date ]</a>
+              <a href="thread.html#299">[ thread ]</a>
+              <a href="subject.html#299">[ subject ]</a>
+              <a href="author.html#299">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

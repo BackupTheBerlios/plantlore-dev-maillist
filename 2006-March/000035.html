@@ -1,0 +1,520 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r47 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r47%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200603122014.k2CKEZm0025718%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000034.html">
+   <LINK REL="Next"  HREF="000036.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r47 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r47%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200603122014.k2CKEZm0025718%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r47 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun Mar 12 21:14:35 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000034.html">[Plantlore-dev] schuzka 11. 3. 2006
+</A></li>
+        <LI>Next message: <A HREF="000036.html">[Plantlore-dev] r48 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#35">[ date ]</a>
+              <a href="thread.html#35">[ thread ]</a>
+              <a href="subject.html#35">[ subject ]</a>
+              <a href="author.html#35">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-03-12 21:14:13 +0100 (Sun, 12 Mar 2006)
+New Revision: 47
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/l10n/L10n.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+Log:
+Added code for localized mnemonics handling.
+Transformed a few listeners into actions. Other are still waiting.
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-03-12 20:14:13 UTC (rev 47)
+@@ -30,7 +30,7 @@
+     {
+         prefs = Preferences.userNodeForPackage(this.getClass());
+         
+-        database = new FirebirdDBLayer(&quot;localhost&quot;, &quot;3050&quot;, &quot;c:/Kovo/DatabaseTest/database/plantlore.fdb&quot;, &quot;SYSDBA&quot;, &quot;masterkey&quot;);
++        database = new FirebirdDBLayer(&quot;localhost&quot;, &quot;3050&quot;, &quot;/mnt/data/temp/plantloreHIB.fdb&quot;, &quot;sysdba&quot;, &quot;masterkey&quot;);
+         try {
+             database.initialize();
+         } catch (DBLayerException e) {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-03-12 20:14:13 UTC (rev 47)
+@@ -9,9 +9,11 @@
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.KeyEvent;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ import java.util.prefs.Preferences;
++import javax.swing.AbstractAction;
+ import net.sf.plantlore.client.dblayer.DBLayer;
+ import net.sf.plantlore.client.dblayer.DBLayerException;
+ import net.sf.plantlore.client.dblayer.FirebirdDBLayer;
+@@ -27,6 +29,7 @@
+ import net.sf.plantlore.client.history.History;
+ import net.sf.plantlore.client.history.HistoryCtrl;
+ import net.sf.plantlore.client.history.HistoryView;
++import net.sf.plantlore.l10n.L10n;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -57,11 +60,14 @@
+         this.model = model;
+         this.view = view;
+         prefs = Preferences.userNodeForPackage(AppCoreView.class);
+-        view.addSettingsListener(new SettingsListener());
+-        view.addPrintListener(new PrintListener());
++        view.setSettingsAction(new SettingsAction());
++        view.setPrintAction(new PrintAction());
+         view.addExitListener(new ExitListener());
+-        view.addHelpContentsListener(new HelpContentsListener());
+-        view.addHelpAboutListener(new HelpAboutListener());
++        view.setHelpContentsAction(new HelpContentsAction());
++        view.setHelpAboutAction(new HelpAboutAction());
++        view.setExportAction(new ExportAction());
++        view.setImportAction(new ImportAction());
++        view.setSearchAction(new SearchAction());
+         view.addDataAuthorsListener(new DataAuthorsListener());
+         view.addDataPublicationsListener(new DataPublicationsListener());
+         view.addDataHistoryListener(new DataHistoryListener());
+@@ -70,7 +76,12 @@
+     /** Handles click to menu item Settings.
+      *
+      */
+-    class SettingsListener implements ActionListener {
++    class SettingsAction extends AbstractAction {
++        public SettingsAction() {
++            putValue(NAME, L10n.getString(&quot;Settings&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;SettingsTooltip&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Settings&quot;));            
++        }
+         public void actionPerformed(ActionEvent actionEvent)
+         {
+             logger.info(&quot;Settings selected&quot;);
+@@ -86,7 +97,12 @@
+         }
+     }
+     
+-    class PrintListener implements ActionListener {
++    class PrintAction extends AbstractAction {
++        public PrintAction() {
++            putValue(NAME, L10n.getString(&quot;Print&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;PrintTooltip&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print&quot;));                        
++        }
+         public void actionPerformed(ActionEvent actionEvent)
+         {
+             System.out.println(&quot;Print selected&quot;);
+@@ -134,21 +150,67 @@
+             System.exit(0);
+         }
+     }
+-    
+-    class HelpContentsListener implements ActionListener {
+-        public void actionPerformed(ActionEvent actionEvent)
+-        {
++
++    class HelpContentsAction extends AbstractAction {
++        public HelpContentsAction() {
++            putValue(NAME, L10n.getString(&quot;helpContents&quot;));
++            putValue(SHORT_DESCRIPTION, &quot;Help contents&quot;);
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;helpContents&quot;));
++        }
++        public void actionPerformed(ActionEvent actionEvent) {
+             System.out.println(&quot;Help contents selected&quot;);
+         }
+     }
+-    
+-    class HelpAboutListener implements ActionListener {
++        
++    class HelpAboutAction extends AbstractAction {
++        public HelpAboutAction() {
++            putValue(NAME, L10n.getString(&quot;helpAbout&quot;));
++            putValue(SHORT_DESCRIPTION, &quot;Help about tooltip&quot;);
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;helpAbout&quot;));
++        }
+         public void actionPerformed(ActionEvent actionEvent)
+         {
+             System.out.println(&quot;Help about selected&quot;);
+         }
+     }
+     
++    class ImportAction extends AbstractAction {
++        public ImportAction() {
++            putValue(NAME, L10n.getString(&quot;dataImport&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;dataImportTooltip&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;dataImport&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Import pressed&quot;);
++        }
++    }
++    
++    class ExportAction extends AbstractAction {
++        public ExportAction() {
++            putValue(NAME, L10n.getString(&quot;dataExport&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;dataExportTooltip&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;dataExport&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Export pressed&quot;);
++        }
++    }
++
++    class SearchAction extends AbstractAction {
++        public SearchAction() {
++            putValue(NAME, L10n.getString(&quot;dataSearch&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;dataSearchTooltip&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;dataSearch&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Search pressed&quot;);
++        }
++    }
++    
++    
+     class AppWindowListener extends WindowAdapter {
+         public void windowClosing(WindowEvent e)
+         {
+@@ -179,7 +241,7 @@
+             //toto volani historie nebude v menu, ale jako tlacitko pro vybrany zaznam        
+             //o vybranem zaznamu predame informace, ktere chceme o nem v historii zobrazit
+             //jmeno rosliny, jmeno autora a lokaci a idOccurrences
+-            historyModel = new History(model.getDatabase(),&quot;Adis Abeba&quot;, &quot;Lada&quot;, &quot;Praha v&#253;chod&quot;, 1);
++            historyModel = new History(model.getDatabase(),&quot;Adis Abeba&quot;, &quot;Lada&quot;, &quot;Praha vchod&quot;, 1);
+             historyView = new HistoryView(historyModel);
+             historyCtrl = new HistoryCtrl(historyModel, historyView);
+             historyView.setVisible(true);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-03-12 20:14:13 UTC (rev 47)
+@@ -17,6 +17,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
++import javax.swing.AbstractAction;
+ import javax.swing.JButton;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JFrame;
+@@ -55,7 +56,7 @@
+     private JMenu
+             fileMenu = new JMenu(L10n.getString(&quot;File&quot;)),
+             dataMenu = new JMenu(L10n.getString(&quot;Data&quot;)),
+-            helpMenu = new JMenu(L10n.getString(&quot;Help&quot;));    
++            helpMenu = new JMenu(L10n.getString(&quot;Help&quot;)); 
+     private JMenuItem settings = new JMenuItem(L10n.getString(&quot;Settings&quot;));
+     private JMenuItem print = new JMenuItem(L10n.getString(&quot;Print&quot;));
+     private JMenuItem exit = new JMenuItem(L10n.getString(&quot;Exit&quot;));
+@@ -64,7 +65,15 @@
+     private JMenuItem dataAuthors = new JMenuItem(L10n.getString(&quot;authorMgr&quot;));
+     private JMenuItem dataPublications = new JMenuItem(L10n.getString(&quot;publicationMgr&quot;));    
+     private JMenuItem dataHistory = new JMenuItem(L10n.getString(&quot;History&quot;));
++    private JMenuItem dataImport = new JMenuItem(L10n.getString(&quot;dataImport&quot;));
++    private JMenuItem dataExport = new JMenuItem(L10n.getString(&quot;dataExport&quot;));
++    private JMenuItem dataSearch = new JMenuItem(L10n.getString(&quot;dataSearch&quot;));
+     
++    private JButton 
++            importButton = new JButton(),
++            exportButton = new JButton(), 
++            searchButton = new JButton();
++    
+     private JLabel statusLabel;
+     
+     private JTable overview;
+@@ -119,18 +128,21 @@
+      */
+     private void initMenu()
+     {
+-        fileMenu.setMnemonic(KeyEvent.VK_F);
++        fileMenu.setMnemonic(L10n.getMnemonic(&quot;File&quot;));
+         fileMenu.add(settings);
+         fileMenu.add(print);
+         fileMenu.addSeparator();
+         fileMenu.add(exit);
+         
+-        dataMenu.setMnemonic(KeyEvent.VK_D);
++        dataMenu.setMnemonic(L10n.getMnemonic(&quot;Data&quot;));
+         dataMenu.add(dataAuthors);
+         dataMenu.add(dataPublications);   
++        dataMenu.add(dataImport);
++        dataMenu.add(dataExport);
++        dataMenu.add(dataSearch);
+         dataMenu.add(dataHistory); 
+ 
+-        helpMenu.setMnemonic(KeyEvent.VK_H);
++        helpMenu.setMnemonic(L10n.getMnemonic(&quot;Help&quot;));
+         helpMenu.add(helpContents);
+         helpMenu.addSeparator();
+         helpMenu.add(helpAbout);
+@@ -147,11 +159,8 @@
+     private void initMainToolBar()
+     {
+         mainToolBar = new JToolBar();
+-        JButton importButton = new JButton(&quot;Import&quot;);
+         mainToolBar.add(importButton);
+-        JButton exportButton = new JButton(&quot;Export&quot;);
+         mainToolBar.add(exportButton);
+-        JButton searchButton = new JButton(&quot;Search&quot;);
+         mainToolBar.add(searchButton);
+         container.add(mainToolBar, BorderLayout.NORTH);
+         
+@@ -227,17 +236,17 @@
+         frame.setVisible(visible);
+     }
+ 
+-    /** Adds listener to the settings menu item.
++    /** Sets an action to the settings menu item.
+      *
+      */
+-    public void addSettingsListener(ActionListener al) {
+-        settings.addActionListener(al);
++    public void setSettingsAction(AbstractAction a) {
++        settings.setAction(a);
+     }
+-    /** Adds listener to the print menu item.
++    /** Sets an action to the print menu item.
+      *
+      */
+-    public void addPrintListener(ActionListener al) {
+-        print.addActionListener(al);
++    public void setPrintAction(AbstractAction a) {
++        print.setAction(a);
+     }
+     /** Adds listener to the exit menu item.
+      *
+@@ -248,16 +257,40 @@
+     /** Adds listener to the HelpContents menu item.
+      *
+      */
+-    public void addHelpContentsListener(ActionListener al) {
+-        helpContents.addActionListener(al);
++    public void setHelpContentsAction(AbstractAction a) {
++        helpContents.setAction(a);
+     }
+     /** Adds listener to the HelpAbout menu item.
+      *
+      */
+-    public void addHelpAboutListener(ActionListener al) {
+-        helpAbout.addActionListener(al);
++    public void setHelpAboutAction(AbstractAction a) {
++        helpAbout.setAction(a);
+     }
++    
++    /** Sets an action to the Data-&gt;Search menu item and to the Search toolbar button.
++     *
++     */
++    public void setSearchAction(AbstractAction a) {
++        dataSearch.setAction(a);
++        searchButton.setAction(a);
++    }
+ 
++    /** Sets an action to the Data-&gt;import menu item and to the Import toolbar button.
++     *
++     */
++    public void setImportAction(AbstractAction a) {
++        dataImport.setAction(a);
++        importButton.setAction(a);
++    }
++
++    /** Sets an action to the Data-&gt;export menu item and to the Export toolbar button.
++     *
++     */
++    public void setExportAction(AbstractAction a) {
++        dataExport.setAction(a);
++        exportButton.setAction(a);
++    }
++
+     /** Adds a listener to the main window frame.
+      *
+      */
+
+Modified: trunk/src/net/sf/plantlore/l10n/L10n.java
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/L10n.java	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/l10n/L10n.java	2006-03-12 20:14:13 UTC (rev 47)
+@@ -76,11 +76,37 @@
+     
+     /** Gets string for the given key
+      *
++     * Removes the first ampersand sign (&amp;) because it is assumed that it is an indiaction of a mnemonic.
++     *
+      * @param key Key of the required value
+      * @trhows NullPointerException in case that &lt;code&gt;load()&lt;/code&gt; wasn't called first or it failed.
+      */
+     public static String getString(String key) {
+-        return resource.getString(key);
++        StringBuffer sb = new StringBuffer(resource.getString(key));
++        int i = sb.indexOf(&quot;&amp;&quot;);
++        if (i&gt;=0)
++            sb.deleteCharAt(i);
++        return sb.toString();
+     }
+     
++    /** Returns mnemonic for the given key.
++     *
++     * If the mnemonic wasn't set in the string for the key then returns -1.
++     *
++     * @param key Key of the required value
++     * @trhows NullPointerException in case that &lt;code&gt;load()&lt;/code&gt; wasn't called first or it failed.
++     */
++    public static int getMnemonic(String key) {
++        StringBuffer sb = new StringBuffer(resource.getString(key));
++        int i = sb.indexOf(&quot;&amp;&quot;);
++        if (i &lt; 0)
++            return -1;
++        if (i+1 == sb.length())
++            return -1;
++        Character c = sb.charAt(i+1);
++        if (i&gt;=0)
++            sb.deleteCharAt(i);
++        
++        return c.toUpperCase(c);
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-03-12 20:14:13 UTC (rev 47)
+@@ -1,15 +1,17 @@
+ # Properties common for all languages go here
+ plantlore = Plantlore
+-Help = Help
+-Settings = Settings
+-Print = Print
+-Exit = Exit
+-helpContents = Help contents
+-helpAbout = About
+-Languages = Languages
+-Other = Other
+-Ok = Ok
+-Cancel = Cancel
++Help = &amp;Help
++Settings = &amp;Settings
++SettingsTooltip = Invokes the setting dialog
++Print = &amp;Print
++PrintTooltip = Prints selected records
++Exit = &amp;Exit
++helpContents = &amp;Help contents
++helpAbout = &amp;About
++Languages = &amp;Languages
++Other = &amp;Other
++Ok = &amp;Ok
++Cancel = &amp;Cancel
+ defaultLang = Default system language
+ Czech = Czech
+ English = English
+@@ -22,6 +24,12 @@
+ prevButton = Prev
+ nextButton = Next
+ Data=Data
++dataImport=&amp;Import
++dataImportTooltip=Imports occurence records into the database
++dataExport=&amp;Export
++dataExportTooltip=Exports selected records
++dataSearch=&amp;Search
++dataSearchTooltip=Invokes the search dialog
+ 
+ authorMgr=Author manager
+ 
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-03-10 14:49:13 UTC (rev 46)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-03-12 20:14:13 UTC (rev 47)
+@@ -1,17 +1,18 @@
+ # Properties for Czech
+-File = Soubor
+-Help = Pomoc
+-helpAbout = O aplikaci
+-helpContents = Obsah
+-Settings = Nastaven&#237;
+-Print = Tisk
+-Exit = Konec
+-prevButton = P?edchoz&#237;
+-nextButton = N&#225;sleduj&#237;c&#237;
+-Data=Data
++File = &amp;Soubor
++Help = &amp;Pomoc
++helpAbout = &amp;O aplikaci
++helpContents = Obsa&amp;h
++Settings = &amp;Nastaven\u00ed
++Print = &amp;Tisk
++Exit = &amp;Konec
++prevButton = P\u0159edchoz\u00ed
++nextButton = N\u00e1sleduj\u00edc\u00ed
++Data=&amp;Data
+ 
+-authorMgr=Author manager
+-
+-publicationMgr=Publication manager
+-
+-History= History - undo
+\ No newline at end of file
++dataImport=&amp;Import
++dataImportTooltip=Importuje n\u00e1lezov\u00e1 data do datab\u00e1ze
++dataExport=&amp;Export
++dataExportTooltip=Exportuje ozna\u010den\u00e9 z\u00e1znamy
++dataSearch=&amp;Hled\u00e1n\u00ed
++dataSearchTooltip=Vyvol\u00e1 vyhled\u00e1vac\u00ed dialog
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000034.html">[Plantlore-dev] schuzka 11. 3. 2006
+</A></li>
+	<LI>Next message: <A HREF="000036.html">[Plantlore-dev] r48 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#35">[ date ]</a>
+              <a href="thread.html#35">[ thread ]</a>
+              <a href="subject.html#35">[ subject ]</a>
+              <a href="author.html#35">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

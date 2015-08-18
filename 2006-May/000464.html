@@ -1,0 +1,172 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r402 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r402%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200605302031.k4UKVOww021068%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000463.html">
+   <LINK REL="Next"  HREF="000465.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r402 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r402%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200605302031.k4UKVOww021068%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r402 - in trunk/src/net/sf/plantlore: client common">fraktalek at berlios.de
+       </A><BR>
+    <I>Tue May 30 22:31:24 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000463.html">[Plantlore-dev] [Bug #7679] Exception
+</A></li>
+        <LI>Next message: <A HREF="000465.html">[Plantlore-dev] [Bug #7680] BioCASE - finished
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#464">[ date ]</a>
+              <a href="thread.html#464">[ thread ]</a>
+              <a href="subject.html#464">[ subject ]</a>
+              <a href="author.html#464">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-30 22:31:24 +0200 (Tue, 30 May 2006)
+New Revision: 402
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+Log:
+Partially fixed Bug #7670  (Display HOURGLASS cursor during long running tasks) for ProgressBar and Overview start.
+
+Also improved action disabling and enabling after login. Login is now disabled really immediately after successful login
+and other actions are enabled after the overview fetched all data from database.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-30 20:14:16 UTC (rev 401)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-30 20:31:24 UTC (rev 402)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.Component;
++import java.awt.Cursor;
+ import java.awt.Frame;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+@@ -293,7 +294,6 @@
+         prevPageAction.setEnabled(enabled);  
+         view.recordsPerPage.setEnabled(enabled);
+         refreshAction.setEnabled(enabled);
+-        loginAction.setEnabled(!enabled);
+     }
+     
+     /** Handles click to menu item Settings.
+@@ -1084,9 +1084,13 @@
+     class DatabaseChange implements Observer {
+     	public void update(Observable targer, Object parameter) {
+     		if(parameter != null &amp;&amp; parameter instanceof DBLayer) {
+-    			System.out.println(&quot;[!] DBLayer retrieval.&quot;);
++                        loginAction.setEnabled(false);
++                        view.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
++
++                        System.out.println(&quot;[!] DBLayer retrieval.&quot;);
+     			DBLayer dblayer = loginModel.getDBLayer();
+ 
++
+                         //FIXME: neni potreba zresetovat stav treba loginModelu, pokdu neco takhle selze? pripadne stav jinyho objektu?
+                         try {
+                             model.setDatabase(dblayer);
+@@ -1097,7 +1101,6 @@
+                             JOptionPane.showMessageDialog(view,&quot;Database problem&quot;,&quot;Some database problem occurred:\n&quot;+ex,JOptionPane.WARNING_MESSAGE);
+                             return;
+                         }
+-                        setDatabaseDependentCommandsEnabled(true);
+     			model.setAccessRights( loginModel.getAccessRights() );
+                         model.login();
+                         
+@@ -1108,6 +1111,8 @@
+                         view.getSBM().displayDefaultText();
+                         
+     			view.initOverview();
++                        view.setCursor(Cursor.getDefaultCursor());
++                        setDatabaseDependentCommandsEnabled(true);
+     		}
+     	}
+     }
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-30 20:14:16 UTC (rev 401)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-30 20:31:24 UTC (rev 402)
+@@ -7,6 +7,7 @@
+ package net.sf.plantlore.common;
+ 
+ import java.awt.Color;
++import java.awt.Cursor;
+ import java.awt.Window;
+ import java.util.Observable;
+ import java.util.Observer;
+@@ -59,7 +60,10 @@
+         }
+         statusFieldWidth = statusField.getWidth();
+         statusField.setBackground(javax.swing.UIManager.getDefaults().getColor(&quot;Panel.background&quot;));
+-       
++        
++        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
++        parent.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
++        
+         task.addObserver(this);
+     }
+     
+@@ -142,6 +146,9 @@
+      * Adjusts widht of the dialog in case it receives a longer text message
+      * form the task than it is possible to display in current widht.
+      *
++     * Will set WAIT_CURSOR to it's parent and will restore it to defaultCursor
++     * after it disappears.
++     *
+      * Invokes exceptionHanlder on received exceptions.
+      */
+     public void update(Observable o, Object arg) {
+@@ -199,6 +206,7 @@
+                         dispose();                    
+                         break;
+                     case STOPPED:
++                        parent.setCursor(Cursor.getDefaultCursor());
+                         afterStopped(value);
+                         break;                    
+                 }//switch
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000463.html">[Plantlore-dev] [Bug #7679] Exception
+</A></li>
+	<LI>Next message: <A HREF="000465.html">[Plantlore-dev] [Bug #7680] BioCASE - finished
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#464">[ date ]</a>
+              <a href="thread.html#464">[ thread ]</a>
+              <a href="subject.html#464">[ subject ]</a>
+              <a href="author.html#464">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

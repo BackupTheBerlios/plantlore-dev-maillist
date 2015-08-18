@@ -1,0 +1,1190 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r485 - in trunk/src/net/sf/plantlore: client	client/export client/login common common/debug server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r485%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/export%20client/login%20common%20common/debug%20server&In-Reply-To=%3C200608041135.k74BZWCP014184%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000633.html">
+   <LINK REL="Next"  HREF="000635.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r485 - in trunk/src/net/sf/plantlore: client	client/export client/login common common/debug server</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r485%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/export%20client/login%20common%20common/debug%20server&In-Reply-To=%3C200608041135.k74BZWCP014184%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r485 - in trunk/src/net/sf/plantlore: client	client/export client/login common common/debug server">krater at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug  4 13:35:32 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000633.html">[Plantlore-dev] Reconnect &amp; RemoteException
+</A></li>
+        <LI>Next message: <A HREF="000635.html">[Plantlore-dev] [Task #3045] User documentation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#634">[ date ]</a>
+              <a href="thread.html#634">[ thread ]</a>
+              <a href="subject.html#634">[ subject ]</a>
+              <a href="author.html#634">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-04 13:35:26 +0200 (Fri, 04 Aug 2006)
+New Revision: 485
+
+Added:
+   trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+   trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+   trunk/src/net/sf/plantlore/common/debug/MemoryMonitor.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Minor (mostly cosmetic) changes of Export.
+
+Login keeps the last ConnectionTask.
+
+Improved ExceptionHandler in the DefaultProgressBar and DefaultProgressBarEx.
+
+The DefaultReconnectionDialog created.
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -9,13 +9,10 @@
+ 
+ import java.awt.Component;
+ import java.awt.Cursor;
+-import java.awt.Frame;
+-import java.awt.HeadlessException;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.ComponentEvent;
+ import java.awt.event.ComponentListener;
+-import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+ import java.awt.event.MouseEvent;
+@@ -28,7 +25,6 @@
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.ObjectInputStream;
+-import java.lang.Integer;
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+@@ -36,17 +32,16 @@
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+-import javax.swing.DefaultCellEditor;
++import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
++import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.KeyStroke;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.SwingUtilities;
+ import javax.swing.event.ListSelectionEvent;
+ import javax.swing.event.ListSelectionListener;
+-import javax.swing.table.TableCellRenderer;
+ import net.sf.jasperreports.engine.JRException;
+-import net.sf.jasperreports.engine.JasperCompileManager;
+ import net.sf.jasperreports.engine.JasperFillManager;
+ import net.sf.jasperreports.engine.JasperPrint;
+ import net.sf.jasperreports.engine.JasperReport;
+@@ -68,22 +63,22 @@
+ import net.sf.plantlore.client.user.UserManager;
+ import net.sf.plantlore.client.user.UserManagerCtrl;
+ import net.sf.plantlore.client.user.UserManagerView;
++import net.sf.plantlore.common.DefaultProgressBarEx;
++import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.ProgressBar;
+ import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.StatusBarManager;
+-import net.sf.plantlore.common.SwingWorker;
+ import net.sf.plantlore.common.Task;
+-import net.sf.plantlore.common.record.Author;
+-import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.exception.ExportException;
+ import net.sf.plantlore.common.exception.ImportException;
+-import net.sf.plantlore.common.record.Plant;
+ import net.sf.plantlore.client.authors.AuthorManager;
+ import net.sf.plantlore.client.authors.AuthorManagerCtrl;
+ import net.sf.plantlore.client.authors.AuthorManagerView;
++import net.sf.plantlore.client.export.ExportMng2;
++import net.sf.plantlore.client.export.ExportMngCtrl2;
+ import net.sf.plantlore.client.history.HistoryCtrl;
+ import net.sf.plantlore.client.history.HistoryView;
+ import net.sf.plantlore.client.imports.DecisionCtrl;
+@@ -97,12 +92,9 @@
+ import net.sf.plantlore.client.login.Login;
+ import net.sf.plantlore.client.login.LoginCtrl;
+ import net.sf.plantlore.client.login.LoginView;
+-import net.sf.plantlore.common.record.Right;
+-import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+-import net.sf.plantlore.server.HibernateDBLayer;
+ import net.sf.plantlore.middleware.RMIDBLayerFactory;
+ 
+ import org.apache.log4j.Logger;
+@@ -210,6 +202,11 @@
+ 
+ 	ExportProgressCtrl exportProgressCtrl;
+ 
++	// Export2
++	ExportMng2 exportModel2;
++
++	ExportMngCtrl2 exportCtrl2;
++
+ 	// Import
+ 	ImportMng importModel;
+ 
+@@ -247,7 +244,7 @@
+ 
+ 	AbstractAction helpAboutAction = new HelpAboutAction();
+ 
+-	AbstractAction exportAction = new ExportAction();
++	AbstractAction exportAction = new ExportAction2();
+ 
+ 	AbstractAction importAction = new ImportAction();
+ 
+@@ -291,6 +288,10 @@
+ 
+ 	AbstractAction loginAction = new LoginAction();
+ 
++	AbstractAction logoutAction = new LogoutAction();
++
++	ReconnectAction reconnectAction = new ReconnectAction();
++
+ 	/** Creates a new instance of AppCoreCtrl */
+ 	public AppCoreCtrl(AppCore model, AppCoreView view) {
+ 		logger = Logger.getLogger(this.getClass().getPackage().getName());
+@@ -332,8 +333,9 @@
+ 		view.occurrencesRefresh.setAction(refreshAction);
+ 
+ 		view.overview.addKeyListener(new OverviewKeyListener());
+-                view.overviewScrollPane.addComponentListener(new OverviewResizeListener());
+-                
++		view.overviewScrollPane
++				.addComponentListener(new OverviewResizeListener());
++
+ 		view.addWindowListener(new AppWindowListener());
+ 		view
+ 				.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+@@ -342,13 +344,9 @@
+ 
+ 		constructDialogs();
+ 
+-		// This is here in order to skip login procedure and connect to the
+-		// database automatically
+-		// For developement purposes only - so that we don't have to go through
+-		// login each time we run Plantlore
+-		// view.initOverview();
+-
+ 		setDatabaseDependentCommandsEnabled(false);
++		
++		DefaultReconnectDialog.setDefaultReconnectAction( reconnectAction );
+ 	}
+ 
+ 	private void constructDialogs() {
+@@ -379,7 +377,7 @@
+ 		detailCtrl = new DetailCtrl(detailModel, detailView);
+ 	}
+ 
+-	private void setDatabaseDependentCommandsEnabled(boolean enabled) {				
++	private void setDatabaseDependentCommandsEnabled(boolean enabled) {
+ 		settingsAction.setEnabled(enabled);
+ 		printAction.setEnabled(enabled);
+ 		exportAction.setEnabled(enabled);
+@@ -399,7 +397,7 @@
+ 		addAction.setEnabled(enabled);
+ 		editAction.setEnabled(enabled);
+ 		deleteAction.setEnabled(enabled);
+-		
++
+ 		selectAllAction.setEnabled(enabled);
+ 		selectNoneAction.setEnabled(enabled);
+ 		invertSelectedAction.setEnabled(enabled);
+@@ -407,13 +405,13 @@
+ 		prevPageAction.setEnabled(enabled);
+ 		view.recordsPerPage.setEnabled(enabled);
+ 		refreshAction.setEnabled(enabled);
+-		
+-		if (model.getAccessRights() != null) 
+-			if	(model.getAccessRights().getAdministrator() != 1) {
++
++		if (model.getAccessRights() != null)
++			if (model.getAccessRights().getAdministrator() != 1) {
+ 				dataMetadataAction.setEnabled(false);
+ 				dataWholeHistoryAction.setEnabled(false);
+ 				dataUserAction.setEnabled(false);
+-		} 
++			}
+ 	}
+ 
+ 	/**
+@@ -465,9 +463,10 @@
+ 					searchModel.clear();
+ 					searchModel.constructQuery();
+ 				}
+-                                if (s.equals(&quot;DYNAMIC_PAGE_LOADING&quot;)) {
+-                                    model.dynamicPageLoading = prefs.getBoolean(PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE,false);
+-                                }                                
++				if (s.equals(&quot;DYNAMIC_PAGE_LOADING&quot;)) {
++					model.dynamicPageLoading = prefs.getBoolean(
++							PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE, false);
++				}
+ 			}
+ 		}
+ 	}
+@@ -510,9 +509,13 @@
+ 						&quot;Problem while saving configuration: &quot;
+ 								+ ex.getMessage());
+ 			}
+-			// Destroy the DBLayer
+-			// model.getDatabase().destroy(); --- takhle se to nesmi delat, musi
+-			// ji znicit factory, ktera ji vyrobila
++
++			// The database layer created by a DBLayerFactory MUST be
++			// destroyed by that factory. There is a method which will do the
++			// trick.
++			if (loginModel != null)
++				loginModel.logout();
++
+ 			System.exit(0);
+ 		}
+ 	}
+@@ -670,6 +673,45 @@
+ 		}
+ 	}
+ 
++	class ExportAction2 extends AbstractAction {
++
++		public ExportAction2() {
++			putValue(NAME, L10n.getString(&quot;dataExport&quot;));
++			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;dataExportTooltip&quot;));
++			putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;dataExport&quot;));
++		}
++
++		public void actionPerformed(ActionEvent actionEvent) {
++			// Create a new dialog if it already doesn't exist.
++			if (exportModel2 == null) {
++				exportModel2 = new ExportMng2(model.getDatabase());
++				exportCtrl2 = new ExportMngCtrl2(exportModel2, view);
++			}
++			try {
++				SelectQuery query;
++				Object[] queryParam = searchModel.constructExportQuery();
++				query = (SelectQuery) queryParam[0];
++				if ((Boolean) queryParam[1]) { // use projections
++					exportModel2.useProjections(true);
++					exportModel2.setRootTable((Class) queryParam[2]);
++				}
++
++				exportModel2.setSelectQuery(query);
++				exportModel2.setSelection(model.getTableModel().getSelection());
++			} catch (DBLayerException e) {
++				// TODO: Some errors may lead to ReconnectDialog.show()!
++				JOptionPane.showMessageDialog(view, &quot;DBLayer Exception: &quot;
++						+ e.getMessage());
++				return;
++			} catch (RemoteException e) {
++				DefaultReconnectDialog.show(view, e);
++				return;
++			}
++
++			exportCtrl2.setVisible(true);
++		}
++	}
++
+ 	class AddAction extends AbstractAction {
+ 		public AddAction() {
+ 			if (showButtonText)
+@@ -843,8 +885,8 @@
+ 
+ 					public void afterStopped(Object value) {
+ 						refreshOverview(false); // false -&gt; do not create task,
+-												// refresh the overview directly
+-												// in this thread
++						// refresh the overview directly
++						// in this thread
+ 					}
+ 				};
+ 				progressBar.setTitle(L10n.getString(&quot;Delete.ProgressTitle&quot;));
+@@ -1143,7 +1185,7 @@
+ 					true);
+ 			AuthorManagerCtrl authCtrl = new AuthorManagerCtrl(authModel,
+ 					authView);
+-                        authModel.addObserver(managerBridge);
++			authModel.addObserver(managerBridge);
+ 			authView.setVisible(true);
+ 		}
+ 
+@@ -1165,7 +1207,7 @@
+ 					publicationManagerModel, view, true);
+ 			publicationManagerCtrl = new PublicationManagerCtrl(
+ 					publicationManagerModel, publicationManagerView);
+-                        publicationManagerModel.addObserver(managerBridge);
++			publicationManagerModel.addObserver(managerBridge);
+ 			publicationManagerView.setVisible(true);
+ 		}
+ 	}
+@@ -1309,15 +1351,18 @@
+ 						// 1 anyway...
+ 						tf.setValue(1);
+ 				} else {
+-                                    try {
+-                                       model.setRecordsPerPage(i);                    
+-                                    } catch (RemoteException ex) {  
+-                                        JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
+-                                        ex.printStackTrace();
+-                                    } catch (DBLayerException ex) {
+-                                        JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
+-                                        ex.printStackTrace();
+-                                    }				}
++					try {
++						model.setRecordsPerPage(i);
++					} catch (RemoteException ex) {
++						JOptionPane.showMessageDialog(view, &quot;RemoteException: &quot;
++								+ ex);
++						ex.printStackTrace();
++					} catch (DBLayerException ex) {
++						JOptionPane.showMessageDialog(view,
++								&quot;DBLayerException: &quot; + ex);
++						ex.printStackTrace();
++					}
++				}
+ 			}
+ 		}
+ 	}
+@@ -1341,21 +1386,23 @@
+ 
+ 	class OverviewMouseListener implements MouseListener {
+ 		public void mouseClicked(MouseEvent e) {
+-                    if (e.getClickCount() &gt;= 2)
+-                    try {
+-                        int resultNumber = model.getSelectedResultNumber();
+-                        if (resultNumber != model.getResultsCount())
+-                            model.selectAndShow(resultNumber);
+-                        detailModel.load(model.getSelectedResultNumber());
+-                        detailView.setVisible(true);
+-                    } catch (RemoteException ex) {  
+-                        JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
+-                        ex.printStackTrace();
+-                    } catch (DBLayerException ex) {
+-                        JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
+-                        ex.printStackTrace();
+-                    }
+-                }
++			if (e.getClickCount() &gt;= 2)
++				try {
++					int resultNumber = model.getSelectedResultNumber();
++					if (resultNumber != model.getResultsCount())
++						model.selectAndShow(resultNumber);
++					detailModel.load(model.getSelectedResultNumber());
++					detailView.setVisible(true);
++				} catch (RemoteException ex) {
++					JOptionPane.showMessageDialog(view, &quot;RemoteException: &quot;
++							+ ex);
++					ex.printStackTrace();
++				} catch (DBLayerException ex) {
++					JOptionPane.showMessageDialog(view, &quot;DBLayerException: &quot;
++							+ ex);
++					ex.printStackTrace();
++				}
++		}
+ 
+ 		public void mousePressed(MouseEvent e) {
+ 		}
+@@ -1380,13 +1427,13 @@
+ 					int resultNumber = model.getSelectedResultNumber();
+ 					if (resultNumber != model.getResultsCount())
+ 						model.selectAndShow(resultNumber - 1);// After Enter
+-																// the
+-																// hyperactive
+-																// JTable moves
+-																// selection to
+-																// next row, so
+-																// we need to
+-																// correct that
++					// the
++					// hyperactive
++					// JTable moves
++					// selection to
++					// next row, so
++					// we need to
++					// correct that
+ 					detailModel.load(model.getSelectedResultNumber());
+ 					detailView.setVisible(true);
+ 				} catch (RemoteException ex) {
+@@ -1422,8 +1469,7 @@
+ 			// Reuse the existing dialogs, hide'em when they're no longer
+ 			// needed.
+ 			if (loginModel == null) {
+-				loginModel = new Login(new RMIDBLayerFactory(), model
+-						.getMainConfig());
++				loginModel = new Login(new RMIDBLayerFactory(), model.getMainConfig());
+ 				loginModel.addObserver(new DatabaseChange());
+ 				loginView = new LoginView(view, loginModel);
+ 				loginCtrl = new LoginCtrl(loginModel, loginView);
+@@ -1432,6 +1478,62 @@
+ 		}
+ 	}
+ 
++	class LogoutAction extends AbstractAction {
++
++		public LogoutAction() {
++			putValue(NAME, L10n.getString(&quot;Overview.MenuFileLogout&quot;));
++			putValue(SHORT_DESCRIPTION, L10n
++					.getString(&quot;Overview.MenuFileLogoutTT&quot;));
++			putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.MenuFileLogout&quot;));
++		}
++
++		public void actionPerformed(ActionEvent arg0) {
++			if (loginModel != null)
++				loginModel.logout();
++
++			/*
++			 * Do some more work here (switch the enabled/disabled menu items,
++			 * etc.)
++			 */
++
++			setDatabaseDependentCommandsEnabled(false);
++		}
++
++	}
++
++	public class ReconnectAction extends AbstractAction {
++
++		private Component parent = view;
++
++		public ReconnectAction() {
++			putValue(NAME, L10n.getString(&quot;Overview.MenuFileReconnect&quot;));
++			putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.MenuFileReconnectTT&quot;));
++			putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Overview.MenuFileReconnect&quot;));
++		}
++
++		public ReconnectAction(Component parent) {
++			this();
++			this.parent = parent;
++		}
++
++		public void setParent(Component parent) {
++			this.parent = parent;
++		}
++
++		public void actionPerformed(ActionEvent arg0) {
++			if (loginModel == null)
++				return;
++			Task t = loginModel.getLastConnectionTask();
++			if (t == null)
++				return;
++			if (parent instanceof JFrame)
++				new DefaultProgressBarEx(t, (JFrame) parent, true);
++			else if (parent instanceof JDialog)
++				new DefaultProgressBarEx(t, (JDialog) parent, true);
++			t.start();
++		}
++	}
++
+ 	// Update all information about the database layer and inform everyone who
+ 	// has to be informed
+ 	class DatabaseChange implements Observer {
+@@ -1524,6 +1626,13 @@
+ 				view.initOverview();
+ 				view.setCursor(Cursor.getDefaultCursor());
+ 				setDatabaseDependentCommandsEnabled(true);
++				
++				/*-------------------------------------------------------------------
++				     Distribute the database layer among existing models.
++				  -------------------------------------------------------------------*/
++				if( exportModel2 != null )
++					exportModel2.setDBLayer( dblayer );
++				
+ 			}
+ 		}
+ 	}
+@@ -1674,37 +1783,39 @@
+ 			}// if arg instanceof Table[]
+ 		}// update()
+ 	}// class ManagerBridge
+-        
+-    class OverviewResizeListener implements ComponentListener {
+-        private final static int sub = 20; //height of the header row perhaps
+-        
+-        public void componentResized(ComponentEvent e) {
+-            if (!model.loggedIn() || !model.dynamicPageLoading)
+-                return;
+-            Component c = e.getComponent();
+-            int tableHeight = c.getSize().height - sub; //height of the row part of JTable ( --&gt; without header)
+-            int rowHeight = view.overview.getRowHeight();
+-            int newRecordsCount = tableHeight / rowHeight;
+-            try {
+-                model.setRecordsPerPage(newRecordsCount);
+-                view.recordsPerPage.setValue(newRecordsCount);
+-            } catch (RemoteException ex) {  
+-                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
+-                ex.printStackTrace();
+-            } catch (DBLayerException ex) {
+-                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
+-                ex.printStackTrace();
+-            }
+-        }
+ 
+-        public void componentMoved(ComponentEvent e) {
+-        }
++	class OverviewResizeListener implements ComponentListener {
++		private final static int sub = 20; // height of the header row perhaps
+ 
+-        public void componentShown(ComponentEvent e) {
+-        }
++		public void componentResized(ComponentEvent e) {
++			if (!model.loggedIn() || !model.dynamicPageLoading)
++				return;
++			Component c = e.getComponent();
++			int tableHeight = c.getSize().height - sub; // height of the row
++														// part of JTable ( --&gt;
++														// without header)
++			int rowHeight = view.overview.getRowHeight();
++			int newRecordsCount = tableHeight / rowHeight;
++			try {
++				model.setRecordsPerPage(newRecordsCount);
++				view.recordsPerPage.setValue(newRecordsCount);
++			} catch (RemoteException ex) {
++				JOptionPane.showMessageDialog(view, &quot;RemoteException: &quot; + ex);
++				ex.printStackTrace();
++			} catch (DBLayerException ex) {
++				JOptionPane.showMessageDialog(view, &quot;DBLayerException: &quot; + ex);
++				ex.printStackTrace();
++			}
++		}
+ 
+-        public void componentHidden(ComponentEvent e) {
+-        }        
+-    }        
++		public void componentMoved(ComponentEvent e) {
++		}
+ 
++		public void componentShown(ComponentEvent e) {
++		}
++
++		public void componentHidden(ComponentEvent e) {
++		}
++	}
++
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng2.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -89,8 +89,7 @@
+ 	 * @param selection	The list of selected records. 
+ 	 * @param template	The list of selected columns. &lt;b&gt;Null means everything is selected.&lt;/b&gt;
+ 	 */
+-	public ExportMng2(DBLayer dblayer, SelectQuery query, Selection selection, Projection template) 
+-	throws ExportException, DBLayerException, RemoteException {
++	public ExportMng2(DBLayer dblayer, SelectQuery query, Selection selection, Projection template) {
+ 		this(dblayer, query, selection, template, null, null, false, null);
+ 	}
+ 
+@@ -103,8 +102,7 @@
+ 	 * 
+ 	 * @param dblayer	The database layer mediating the access to the database.
+ 	 */
+-	public ExportMng2(DBLayer dblayer) 
+-	throws ExportException {
++	public ExportMng2(DBLayer dblayer) {
+ 		setDBLayer(dblayer);
+ 		setSelection(null);
+ 	}
+@@ -115,8 +113,7 @@
+ 	 * @param dblayer	The database layer mediating the access to the database.
+ 	 * @param query	The query defining the result set which is to be iterated over.
+ 	 */
+-	public ExportMng2(DBLayer dblayer, SelectQuery query) 
+-	throws ExportException, DBLayerException, RemoteException {
++	public ExportMng2(DBLayer dblayer, SelectQuery query) {
+ 		this(dblayer, query, null, null, null, null, false, null);
+ 	}
+ 	
+@@ -142,7 +139,7 @@
+ 			String filename,
+ 			boolean useProjections,
+ 			Class rootTable) 
+-	throws ExportException, DBLayerException, RemoteException  {
++	{
+ 		useProjections( useProjections );
+ 		setRootTable( rootTable );
+ 		setDBLayer(dblayer);
+@@ -359,10 +356,10 @@
+ 
+ 
+ 	synchronized public void update(Observable source, Object arg) {
+-		if( !((ExportTask)source).isExportInProgress() ) {
+-			exportTasks.remove( source );
+-			source.deleteObserver(this);
+-		}
++//		if( !((ExportTask)source).isExportInProgress() ) {
++//			exportTasks.remove( source );
++//			source.deleteObserver(this);
++//		}
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -20,6 +20,7 @@
+ 	private JFileChooser choice;
+ 	
+ 	private ExportMngViewB viewB;
++	
+ 
+ 	
+ 	public ExportMngCtrl2(ExportMng2 model, AppCoreView view) {
+@@ -71,7 +72,7 @@
+ 	private void performExport() {
+ 		try {
+ 			ExportTask2 export = model.createExportTask();
+-			new DefaultProgressBarEx(export, parentView, false);
++			new DefaultProgressBarEx(export, parentView, true);
+ 			export.start();
+ 		} catch(Exception e) {
+ 			JOptionPane.showMessageDialog(null,
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -42,13 +42,11 @@
+ 	 * The list of databases the User has accessed. This list is unique for every User
+ 	 * and is stored in his home directory. 
+ 	 */
+-	private ArrayList&lt;DBInfo&gt; dbinfo = new ArrayList&lt;DBInfo&gt;(10);
++	private ArrayList&lt;DBInfo&gt; dbinfos = new ArrayList&lt;DBInfo&gt;(10);
+ 	
+ 	/** The currently selected record. Null means nothing is selected. */
+ 	private DBInfo selected = null;
+ 	
+-	//private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
+-	
+ 	private MainConfig mainConfig = null;
+ 	private DBLayerFactory factory = null;
+ 	private DBLayer dblayer;
+@@ -57,6 +55,8 @@
+ 	private Right accessRights;
+ 	private User plantloreUser;
+ 	
++	private Task lastConnectionTask; 
++	
+ 	/**
+ 	 * Create a new login model. The DBLayer factory will be used to produce 
+ 	 * new DBLayers.
+@@ -77,7 +77,7 @@
+ 		logger.debug(&quot;Loading the stored list of databases.&quot;);
+ 		
+ 		for (DBInfo savedDBInfo: mainConfig.getDBinfos())
+-			dbinfo.add(savedDBInfo);
++			dbinfos.add(savedDBInfo);
+ 		this.setChanged(); this.notifyObservers(UPDATE_LIST);
+ 
+ 		// Restore the last selected record.
+@@ -94,7 +94,7 @@
+ 	protected void save() {
+ 		logger.debug(&quot;Saving the list of databases.&quot;);
+ 		
+-		mainConfig.setDBInfos(dbinfo, selected);
++		mainConfig.setDBInfos(dbinfos, selected);
+ 		try {
+ 			mainConfig.save();
+ 		}catch(IOException e) {
+@@ -123,7 +123,7 @@
+ 		DBInfo r = new DBInfo(
+ 				alias, host, port, databaseType, databasePort, databaseIdentifier, databaseParameter,
+ 				new String[MAX_NAMES], masterUser, masterPassword );
+-		dbinfo.add(r);
++		dbinfos.add(r);
+ 		logger.debug(&quot;New database record has been created &quot; + r);
+ 		save();
+ 		setChanged(); notifyObservers(UPDATE_LIST);
+@@ -135,7 +135,7 @@
+ 	 */
+ 	synchronized public void deleteSelectedRecord() {
+ 		if(selected == null) return;
+-		dbinfo.remove(selected);
++		dbinfos.remove(selected);
+ 		logger.debug(&quot;The selected record has been removed &quot; + selected);
+ 		selected = null;
+ 		save();
+@@ -183,7 +183,7 @@
+ 	 */
+ 	synchronized public DBInfo[] getRecords() {
+ 		// Seeing is believing: <A HREF="http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[">http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[</A>])
+-		return dbinfo.toArray(new DBInfo[0]);
++		return dbinfos.toArray(new DBInfo[0]);
+ 	}
+ 	
+ 	private int lastIndex = Integer.MIN_VALUE;
+@@ -198,7 +198,7 @@
+ 		if(index == lastIndex) 
+ 			return;
+ 		else if(index &gt;= 0) 
+-			selected = dbinfo.get(index); 
++			selected = dbinfos.get(index); 
+ 		else 
+ 			selected = null;
+ 		
+@@ -318,75 +318,89 @@
+ 	 * @param name The account name (used to access the database).  
+ 	 * @param password The password to the account.
+ 	 */
+-	synchronized public Task createConnectionTask(final String name, final String password) {
++	synchronized public Task createConnectionTask(String name, String password) {
+ 		if(selected == null) {
+ 			logger.debug(&quot;The System cannot create a connection when nothing was selected!&quot;);
+ 			return null;
+ 		}
+ 		
+ 		logout();
+-		
+-		final DBInfo selectedClone = selected.clone();
+ 
+ 		// The current username is moved to the top of the list of names :) Nice feature.
+-		selectedClone.promoteUser(name);
++		selected.promoteUser(name);
+ 		// Save the current state.
+ 		save();
+ 		
+-		return new Task() {
++		return lastConnectionTask = new ConnectionTask( selected.clone(), name, password );
+ 
+-			@Override
+-			public Object task() throws Exception {
++	}
++	
++	
++	
++	private class ConnectionTask extends Task {
++		
++		private DBInfo dbinfo;
++		private transient String name, password;
++		
++		
++		public ConnectionTask(DBInfo dbinfo, String name, String password) {
++			this.dbinfo = dbinfo;
++			this.name = name;
++			this.password = password;
++		}
++		
++		@Override
++		public Object task() throws Exception {
++			
++			try {				
++				// Create a new database layer.
++				logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + dbinfo.host + &quot;:&quot; + dbinfo.port);
++				setStatusMessage( L10n.getString(&quot;Login.Connecting&quot;) );
++				dblayer = factory.create( dbinfo );
++				if(isCanceled())
++					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
+ 				
+-				try {				
+-					// Create a new database layer.
+-					logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + selectedClone.host + &quot;:&quot; + selectedClone.port);
+-					setStatusMessage( L10n.getString(&quot;Login.Connecting&quot;) );
+-					dblayer = factory.create( selectedClone );
+-					if(isCanceled())
+-						throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
+-					
+-					logger.debug(&quot;Connection successful.&quot;);
+-					setStatusMessage( L10n.getString(&quot;Login.Connected&quot;) );
+-					
+-					// Initialize the database layer.
+-					setStatusMessage( L10n.getString(&quot;Login.InitializingDBLayer&quot;) );
+-					logger.debug(&quot;Initializing that DBLayer (&quot; + selectedClone.databaseType + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+-					
+-					Object[] init = dblayer.initialize(selectedClone.getDatabaseIdentifier(), name, password);
+-					if(isCanceled())
+-						throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
+-					plantloreUser = (User)init[0];
+-					accessRights = (Right)init[1];
+-				} 
+-				catch (Exception e) {
+-					logger.error(&quot;The initialization of the DBLayer failed! &quot; + e.getMessage());
+-					// If the initialization of the DBLayer failed, the uninitialized DBLayer must be destroyed!
+-					// Otherwise, the server's policy may not allow another connection from this client!
+-					if(dblayer != null)
+-						try {
+-							factory.destroy(dblayer);
+-						} catch(RemoteException re) {
+-							// Nothing we can do; the server is probably in trouble, or the network connection failed. 
+-						}
+-					// Re-throw the exception so that the view is updated as well.
+-					throw e;
+-				}
++				logger.debug(&quot;Connection successful.&quot;);
++				setStatusMessage( L10n.getString(&quot;Login.Connected&quot;) );
+ 				
+-				setStatusMessage( L10n.getString(&quot;Login.DBLayerInitialized&quot;) );
+-				logger.debug(&quot;DBLayer initialized.&quot;);
++				// Initialize the database layer.
++				setStatusMessage( L10n.getString(&quot;Login.InitializingDBLayer&quot;) );
++				logger.debug(&quot;Initializing that DBLayer (&quot; + dbinfo.databaseType + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+ 				
+-				fireStopped(null);
+-				
+-				// Everything went fine - 
+-				// there is a new DBLayer which is to be announced to the observers of Login.
+-				announceConnection();
+-				return null;
++				Object[] init = dblayer.initialize(dbinfo.getDatabaseIdentifier(), name, password);
++				if(isCanceled())
++					throw new Exception(L10n.getString(&quot;Common.Canceled&quot;));
++				plantloreUser = (User)init[0];
++				accessRights = (Right)init[1];
++			} 
++			catch (Exception e) {
++				logger.error(&quot;The initialization of the DBLayer failed! &quot; + e.getMessage());
++				// If the initialization of the DBLayer failed, the uninitialized DBLayer must be destroyed!
++				// Otherwise, the server's policy may not allow another connection from this client!
++				if(dblayer != null)
++					try {
++						factory.destroy(dblayer);
++					} catch(RemoteException re) {
++						// Nothing we can do; the server is probably in trouble, or the network connection failed. 
++					}
++				// Re-throw the exception so that the view is updated as well.
++				throw e;
+ 			}
+-		};
+-	
++			
++			setStatusMessage( L10n.getString(&quot;Login.DBLayerInitialized&quot;) );
++			logger.debug(&quot;DBLayer initialized.&quot;);
++			
++			fireStopped(null);
++			
++			// Everything went fine - 
++			// there is a new DBLayer which is to be announced to the observers of Login.
++			announceConnection();
++			return null;
++		}
+ 	}
+ 	
++	
++	
+ 	/**
+ 	 * Cancel the login proces.
+ 	 *
+@@ -399,7 +413,7 @@
+ 		}
+ 		logout();
+ 		setChanged(); notifyObservers(L10n.getString(&quot;Login.Interrupted&quot;));
+-	} //NO LONGER AVAILABLE (it didn't work anyway).
++	}
+ 	
+ 	
+ 	
+@@ -420,6 +434,12 @@
+ 			}
+ 	}
+ 	
++	
++	
++	synchronized public Task getLastConnectionTask() {
++		return lastConnectionTask;
++	}
++	
+ 		
+ 	/**
+ 	 * @return The last DBLayer that has been created.  
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBar.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -1,10 +1,12 @@
+ package net.sf.plantlore.common;
+ 
+-import java.awt.Component;
++import java.rmi.RemoteException;
+ 
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
++
++import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+@@ -18,9 +20,6 @@
+  */
+ public class DefaultProgressBar extends ProgressBar {
+ 	
+-	private Component[] components;
+-	
+-	
+ 	public DefaultProgressBar(Task task, JFrame parent, boolean modal) {
+ 		super(task, parent, modal);
+ 	}
+@@ -30,30 +29,21 @@
+ 	}
+ 	
+ 	
+-	public DefaultProgressBar unlockComponents(Component...c) {
+-		this.components = c;
+-		return this;
+-	}
+-	
+-	
+ 	@Override
+-	public void afterStopped(Object value) {
+-		super.afterStopped(value);
+-		if(components != null)
+-			for(Component c : components)
+-				c.setEnabled(true);
+-	}
+-	
+-	
+-	@Override
+ 	public void exceptionHandler(Exception ex) {
+-		JOptionPane.showMessageDialog( 
+-				parent, 
+-				ex.getMessage(), 
+-				L10n.getString(&quot;Error.General&quot;), 
+-				JOptionPane.ERROR_MESSAGE );
++		
++		if( ex instanceof RemoteException || ex instanceof DBLayerException )
++			DefaultReconnectDialog.show(parent, ex);
++		
++		else
++			JOptionPane.showMessageDialog( 
++					parent, 
++					ex.getMessage(), 
++					L10n.getString(&quot;Error.General&quot;), 
++					JOptionPane.ERROR_MESSAGE );
++		
+ 		getTask().stop();
+-		getTask().fireStopped(null); // So that the afterStopped() method is called! (BUG OR FEATURE in Task?)
++		
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/common/DefaultProgressBarEx.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -1,8 +1,11 @@
+ package net.sf.plantlore.common;
+ 
++import java.rmi.RemoteException;
++
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
++
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+@@ -16,7 +19,6 @@
+  */
+ public class DefaultProgressBarEx extends ProgressBarEx {
+ 	
+-	
+ 	public DefaultProgressBarEx(Task task, JFrame parent, boolean modal) {
+ 		super(task, parent, modal);
+ 	}
+@@ -26,16 +28,23 @@
+ 	}
+ 	
+ 	
++
+ 	
+ 	@Override
+ 	public void exceptionHandler(Exception ex) {
+-		JOptionPane.showMessageDialog( 
+-				parent, 
+-				ex.getMessage(), 
+-				L10n.getString(&quot;Error.General&quot;), 
+-				JOptionPane.ERROR_MESSAGE );
++		
++		if( ex instanceof RemoteException )
++			DefaultReconnectDialog.show(parent, ex);
++		
++		else
++			JOptionPane.showMessageDialog( 
++					parent, 
++					ex.getMessage(), 
++					L10n.getString(&quot;Error.General&quot;), 
++					JOptionPane.ERROR_MESSAGE );
++		
+ 		getTask().stop();
+-		getTask().fireStopped(null); // So that the afterStopped() method is called! (BUG OR FEATURE in Task?)
++		
+ 	}
+ 	
+ }
+
+Added: trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/common/DefaultReconnectDialog.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -0,0 +1,59 @@
++package net.sf.plantlore.common;
++
++import java.awt.Component;
++import javax.swing.JOptionPane;
++import net.sf.plantlore.l10n.L10n;
++import net.sf.plantlore.client.AppCoreCtrl;
++
++
++public class DefaultReconnectDialog {
++	
++	private static String[] options = new String[] { L10n.getString(&quot;Overview.MenuFileReconnect&quot;), L10n.getString(&quot;Common.OK&quot;) };
++	private static AppCoreCtrl.ReconnectAction defaultReconnectAction;
++
++	
++	public static void setDefaultReconnectAction(AppCoreCtrl.ReconnectAction reconnect) {
++		defaultReconnectAction = reconnect;
++	}
++	
++	
++	public static void show(Component parent, Exception e, AppCoreCtrl.ReconnectAction reconnect) {
++		
++		//reconnect.setParent(parent);
++		
++		int choice = JOptionPane.showOptionDialog(
++				parent, 
++				e.getMessage(), 
++				L10n.getString(&quot;Error.ConnectionLost&quot;),
++				0,
++				JOptionPane.ERROR_MESSAGE,
++				null, 
++				options,
++				options[0]
++		);
++		
++		if(choice == 0) 
++			reconnect.actionPerformed(null);
++	}
++	
++	
++	public static void show(Component parent, Exception e) {
++		
++		defaultReconnectAction.setParent(parent);
++		
++		int choice = JOptionPane.showOptionDialog(
++				parent, 
++				e.getMessage(), 
++				L10n.getString(&quot;Error.ConnectionLost&quot;),
++				0,
++				JOptionPane.ERROR_MESSAGE,
++				null, 
++				options,
++				options[0]
++		);
++		
++		if(choice == 0 &amp;&amp; defaultReconnectAction != null) 
++			defaultReconnectAction.actionPerformed(null);
++	}
++
++}
+
+Modified: trunk/src/net/sf/plantlore/common/debug/MemoryMonitor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/debug/MemoryMonitor.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/common/debug/MemoryMonitor.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -16,7 +16,7 @@
+     public MemoryMonitor() {
+         initComponents();
+         
+-        progress.setMaximum(512); // My computer has 512MB memory
++        progress.setMaximum(512); // My computer has 512MB memory [java -Xmx512m]
+         progress.setStringPainted(true);
+ 
+         
+@@ -31,9 +31,9 @@
+         Thread t = new Thread() {
+         	private Thread update = new Thread() {
+             	public void run() {
+-            		int total = (int)( Runtime.getRuntime().totalMemory() / (1024*1024) );
+-                	progress.setValue(total);
+-                	progress.setString(total + &quot;MB&quot;);
++            		float total = Runtime.getRuntime().totalMemory() / (1024.0f*1024.0f);
++                	progress.setValue( (int)total );
++                	progress.setString(Float.toString( Math.round(total*10) / 10.0f ) + &quot;MB&quot;);
+             	}
+             };
+             
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-03 23:14:30 UTC (rev 484)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-08-04 11:35:26 UTC (rev 485)
+@@ -2232,12 +2232,17 @@
+     	if(undertaker != null) 
+     		for(SelectQuery sq : queries.values()) 
+     			try { UnicastRemoteObject.unexportObject(sq, true); }
+-    			catch(NoSuchObjectException e) {}
++    			catch(NoSuchObjectException e) {/* Ignore it.*/}
+     	queries.clear();
+     	
+     	//kovo by mel asi nejak poukoncovat otevreny vysledky
+-    	//for each unfinished (unclosed) result do close(result)  
++    	//for each unfinished (unclosed) result do close(result)
+     	
++    	
++    	
++    	
++    	sessionFactory = null;
++    	
+     }
+    
+     // TODO: IS IT OK TO OVERRIDE THIS METHOD?
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000633.html">[Plantlore-dev] Reconnect &amp; RemoteException
+</A></li>
+	<LI>Next message: <A HREF="000635.html">[Plantlore-dev] [Task #3045] User documentation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#634">[ date ]</a>
+              <a href="thread.html#634">[ thread ]</a>
+              <a href="subject.html#634">[ subject ]</a>
+              <a href="author.html#634">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

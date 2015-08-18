@@ -1,0 +1,814 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r183 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r183%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604242018.k3OKIVpx013891%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000202.html">
+   <LINK REL="Next"  HREF="000204.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r183 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r183%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%20client/export/builders%20common/record&In-Reply-To=%3C200604242018.k3OKIVpx013891%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r183 - in trunk/src/net/sf/plantlore: client/export client/export/builders common/record">krater at berlios.de
+       </A><BR>
+    <I>Mon Apr 24 22:18:31 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000202.html">[Plantlore-dev] BioCASE
+</A></li>
+        <LI>Next message: <A HREF="000204.html">[Plantlore-dev] r184 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#203">[ date ]</a>
+              <a href="thread.html#203">[ thread ]</a>
+              <a href="subject.html#203">[ subject ]</a>
+              <a href="author.html#203">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-24 22:18:29 +0200 (Mon, 24 Apr 2006)
+New Revision: 183
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/Builder.java
+   trunk/src/net/sf/plantlore/client/export/Director.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+   trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+   trunk/src/net/sf/plantlore/common/record/Plant.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+   trunk/src/net/sf/plantlore/common/record/Territory.java
+   trunk/src/net/sf/plantlore/common/record/Village.java
+Log:
+Records' getColumns(), getForeignKeys() return ArrayList&lt;String&gt; instead of a String[].
+The interface Builder changed to suit a new purpose. CSVBuilder rewritten accordingly.
+Builder is not up-to-date. Do not use it yet.
+
+Modified: trunk/src/net/sf/plantlore/client/export/Builder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/client/export/Builder.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -20,25 +20,26 @@
+ 	/** 
+ 	 * Write a header. This method is called just once before the iteration starts. 
+ 	 */
+-	void makeHeader() throws IOException;
++	void header() throws IOException;
+ 	
+ 	/** 
+ 	 * Write a footer. This method is called just once after the iteration ends. 
+ 	 */
+-	void makeFooter() throws IOException;
++	void footer() throws IOException;
+ 	
+ 	/** 
+ 	 * Make adjustments needed before
+ 	 * the output of another record starts. 
+ 	 * This method is called right before the &lt;code&gt;writeRecord()&lt;/code&gt;. 
+ 	 */
+-	void startNewRecord() throws IOException;
++	void startRecord() throws IOException;
+ 	
+-	/** 
+-	 * Write the record that is contained within the &lt;code&gt;args&lt;/code&gt; array.
+-	 * @see net.sf.plantlore.middleware.DBLayer
++	/**
++	 * 
++	 * @param arg
++	 * @throws IOException
+ 	 */
+-	void writeRecord(Record[] args) throws IOException;
++	void part(Record arg) throws IOException;
+ 	
+ 	/** 
+ 	 * Make adjustments needed after the output of the current record is completed.
+
+Modified: trunk/src/net/sf/plantlore/client/export/Director.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/client/export/Director.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -17,14 +17,11 @@
+  * Purpose: The Director continualy fetches results of the &lt;code&gt;query&lt;/code&gt;.
+  * The selected queries (queries whose ID is in the &lt;code&gt;selection&lt;/code&gt;)
+  * are passed to the &lt;code&gt;builder&lt;/code&gt; - the builder is responsible for
+- * parsing the result and creating a corresponing output.
+- * &lt;br/&gt;
+- * Note that the Director doesn't manage any of these objects.
+- * It merely iterates over the selected records of the result.
++ * creating a corresponing output.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-21
+- *	@version 1.0
++ *	@version wrong (must be rewritten!) 
+  *
+  * @see net.sf.plantlore.client.common.Selection
+  * @see net.sf.plantlore.client.export.Builder
+@@ -34,7 +31,7 @@
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	
+-	private Builder builder;
++	private Builder build;
+ 	private SelectQuery query;
+ 	private Selection selection;
+ 	private DBLayer database;
+@@ -52,7 +49,7 @@
+ 	 * @param selection	The set of selected records.
+ 	 */
+ 	public Director(Builder builder, SelectQuery query, DBLayer database, Selection selection) {
+-		this.builder = builder; this.query = query; this.database = database;
++		this.build = builder; this.query = query; this.database = database;
+ 		this.selection = selection;
+ 	}
+ 	
+@@ -67,7 +64,7 @@
+ 			logger.info(&quot;Export begins...&quot;);
+ 			
+ 			// Create the header of the file (some opening tags possibly).
+-			builder.makeHeader();
++			build.header();
+ 			// Iterate over the result of the query.
+ 			for(int i = 0; i &lt; database.getNumRows( result ); i++) {
+ 				Record[] records = (Record[]) database.next( result );
+@@ -75,12 +72,16 @@
+ 				
+ 				count++;
+ 				// Write down this record.
+-				builder.startNewRecord();
+-				builder.writeRecord( records );
+-				builder.finishRecord();
++				build.startRecord();
++				
++				// Parse the record.
++				//build.writeRecord( records );
++				
++				
++				build.finishRecord();
+ 			}
+ 			// Create the footer of the file (some closing tags possibly).
+-			builder.makeFooter();
++			build.footer();
+ 			logger.info(&quot;Export completed. &quot; + count + &quot; records sent to output.&quot;);
+ 		}
+ 		// FIXME: Since the run() method comes from the Runnable interface, it cannot throw
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -8,6 +8,9 @@
+ 
+ 
+ /**
++ * The template that holds the information about the selected columns and tables.
++ * This information is used by the builder to decide, whether or not the currently
++ * considered column of a table should be exported.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-22
+@@ -20,35 +23,89 @@
+ 	/** The list of all tables the current template covers. */
+ 	private ArrayList&lt;Class&gt; tables = new ArrayList&lt;Class&gt;(20);
+ 	
+-	/** The list of &quot;basic tables&quot; i.e. tables related directly to the Occurence data. */
++	/** 
++	 * The list of &quot;basic tables&quot; i.e. tables related directly to the Occurence data.
++	 */
+ 	public final static Class[] BASIC_TABLES = new Class[] { 
+ 			Author.class, AuthorOccurrence.class, Habitat.class,
+ 			Metadata.class, Occurrence.class, Phytochorion.class,
+ 			Plant.class, Publication.class, Territory.class,
+-			Village.class
+-			};
++			Village.class };
++		
++	/** 
++	 * @return The table that is central (primary) to the current query. 
++	 */
++	public Class getRootTable() { return tables.get(0); }
+ 	
+-	public static Class whichTable(Record record) {
+-		for(Class c : BASIC_TABLES)
+-			if( c.isInstance( record ) ) return c;
+-		return null;
++	/** 
++	 * Mark the database as set every time the database gets involved in a query!
++	 * @param table	The database that is involved in a query.
++	 */ 
++	public void set(Class table) { 
++		tables.add(table); 
+ 	}
+ 	
+-	/** The table that is central to the current query. */
+-	public Class getRootTable() { return tables.get(0); }
++	/** 
++	 * Unset a previously selected table.
++	 * @param table The table to be unset. 
++	 */
++	public void unset(Class table) { 
++		tables.remove(table);
++	}
+ 	
+-	public void setTable(Class table) { tables.add(table); }
+-	public void unsetTable(Class table) { tables.remove(table); }
+-	public boolean isSetTable(Class table) { return tables.contains(table); } 
+-	public boolean isSetTableD(Class table) { return tables.remove(table); }
++	/** 
++	 * 
++	 * @param table
++	 * @return true if the some of the table's columns are seleted to be exported. 
++	 */
++	public boolean isSet(Class table) { 
++		return tables.contains(table); 
++	} 
+ 	
+-	public void set(Class table, String column) { columns.add(table+&quot;.&quot;+column); }
+-	public void unset(Class table, String column) { columns.remove(table+&quot;.&quot;+column); }
+-	public boolean isSet(Class table, String column) { return columns.contains(table+&quot;.&quot;+column); }
++	/**
++	 * 
++	 * @param table	The table we are interested in and that will be deleted if it is there.
++	 * @return true if the table is set.
++	 */
++	public boolean isSetD(Class table) { return tables.remove(table); }
+ 	
++	/**
++	 * 
++	 * @param table
++	 * @param column
++	 */
++	public void set(Class table, String column) { 
++		columns.add(table+&quot;.&quot;+column);
++		tables.add(table);
++	}
++	
++	
++	public void unset(Class table, String column) { 
++		columns.remove(table+&quot;.&quot;+column); 
++	}
++	
++	
++	public boolean isSet(Class table, String column) { 
++		return columns.contains(table+&quot;.&quot;+column); 
++	}
++	
++	/** 
++	 * Deselect all columns of all tables.
++	 */
++	public void unsetAll() { 
++		columns.clear(); 
++		tables.clear();
++	}
++	
+ 		
+-	public void unsetAll() { columns.clear(); }
+-	
+-	public boolean match(Template t) { return columns.containsAll(t.columns); }
++	/**
++	 * Match this template against another one.
++	 * 
++	 * @param t	The template against which the matching will be held.
++	 * @return	True if this template is a superset of the other template.
++	 */ 
++	public boolean match(Template t) { 
++		return columns.containsAll(t.columns); 
++	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/client/export/builders/CSVBuilder.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -2,29 +2,41 @@
+ 
+ import java.io.IOException;
+ import java.io.Writer;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.ArrayList;
++import java.util.Hashtable;
+ 
+-import net.sf.plantlore.client.export.MetaBuilder;
+-//import net.sf.plantlore.client.export.RecordWalkBuilder;
++import net.sf.plantlore.client.export.Builder;
++import net.sf.plantlore.common.record.*;
+ import net.sf.plantlore.client.export.Template;
+ 
+ 
+ /**
+  * CSV Builder.
++ * An ingenious use of introspection :]
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+  * @since 2006-04-23
+  */
+-public class CSVBuilder extends MetaBuilder {
++public class CSVBuilder implements Builder{
+ 	
+ 	private Writer output;
+-	private Template tmp;
++	
++	private boolean first;
+ 		
+ 	private static final String DELIMITER = &quot;,&quot;;
+ 	private static final String DOUBLEQUOTE = &quot;\&quot;&quot;;
+ 	private static final String NEWLINE = System.getProperty(&quot;line.separator&quot;);
+ 	
+-	private boolean firstColumn = true;
++	private static final Object[] NO_PARAMETERS = new Object[0];
+ 	
++	
++	private ArrayList&lt;Record&gt; cache = new ArrayList&lt;Record&gt;(20);
++	private ArrayList&lt;Author&gt; authors = new ArrayList&lt;Author&gt;(10);
++	
++	private Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt; properties = 
++		new Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt;(20);
+ 		
+ 	/**
+ 	 * Create a new CSV Builder. 
+@@ -34,25 +46,65 @@
+ 	 * @param tmp	The template that describes the selected columns and tables.
+ 	 */
+ 	public CSVBuilder(Writer output, Template tmp) {
+-		super( tmp );
+-		this.output = output; this.tmp = tmp;
++		this.output = output;
++		for( Class table : Template.BASIC_TABLES)
++			try {
++				// Get the list of all properties.
++				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getProperties();
++				// Create a list of getters of those properties.
++				ArrayList&lt;Method&gt; methods = new ArrayList&lt;Method&gt;( columns.size() );
++				properties.put(table, methods);
++				// Check if these properties (columns) are set to be exported. 
++				for(String column : columns)  
++					if( !tmp.isSet(table, column) ) // yes -&gt; store the getter
++						try {
++							methods.add( table.getMethod( methodName(column), new Class[0] ) );
++						} catch(NoSuchMethodException e) {}
++			} 
++			catch(IllegalAccessException e) {}
++			catch(InstantiationException e) {}
+ 	}
+ 	
+ 	
+-	@Override
++	public void header() throws IOException {
++		
++	}
++	
++	
++	public void footer() throws IOException {
++		output.write(NEWLINE);
++	}
++	
++	
++	public void startRecord() throws IOException {
++		 cache.clear(); authors.clear(); first = true;
++	}
++	
++	
+ 	public void finishRecord() throws IOException {
++		if(authors.size() == 0)
++			for(Record record : cache) write( record );
++		else
++			for(Author author : authors) {
++				for(Record record : cache) write( record );
++				write( author );
++			}
++		
+ 		output.write(NEWLINE);		
+-		firstColumn = true;
+ 	}
+ 	
++	
++	public void part(Record record) throws IOException {
++		if(record instanceof Author) authors.add( (Author) record);
++		else cache.add(record);
++	}
++	
++	
+ 	/**
+-	 * Send the &lt;code&gt;[table, column, value]&lt;/code&gt; in the CSV format
++	 * Send the &lt;code&gt;value&lt;/code&gt; in the CSV format
+ 	 * to the output.
+ 	 */ 
+-	protected void w(Class table, String column, Object value) throws IOException {
+-		// Shall we export this column?
+-		if( !tmp.isSet(table, column) ) return;
+-		
++	protected void w(Object value) throws IOException {
+ 		StringBuilder r = new StringBuilder( value.toString() );
+ 		boolean containsDoubleQuote = r.indexOf(DOUBLEQUOTE) &gt;= 0, 
+ 			containsDelimiter = r.indexOf(DELIMITER) &gt;= 0,
+@@ -71,11 +123,36 @@
+ 			r.insert(0, DOUBLEQUOTE); r.append(DOUBLEQUOTE);
+ 		}
+ 		
+-		if( firstColumn ) firstColumn = false; 
+-		else output.write( DELIMITER );
+ 		output.write( r.toString() );
+-			
+ 	}
+ 	
++	/**
++	 * Construct the getter method name from the name of the &lt;code&gt;column&lt;/code&gt;
++	 * 
++	 * @param column	The name of the column whose value we need to obtain. 
++	 * @return	The getter's name.
++	 */
++	private String methodName(String column) {
++		StringBuilder s = new StringBuilder(&quot;get&quot; + column); // prepend `get` in front of  the name
++		s.setCharAt(3, Character.toUpperCase(s.charAt(3))); // convert the first letter of the name to uppercase
++		return s.toString();
++	}
+ 
++	
++	
++	protected void write(Record record) throws IOException {
++		Class table =  record.getClass();
++		ArrayList&lt;Method&gt; methods = properties.get( table );
++		for(Method getter : methods) 
++			try {
++				// Invoke the getter.
++				Object value = getter.invoke( record, NO_PARAMETERS );
++				if( !first ) output.write(DELIMITER); else first = false;
++				w( value );
++			} 
++			catch(IllegalAccessException e) {}
++			catch(InvocationTargetException e) {}
++	}
++	
++
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -6,6 +6,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TAUTHORS table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents an author
+@@ -44,8 +46,8 @@
+     public Author() {
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, WHOLENAME, ORGANIZATION, ROLE, ADDRESS, PHONENUMBER, EMAIL, URL, NOTE };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, WHOLENAME, ORGANIZATION, ROLE, ADDRESS, PHONENUMBER, EMAIL, URL, NOTE );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TAUTHORSOCCURENCES table in the DB. This object is used as a 
+  *  data holder for Hibernate operations on the server side. On the side of the client, it 
+@@ -32,12 +34,12 @@
+     public static final String RESULTREVISION = &quot;resultRevision&quot;;
+     
+     @Override
+-    public String[] getForeignKeys() { 
+-    	return new String[] { AUTHOR, OCCURRENCE }; 
++    public ArrayList&lt;String&gt; getForeignKeys() { 
++    	return list( AUTHOR, OCCURRENCE ); 
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, AUTHOR, OCCURRENCE, ROLE, RESULTREVISION };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, AUTHOR, OCCURRENCE, ROLE, RESULTREVISION );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing THABITATS table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a habitat
+@@ -46,13 +48,13 @@
+     public static final String NOTE = &quot;note&quot;;
+     
+     @Override
+-    public String[] getForeignKeys() { 
+-    	return new String[] { TERRITORY, PHYTOCHORION, NEARESTVILLAGE }; 
++    public ArrayList&lt;String&gt; getForeignKeys() { 
++    	return list( TERRITORY, PHYTOCHORION, NEARESTVILLAGE ); 
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
+-    			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++    			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TMETADATA table in the DB. This object is used as a data
+  *  holder for Hibernate operations on the server side. On the side of the client, it represents
+@@ -61,12 +63,12 @@
+     public Metadata() {
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, TECHNICALCONTACTNAME,
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, TECHNICALCONTACTADDRESS, TECHNICALCONTACTEMAIL, TECHNICALCONTACTNAME,
+     			CONTENTCONTACTADDRESS, CONTENTCONTACTEMAIL, CONTENTCONTACTNAME,
+     			DATASETDETAILS, DATASETTITLE, SOURCEID, SOURCEINSTITUTIONID,
+     			OWNERORGANIZATIONABBREV, BIOTOPETEXT, RECORDBASIS, VERSIONPLANTSFILE,
+-    			DATECREATE, DATEMODIFIED };
++    			DATECREATE, DATEMODIFIED );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TAUTHORS table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents an occurrence
+@@ -64,15 +66,15 @@
+     
+     
+     @Override
+-    public String[] getForeignKeys() { 
+-    	return new String[] { HABITAT, PLANT, PUBLICATION, METADATA }; 
++    public ArrayList&lt;String&gt; getForeignKeys() { 
++    	return list( HABITAT, PLANT, PUBLICATION, METADATA ); 
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED,
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, UNITIDDB, UNITVALUE, HABITAT, PLANT, YEARCOLLECTED,
+     			MONTHCOLLECTED, DAYCOLLECTED, TIMECOLLECTED, ISODATETIMEBEGIN,
+     			DATASOURCE, PUBLICATION, HERBARIUM, CREATEDWHEN, 
+-    			UPDATEDWHEN, METADATA, NOTE };
++    			UPDATEDWHEN, METADATA, NOTE );
+     }
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Phytochorion.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Phytochorion.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TPHYTOCHORIA table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a phytochorion
+@@ -34,8 +36,8 @@
+         
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, CODE, NAME };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, CODE, NAME );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Plant.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Plant.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TPLANTS table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a plant
+@@ -44,9 +46,9 @@
+         
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, TAXON, GENUS, SPECIES, SCIENTIFICNAMEAUTHOR,
+-    			CZECHNAME, SYNONYMS, NOTE, SURVEYTAXID };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, TAXON, GENUS, SPECIES, SCIENTIFICNAMEAUTHOR,
++    			CZECHNAME, SYNONYMS, NOTE, SURVEYTAXID );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TPUBLICATIONS table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a publication
+@@ -46,9 +48,9 @@
+         
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, COLLECTIONNAME, COLLECTIONYEARPUBLICATION, JOURNALNAME,
+-    			JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL, URL, NOTE };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, COLLECTIONNAME, COLLECTIONYEARPUBLICATION, JOURNALNAME,
++    			JOURNALAUTHORNAME, REFERENCECITATION, REFERENCEDETAIL, URL, NOTE );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -1,6 +1,7 @@
+ package net.sf.plantlore.common.record;
+ 
+ import java.io.Serializable;
++import java.util.ArrayList;
+ 
+ /**
+  * The common ancestor of all records. 
+@@ -21,11 +22,29 @@
+ 	/**
+ 	 * @return The set of all foreign keys (columns that refer to other tables).
+ 	 */
+-	public String[] getForeignKeys() { return null; }
++	public ArrayList&lt;String&gt; getForeignKeys() { return new ArrayList(0); }
+ 	
+ 	/**
+ 	 * @return The set of all columns of the table.
+ 	 */
+-	public String[] getColumns() { return null; }
++	public ArrayList&lt;String&gt; getColumns() { return new ArrayList(0); }
+ 	
++	/**
++	 * @return The set of columns that are not foreign keys.
++	 */
++	public ArrayList&lt;String&gt; getProperties() {
++		ArrayList&lt;String&gt; properties = getColumns();
++		properties.removeAll(getForeignKeys());
++		return properties;
++	}
++	
++	
++	
++	protected static ArrayList&lt;String&gt; list(String... values) {
++		if(values == null) return new ArrayList&lt;String&gt;(0);
++		ArrayList&lt;String&gt; list = new ArrayList&lt;String&gt;(values.length);
++		for(String value : values) list.add(value);
++		return list;
++	}
++	
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Territory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Territory.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TTERRITORIES table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a territory
+@@ -32,8 +34,8 @@
+         
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, NAME };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, NAME );
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/common/record/Village.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-23 20:01:12 UTC (rev 182)
++++ trunk/src/net/sf/plantlore/common/record/Village.java	2006-04-24 20:18:29 UTC (rev 183)
+@@ -7,6 +7,8 @@
+ 
+ package net.sf.plantlore.common.record;
+ 
++import java.util.ArrayList;
++
+ /**
+  *  Data holder object representing TVILLAGES table in the DB. This object is used as a data holder
+  *  for Hibernate operations on the server side. On the side of the client, it represents a village
+@@ -30,8 +32,8 @@
+         
+     }
+     
+-    public String[] getColumns() {
+-    	return new String[] { ID, NAME };
++    public ArrayList&lt;String&gt; getColumns() {
++    	return list( ID, NAME );
+     }
+     
+     /**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000202.html">[Plantlore-dev] BioCASE
+</A></li>
+	<LI>Next message: <A HREF="000204.html">[Plantlore-dev] r184 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#203">[ date ]</a>
+              <a href="thread.html#203">[ thread ]</a>
+              <a href="subject.html#203">[ subject ]</a>
+              <a href="author.html#203">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,812 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r149 - in trunk/src/net/sf/plantlore: client/authors client/history client/login middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r149%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/authors%20client/history%20client/login%20middleware%20server&In-Reply-To=%3C200604181656.k3IGu62l018163%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000153.html">
+   <LINK REL="Next"  HREF="000155.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r149 - in trunk/src/net/sf/plantlore: client/authors client/history client/login middleware server</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r149%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/authors%20client/history%20client/login%20middleware%20server&In-Reply-To=%3C200604181656.k3IGu62l018163%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r149 - in trunk/src/net/sf/plantlore: client/authors client/history client/login middleware server">krater at berlios.de
+       </A><BR>
+    <I>Tue Apr 18 18:56:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000153.html">[Plantlore-dev] r148 - trunk/src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000155.html">[Plantlore-dev] r150 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#154">[ date ]</a>
+              <a href="thread.html#154">[ thread ]</a>
+              <a href="subject.html#154">[ subject ]</a>
+              <a href="author.html#154">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-18 18:55:51 +0200 (Tue, 18 Apr 2006)
+New Revision: 149
+
+Modified:
+   trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistory.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+SelectQuery interface made a valid remote interface: all methods now throw RemoteException (affected classes: AuthoManager, History, WholeHistory - repaired).
+
+Further tuning (correct initialization of the logger, more log output, extended javadoc) of the plantlore/server classes (Plantlore, HibernateDBLayer, RMIRemoteDBLayerFactory, RMIServer, SelectQueryImplementation).
+
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -187,66 +187,89 @@
+                 // Create new Select query
+                 SelectQuery query;
+                 try {
+-                	query = database.createQuery(Author.class);
+-                } catch(RemoteException e) {
+-                	System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+-                	return null;
+-                }
+-                if (searchName != null)
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Author.WHOLENAME, null, &quot;%&quot;+searchName+&quot;%&quot;, null);
+-                if (searchOrganization != null) 
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Author.ORGANIZATION, null, &quot;%&quot;+searchOrganization+&quot;%&quot;, null);
+-                if (searchRole != null)
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Author.ROLE, null, &quot;%&quot;+searchRole+&quot;%&quot;, null);
+-                if (searchEmail != null) 
+-                    query.addRestriction(PlantloreConstants.RESTR_LIKE, Author.EMAIL, null, &quot;%&quot;+searchEmail+&quot;%&quot;, null);                
+-                String field;
+-                switch (sortField) {
+-                    case 1: field = Author.WHOLENAME;
+-                            break;
+-                    case 2: field = Author.ORGANIZATION;
+-                            break;
+-                    case 3: field = Author.ROLE;
+-                            break;
+-                    case 4: field = Author.EMAIL;
+-                            break;
+-                    case 5: field = Author.PHONENUMBER;
+-                            break;                            
+-                    case 6: field = Author.URL;
+-                            break;          
+-                    default:field = Author.WHOLENAME;
+-                }
+-                
+-                if (sortDirection == 0) {
+-                    query.addOrder(PlantloreConstants.DIRECT_ASC, field);
+-                } else {
+-                    query.addOrder(PlantloreConstants.DIRECT_DESC, field);                    
+-                }   
+-                int resultId = 0;
+-                try {
+-                    // Execute query                    
+-                    resultId = database.executeQuery(query);        
+-                } catch (DBLayerException e) {
+-                    // Log and set an error                   
+-                    logger.error(&quot;Searching authors failed. Unable to execute search query.&quot;);
+-                    setError(e);
+-                    // setError(&quot;Searching authors failed. Please contact your administrator.&quot;);
+-                } finally {
+-                    // Set operation state to finished
+-                    done = true;                    
+-                    // Save the results
+-                    setResult(resultId);
+-                    return resultId;                    
+-                } 
++					query = database.createQuery(Author.class);
++
++					if (searchName != null)
++						query.addRestriction(PlantloreConstants.RESTR_LIKE,
++								Author.WHOLENAME, null, &quot;%&quot; + searchName + &quot;%&quot;,
++								null);
++					if (searchOrganization != null)
++						query.addRestriction(PlantloreConstants.RESTR_LIKE,
++								Author.ORGANIZATION, null, &quot;%&quot;
++										+ searchOrganization + &quot;%&quot;, null);
++					if (searchRole != null)
++						query
++								.addRestriction(PlantloreConstants.RESTR_LIKE,
++										Author.ROLE, null, &quot;%&quot; + searchRole
++												+ &quot;%&quot;, null);
++					if (searchEmail != null)
++						query.addRestriction(PlantloreConstants.RESTR_LIKE,
++								Author.EMAIL, null, &quot;%&quot; + searchEmail + &quot;%&quot;,
++								null);
++					String field;
++					switch (sortField) {
++					case 1:
++						field = Author.WHOLENAME;
++						break;
++					case 2:
++						field = Author.ORGANIZATION;
++						break;
++					case 3:
++						field = Author.ROLE;
++						break;
++					case 4:
++						field = Author.EMAIL;
++						break;
++					case 5:
++						field = Author.PHONENUMBER;
++						break;
++					case 6:
++						field = Author.URL;
++						break;
++					default:
++						field = Author.WHOLENAME;
++					}
++
++					if (sortDirection == 0) {
++						query.addOrder(PlantloreConstants.DIRECT_ASC, field);
++					} else {
++						query.addOrder(PlantloreConstants.DIRECT_DESC, field);
++					}
++					int resultId = 0;
++					try {
++						// Execute query
++						resultId = database.executeQuery(query);
++					} catch (DBLayerException e) {
++						// Log and set an error
++						logger
++								.error(&quot;Searching authors failed. Unable to execute search query.&quot;);
++						setError(e);
++						// setError(&quot;Searching authors failed. Please contact
++						// your administrator.&quot;);
++					} finally {
++						// Set operation state to finished
++						done = true;
++						// Save the results
++						setResult(resultId);
++						return resultId;
++					}
++				} catch (RemoteException e) {
++					System.err
++							.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++					return null;
++				}
+             }
+         };
+         worker.start();
+     }
+ 
+     /**
+-     *  Checks whether an error is set. If yes, notifies observers to display it. Finally unsets the error flag.
+-     *  @return &lt;code&gt;true&lt;/code&gt; if an error was set (and observers were notified), &lt;code&gt;false&lt;/code&gt; otherwise
+-     */
++	 * Checks whether an error is set. If yes, notifies observers to display it.
++	 * Finally unsets the error flag.
++	 * 
++	 * @return &lt;code&gt;true&lt;/code&gt; if an error was set (and observers were
++	 *         notified), &lt;code&gt;false&lt;/code&gt; otherwise
++	 */
+     public boolean processErrors() {
+         if (this.error != null) {
+             setChanged();
+@@ -258,12 +281,16 @@
+     }
+ 
+     /**
+-     *  Process results of a search query. Retrieves results using the database management object (DBLayer) and stores them in the data field
+-     *  of the class. Notifies observers about the changes. Sets an error in case of an exception.
+-     *
+-     *  @param from number of the first row to retrieve.
+-     *  @param count number of rows to retrieve 
+-     */
++	 * Process results of a search query. Retrieves results using the database
++	 * management object (DBLayer) and stores them in the data field of the
++	 * class. Notifies observers about the changes. Sets an error in case of an
++	 * exception.
++	 * 
++	 * @param from
++	 *            number of the first row to retrieve.
++	 * @param count
++	 *            number of rows to retrieve
++	 */
+     public void processResults(int from, int count) {
+         if (this.resultId != 0) {
+             logger.debug(&quot;Rows in the result: &quot;+getResultRows());
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -138,10 +138,11 @@
+        SelectQuery query = null;
+        try {
+        	    query = database.createQuery(Occurrence.class);
++       	    query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, idOcc, null);
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException - History(), crateQuery&quot;);       	  
+        }      
+-       query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, idOcc, null);      
++             
+        
+        int resultId = 0;
+        try {
+@@ -210,12 +211,12 @@
+        SelectQuery query = null;
+        try {
+        	    query = database.createQuery(HistoryChange.class);
++       	    query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, occurrence, null);
++       	    query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, HistoryChange.HISTORYCHANGE_INSERT, null);
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException- searchInsertInfo(), createQuery&quot;);       	  
+        }            
+-       query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, occurrence, null);
+-       query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, HistoryChange.HISTORYCHANGE_INSERT, null);
+-       
++              
+        int resultIdInsert = 0;
+        try {
+            // Execute query                    
+@@ -246,15 +247,16 @@
+     	//  Select data from tHistory table
+         try {
+ 			query = database.createQuery(HistoryRecord.class);
++			// Create aliases for table tHistoryChange.      
++	        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);        
++	        // Add restriction to COPERATION column of tJistoryChange table
++	        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.operation&quot;, null, HistoryChange.HISTORYCHANGE_EDIT, null);        
++	        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.occurrence&quot;, null, occurrence, null);    	
++	        query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);
+ 		} catch (RemoteException e) {
+ 			System.err.println(&quot;RemoteException- searchEditHistory(), createQuery&quot;);
+ 		}
+-        // Create aliases for table tHistoryChange.      
+-        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);        
+-        // Add restriction to COPERATION column of tJistoryChange table
+-        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.operation&quot;, null, HistoryChange.HISTORYCHANGE_EDIT, null);        
+-        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.occurrence&quot;, null, occurrence, null);    	
+-        query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);        
++                
+     	
+         int resultIdEdit = 0;
+         try {
+@@ -366,46 +368,51 @@
+     	SelectQuery query = null;
+     	if (typeObject.equals(&quot;Habitat&quot;)){
+     		try {
+-            	query = database.createQuery(Habitat.class);	        		        	    
++            	query = database.createQuery(Habitat.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Habitat.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Habitat, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Habitat.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Plant&quot;)){
+     		try {
+-            	query = database.createQuery(Plant.class);	        		        	    
++            	query = database.createQuery(Plant.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Plant.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Plant, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Plant.ID, null, id , null);
+     	} else if (typeObject.equals(&quot;Publication&quot;)){
+     		try {
+-            	query = database.createQuery(Publication.class);	        		        	    
++            	query = database.createQuery(Publication.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Publication.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Publication, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Publication.ID, null, id , null);
++           
+     	} else if (typeObject.equals(&quot;Village&quot;)){
+     		try {
+-            	query = database.createQuery(Village.class);	        		        	    
++            	query = database.createQuery(Village.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Village.ID, null, id, null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Village, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Village.ID, null, id, null);
++         
+     	}  else if  (typeObject.equals(&quot;Territory&quot;)){
+     		try {
+-            	query = database.createQuery(Territory.class);	        		        	    
++            	query = database.createQuery(Territory.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Territory.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Territory, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Territory.ID, null, id , null); 
++             
+     	} else if (typeObject.equals(&quot;Phytochorion&quot;)){
+     		try {
+-            	query = database.createQuery(Phytochorion.class);	        		        	    
++            	query = database.createQuery(Phytochorion.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Phytochorion.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Phytochorion, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Phytochorion.ID, null, id , null);
++            
+     	} else {
+     		logger.error(&quot;SearchObject() - Incorrect type of object.&quot;);
+     	}
+@@ -800,14 +807,15 @@
+     	SelectQuery query = null;
+         try {
+         	    query = database.createQuery(HistoryRecord.class);
++        	    // Create aliases for table tHistoryChange.      
++                query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);  
++                // Add restriction to cChangeId column 
++                query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.id&quot;, null, id , null);
+         } catch(RemoteException e) {
+         	    System.err.println(&quot;RemoteException- searchHistoryChangeId(), createQuery&quot;);       	  
+         }     
+-        // Create aliases for table tHistoryChange.      
+-        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);  
+-        // Add restriction to cChangeId column 
+-        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.id&quot;, null, id , null);
+         
++        
+         int resultIdChange = 0;
+         try {                   
+         	resultIdChange = database.executeQuery(query);        
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistory.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistory.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -129,14 +129,15 @@
+ 
+     	//  Select data from tHistory table
+         try {
+-		query = database.createQuery(HistoryRecord.class);
+-        } catch (RemoteException e) {
++			query = database.createQuery(HistoryRecord.class);
++			// Create aliases for table tHistoryChange.
++			query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);
++			// sort by date/time
++			query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);
++		} catch (RemoteException e) {
+                 System.err.println(&quot;RemoteException- searchWholeHistoryData(), createQuery&quot;);
+         }
+-        // Create aliases for table tHistoryChange.      
+-        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);
+-       //sort by date/time 	
+-        query.addOrder(PlantloreConstants.DIRECT_DESC, &quot;hc.when&quot;);        
++                
+     	
+         int resultId = 0;
+         try {
+@@ -789,60 +790,68 @@
+     	SelectQuery query = null;
+     	if (typeObject.equals(&quot;Occurrence&quot;)){
+             try {
+-            	query = database.createQuery(Occurrence.class);	        		        	    
++            	query = database.createQuery(Occurrence.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Occurrence, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Habitat&quot;)){
+             try {
+-            	query = database.createQuery(Habitat.class);	        		        	    
++            	query = database.createQuery(Habitat.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Habitat.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Habitat, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Habitat.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Plant&quot;)){
+             try {
+-            	query = database.createQuery(Plant.class);	        		        	    
++            	query = database.createQuery(Plant.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Plant.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Plant, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Plant.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Author&quot;)){
+             try {
+-            	query = database.createQuery(Author.class);	        		        	    
++            	query = database.createQuery(Author.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Author.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Author, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Author.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Publication&quot;)){
+             try {
+-            	query = database.createQuery(Publication.class);	        		        	    
++            	query = database.createQuery(Publication.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Publication.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject() - Publication, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Publication.ID, null, id , null);
++            
+     	} else if (typeObject.equals(&quot;Village&quot;)){
+             try {
+-            	query = database.createQuery(Village.class);	        		        	    
++            	query = database.createQuery(Village.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Village.ID, null, id, null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Village, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Village.ID, null, id, null);
++            
+     	}  else if  (typeObject.equals(&quot;Territory&quot;)){
+             try {
+-            	query = database.createQuery(Territory.class);	        		        	    
++            	query = database.createQuery(Territory.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Territory.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Territory, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Territory.ID, null, id , null); 
++             
+     	} else if (typeObject.equals(&quot;Phytochorion&quot;)){
+             try {
+-            	query = database.createQuery(Phytochorion.class);	        		        	    
++            	query = database.createQuery(Phytochorion.class);
++            	query.addRestriction(PlantloreConstants.RESTR_EQ, Phytochorion.ID, null, id , null);
+             } catch(RemoteException e) {
+             	    System.err.println(&quot;RemoteException, searchObject()- Phytochorion, createQuery&quot;);       	  
+             }            
+-            query.addRestriction(PlantloreConstants.RESTR_EQ, Phytochorion.ID, null, id , null);
++            
+     	} else {
+     		logger.error(&quot;SearchObject() - Incorrect type of object.&quot;);
+     	}
+@@ -958,14 +967,15 @@
+     	SelectQuery query = null;
+         try {
+         	    query = database.createQuery(HistoryRecord.class);
++        	    // Create aliases for table tHistoryChange.      
++                query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);  
++                // Add restriction to cChangeId column 
++                query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.id&quot;, null, id , null);
+         } catch(RemoteException e) {
+         	    System.err.println(&quot;RemoteException- searchHistoryChangeId(), createQuery&quot;);       	  
+         }        
+-        // Create aliases for table tHistoryChange.      
+-        query.createAlias(&quot;historyChange&quot;, &quot;hc&quot;);  
+-        // Add restriction to cChangeId column 
+-        query.addRestriction(PlantloreConstants.RESTR_EQ, &quot;hc.id&quot;, null, id , null);
+         
++        
+         int resultIdChange = 0;
+         try {                   
+         	resultIdChange = database.executeQuery(query);        
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -56,8 +56,8 @@
+ 	protected void load() {
+ 		logger.debug(&quot;Loading the stored list of databases.&quot;);
+ 		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
+-		dbinfo.add(new DBInfo(&quot;# Testovac&#237; datab&#225;ze #&quot;, &quot;&quot;, -1,
+-				&quot;jdbc:firebirdsql:natalka.kolej.mff.cuni.cz/3050:/mnt/data/temp/plantloreHIBdata.fdb&quot;, 
++		dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;data.kolej.mff.cuni.cz&quot;, -1,
++				&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdata.fdb&quot;, 
+ 				new String[] { &quot;sysdba&quot;, null, null, null, null }));
+ 		
+ 		this.setChanged(); this.notifyObservers();
+@@ -166,12 +166,14 @@
+ 		selected.promoteUser(name);
+ 		
+ 		// Create a new database layer.
+-		logger.info(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + selected.host + &quot;:&quot; + selected.port);
++		logger.debug(&quot;Asking the DBLayerFactory for a new DBLayer @ &quot; + selected.host + &quot;:&quot; + selected.port);
+ 		dblayer = factory.create(selected.host, selected.port);
++		
+ 		// Initialize the database layer.
+-		logger.info(&quot;Initializing that DBLayer...&quot;);
++		logger.debug(&quot;Initializing that DBLayer (&quot; + selected.db + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+ 		dblayer.initialize(selected.db,name, password);
+-		logger.info(&quot;DBLayer initialized.&quot;);
++		logger.debug(&quot;DBLayer initialized.&quot;);
++		
+ 		// Save the current state.
+ 		save();
+ 		// Everything went fine.
+
+Modified: trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/middleware/RMIDBLayerFactory.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -89,13 +89,21 @@
+ 		if(host == null || host.equals(&quot;&quot;) || host.equalsIgnoreCase(&quot;localhost&quot;))
+ 			return create();
+ 		
+-		System.out.println(&quot;GOING RMI&quot;);
++		logger.debug(&quot;Creating a new DBLayer using the RMI:&quot;);
+ 		
+ 		// Connect to the remote server and obtain the RemoteDBLayerFactory
++		logger.debug(&quot;  # connecting to the remote registry @ &quot; + host + &quot;:&quot; + port +&quot; ...&quot;);
+ 		Registry registry = LocateRegistry.getRegistry(host, port);
++		logger.debug(&quot;    completed&quot;);
++		
++		logger.debug(&quot;  # obtaining the remote dblayer factory ...&quot;);
+ 		RemoteDBLayerFactory remoteFactory = (RemoteDBLayerFactory) registry.lookup(RemoteDBLayerFactory.ID);
++		logger.debug(&quot;    completed&quot;);
++		
+ 		// Get the stub from the remote factory and save the information about the connection
++		logger.debug(&quot;  # creating a new dblayer...&quot;);
+ 		DBLayer stub = remoteFactory.create();
++		logger.debug(&quot;  completed! :)&quot;);
+ 		ConnectionInfo info = new ConnectionInfo(remoteFactory, null, stub, &quot;localhost -&gt; &quot; + host + &quot;:&quot; + port);
+ 		client.put(stub, info);
+ 		
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -2,6 +2,7 @@
+ 
+ import java.io.Serializable;
+ import java.rmi.Remote;
++import java.rmi.RemoteException;
+ import java.util.Collection;
+ 
+ import net.sf.plantlore.common.PlantloreConstants;
+@@ -28,7 +29,7 @@
+      *  @param propertyName name of the column for which we want to create an alias (foreign key column)
+      *  @param aliasName name of the new alias
+      */    
+-    void createAlias(String propertyName, String aliasName);
++    void createAlias(String propertyName, String aliasName)  throws RemoteException;
+     
+     /**
+      *  Add restriction to the constructed criteria. Restrictions are parts of the where condition.
+@@ -39,7 +40,7 @@
+      *  @param value value for restrictions containg values
+      *  @param values collection of values for restrictions working with more values (RESTR_IN)
+      */
+-    void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values);
++    void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values)  throws RemoteException;
+     
+     /**
+      *  Add projection to constructed criteria. Projections are columns we want to select
+@@ -48,7 +49,7 @@
+      *  @param propertyName name of the column for the projection
+      *  @see PlantloreConstants
+      */
+-    void addProjection(int type, String propertyName);
++    void addProjection(int type, String propertyName)  throws RemoteException;
+     
+     /**
+      *  Set method of fetching the results.
+@@ -56,7 +57,7 @@
+      *  @param associationPath
+      *  @param mode
+      */
+-    void setFetchMode(String associationPath, int mode);
++    void setFetchMode(String associationPath, int mode)  throws RemoteException;
+     
+     /**
+      *  Add orderby clause to the constructed criteria.
+@@ -64,7 +65,7 @@
+      *  @param direction direction of ordering (ASC or DESC)
+      *  @param propertyName property we want to use for ordering the results
+      */
+-    void addOrder(int direction, String propertyName);
++    void addOrder(int direction, String propertyName)  throws RemoteException;
+     
+     /**
+      *  Add association to the criteria. Association means that given associated record (from a
+@@ -72,6 +73,6 @@
+      *
+      *  @param associationPath path of associated entities
+      */
+-    void addAssociation(String associationPath);
++    void addAssociation(String associationPath)  throws RemoteException;
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -27,6 +27,8 @@
+ 
+ /**
+  *  Implementation of DBLayer using Hibernate OR mapping to access the database.
++ *  
++ *  TODO: Nezapominat generovat stub! (rmic net.sf.plantlore.server.HibernateDBLayer)
+  *
+  *  @author Tom&#225;&#353; Kova&#345;&#237;k (database parts), Erik Kratochv&#237;l (rmi parts)
+  *  @version far from ready!
+@@ -53,19 +55,26 @@
+      */
+     public HibernateDBLayer(Undertaker undertaker) {
+     	this();
+-    	this.undertaker = undertaker; 
++    	this.undertaker = undertaker;
++    	logger.debug(&quot;      completely completed.&quot;);
+     }
+     
+     /** Creates a new instance of HibernateDBLayer */
+     public HibernateDBLayer() {
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());        
++        logger = Logger.getLogger(this.getClass().getPackage().getName());
++        
++        
++        logger.debug(&quot;      Constructing a new HibernateDBLayer ...&quot;);
++        
+         // Initialize pool of result sets, initial capacity = 8
+         results = new Hashtable&lt;Integer, ScrollableResults&gt;(8); 
+         // Initialize maximum result id
+         maxResultId = 0;
+         
+         // Table of all living queries, initial capacity = 8
+-        queries = new Hashtable&lt;SelectQuery, SelectQuery&gt;(8); 
++        queries = new Hashtable&lt;SelectQuery, SelectQuery&gt;(8);
++        
++        logger.debug(&quot;      completed.&quot;);
+     }    
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -47,7 +47,11 @@
+ 		// Take the appropriate action.
+ 		try {
+ 			if (command.equalsIgnoreCase(&quot;start&quot;)) {
+-				try { server = new RMIServer(port); } catch (Exception e) { System.err.println(e); server.stop(true); }
++				try { 
++					server = new RMIServer(port);
++					server.start();
++				} 
++				catch (Exception e) { System.err.println(e); server.stop(true); }
+ 			} 
+ 			else {
+ 				Registry registry = LocateRegistry.getRegistry(host, port);
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -103,15 +103,18 @@
+ 		String clientHost = &quot;unknown&quot;;
+ 		try { clientHost = RemoteServer.getClientHost(); } 
+ 		catch(Exception e) { logger.warn(&quot;Unable to retrieve the client's host name.&quot;); }
++		logger.debug(&quot;Someone from the &quot; + clientHost + &quot; contacted us.&quot;);
+ 		
+ 		// Connection policy
+ 		if( !allowConnection(clientHost) ) {
+-			logger.info(&quot;Too many connections from &quot; + clientHost + &quot; (or the server is full)!&quot;);
++			logger.warn(&quot;Too many connections from &quot; + clientHost + &quot; (or the server is full)!&quot;);
+ 			return null;
+ 		}
+ 		
+ 		// Create a new DBLayer, export it, and keep the stub. Also set the Undertaker of this object.
++		logger.debug(&quot;  Creating a new HibernateDBLayer ...&quot;);
+ 		DBLayer database = new HibernateDBLayer(this);
++		logger.debug(&quot;   completed!&quot;);
+ 		DBLayer stub = (DBLayer) UnicastRemoteObject.exportObject(database);
+ 		
+ 		// Save the information about this connection.
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -1,13 +1,17 @@
+ package net.sf.plantlore.server;
+ 
++import java.io.IOException;
++import java.io.InputStream;
+ import java.rmi.AlreadyBoundException;
+ import java.rmi.RemoteException;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
++import java.util.Properties;
+ 
+ import org.apache.log4j.Logger;
++import org.apache.log4j.PropertyConfigurator;
+ 
+ import net.sf.plantlore.middleware.RemoteDBLayerFactory;
+ import net.sf.plantlore.server.tools.*;
+@@ -29,6 +33,8 @@
+ 	/** The default port where the rmiregistry listens. To that rmiregistry the RemoteDBLayerFactory will be bound to. */
+ 	public static final int DEFAULT_PORT = Registry.REGISTRY_PORT;
+ 	
++	private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
++	
+ 	private RMIRemoteDBLayerFactory remoteFactory = null;
+ 	private int port = DEFAULT_PORT;
+ 	private Guard guard = null;
+@@ -41,7 +47,21 @@
+ 	}
+ 	
+ 	/** Create a new instance of RMIServer running on the specified port. */
+-	public RMIServer(int port) throws RemoteException, AlreadyBoundException { 
++	public RMIServer(int port) throws RemoteException, AlreadyBoundException {
++		// Load log4j settings
++        ClassLoader cl = this.getClass().getClassLoader();
++        InputStream is = cl.getResourceAsStream(LOGGER_PROPS);
++        Properties props = new Properties();
++        //FIXME:
++        try {
++            props.load(is);
++        } catch (IOException ex) {
++            ex.printStackTrace();
++        }
++        //maybe CHANGE to configureAndWatch()
++        PropertyConfigurator.configure(props);
++        
++        
+ 		this.port = port;
+ 		
+ 		logger = Logger.getLogger(this.getClass().getPackage().getName());
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-04-18 14:40:48 UTC (rev 148)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-04-18 16:55:51 UTC (rev 149)
+@@ -25,6 +25,8 @@
+  * reference manual.
+  *
+  *  FIXME: Malo by to hadzat DBLayerException...
++ *  
++ *  TODO: Nezapominat generovat stub! (rmic net.sf.plantlore.server.SelectQueryImplementation)
+  *
+  * @author Tom&#225;&#353; Kova&#345;&#237;k, Erik Kratochv&#237;l
+  */
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000153.html">[Plantlore-dev] r148 - trunk/src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000155.html">[Plantlore-dev] r150 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#154">[ date ]</a>
+              <a href="thread.html#154">[ thread ]</a>
+              <a href="subject.html#154">[ subject ]</a>
+              <a href="author.html#154">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

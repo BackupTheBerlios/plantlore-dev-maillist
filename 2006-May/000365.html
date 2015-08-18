@@ -1,0 +1,977 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r314 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r314%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605211715.k4LHFnRC017313%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000363.html">
+   <LINK REL="Next"  HREF="000364.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r314 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r314%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605211715.k4LHFnRC017313%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r314 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun May 21 19:15:49 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000363.html">[Plantlore-dev] r313 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000364.html">[Plantlore-dev] r315 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#365">[ date ]</a>
+              <a href="thread.html#365">[ thread ]</a>
+              <a href="subject.html#365">[ subject ]</a>
+              <a href="author.html#365">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-21 19:15:48 +0200 (Sun, 21 May 2006)
+New Revision: 314
+
+Added:
+   trunk/src/net/sf/plantlore/client/Print.java
+   trunk/src/net/sf/plantlore/client/PrintCtrl.java
+   trunk/src/net/sf/plantlore/client/PrintView.form
+   trunk/src/net/sf/plantlore/client/PrintView.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/Settings.java
+   trunk/src/net/sf/plantlore/client/SettingsView.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented printing and fixed a minor bug in settings (NullPointerException was thrown on Ok if the Scheda tab hadn't been changed).
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -267,6 +267,10 @@
+             return 0;
+     }
+     
++    public void invertSelectedOnCurrentRow() {
++        tableModel.invertSelected(selectedRow);
++    }
++    
+     public void setSelectedRow(int i) 
+     {
+         selectedRow = i;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -7,9 +7,14 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.awt.Component;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
++import java.awt.event.MouseEvent;
++import java.awt.event.MouseListener;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ import java.beans.PropertyChangeEvent;
+@@ -24,11 +29,13 @@
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
++import javax.swing.DefaultCellEditor;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.event.ListSelectionEvent;
+ import javax.swing.event.ListSelectionListener;
++import javax.swing.table.TableCellRenderer;
+ import net.sf.jasperreports.engine.JRException;
+ import net.sf.jasperreports.engine.JasperCompileManager;
+ import net.sf.jasperreports.engine.JasperFillManager;
+@@ -53,6 +60,7 @@
+ import net.sf.plantlore.client.user.UserManager;
+ import net.sf.plantlore.client.user.UserManagerCtrl;
+ import net.sf.plantlore.client.user.UserManagerView;
++import net.sf.plantlore.common.Selection;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Occurrence;
+@@ -106,6 +114,10 @@
+     SettingsView settingsView;
+     SettingsCtrl settingsCtrl;
+     
++    Print printModel;
++    PrintView printView;
++    PrintCtrl printCtrl;
++    
+     // History of one occurrence
+     History historyModel;
+     HistoryView historyView;
+@@ -206,6 +218,22 @@
+         view.setNextPageAction(nextPageAction);
+         view.setPrevPageAction(prevPageAction);
+         view.setSelectedRowListener(new OverviewSelectionListener());
++        view.overview.addMouseListener(new OverviewMouseListener());
++        
++        DefaultCellEditor dce = (DefaultCellEditor) view.overview.getDefaultEditor(String.class);
++        Component c = dce.getComponent();
++        FocusListener[] fl = c.getFocusListeners();
++        System.out.println(&quot;========== Got &quot;+fl.length+&quot; focus listeners.&quot;);
++        for (FocusListener listener : fl)
++            c.removeFocusListener(listener);
++        KeyListener[] okl = view.overview.getKeyListeners();
++        okl = c.getKeyListeners();
++        System.out.println(&quot;========== Got &quot;+okl.length+&quot; key listeners.&quot;);
++        for (KeyListener kl : okl) {
++            view.overview.removeKeyListener(kl);
++            System.out.println(&quot;Removed key listener &quot;+kl);
++        }
++        view.overview.addKeyListener(new OverviewKeyListener());
+ 
+         view.addWindowListener(new AppWindowListener());
+         view.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+@@ -302,41 +330,18 @@
+         }
+         public void actionPerformed(ActionEvent actionEvent)
+         {
+-            System.out.println(&quot;Print selected&quot;);
+-            DBLayer dbl = new HibernateDBLayer();
+-            try
+-            {
+-                dbl.initialize(null, null, null); // FIXME inicializace DB na dvou mistech?? zjistit proc
+-            } catch (DBLayerException ex)
+-            {
+-                System.out.println(&quot;Exception while initializing DBLayer: &quot;+ex.getMessage());
+-                ex.printStackTrace();
+-            } catch(RemoteException e) {
+-            	System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++            if (printModel == null) {
++                printModel = new Print();
++                printView = new PrintView(view, true, printModel);
++                printCtrl = new PrintCtrl(printModel, printView);
+             }
+-            /*
+-            Query sq = new SelectQuery();
+-            try
+-            {
+-                sq.setType(DBMapping.PLANTRECORD);
+-                Result qr = dbl.executeQuery(sq);
+-                System.out.println(&quot;There are &quot;+qr.getNumRows()+&quot; plants in the db.&quot;);
+-                Plant p = (Plant) dbl.next(qr);
+-                do {
+-                    System.out.println(&quot;-----------------&quot;);
+-                System.out.println(&quot;Plant is &quot;+p.getPublishableName());
+-                System.out.println(&quot;Czech name &quot;+p.getCzechName());
+-                System.out.println(&quot;Abbrev. &quot;+p.getAbbreviation());
+-                System.out.println(&quot;Adopted name &quot;+p.getAdoptedName());
+-                System.out.println(&quot;Note &quot;+p.getNote());
+-                p = (Plant) dbl.next(qr);
+-                } while (p!=null);
+-            } catch (DBLayerException ex)
+-            {
+-                System.out.println(&quot;Msg: &quot;+ex.getMessage());
+-                ex.printStackTrace();
++            Selection sel = model.getTableModel().getSelection();
++            if (sel.values().size() &lt; 1) {
++                JOptionPane.showMessageDialog(view, &quot;Please check at least one record.&quot;);
++                return;
+             }
+-            */
++            printModel.setSource(model.getDatabase(), sel);
++            printView.setVisible(true);
+         }
+     }
+     
+@@ -841,6 +846,48 @@
+         }
+     }
+     
++    class OverviewMouseListener implements MouseListener {
++        public void mouseClicked(MouseEvent e) {
++            if (e.getClickCount() == 2) {
++                JOptionPane.showMessageDialog(view,&quot;Double click! On row #&quot;+model.getSelectedRowNumber());
++            }
++            System.out.println(&quot;Click count = &quot;+e.getClickCount());
++        }
++
++        public void mousePressed(MouseEvent e) {
++        }
++
++        public void mouseReleased(MouseEvent e) {
++        }
++
++        public void mouseEntered(MouseEvent e) {
++        }
++
++        public void mouseExited(MouseEvent e) {
++        }
++        
++    }
++    
++    class OverviewKeyListener implements KeyListener {
++        public void keyTyped(KeyEvent e) {
++            System.out.println(&quot;Typed key: char=&quot;+e.getKeyChar()+&quot; code=&quot;+e.getKeyCode()+&quot; text=&quot;+e.getKeyText(e.getKeyChar())+&quot; modif=&quot;+e.getKeyModifiersText(e.getModifiers()));
++            if (e.getKeyText(e.getKeyChar()).equals(&quot;Space&quot;))
++                model.invertSelectedOnCurrentRow();
++            if (e.getKeyText(e.getKeyChar()).equals(&quot;Enter&quot;)) {
++                JOptionPane.showMessageDialog(view,&quot;Detail of #&quot;+model.getSelectedRowNumber());
++                e.consume();
++            }
++        }
++
++        public void keyPressed(KeyEvent e) {
++            
++        }
++
++        public void keyReleased(KeyEvent e) {
++        }
++        
++    }
++    
+     class LoginAction extends AbstractAction {
+         public LoginAction() {
+             putValue(NAME, L10n.getString(&quot;Overview.MenuFileLogin&quot;));
+
+Added: trunk/src/net/sf/plantlore/client/Print.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Print.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/Print.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -0,0 +1,101 @@
++/*
++ * Print.java
++ *
++ * Created on 19. kv&#283;ten 2006, 17:24
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.io.File;
++import java.util.HashMap;
++import java.util.Observable;
++import java.util.prefs.Preferences;
++import net.sf.jasperreports.engine.JRException;
++import net.sf.jasperreports.engine.JasperCompileManager;
++import net.sf.jasperreports.engine.JasperFillManager;
++import net.sf.jasperreports.engine.JasperPrint;
++import net.sf.jasperreports.engine.JasperReport;
++import net.sf.plantlore.common.Selection;
++import net.sf.plantlore.middleware.DBLayer;
++import org.apache.log4j.Logger;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class Print extends Observable {
++    private Logger logger;
++    private File theChosenOne;
++    private Selection selection;
++    private DBLayer database;
++    private JasperReport jasperReport;
++    private JasperPrint jasperPrint;
++    private boolean reportChanged = false;
++    
++    /** Creates a new instance of Print */
++    public Print() {
++            logger = Logger.getLogger(this.getClass().getPackage().getName());        
++    }
++
++    public File getTheChosenOne() {
++        return theChosenOne;
++    }
++
++    public void setTheChosenOne(File theChosenOne) throws JRException {
++        if (theChosenOne != null)
++            logger.debug(&quot;Print report set to &quot;+theChosenOne.getAbsolutePath());
++        else
++            return;
++
++        jasperReport = JasperCompileManager.compileReport(theChosenOne.getAbsolutePath());
++        
++        this.theChosenOne = theChosenOne;
++        reportChanged = true;
++        setChanged();
++        notifyObservers(&quot;REPORT_CHOSEN&quot;);
++    }
++    
++    public JasperPrint createJasperPrint() throws JRException {
++        if (jasperPrint == null || reportChanged) {
++            Preferences prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
++            String h1 = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set the first header in settings, please.&quot;);
++            String h2 = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set the second header in settings, please.&quot;);
++            HashMap params = new HashMap();
++            params.put(&quot;HEADER_ONE&quot;,h1);
++            params.put(&quot;HEADER_TWO&quot;,h2);
++            jasperPrint = JasperFillManager.fillReport(
++                  jasperReport, params, new JasperDataSource(database, selection)  );    
++            reportChanged = false;
++        }
++        return jasperPrint;
++    }
++
++    public Selection getSelection() {
++        return selection;
++    }
++    public void setSource(DBLayer database, Selection selection) {
++        this.database = database;
++        this.selection = selection;
++        logger.debug(&quot;Selection and database set.&quot;);
++        jasperPrint = null;
++        setChanged();
++        notifyObservers(&quot;NEW_SOURCE&quot;);
++    }
++    
++    public DBLayer getDatabase() {
++        return database;
++    }
++
++    public JasperPrint getJasperPrint() {
++        return jasperPrint;
++    }
++
++    public void setJasperPrint(JasperPrint jasperPrint) {
++        this.jasperPrint = jasperPrint;
++    }
++    
++    
++}
+
+Added: trunk/src/net/sf/plantlore/client/PrintCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/PrintCtrl.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/PrintCtrl.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -0,0 +1,158 @@
++/*
++ * PrintCtrl.java
++ *
++ * Created on 19. kv&#283;ten 2006, 17:25
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.awt.Frame;
++import java.awt.event.ActionEvent;
++import java.io.File;
++import java.util.HashMap;
++import java.util.prefs.Preferences;
++import javax.swing.AbstractAction;
++import javax.swing.JFileChooser;
++import javax.swing.JOptionPane;
++import javax.swing.filechooser.FileFilter;
++import net.sf.jasperreports.engine.JRException;
++import net.sf.jasperreports.engine.JasperCompileManager;
++import net.sf.jasperreports.engine.JasperFillManager;
++import net.sf.jasperreports.engine.JasperPrint;
++import net.sf.jasperreports.engine.JasperPrintManager;
++import net.sf.jasperreports.engine.JasperReport;
++import net.sf.plantlore.l10n.L10n;
++import org.xml.sax.SAXParseException;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class PrintCtrl {
++    Print model;
++    PrintView view;
++    String description = &quot;JasperReport's .jrxml reports&quot;;
++    JasperReport jasperReport;
++    JasperPrint jasperPrint;
++    
++    /** Creates a new instance of PrintCtrl */
++    public PrintCtrl(Print model, PrintView view) {
++        this.model = model;
++        this.view = view;
++        view.chooseButton.setAction(new ChooseAction());
++        view.printButton.setAction(new PrintAction());
++        view.previewButton.setAction(new PreviewAction());
++        view.helpButton.setAction(new HelpAction());
++        view.cancelButton.setAction(new CancelAction());
++        view.reportField.setEditable(false);
++        
++        view.printButton.setEnabled(false);
++        view.previewButton.setEnabled(false);
++    }
++    
++    class ChooseAction extends AbstractAction {
++        JFileChooser chooser = new JFileChooser();
++        
++        public ChooseAction() {
++            chooser.setFileFilter(new PrintFileFilter());
++            putValue(NAME, L10n.getString(&quot;Print.Choose&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Print.ChooseTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Choose&quot;));                                    
++        }
++        
++        public void actionPerformed(ActionEvent e) {
++            int choice = chooser.showOpenDialog(view);
++            if (choice == JFileChooser.APPROVE_OPTION) {
++                try {
++                    model.setTheChosenOne(chooser.getSelectedFile());                    
++                } catch (JRException ex) {
++                    JOptionPane.showMessageDialog(view, &quot;The report is probably broken:\n &quot;+ex);
++                    return;
++                }            
++            }//if
++        }//actionPerformed        
++    }
++    
++    class PrintAction extends AbstractAction {
++        public PrintAction() {
++            putValue(NAME, L10n.getString(&quot;Print.Print&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Print.PrintTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Print&quot;));                                    
++        }
++        public void actionPerformed(ActionEvent e) {
++            try {
++                model.createJasperPrint();
++            } catch (JRException ex) {
++                JOptionPane.showMessageDialog(view.getParent(), &quot;The report is probably broken:\n&quot;+ex);            
++            }
++            
++            try {
++                JasperPrintManager.printReport(model.getJasperPrint(), true);
++            } catch (JRException ex) {
++                JOptionPane.showMessageDialog(view.getParent(), &quot;A problem appeared while trying to print:\n&quot;+ex);
++            }
++        }
++        
++    }
++    class CancelAction extends AbstractAction {
++        public CancelAction() {
++            putValue(NAME, L10n.getString(&quot;Print.Cancel&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Print.CancelTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Cancel&quot;));                                    
++        }
++        public void actionPerformed(ActionEvent e) {
++            view.setVisible(false);
++        }
++        
++    }
++    class HelpAction extends AbstractAction {
++        public HelpAction() {
++            putValue(NAME, L10n.getString(&quot;Print.Help&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Print.HelpTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Help&quot;));                                    
++        }
++        public void actionPerformed(ActionEvent e) {
++            System.out.println(&quot;HELP!&quot;);
++        }
++        
++    }
++    class PreviewAction extends AbstractAction {
++        public PreviewAction() {
++            putValue(NAME, L10n.getString(&quot;Print.Preview&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Print.PreviewTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Print.Preview&quot;));                                    
++        }
++        public void actionPerformed(ActionEvent e) {     
++            try {
++                model.createJasperPrint();
++            } catch (JRException ex) {
++                JOptionPane.showMessageDialog(view.getParent(), &quot;The report is probably broken:\n&quot;+ex);                            
++            }
++            new SchedaView((Frame) view.getParent(), true, model.getJasperPrint()).setVisible(true);
++        }
++        
++    }
++    
++    class PrintFileFilter extends FileFilter {
++        public boolean accept(File f) {
++            if (f.exists() &amp;&amp; !f.isDirectory()) {                
++                String name = f.getName();
++                int dot = name.lastIndexOf(&quot;.&quot;);
++                if (dot &lt; 0)
++                    return false;
++                if (!name.substring(dot).equals(&quot;.jrxml&quot;))
++                    return false;
++                else return true;
++            } else
++                return false;
++        }
++
++        public String getDescription() {
++            return description;
++        }
++    }
++    
++}
+
+Added: trunk/src/net/sf/plantlore/client/PrintView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/PrintView.form	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/PrintView.form	2006-05-21 17:15:48 UTC (rev 314)
+@@ -0,0 +1,150 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;numOfRecordsLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jLabel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;reportField&quot; pref=&quot;318&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;chooseButton&quot; min=&quot;-2&quot; pref=&quot;81&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++          &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;numOfRecordsLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jLabel1&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;reportField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;chooseButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace pref=&quot;36&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;numOfRecordsLabel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Number of selected records to print:&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Use report:&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;reportField&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;chooseButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Choose&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel1&quot;&gt;
++
++      &lt;Layout&gt;
++        &lt;DimensionLayout dim=&quot;0&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;helpButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;145&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;previewButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;printButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++        &lt;DimensionLayout dim=&quot;1&quot;&gt;
++          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;helpButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;printButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;previewButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;cancelButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++          &lt;/Group&gt;
++        &lt;/DimensionLayout&gt;
++      &lt;/Layout&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;helpButton&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Help&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancelButton&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Cancel&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;previewButton&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Preview&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;printButton&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Print&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/client/PrintView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/PrintView.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/PrintView.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -0,0 +1,165 @@
++/*
++ * PrintView.java
++ *
++ * Created on 19. kv&#283;ten 2006, 17:13
++ */
++
++package net.sf.plantlore.client;
++
++import java.util.Observable;
++import java.util.Observer;
++
++/**
++ *
++ * @author  fraktalek
++ */
++public class PrintView extends javax.swing.JDialog implements Observer {
++    private Print model;
++    
++    /** Creates new form PrintView */
++    public PrintView(java.awt.Frame parent, boolean modal, Print model) {
++        super(parent, modal);
++        this.model = model;
++        initComponents();
++        model.addObserver(this);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        numOfRecordsLabel = new javax.swing.JLabel();
++        jLabel1 = new javax.swing.JLabel();
++        reportField = new javax.swing.JTextField();
++        chooseButton = new javax.swing.JButton();
++        jPanel1 = new javax.swing.JPanel();
++        helpButton = new javax.swing.JButton();
++        cancelButton = new javax.swing.JButton();
++        previewButton = new javax.swing.JButton();
++        printButton = new javax.swing.JButton();
++
++        numOfRecordsLabel.setText(&quot;Number of selected records to print:&quot;);
++
++        jLabel1.setText(&quot;Use report:&quot;);
++
++        chooseButton.setText(&quot;Choose&quot;);
++
++        helpButton.setText(&quot;Help&quot;);
++
++        cancelButton.setText(&quot;Cancel&quot;);
++
++        previewButton.setText(&quot;Preview&quot;);
++
++        printButton.setText(&quot;Print&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
++        jPanel1.setLayout(jPanel1Layout);
++        jPanel1Layout.setHorizontalGroup(
++            jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel1Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(helpButton)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 145, Short.MAX_VALUE)
++                .add(cancelButton)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(previewButton)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(printButton)
++                .addContainerGap())
++        );
++
++        jPanel1Layout.linkSize(new java.awt.Component[] {cancelButton, helpButton, previewButton, printButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
++        jPanel1Layout.setVerticalGroup(
++            jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1Layout.createSequentialGroup()
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(helpButton)
++                    .add(printButton)
++                    .add(previewButton)
++                    .add(cancelButton))
++                .addContainerGap())
++        );
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(numOfRecordsLabel)
++                    .add(layout.createSequentialGroup()
++                        .add(jLabel1)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(reportField, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 318, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                        .add(chooseButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 81, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                .addContainerGap())
++            .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(numOfRecordsLabel)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel1)
++                    .add(reportField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(chooseButton))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 36, Short.MAX_VALUE)
++                .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    /**
++     * @param args the command line arguments
++     */
++    public static void main(String args[]) {
++        java.awt.EventQueue.invokeLater(new Runnable() {
++            public void run() {
++                new PrintView(new javax.swing.JFrame(), true, new Print()).setVisible(true);
++            }
++        });
++    }
++
++    public void update(Observable o, Object arg) {
++        if (arg != null &amp;&amp; arg instanceof String) {
++            String msg = (String)arg;
++            if (msg.equals(&quot;REPORT_CHOSEN&quot;)) {
++                if (model.getTheChosenOne() != null) {
++                    reportField.setText(model.getTheChosenOne().getAbsolutePath());
++                    previewButton.setEnabled(true);
++                    printButton.setEnabled(true);
++                } else {
++                    previewButton.setEnabled(false);
++                    printButton.setEnabled(false);
++                }
++                return;
++            }
++            if (msg.equals(&quot;NEW_SOURCE&quot;)) {
++                numOfRecordsLabel.setText(&quot;Number of records to print: &quot;+model.getSelection().values().size());
++                return;
++            }
++        }
++    }
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton cancelButton;
++    protected javax.swing.JButton chooseButton;
++    protected javax.swing.JButton helpButton;
++    protected javax.swing.JLabel jLabel1;
++    private javax.swing.JPanel jPanel1;
++    protected javax.swing.JLabel numOfRecordsLabel;
++    protected javax.swing.JButton previewButton;
++    protected javax.swing.JButton printButton;
++    protected javax.swing.JTextField reportField;
++    // End of variables declaration//GEN-END:variables
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/client/Settings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Settings.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/Settings.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -43,6 +43,10 @@
+         language = prefs.get(&quot;locale&quot;,&quot;xxx&quot;);
+         if (language.equals(&quot;xxx&quot;))
+             language = L10n.DEFAULT_LANGUAGE;
++        
++        prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
++        headerOne = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set header one in settings.&quot;);
++        headerTwo = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set header two in settings.&quot;);
+     }
+     
+     /** Returns currently set language in this model.
+@@ -85,10 +89,13 @@
+             prefs.remove(&quot;locale&quot;);
+         else
+             prefs.put(&quot;locale&quot;,language);
++            
+         
+         prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
+-        prefs.put(&quot;HEADER_ONE&quot;,headerOne);
+-        prefs.put(&quot;HEADER_TWO&quot;,headerTwo);
++        if (headerOne != null)
++            prefs.put(&quot;HEADER_ONE&quot;,headerOne);
++        if (headerTwo != null)
++            prefs.put(&quot;HEADER_TWO&quot;,headerTwo);
+         
+         setChanged();
+         notifyObservers(&quot;COLUMNS&quot;);        
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsView.java	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/client/SettingsView.java	2006-05-21 17:15:48 UTC (rev 314)
+@@ -30,6 +30,7 @@
+     }
+     
+     public void loadValues() {
++        //--- LOCALE TAB        
+         switch (model.getLanguage()) {
+             case Settings.CZECH:
+                 czechRadioButton.setSelected(true);
+@@ -44,6 +45,7 @@
+                 defaultRadioButton.setSelected(true);                
+         }
+ 
++        //--- COLUMN TAB
+         DefaultListModel lm = (DefaultListModel)availableList.getModel();
+ 
+         ArrayList&lt;Column&gt; columns = model.getUnselectedColumns();
+@@ -60,6 +62,10 @@
+                 continue;
+             else
+                 lm.addElement(column);        
++        
++        //--- SCHEDA TAB
++        headerOneField.setText(model.getHeaderOne());
++        headerTwoField.setText(model.getHeaderTwo());
+     }
+     
+     /** This method is called from within the constructor to
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-21 17:15:48 UTC (rev 314)
+@@ -556,3 +556,7 @@
+ savePublicationBtn=Save publication
+ 
+ Overview.Warning.MaxRecordsPerPage=The maximum number of records per page is
++
++Print.Choose=&amp;Choose
++
++Print.ChooseTT=Choose the JasperReport's report to use for printing
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-21 17:15:48 UTC (rev 314)
+@@ -232,3 +232,7 @@
+ 
+ 
+ Overview.Warning.MaxRecordsPerPage=Nejv\u011Bt\u0161\u00ED mo\u017En\u00FD po\u010Det z\u00E1znam\u016F zobrazen\u00FDch na stranu je
++
++Print.Choose=&amp;Vyber
++
++Print.ChooseTT=V\u00FDb\u011Br JasperReports reportu, kter\u00FD se m\u00E1 pou\u017E\u00EDt pro tisk.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-21 17:12:33 UTC (rev 313)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-21 17:15:48 UTC (rev 314)
+@@ -550,3 +550,7 @@
+ 
+ 
+ Overview.Warning.MaxRecordsPerPage=The maximum number of records per page is
++
++Print.Choose=&amp;Choose
++
++Print.ChooseTT=Choose the JasperReport's report to use for printing
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000363.html">[Plantlore-dev] r313 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000364.html">[Plantlore-dev] r315 - trunk/src/net/sf/plantlore/client
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#365">[ date ]</a>
+              <a href="thread.html#365">[ thread ]</a>
+              <a href="subject.html#365">[ subject ]</a>
+              <a href="author.html#365">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

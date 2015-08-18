@@ -1,0 +1,3649 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r468 - in trunk/src/net/sf/plantlore: client	client/history common/record config/hibernate server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-July/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r468%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/history%20common/record%20config/hibernate%20server&In-Reply-To=%3C200607220228.k6M2Seul007764%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000605.html">
+   <LINK REL="Next"  HREF="000607.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r468 - in trunk/src/net/sf/plantlore: client	client/history common/record config/hibernate server</H1>
+    <B>lada at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r468%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/history%20common/record%20config/hibernate%20server&In-Reply-To=%3C200607220228.k6M2Seul007764%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r468 - in trunk/src/net/sf/plantlore: client	client/history common/record config/hibernate server">lada at mail.berlios.de
+       </A><BR>
+    <I>Sat Jul 22 04:28:40 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000605.html">[Plantlore-dev] Import &amp; Export
+</A></li>
+        <LI>Next message: <A HREF="000607.html">[Plantlore-dev] r469 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#606">[ date ]</a>
+              <a href="thread.html#606">[ thread ]</a>
+              <a href="subject.html#606">[ subject ]</a>
+              <a href="author.html#606">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-07-22 04:28:35 +0200 (Sat, 22 Jul 2006)
+New Revision: 468
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+   trunk/src/net/sf/plantlore/client/history/HistoryView.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+   trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+   trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+History - test and fix other bugs (logic of selectAll and unselectedAll, work with cOldRecordId, rights, exception and display error message, comment).
+HibernateDBLayer - add setting of tHabitat.cCreateWho for operation INSERT. Fix work with cOldRecordId. 
+AppCoreCtrl - add test of administrator right (Only user, who has administrator right, can display dialog for WholeHistory, MetadataManager and UserManager). Call message dialog if constructor of history ends with mistake.
+Database was changed - we need new version of the database.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -379,7 +379,7 @@
+ 		detailCtrl = new DetailCtrl(detailModel, detailView);
+ 	}
+ 
+-	private void setDatabaseDependentCommandsEnabled(boolean enabled) {
++	private void setDatabaseDependentCommandsEnabled(boolean enabled) {				
+ 		settingsAction.setEnabled(enabled);
+ 		printAction.setEnabled(enabled);
+ 		exportAction.setEnabled(enabled);
+@@ -399,7 +399,7 @@
+ 		addAction.setEnabled(enabled);
+ 		editAction.setEnabled(enabled);
+ 		deleteAction.setEnabled(enabled);
+-
++		
+ 		selectAllAction.setEnabled(enabled);
+ 		selectNoneAction.setEnabled(enabled);
+ 		invertSelectedAction.setEnabled(enabled);
+@@ -407,6 +407,13 @@
+ 		prevPageAction.setEnabled(enabled);
+ 		view.recordsPerPage.setEnabled(enabled);
+ 		refreshAction.setEnabled(enabled);
++		
++		if (model.getAccessRights() != null) 
++			if	(model.getAccessRights().getAdministrator() != 1) {
++				dataMetadataAction.setEnabled(false);
++				dataWholeHistoryAction.setEnabled(false);
++				dataUserAction.setEnabled(false);
++		} 
+ 	}
+ 
+ 	/**
+@@ -1192,21 +1199,19 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent e) {
+-			System.out.println(&quot;Undo selected&quot;);
+-			// toto volani historie nebude v menu, ale jako tlacitko pro vybrany
+-			// zaznam
+-			// o vybranem zaznamu predame informace, ktere chceme o nem v
+-			// historii zobrazit
+-			// jmeno rosliny, jmeno autora a lokaci a idOccurrences
+-
+-			historyModel = new History(model.getDatabase(), model
+-					.getSelectedOccurrence());
++			System.out.println(&quot;History od record: &quot;+ model.getDatabase());	
++			
++			historyModel = new History(model.getDatabase(), model.getSelectedOccurrence());
++			if (historyModel.isError()) {				
++				JOptionPane.showMessageDialog(view, historyModel.getError(), L10n.getString(&quot;Error.HistorySearchTitle&quot;),
++						JOptionPane.WARNING_MESSAGE);				
++			} else {	
+ 			historyView = new HistoryView(historyModel, view, true);
+ 			historyCtrl = new HistoryCtrl(historyModel, historyView);
+ 			historyModel.addObserver(managerBridge);
+ 			historyView.setVisible(true);
++			}
+ 		}
+-
+ 	}
+ 
+ 	class DataWholeHistoryAction extends AbstractAction {
+@@ -1215,15 +1220,22 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {
+-			System.out.println(&quot;Whole history - Undo selected&quot;);
++			System.out.println(&quot;Whole history&quot;);
+ 
+ 			wholeHistoryModel = new History(model.getDatabase());
+-			wholeHistoryView = new WholeHistoryView(wholeHistoryModel, view,
+-					true);
+-			wholeHistoryCtrl = new WholeHistoryCtrl(wholeHistoryModel,
+-					wholeHistoryView);
+-			wholeHistoryModel.addObserver(managerBridge);
+-			wholeHistoryView.setVisible(true);
++			if (wholeHistoryModel.isError()) {
++				//TODO: zjistit nejdrive o jakou chybu jde
++				JOptionPane.showMessageDialog(view, wholeHistoryModel.getError(), L10n.getString(&quot;Error.HistorySearchTitle&quot;),
++						JOptionPane.WARNING_MESSAGE);				
++				logger.error(&quot;&quot;);
++			} else {			
++				wholeHistoryView = new WholeHistoryView(wholeHistoryModel, view,
++						true);
++				wholeHistoryCtrl = new WholeHistoryCtrl(wholeHistoryModel,
++						wholeHistoryView);
++				wholeHistoryModel.addObserver(managerBridge);
++				wholeHistoryView.setVisible(true);
++			}
+ 		}
+ 	}
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/DetailsHistoryCtrl.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -11,32 +11,34 @@
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+-import org.apache.log4j.Logger;
+ 
+ /**
++ * Controller for the DetailsHistory dialog (part of the DetailsHistory MVC).
+  *
+- * @author Lada
++ * @author Lada Oberreiterova
++ * @version 1.0
+  */
+ public class DetailsHistoryCtrl {
+-    
+-    private Logger logger;   
++     
++	/** View of the DerailsHistory MVC*/
+     private DetailsHistoryView view;
+     
+-    /** Creates a new instance of DetailsHistoryCtrl */
++    /** 
++     * Creates a new instance of DetailsHistoryCtrl
++     * @param view View of the DerailsHistory MVC 
++     */
+     public DetailsHistoryCtrl(DetailsHistoryView view) {
+-        
+-        logger = Logger.getLogger(this.getClass().getPackage().getName());              
++                          
+         this.view = view;
+-        
++        // Add action listeners to buttons
+         view.closeButton.addActionListener(new closeButtonListener());
+         view.helpButton.addActionListener(new helpButtonListener());
+     }
+-     
+-  
+-   /**
+-    * On Cancel just hides the view.
+-    *
+-    */
++       
++    /** 
++     * ActionListener class controlling the &lt;b&gt;OK&lt;/b&gt; button on the form.
++     * On Ok makes the model store() the preferences and hides the view.     
++     */
+    class closeButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+@@ -45,13 +47,12 @@
+    }
+    
+    /**
+-    * On Help should call help.
+-    *
++    * ActionListener class controlling the &lt;b&gt;HELP&lt;/b&gt; button on the form.
++    * Display help viewer
+     */
+    class helpButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {    	  
+-    	   // Display help viewer            
++       {    	      	           
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
+        }
+    }
+
+Modified: trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/DetailsHistoryView.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -13,30 +13,45 @@
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+- *
+- * @author  Lada
++ * View for the DetailsHistory dialog (part of the DetailsHistory MVC). Used for displaying the detailed information about the record.
++ * 
++ * @author  Lada Oberreiterova
++ * @version 1.0
+  */
+ public class DetailsHistoryView extends javax.swing.JDialog implements Observer {
+     
+-    /**
+-     * Creates new form DetailsHistoryView
++    
++	private static final long serialVersionUID = 2142390888514121396L;
++	
++	/**
++     * Creates new form DetailsHistoryView     
++     * @param parent parent of this dialog
++     * @param modal boolean flag whether the dialog should be modal or not
+      */
+     public DetailsHistoryView(javax.swing.JDialog parent, boolean modal) {
+         super(parent, modal);
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents(); 
++        //Init Help
+         PlantloreHelp.addKeyHelp(PlantloreHelp.HISTORY_MANAGER, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.HISTORY_MANAGER, this.helpButton);        
+         this.detailsTextArea.setEditable(false);
+     }
+-    
++        
+     public void update(Observable observable, Object object) {
+     } 
+     
++    /**
++     * Display generic message containing detailed information about the record
++     * @param detailsMessage Message we want to display     
++     */
+     public void setDetailsMessage(String detailsMessage) {
+         this.detailsTextArea.setText(detailsMessage);
+     }
+     
++    /**
++     * Close this dialog.    
++     */
+     public void close() {
+         dispose();
+     }
+@@ -102,18 +117,7 @@
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+-    
+-    /**
+-     * @param args the command line arguments
+-     */
+-    public static void main(String args[]) {
+-        java.awt.EventQueue.invokeLater(new Runnable() {
+-            public void run() {
+-                new DetailsHistoryView(new javax.swing.JDialog(), true).setVisible(true);
+-            }
+-        });
+-    }
+-    
++      
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     protected javax.swing.JButton closeButton;
+     protected javax.swing.JTextArea detailsTextArea;
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -24,7 +24,6 @@
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.common.record.Habitat;
+ import net.sf.plantlore.common.record.HistoryChange;
+-import net.sf.plantlore.common.record.HistoryColumn;
+ import net.sf.plantlore.common.record.HistoryRecord;
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.common.record.Occurrence;
+@@ -41,8 +40,12 @@
+ import org.apache.log4j.Logger;
+ 
+ /**
+- *
+- * @author Lada
++ * History model. Contains bussines logic and data fields of the History. Implements
++ * operations including search history data, undo, cleare database.
++ * 
++ * @author Lada Oberreiterova
++ * @version 1.0 
++ * 
+  */
+ public class History extends Observable {
+     
+@@ -53,47 +56,29 @@
+     /** Exception with details about an error */
+     private String error = null;
+     /** Constant with default number of rows to display */
+-    private static final int DEFAULT_DISPLAY_ROWS = 6;    
++    private static final int DEFAULT_DISPLAY_ROWS = 12;    
+     /** Actual number of rows to display */
+     private int displayRows = DEFAULT_DISPLAY_ROWS;   
+     /** Index of the first record shown in the table */
+     private int currentFirstRow;
+     /** Information about current display rows*/
+-    private String displayRow;    
+-    
+-    //*******Informations about searching Result from database*****//
++    private String displayRow;          
+     /** Result of the search query */
+     private int resultId = 0;
+-    /** List of data (results of a search query) displayed in the table */
++    /** List of data (results of a search query) displayed in the view dialog */
+     private ArrayList&lt;HistoryRecord&gt; historyDataList = new ArrayList&lt;HistoryRecord&gt;();     
+-    // seznam editovanych objektu (potrebny pro hromadne potvrzeni update)
++    /** List of editing object */
+     private ArrayList&lt;Object&gt; editObjectList = new ArrayList&lt;Object&gt;();    
+-    // informace pro uzivatele o record undo
+-    private String messageUndo;
+-
+-    //************************************pro historii jednoho nalezu*********************/
+-    //seznam id vsech oznacenych polozek
++    /** Information message */
++    private String messageUndo;    
++    /** List of identifier of selected item */
+     private HashSet markListId = new HashSet();
+-    //Seznam Item + maxIdItem (nejstarsi oznacene id pro dany Item=sloupec)
++    /** List of pairs (Item, identifier of the oldest change of this Item) */
+     private ArrayList&lt;Object[]&gt; markItem = new ArrayList&lt;Object[]&gt;();
+-    //Informuje o tom, zda byla zvolena volba &quot;SelectAll&quot;
+-    private boolean selectAll;    
+-    
+-    //*********************Record of history, ... ***************************************//   
+-    private Object data;
+-    private Occurrence occurrence;
+-    private Habitat habitat;
+-    private AuthorOccurrence authorOccurrence;
+-    private HistoryRecord historyRecord;
+-    private HistoryChange historyChange;
+-    private Publication publication;
+-    private Author author;
+-    private Village village;
+-    private Territory territory;
+-    private Phytochorion phytochorion;
+-    private Metadata metadata;
+-    
+-     //	**************Informations about HistoryRecord*************//	
++    /** Information about useing function Select All*/
++    private boolean selectAll;
++    /** Information about useing function Unselected All*/
++    private boolean unselectedAll;    
+     /** Name of the table where value was changed*/
+     private String tableName;  
+     /** Name of the column where value was changed*/
+@@ -112,16 +97,19 @@
+     private String oldValue;      
+    /** Name of user who did changed*/
+     private String nameUser;
+-    
+-    //**************Informations about occurrences***************//
+-    /** Name of plant for specified occurrenc*/
++    /** Name of plant for specific occurrence*/
+     private String namePlant;
+-    /** Name of author for specified occurrenc*/
++    /** Name of author for specific occurrence*/
+     private String nameAuthor;
+-    /** Informaciton about location for specified occurrenc*/
+-    private String location;
++    /** Informaciton about location for specific occurrence*/
++    private String location;    
+     
+-    //********************************************************//          
++    /** Instances of Record */
++    private Object data;        
++    private HistoryRecord historyRecord;
++    private HistoryChange historyChange;
++         
++    /** */    
+     private Hashtable&lt;String, Integer&gt; authorsOccurrenceHash;
+     private Hashtable&lt;String, Integer&gt; occurrenceHash; 
+     private Hashtable&lt;String, Integer&gt; authorHash;
+@@ -130,7 +118,7 @@
+     private Hashtable&lt;String, Integer&gt; publicationHash;
+     private Hashtable&lt;String, Enum&gt; editTypeHash;
+     
+-    //*********************************************************//
++    /** Constants used for description of errors */
+     public static final String ERROR_SEARCH_RECORD = L10n.getString(&quot;Error.historyRecordSearchFailed&quot;);
+     public static final String ERROR_SEARCH_DATA = L10n.getString(&quot;Error.historyDataSearchFailed&quot;);
+     public static final String ERROR_SEARCH_OBJECT = L10n.getString(&quot;Error.historyObjectSearchFailed&quot;);
+@@ -138,7 +126,12 @@
+     public static final String ERROR_PROCESS = L10n.getString(&quot;Error.historyProcessResultsFailed&quot;);
+     public static final String ERROR_UPDATE = L10n.getString(&quot;Error.historyUpdateResultsFailed&quot;);
+     public static final String ERROR_DELETE = L10n.getString(&quot;Error.historyDeleteResultsFailed&quot;);  
+-        
++    public static final String ERROR_CLEAR_DATABASE = L10n.getString(&quot;Error.historyClearDatabase&quot;);
++    public static final String ERROR_CLEAR_HISTORY = L10n.getString(&quot;Error.historyClearHistory&quot;);
++    public static final String ERROR_PARSE_DATE = L10n.getString(&quot;Error.historyParseData&quot;);
++    public static final String ERROR_NUMBER_ROWS = L10n.getString(&quot;Error.historyGetNumberRows&quot;);
++    public static final String ERROR_NO_RIGHTS = L10n.getString(&quot;Error.historyNoRights&quot;); 
++    
+     /**
+      * Creates a new instance of History - history of Occurrences, Habitats, Authors, 
+      * Publications, Metadata, Territories, Phytochorions, Villages
+@@ -163,7 +156,7 @@
+     public History(DBLayer database, int idObj)
+     {
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+-       this.database = database;       
++       this.database = database;                     
+        
+        SelectQuery query = null;
+        int resultIdRecord = 0;
+@@ -190,9 +183,15 @@
+     	   setError(ERROR_SEARCH_RECORD); 
+        } else {
+     	   
+-    	   occurrence = (Occurrence)object[0];    	   
++    	   Occurrence occurrence = (Occurrence)object[0];    	   
+     	   setData(occurrence);
+     	   
++    	   //Check rights
++    	   if(! hasRights(occurrence.getCreatedWho().getId())) {
++    		   setError(ERROR_NO_RIGHTS);
++    		   return;
++    	   }
++    	   
+ 	       //Save basic information about specific occurrence 
+ 	       setNameAuthor(getAllNameOfAuthors(getAllAuthors(occurrence, 0)));
+ 	       setNamePlant(occurrence.getPlant().getTaxon());       
+@@ -214,7 +213,7 @@
+      *  Creates a new instance of History - history of specific habitat 
+      *  @param database Instance of a database management object
+      *  @param idObj integer containing identifier of specific habitat
+-     *  @param infoHabitat
++     *  @param infoHabitat 
+      * */
+     public History(DBLayer database, int idObj, String infoHabitat)
+     {
+@@ -246,8 +245,14 @@
+     	   setError(ERROR_SEARCH_RECORD); 
+        } else {
+     	   
+-    	   habitat = (Habitat)object[0];    	   
++    	   Habitat habitat = (Habitat)object[0];    	   
+     	   setData(habitat);
++
++    	   //Check rights
++    	   if(! hasRights(habitat.getCreatedWho().getId())) {
++    		   setError(ERROR_NO_RIGHTS);
++    		   return;
++    	   }
+     	   
+     	   //TODO
+ 	       //Save basic information about specific habitat	             	      	  
+@@ -267,7 +272,9 @@
+      * @param data object containing specific occurrence or habitat
+      */     
+     public void searchEditHistory(Object data)
+-    {      	    	
++    {    
++    	//Cleare historyDataList
++    	historyDataList.clear();
+         //Create new Select query
+         SelectQuery query = null; 
+         int resultIdEdit = 0;
+@@ -303,6 +310,8 @@
+      */
+     public void searchWholeHistoryData() {
+         
++    	// Cleare historyDataList
++    	historyDataList.clear();
+         //Create new Select query
+         SelectQuery query = null;
+         int resultIdWHistory = 0;
+@@ -334,51 +343,59 @@
+         if (this.resultId != 0) {
+             int currentRow = getResultRows();
+             logger.debug(&quot;Rows in the result: &quot;+currentRow);
+-            logger.debug(&quot;Max available rows: &quot;+(from+count-1));
++            logger.debug(&quot;Max available rows: &quot;+(from+count-1));            
+            
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+-            int to = Math.min(currentRow, from+count-1);           
++            int to = Math.min(currentRow, from+count-1);             
+             if (to &lt;= 0) {
+             	historyDataList = new ArrayList&lt;HistoryRecord&gt;(); 
+             	setDisplayRows(0);
+             	setCurrentDisplayRows(&quot;0-0&quot;);
++            } else if (historyDataList.size() &gt;= to) {
++            	logger.debug(&quot;Retrieving query results: 1 - &quot; + to);
++            	setCurrentDisplayRows(from+ &quot;-&quot; + to);
++            	setCurrentFirstRow(from);
+             } else {
+-                logger.debug(&quot;Retrieving query results: 1 - &quot;+to);
+-                setCurrentDisplayRows(from+ &quot;-&quot; + to);
+-                try {                	 
+-                     // Retrieve selected row interval 
+-                	Object[] objectHistory;
+-                 	try {
+-                 		objectHistory = database.more(this.resultId, 0, to-1);  
+-                 	} catch(RemoteException e) {
+-                     	System.err.println(&quot;RemoteException- processEditResult, more&quot;);
+-                     	logger.debug(&quot;RemoteException- processEditResult, more&quot;);
+-                     	return;
+-                     }                   
+-                    int countResult = objectHistory.length;  
+-                    logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);
+-                    // Create storage for the results
+-                    this.historyDataList = new ArrayList&lt;HistoryRecord&gt;();
+-                    // Cast the results to the HistoryRecord objects
+-                    for (int i=0; i&lt;countResult; i++ ) {                    							
+-						Object[] objHis = (Object[])objectHistory[i];
+-                        this.historyDataList.add((HistoryRecord)objHis[0]);
+-                    }                               
++                logger.debug(&quot;Retrieving query results: 1 - &quot;+ to);
++                setCurrentDisplayRows(from+ &quot;-&quot; + to);                              	 
++                // Retrieve selected row interval 
++            	Object[] objectHistory;
++             	try {
++             		objectHistory = database.more(this.resultId, 0, to-1);  
++             	} catch(RemoteException e) {
++             		logger.error(&quot;Remote exception caught in History (processResult). Details: &quot;+e.getMessage());
++        			setError(ERROR_SEARCH_DATA);
++        			setChanged();
++                    notifyObservers();
++                 	return;                                                                                       
+                 } catch (DBLayerException e) {                  
+-                    logger.error(&quot;Processing search results failed: &quot;+e.toString());   
+-                    setError(this.ERROR_PROCESS);
+-                }    
+-                // Update current first displayed row (only if data retrieval was successful).
+-                if (!this.isError()) {
+-                    logger.info(&quot;Results successfuly retrieved&quot;);                   
+-                    setCurrentFirstRow(from);
++                    logger.error(&quot;Processing search results failed: &quot; + e.getMessage());   
++                    setError(ERROR_PROCESS);
++                    setChanged();
++                    notifyObservers();
++                    return;
++                }  
++                if (objectHistory == null) {
++                	logger.error(&quot;tHistoryChange doesn`t contain required data&quot;);
++                	setError(ERROR_PROCESS);
++                    setChanged();
++                    notifyObservers();
++                    return;
+                 }
+-            }
+-            // Tell observers to update
+-            setChanged();
+-            notifyObservers();
+-            // Clean error flag 
+-            this.error = null;
++                int countResult = objectHistory.length;  
++                logger.debug(&quot;Results retrieved. Count: &quot;+ countResult);                
++                this.historyDataList = new ArrayList&lt;HistoryRecord&gt;();
++                // Cast the results to the HistoryRecord objects
++                for (int i=0; i&lt;countResult; i++ ) {                    							
++					Object[] objHis = (Object[])objectHistory[i];
++                    this.historyDataList.add((HistoryRecord)objHis[0]);
++                    logger.debug(&quot;RESULT: &quot; + ((HistoryRecord)objHis[0]).getId());
++                }
++               
++                // Update current first displayed row                
++                logger.info(&quot;Results successfuly retrieved&quot;);                   
++                setCurrentFirstRow(from);
++            }                        
+          }         
+     }
+     
+@@ -397,7 +414,8 @@
+         initMetadataHash();
+         	    	
+     	//read record from younger to older until selected row        
+-    	for( int i=0; i &lt; toResult; i++) {    		
++    	for( int i=0; i &lt; toResult; i++) {    
++    		if (isError()) return;
+     		//init history data 
+     		historyRecord = (HistoryRecord)historyDataList.get(i);    		
+     		historyChange = historyRecord.getHistoryChange();
+@@ -432,9 +450,8 @@
+     	
+     	//take record from younger to older
+     	for( int i=0; i &lt; countResult; i++) {
+-    		if (! markListId.contains(i)) {
+-    			continue;
+-    		}
++    		if (isError())return;
++    		if (! markListId.contains(i)) continue;    		
+     		
+     		// init history data about editing concerned with record
+     		historyRecord = (HistoryRecord)historyDataList.get(i);    		
+@@ -454,10 +471,11 @@
+      *   @param isDelete int containing informaciton about insertion or erasure of record. 
+      */
+     public void undoInsertDelete(int isDelete) {
+-        if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){
+-             Object[] object = searchObject(&quot;Occurrence&quot;,recordId);             
+-             Occurrence occurrence = (Occurrence)object[0];             
+-             occurrence.setDeleted(isDelete);              
++        if (tableName.equals(PlantloreConstants.ENTITY_OCCURRENCE)){        	
++        	Object[] object = searchObject(&quot;Occurrence&quot;,recordId);        	        	
++        	if (isError()) return; //tOccurrence doesn`t contain required data        	       		        		
++        	Occurrence occurrence = (Occurrence)object[0];             
++            occurrence.setDeleted(isDelete);                      	     	 
+              //Add to list of changed Record
+              if (!editObjectList.contains((Record)occurrence))                 
+                 editObjectList.add((Record)occurrence);       
+@@ -474,7 +492,8 @@
+                     editObjectList.add((Record)authorOccurrence);                 
+             }                                     
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
+-             Object[] object = searchObject(&quot;AuthorOccurrence&quot;,recordId);  
++             Object[] object = searchObject(&quot;AuthorOccurrence&quot;,recordId);               
++             if (isError()) return; //tAuthorOccurrence doesn`t contain required data
+              AuthorOccurrence authorOccurrence = (AuthorOccurrence)object[0];
+              authorOccurrence.setDeleted(isDelete);             
+              //Add to list of changed Record             
+@@ -482,28 +501,31 @@
+                 editObjectList.add((Record)authorOccurrence);             
+        } else if (tableName.equals(PlantloreConstants.ENTITY_HABITAT)) {            
+                Object[] object = searchObject(&quot;Habitat&quot;,recordId);  
++               if (isError()) return; //tHabitat doesn`t contain required data
+                Habitat habitat = (Habitat)object[0];
+                habitat.setDeleted(isDelete);
+                //Add to list of changed Record             
+                if (!editObjectList.contains((Record)habitat))                 
+                    editObjectList.add((Record)habitat);             
+         } else if (tableName.equals(PlantloreConstants.ENTITY_METADATA)) {
+-             Object[] object = searchObject(&quot;Metadata&quot;,recordId);  
++             Object[] object = searchObject(&quot;Metadata&quot;,recordId); 
++             if (isError()) return; //tMetadata doesn`t contain required data
+              Metadata metadata = (Metadata)object[0];
+              metadata.setDeleted(isDelete);
+              //Add to list of changed Record             
+              if (!editObjectList.contains((Record)metadata))                 
+                 editObjectList.add((Record)metadata);             
+         } else if (tableName.equals(PlantloreConstants.ENTITY_PUBLICATION)) {
+-             Object[] object = searchObject(&quot;Publication&quot;,recordId);  
++             Object[] object = searchObject(&quot;Publication&quot;,recordId);
++             if (isError()) return; //tPublication doesn`t contain required data
+              Publication publication = (Publication)object[0];
+              publication.setDeleted(isDelete);
+              //Add to list of changed Record             
+              if (!editObjectList.contains((Record)publication))                 
+                 editObjectList.add((Record)publication);             
+-        } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {
+-             logger.debug(&quot;AUTHOR HISTORY: &quot;+ isDelete);
+-             Object[] object = searchObject(&quot;Author&quot;,recordId);   
++        } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {             
++             Object[] object = searchObject(&quot;Author&quot;,recordId);  
++             if (isError()) return; //tAuthor doesn`t contain required data
+              Author author = (Author)object[0];
+              author.setDeleted(isDelete);
+              //Add to list of changed Record             
+@@ -521,7 +543,7 @@
+         
+         //init history data about editing concerned with record
+         columnName = historyRecord.getHistoryColumn().getColumnName();    		    			
+-        oldRecordId = historyChange.getOldRecordId();                        	           
++        oldRecordId = historyRecord.getOldRecordId();                        	           
+         oldValue = historyRecord.getOldValue();
+         
+         if (tableName.equals(PlantloreConstants.ENTITY_AUTHOROCCURRENCE)) {
+@@ -573,6 +595,7 @@
+     	if (!contain) {
+         	// Select record AuthorOccurrence where id = authorOccurrenceId 
+     		Object[] object = searchObject(&quot;AuthorOccurrence&quot;, authorOccId);
++    		if (isError()) return; //tAuthorOccurrence doesn`t contain required data
+             authorOccurrence = (AuthorOccurrence)object[0];
+         }     	                 
+                 
+@@ -646,6 +669,7 @@
+         if (!contain) {
+         	// Select record Occurrence where id = occurrenceId 
+             Object[] objectOcc = searchObject(&quot;Occurrence&quot;,occurrenceId);
++            if (isError()) return; //tOccurrence doesn`t contain required data
+             occ = (Occurrence)objectOcc[0];                    	
+         }    
+                 
+@@ -665,6 +689,7 @@
+             if (oldRecordId &gt; 0 ) {
+                 //Select record Plant where id = oldRocordId 
+                 Object[] object = searchObject(&quot;Plant&quot;,oldRecordId);
++                if (isError()) return; //tPlant doesn`t contain required data
+                 Plant plant = (Plant)object[0];
+                 //Set old value to attribute plantID
+                 occ.setPlant(plant);
+@@ -708,6 +733,7 @@
+                         time = df.parse( oldValue );
+                 } catch (ParseException e) {
+                         logger.error(&quot;Parse time failed. &quot;+ e);
++                        setError(ERROR_PARSE_DATE);
+                 }
+                 occ.setTimeCollected(time);
+                 logger.debug(&quot;Set selected value for update of attribute Time.&quot;);
+@@ -735,6 +761,7 @@
+                 //Select record Publication where id = oldRocordId 
+                 if (oldRecordId &gt; 0){
+                     Object[] objectPubl = searchObject(&quot;Publication&quot;,oldRecordId);
++                    if (isError()) return; //tPublication doesn`t contain required data
+                     Publication publication = (Publication)objectPubl[0];
+                     //Set old value to attribute publicationID
+                     occ.setPublication(publication);
+@@ -747,6 +774,7 @@
+         		//Select record Publication where id = oldRocordId 
+ 	            if (oldRecordId &gt; 0){
+ 	                Object[] objectMetadata = searchObject(&quot;Metadata&quot;,oldRecordId);
++	                if (isError()) return; //tMetadata doesn`t contain required data
+ 	                Metadata metadata = (Metadata)objectMetadata[0];
+ 	                //Set old value to attribute metadataID
+ 	                occ.setMetadata(metadata);
+@@ -759,6 +787,7 @@
+         		//Select record Publication where id = oldRocordId 
+ 	            if (oldRecordId &gt; 0){
+ 	                Object[] objectHabitat = searchObject(&quot;Habitat&quot;,oldRecordId);
++	                if (isError()) return; //tHabitat doesn`t contain required data
+ 	                Habitat habitat = (Habitat)objectHabitat[0];
+ 	                //Set old value to attribute habitatID
+ 	                occ.setHabitat(habitat);
+@@ -783,8 +812,8 @@
+     /**
+      * Rollback data editing concerned with specific habitat
+      */
+-    public void undoHabitat() {
+-                         
++    public void undoHabitat() {            	
++    	
+         int habitatId = historyChange.getRecordId();	        
+         Habitat hab = null;
+     	int placings = 0;
+@@ -803,7 +832,8 @@
+     	
+     	if (!contain) {
+         	// Select record Habitat where id = habitatId 
+-    		Object[] object = searchObject(&quot;Habitat&quot;,habitatId);        
++    		Object[] object = searchObject(&quot;Habitat&quot;,habitatId);
++    		if (isError()) return; //tHabitat doesn`t contain required data
+             hab = (Habitat)object[0];
+         } 
+                              
+@@ -845,6 +875,7 @@
+                 //Select record Village where id = oldRocordId 
+                 if (oldRecordId != 0){
+                         Object[] objectVill = searchObject(&quot;Village&quot;,oldRecordId);
++                        if (isError()) return; //tVillage doesn`t contain required data
+                         Village village = (Village)objectVill[0];
+                 hab.setNearestVillage(village);
+                 logger.debug(&quot;Set selected value for update of attribute NearesVillage.&quot;);
+@@ -856,6 +887,7 @@
+                 // Select record Phytochoria where id = oldRocordId 
+                 if (oldRecordId != 0){
+                         Object[] objectPhyt = searchObject(&quot;Phytochorion&quot;,oldRecordId);
++                        if (isError()) return; //tPhytochorion doesn`t contain required data
+                         Phytochorion phytochorion = (Phytochorion)objectPhyt[0];
+                         hab.setPhytochorion(phytochorion);
+                         logger.debug(&quot;Set selected value for update of attribute Phytochorion.&quot;);
+@@ -867,8 +899,9 @@
+                 // Select record Territory where id = oldRocordId 
+                 if (oldRecordId != 0){
+                         Object[] objectTerr = searchObject(&quot;Territory&quot;,oldRecordId);
++                        if (isError()) return; //tTerritory doesn`t contain required data
+                         Territory territory = (Territory)objectTerr[0];
+-                        hab.setTerritory(territory);
++                        hab.setTerritory(territory);                                                            
+                         logger.debug(&quot;Set selected value for update of attribute Territory.&quot;);
+                 }else {
+                         logger.error(&quot;UNDO - Incorrect oldRecordId for Territory.&quot;);
+@@ -915,6 +948,7 @@
+     	if (!contain) {
+         	// Select record Publication where id = publicationId 
+     		Object[] object = searchObject(&quot;Publication&quot;, publicationId);
++    		if (isError()) return; //tPublication doesn`t contain required data
+             publication = (Publication)object[0];
+         } 
+             	        
+@@ -993,6 +1027,7 @@
+     	if (!contain) {
+         	// Select record Author where id = authorId 
+     		Object[] object = searchObject(&quot;Author&quot;, authorId);
++    		if (isError()) return; //tAuthor doesn`t contain required data
+             author = (Author)object[0];
+         } 	
+        
+@@ -1066,7 +1101,7 @@
+     			if (metadataId == listOccId) {
+     				contain = true;
+     				placings = i; 
+-    				author = (Author)(editObjectList.get(i));
++    				metadata = (Metadata)(editObjectList.get(i));
+     				break;
+     			}
+     		}
+@@ -1075,6 +1110,7 @@
+     	if (!contain) {
+         	// Select record Metadata where id = metadataId 
+     		Object[] object = searchObject(&quot;Metadata&quot;, metadataId);
++    		if (isError()) return; //tMetadata doesn`t contain required data
+     	    metadata = (Metadata)object[0];
+         }
+     	
+@@ -1178,6 +1214,7 @@
+     	if (!contain) {
+         	// Select record Phytochorion where id = phytochorionId 
+     		Object[] object = searchObject(&quot;Phytochorion&quot;, phytId);
++    		if (isError()) return; //tPhytochorion doesn`t contain required data
+             phytochorion = (Phytochorion)object[0];     
+         }
+     	
+@@ -1224,6 +1261,7 @@
+     	if (!contain) {
+         	// Select record Village where id = villageId 
+     		Object[] object = searchObject(&quot;Village&quot;, villageId);
++    		if (isError()) return; //tVillage doesn`t contain required data
+             village = (Village)object[0];     
+         }
+        
+@@ -1268,6 +1306,7 @@
+     	if (!contain) {
+         	// Select record Territory where id = territoryId 
+     		Object[] object = searchObject(&quot;Territory&quot;, territoryId);
++    		if (isError()) return; //tTerritory doesn`t contain required data
+     		territory = (Territory)object[0];     
+         }
+     	        
+@@ -1291,7 +1330,7 @@
+      * 
+      * @param typeObject string containing information about type of object
+      * @param id int containing identifier of record
+-     * @return object defined by parameters typeObject and id
++     * @return object[] array of object defined by parameters typeObject and id
+      */
+     public Object[] searchObject(String typeObject, int id) {       
+     	SelectQuery query = null;
+@@ -1349,22 +1388,22 @@
+             setChanged();
+             notifyObservers();
+         }
+-       
+-        //TODO
++              
+ 	   if (object == null) {
+ 		   logger.error(&quot;t&quot;+typeObject+ &quot; doesn't contain required data&quot;);  
+ 		   setError(ERROR_SEARCH_OBJECT);		   
+ 		   //Tell observers to update
+            setChanged();
+-           notifyObservers();
+-	   } 	   
++           notifyObservers();           
++	   } 	 
+        return object; 	       	          	              	        
+     }
+     
+     /**     
+      * Seach all authors concerned with specific occurrence
+-     * @param occurrence 
+-     * @param idDelete 
++     * @param occurrence specific occurrence
++     * @param idDelete int containing information about type of author - active, inactive
++     * @return object[] names of authors for specific occurrence
+      */
+     public Object[] getAllAuthors(Occurrence occurrence, int isDelete) {        
+         
+@@ -1397,22 +1436,14 @@
+             setChanged();
+             notifyObservers();
+         }     
+-        
+-        //TODO
+-        if(objects == null ) {
+-        	logger.error(&quot;tAuthorOccurrence doesn't contain required data&quot;);  
+- 		    setError(ERROR_SEARCH_AUTHOR);
+- 		    //Tell observers to update
+-            setChanged();
+-            notifyObservers();
+-        }
+-        
++               
+        return objects;
+     }
+     
+     /**
+      *  Get names of authors for specific occurrence
+      *  @param objects  
++     *  @return String containing names of authors for specific occurrence
+      */
+     public String getAllNameOfAuthors(Object[] objects) {
+         if (objects == null)
+@@ -1440,7 +1471,8 @@
+         Enum key;
+         initEditTypeHash();
+         
+-    	int count = editObjectList.size();        
++    	int count = editObjectList.size();
++              	
+     	for (int i=0; i&lt; count; i++) {
+     		try {
+     			logger.debug(&quot;Object for update: &quot;+ ((Record)editObjectList.get(i)).getId());                         
+@@ -1457,13 +1489,15 @@
+ 	       	    //Tell observers to update
+ 	            setChanged();
+ 	            notifyObservers();
++	            return;
+ 	        } catch (DBLayerException e) {
+ 	        	logger.error(&quot;Update data failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
+ 	            setError(ERROR_UPDATE); 
+ 	            //Tell observers to update
+ 	            setChanged();
+ 	            notifyObservers();
+-	        }                
++	            return;
++	        } 
+        }    	
+     	//Create array of editing object and call notifyObservers
+         informMethod(editType);
+@@ -1471,7 +1505,7 @@
+     
+     /**
+      *  Create array of editing object and give this array to parrent
+-     *  @param editType
++     *  @param editType containing list of type of editing object 
+      */
+     public void informMethod(ArrayList&lt;Enum&gt; editType) {
+         int count = editType.size();
+@@ -1493,8 +1527,8 @@
+        
+     /**
+      * Delete selected data from history table. During delete data from table tHistoryChange verify foring key from table tHistory.
+-     * @param toResult
+-     * @param typeHistory
++     * @param toResult identifier of the oldest changes which will be restored
++     * @param typeHistory containing information about type of history (whole history or history of record)
+      */
+     public void deleteHistory(int toResult, boolean typeHistory) {
+    	
+@@ -1553,7 +1587,7 @@
+     /**
+      * Get number of record from tHistory, whitch has the value of attribute cChangeId equals id
+      * @param id identifier of historyChange record 
+-     * @return int number of record from tHistory, whitch has the value of attribute cChangeId equals id
++     * @return int number of record from tHistory, where attribute cChangeId is equaled prameter &quot;id&quot;
+      */
+     public int getRelationshipHistoryChange(int id){    	
+     	SelectQuery query = null;
+@@ -1591,7 +1625,7 @@
+     	for (int i=0; i&lt;count; i++) {
+     		Object[] itemList = (Object[])(markItem.get(i));
+     		String item = (String)itemList[0];
+-    		Integer maxId = (Integer)itemList[1];      		
++    		Integer maxId = (Integer)itemList[1];      		      		
+     		oldValue = ((HistoryRecord)historyDataList.get(maxId)).getOldValue(); 
+     		messageUndo = messageUndo + item + &quot;  --&gt;  &quot; + oldValue + &quot;\n&quot;;
+     	}       
+@@ -1608,8 +1642,9 @@
+     }
+     
+     /**
+-     *  Create message containing details about record
+-     *  @param resultNumber 
++     *  Create message containing details of record
++     *  @param resultNumber identifier of selected record
++     *  @return String containing details of record 
+      */
+     public String getDetailsMessage(int resultNumber) {
+         
+@@ -1627,6 +1662,7 @@
+               int occurrenceId = historyChange.getRecordId();
+               //Select record Occurrence where id = occurrenceId 
+               Object[] objectOcc = searchObject(&quot;Occurrence&quot;,occurrenceId);
++              if (isError()) return &quot;&quot;; //tOccurrence doesn`t contain required data
+               Occurrence occurrence = (Occurrence)objectOcc[0]; 
+               detailsMessage = L10n.getString(&quot;History.DetailsOccurrence&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_OCCURRENCE + &quot;.&quot;+ Occurrence.PLANT) + &quot;: &quot;+ occurrence.getPlant().getTaxon()+&quot;\n&quot;;
+@@ -1646,17 +1682,19 @@
+         }else if (tableName.equals(PlantloreConstants.ENTITY_HABITAT)) {
+         	  //Get details for Publication
+               Object[] object = searchObject(&quot;Habitat&quot;,recordId);
++              if (isError()) return &quot;&quot;; //tHabitat doesn`t contain required data
+               Habitat habitat = (Habitat)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsOccurrence&quot;) + &quot;\n\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.NEARESTVILLAGE) + &quot;: &quot;+ occurrence.getHabitat().getNearestVillage().getName() + &quot;\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.DESCRIPTION) + &quot;: &quot;+ occurrence.getHabitat().getDescription() + &quot;\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.TERRITORY) + &quot;: &quot;+ occurrence.getHabitat().getTerritory().getName() + &quot;\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.PHYTOCHORION) + &quot;: &quot;+ occurrence.getHabitat().getPhytochorion().getName() +&quot; (Code: &quot; + occurrence.getHabitat().getPhytochorion().getCode() + &quot;)\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.COUNTRY) + &quot;: &quot; + occurrence.getHabitat().getCountry() +&quot;\n&quot;;
+-              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.NOTE) + &quot;: &quot; + occurrence.getHabitat().getNote() +&quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.NEARESTVILLAGE) + &quot;: &quot;+ habitat.getNearestVillage().getName() + &quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.DESCRIPTION) + &quot;: &quot;+ habitat.getDescription() + &quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.TERRITORY) + &quot;: &quot;+ habitat.getTerritory().getName() + &quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.PHYTOCHORION) + &quot;: &quot;+ habitat.getPhytochorion().getName() +&quot; (Code: &quot; + habitat.getPhytochorion().getCode() + &quot;)\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.COUNTRY) + &quot;: &quot; + habitat.getCountry() +&quot;\n&quot;;
++              detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_HABITAT +&quot;.&quot;+ Habitat.NOTE) + &quot;: &quot; + habitat.getNote() +&quot;\n&quot;;
+     	}else if (tableName.equals(PlantloreConstants.ENTITY_PUBLICATION)) {
+               //Get details for Publication
+-              Object[] object = searchObject(&quot;Publication&quot;,recordId); 
++              Object[] object = searchObject(&quot;Publication&quot;,recordId);
++              if (isError()) return &quot;&quot;; //tPublication doesn`t contain required data
+               Publication publication = (Publication)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsPublication&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_PUBLICATION +&quot;.&quot;+ Publication.COLLECTIONNAME) + &quot;: &quot; + publication.getCollectionName() + &quot;\n&quot;;
+@@ -1667,7 +1705,8 @@
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_PUBLICATION +&quot;.&quot;+ Publication.NOTE) + &quot;: &quot; + publication.getNote() + &quot;\n&quot;;
+         } else if (tableName.equals(PlantloreConstants.ENTITY_AUTHOR)) {
+               //Get details for Author
+-              Object[] object = searchObject(&quot;Author&quot;,recordId);   
++              Object[] object = searchObject(&quot;Author&quot;,recordId); 
++              if (isError()) return &quot;&quot;; //tAuthor doesn`t contain required data
+               Author author = (Author)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsAuthor&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_AUTHOR +&quot;.&quot;+ Author.WHOLENAME)+ &quot;: &quot; + author.getWholeName() + &quot;\n&quot;;
+@@ -1680,7 +1719,8 @@
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_AUTHOR +&quot;.&quot;+ Author.NOTE)+ &quot;: &quot;  + author.getNote() + &quot;\n&quot;;
+         }  else if (tableName.equals(PlantloreConstants.ENTITY_METADATA)) {
+              //Get details for Metadata
+-              Object[] object = searchObject(&quot;Metadata&quot;,recordId);   
++              Object[] object = searchObject(&quot;Metadata&quot;,recordId); 
++              if (isError()) return &quot;&quot;; //tMetadata doesn`t contain required data
+               Metadata metadata = (Metadata)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsMetadata&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(&quot;History.DetailsMetadata.Institution&quot;) + &quot;\n&quot;;
+@@ -1705,19 +1745,22 @@
+         } else if (tableName.equals(PlantloreConstants.ENTITY_PHYTOCHORION)) {
+               //Get details for Phytochorion
+               Object[] object = searchObject(&quot;Phytochorion&quot;,recordId); 
++              if (isError()) return &quot;&quot;; //tPhytochorion doesn`t contain required data
+               Phytochorion  phytochorion = (Phytochorion)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsPhytochorion&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_PHYTOCHORION +&quot;.&quot;+ Phytochorion.NAME) + &quot;: &quot; + phytochorion.getName() + &quot;\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_PHYTOCHORION +&quot;.&quot;+ Phytochorion.CODE) + &quot;: &quot; + phytochorion.getCode() + &quot;\n&quot;;
+         } else if (tableName.equals(PlantloreConstants.ENTITY_TERRITORY)) {
+               //Get details for Territory
+-              Object[] object = searchObject(&quot;Territory&quot;,recordId); 
++              Object[] object = searchObject(&quot;Territory&quot;,recordId);
++              if (isError()) return &quot;&quot;; //tTerritory doesn`t contain required data
+               Territory territory = (Territory)object[0];
+               detailsMessage = L10n.getString(&quot;History.DetailsTerritory&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_TERRITORY +&quot;.&quot;+ Territory.NAME) + &quot;: &quot; + territory.getName() + &quot;\n&quot;;
+         } else if (tableName.equals(PlantloreConstants.ENTITY_VILLAGE)) {
+               //Get details for Village
+-              Object[] object = searchObject(&quot;Village&quot;,recordId);  
++              Object[] object = searchObject(&quot;Village&quot;,recordId);
++              if (isError()) return &quot;&quot;; //tVillage doesn`t contain required data
+               Village village = (Village)object[0];
+               detailsMessage = L10n.getString(&quot;History.detailsVillage&quot;) + &quot;\n\n&quot;;
+               detailsMessage = detailsMessage + L10n.getString(PlantloreConstants.ENTITY_VILLAGE +&quot;.&quot;+ Village.NAME) + &quot;: &quot; + village.getName() + &quot;\n&quot;;
+@@ -1731,76 +1774,175 @@
+     }
+     
+     /**
+-     *  Delete all date from tables tHistorz and tHistoryChange
++     *  Delete all date from tables tHistory and tHistoryChange
+      */
+     public void clearHistory() {        
+         
++    	//TODO uzavrit to do dlouhotrvajici transakce
+         try {
+             //delete data from table tHistory
+             database.conditionDelete(HistoryRecord.class, HistoryRecord.ID, &quot;&gt;&quot;, 0);
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tHistory failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_HISTORY);       	   
++            setChanged();
++            notifyObservers();    
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tHistory failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_HISTORY);            
++            setChanged();
++            notifyObservers(); 
++            return;
++        }        
+         
+         try {            
+             //delete data from  table tHistoryChange
+             database.conditionDelete(HistoryChange.class, HistoryChange.ID, &quot;&gt;&quot;, 0);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        }
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tHistoryChange failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_HISTORY);       	   
++            setChanged();
++            notifyObservers();  
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tHistoryChange failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_HISTORY);            
++            setChanged();
++            notifyObservers();
++            return;
++        }        
+         
+     }
+     
+     /**
+-     * Delete all record with cdelete equals 1 from table tAuthors, tAuthorsOccurrences, tOccurrences, tHabitats, tPublications
++     * Delete records from table tAuthors, tAuthorsOccurrences, tOccurrences, tHabitats, tPublications with condition cdelete == 1 
+      */
+     public void clearDatabase() {
++    	
++    	//TODO - osetrit proti smazani zaznamu na ktery existuje FK
++    	//Uzavrit to do dlouho trvajici transakce, at se to provede bud vse nebo nic 
++    	
+         try {
+-            
++            // delete data from table tAuthor with contidion cDelete == 1
+             database.conditionDelete(Author.class, Author.DELETED, &quot;=&quot;, 1);
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tAuthor failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_DATABASE);       	   
++            setChanged();
++            notifyObservers();   
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tAuthor failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_DATABASE);            
++            setChanged();
++            notifyObservers();  
++            return;
++        }        
+         try {
+-            database.conditionDelete(AuthorOccurrence.class, AuthorOccurrence.DELETED, &quot;=&quot;, 1);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        }
++        	//delete data from table tAuthorOccurrence with contidion cDelete &gt; 0
++            database.conditionDelete(AuthorOccurrence.class, AuthorOccurrence.DELETED, &quot;&gt;&quot;, 0);
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tAuthorOccurrence failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_DATABASE);       	   
++            setChanged();
++            notifyObservers();
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tAuthorOccurrence failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_DATABASE);            
++            setChanged();
++            notifyObservers();
++            return;
++        }        
+         try {
++        	// delete data from table tOccurrence with contidion cDelete == 1
+             database.conditionDelete(Occurrence.class, Occurrence.DELETED, &quot;=&quot;, 1);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        }
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tOccurrence failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_DATABASE);       	   
++            setChanged();
++            notifyObservers();
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tOccurrence failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_DATABASE);            
++            setChanged();
++            notifyObservers();
++            return;
++        }        
+         try {
++        	// delete data from table tHabitat with contidion cDelete == 1
+             database.conditionDelete(Habitat.class, Habitat.DELETED, &quot;=&quot;, 1);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        }
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tHabitat failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_DATABASE);       	   
++            setChanged();
++            notifyObservers();
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tHabitat failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_DATABASE);            
++            setChanged();
++            notifyObservers();
++            return;
++        }        
+         try {
++        	// delete data from table tPublication with contidion cDelete == 1
+             database.conditionDelete(Publication.class, Publication.DELETED, &quot;=&quot;, 1);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
++        } catch (RemoteException e) {
++        	logger.error(&quot;Delete data from tPublication failed.Remote exception caught in History. Details: &quot;+e.getMessage());
++       	    setError(ERROR_CLEAR_DATABASE);       	   
++            setChanged();
++            notifyObservers();
++            return;
++        } catch(DBLayerException e) {
++        	logger.error(&quot;Delete data from tPublication failed. DBLayer exception caught in History. Details: &quot;+e.getMessage());       	                                                   
++            setError(ERROR_CLEAR_DATABASE);            
++            setChanged();
++            notifyObservers();
++            return;
++        }        
++    }
++    
++    /**
++     * Check right for working with history of the record 
++     * @param createWhoId identifier of user who inserted the record into database
++     * @return true if user has right to work with history of record
++     */
++    public boolean hasRights(Integer createWhoId) {
++        String[] group;     
++        try {
++            // Administrator can work with history of any record
++            if (database.getUserRights().getAdministrator() == 1) {
++                return true;                        
++            } else { 
++                // Check whether the user can work with history of all the records
++                if (database.getUserRights().getEditAll() == 1) {
++                    return true;
++                }
++                // Check whether the user can work with history of the record through some other user
++                group = database.getUserRights().getEditGroup().split(&quot;,&quot;);                
++                // Check whether someone in the group is an owner of the publication
++                for (int i=0;i&lt;group.length;i++) {
++                    if (createWhoId.toString().equals(group[i])) {
++                        return true;
++                    }
++                }
++                // No rights to work with history of the record
++                return false;
++            }
++        } catch (RemoteException e) {
++        	logger.error(&quot;GetUserRight() failed. Remote exception caught in History. Details: &quot;+e.getMessage());       	                
+         }
++        return false;
+     }
+     
+      //***************************//
+     //****Init Hashtable*********//
+     //**************************//
+     
++    /** Init hash table for AuthorOccurence */
+     private void initAuthorsOccurrenceHash() {
+         authorsOccurrenceHash = new Hashtable&lt;String, Integer&gt;(3);
+         authorsOccurrenceHash.put(AuthorOccurrence.AUTHOR, 1);
+@@ -1808,6 +1950,7 @@
+         authorsOccurrenceHash.put(AuthorOccurrence.NOTE, 3);
+     }
+     
++    /** Init hash table for Occurence */
+     private void initOccurrenceHash() {
+     	occurrenceHash = new Hashtable&lt;String, Integer&gt;(10); 
+         occurrenceHash.put(Occurrence.PLANT, 1);
+@@ -1823,6 +1966,7 @@
+         occurrenceHash.put(Occurrence.HABITAT, 11);
+     }    
+     
++    /** Init hash table for Habitat */
+     private void initHabitatHash() {
+     	habitatHash = new Hashtable&lt;String, Integer&gt;(11);         
+         habitatHash.put(Habitat.QUADRANT, 1);
+@@ -1838,6 +1982,7 @@
+         habitatHash.put(Habitat.NOTE, 10);
+     }    
+     
++    /** Init hash table for Metadata */
+     private void initMetadataHash() {
+         metadataHash = new Hashtable&lt;String, Integer&gt;(16);
+         metadataHash.put(Metadata.TECHNICALCONTACTNAME, 1);
+@@ -1855,6 +2000,7 @@
+         metadataHash.put(Metadata.BIOTOPETEXT, 13);        
+     }
+     
++    /** Init hash table for Publication */
+     private void initPublicationHash() {
+         publicationHash = new Hashtable&lt;String, Integer&gt;(6);
+         publicationHash.put(Publication.COLLECTIONNAME, 1);
+@@ -1865,6 +2011,7 @@
+         publicationHash.put(Publication.URL, 6);      
+     }
+     
++    /** Init hash table for Author */
+     private void initAuthorHash() {
+         authorHash = new Hashtable&lt;String, Integer&gt;(7);
+         authorHash.put(Author.WHOLENAME, 1);        
+@@ -1876,6 +2023,7 @@
+         authorHash.put(Author.NOTE, 7);        
+     }              
+     
++    /** Init hash table for editing object*/
+     private void initEditTypeHash() {
+         editTypeHash = new Hashtable&lt;String, Enum&gt;(5);
+         editTypeHash.put(&quot;Occurrence&quot;, PlantloreConstants.Table.OCCURRENCE);                
+@@ -1903,7 +2051,7 @@
+     
+     /**
+      *  Checks whether an error flag is set.
+-     *  return true if an error occured and error message is available, false otherwise
++     *  @return true if an error occured and error message is available, false otherwise
+      */
+     public boolean isError() {
+         if (this.error != null) {
+@@ -1919,18 +2067,10 @@
+      */
+     public String getError() {
+         return this.error;
+-    }
++    }    
+     
+-    
+-    public Object getData() {
+-    	return data;
+-    }
+-    
+-    public void setData(Object data) {
+-    	this.data = data;
+-    }
+-    
+     /**
++     * Get information about selecting of all record
+      * @return true if all recorda were selected.
+      */
+     public boolean getSelectAll() {
+@@ -1938,74 +2078,158 @@
+ 	   }
+ 
+     /**
+-     * Set information if all records were selected. 
+-     * @param selectAll
++     * Set information if all records were selected 
++     * @param selectAll true if all records were selected
+      */
+ 	 public void setSelectAll(boolean selectAll) {
+ 		  this.selectAll = selectAll;		  
+ 	 } 
++
++    /**
++     * Get information about unselecting of all record
++     * @return true if all recorda were unselected.
++     */
++    public boolean getUnselectedAll() {
++		  return this.unselectedAll;		  
++	   }
++
++    /**
++     * Set information if all records were unselected 
++     * @param unselectedAll true if all records were unselected
++     */
++	 public void setUnselectedAll(boolean unselectedAll) {
++		  this.unselectedAll = unselectedAll;		  
++	 } 
++	 
++	/**
++	 * Get object whitch history of changes is displayed (Habitat or Occurrence) 
++	 * @return object whitch history of changes is displayed (Habitat or Occurrence)
++	 */ 
++    public Object getData() {
++    	return data;
++    }
++       
++    /**
++     * Set object whitch history of changes is displayed (Habitat or Occurrence)
++     * @param data object whitch history of changes is displayed (Habitat or Occurrence)
++     */
++    public void setData(Object data) {
++    	this.data = data;
++    }	
+     
++    /**
++     * Get list of identifiers of selected items (history of record)
++     * @return list of identifiers of selected items (history of record)
++     */
+ 	 public HashSet getMarkListId() {
+ 		  return this.markListId;		  
+ 	   }
+ 
++	 /**
++	  * Set list of identifiers of selected items (history of record)
++	  * @param markListId list of identifiers of selected items (history of record)
++	  */
+ 	 public void setMarkListId(HashSet markListId) {
+ 		  this.markListId = markListId;		  
+ 	 } 
+-	 
++	
++	 /**
++	  * Get list of pairs (Item, identifier of the oldest change of this Item
++	  * @return list of pairs (Item, identifier of the oldest change of this Item
++	  */
+     public ArrayList&lt;Object[]&gt; getMarkItem() {
+ 		  return this.markItem;		  
+ 	   }
+ 
++    /**
++     * Set list of pairs (Item, identifier of the oldest change of this Item
++     * @param markItem list of pairs (Item, identifier of the oldest change of this Item
++     */
+ 	 public void setMarkItem(ArrayList&lt;Object[]&gt; markItem) {
+ 		  this.markItem = markItem;		  
+ 	 } 
++	 
++	 /**
++	  * Get results of a search query for dislpaying in history dialog
++	  * @return results of a search query for dislpaying in history dialog
++	  */
++	 public ArrayList&lt;HistoryRecord&gt; getHistoryDataList() {
++         return this.historyDataList;		  
++     }
++
++	 /**
++	  * Set results of a search query for dislpaying in history dialog
++	  * @param historyDataList results of a search query for dislpaying in history dialog
++	  */
++	public void setHistoryDataList(ArrayList&lt;HistoryRecord&gt; historyDataList) {
++	         this.historyDataList = historyDataList;		  
++	} 
++	
++	/**
++	 * Get information about current display rows
++	 * @return information about current display rows
++	 */
++	public String getCurrentDisplayRows() {
++		  return this.displayRow;		  
++	  }
++	
++	/**
++	 * Set information about current display rows
++	 * @param displayRow information about current display rows
++	 */
++	public void setCurrentDisplayRows(String displayRow) {
++	         this.displayRow = displayRow;		  
++	} 
++	
++	/**
++	 * Get message with information for user
++	 * @return message with information for user
++	 */
++	public String getMessageUndo() {
++		  return this.messageUndo;		  
++	  }
++	
++	/**
++	 * Set message with information for user
++	 * @param messageUndo message with information for user
++	 */
++	public void setMessageUndo(String messageUndo) {
++	         this.messageUndo = messageUndo;		  
++	} 
++
+     
+-    
+-    //id vysledku po vyhledavani v db
++	 /**
++	  * Set result of a database operation. This is used only for search operations.
++      * @param resultId id of the SelectQuery result	  
++	  */
+     public void setResultId(int resultId) {
+         this.resultId = resultId;
+     }
+     
++    /**
++     *  Get results of last database operation. This is used only for search operations.
++     *  @return resultId identifying the SelectQuery result
++     */
+     public int getResultId() {
+         return this.resultId;
+     }
+     
++    /**
++     * Get the number of results for the current SelectQuery
++     * @return number of results for the current SelectQuery
++     */
+     public int getResultRows() {
+         int resultCount = 0;
+         if (resultId != 0) try {
+-                resultCount = database.getNumRows(resultId);        	
++             resultCount = database.getNumRows(resultId);        	
+         } catch(RemoteException e) {
+-                System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
++        	logger.error(&quot;Get number of results failed.Remote exception caught in History. Details: &quot;+e.getMessage());  
++        	setError(ERROR_NUMBER_ROWS);
+         }
+         return resultCount;
+     }
+-
+-    public ArrayList&lt;HistoryRecord&gt; getHistoryDataList() {
+-              return this.historyDataList;		  
+-       }
+-
+-     public void setHistoryDataList(ArrayList&lt;HistoryRecord&gt; historyDataList) {
+-              this.historyDataList = historyDataList;		  
+-     } 
+-    
+-     public String getCurrentDisplayRows() {
+-		  return this.displayRow;		  
+-	   }
+-
+-     public void setCurrentDisplayRows(String displayRow) {
+-              this.displayRow = displayRow;		  
+-     } 
+-     
+-     public String getMessageUndo() {
+-		  return this.messageUndo;		  
+-	   }
+-
+-     public void setMessageUndo(String messageUndo) {
+-              this.messageUndo = messageUndo;		  
+-     } 
+-     
+-         /**
++        
++     /**
+      *  Get index of the first row currently displayed in the list of record changes. This is an index in the results returned by a search query.
+      *  @return index of the first row currently displayed in the list of history
+      */
+@@ -2037,26 +2261,50 @@
+         this.displayRows = rows;
+     }
+     
++    /**
++     * Get name of the plant
++     * @return name of the plant
++     */
+     public String getNamePlant() {
+ 		  return this.namePlant;
+ 	   }
+ 
++    /**
++     * Set name of the plant
++     * @param namePlant name of the plant
++     */
+     public void setNamePlant(String namePlant) {
+ 		  this.namePlant = namePlant;
+ 	}   
+     
++    /**
++     * Get name of the author
++     * @return name of the author
++     */
+     public String getNameAuthor() {
+ 		  return this.nameAuthor;
+ 	   }
+ 
++    /**
++     * Set name of the author
++     * @param nameAuthor name of the author
++     */
+ 	 public void setNameAuthor(String nameAuthor) {
+ 		  this.nameAuthor = nameAuthor;
+ 	 } 
+ 	 
++	 /**
++	  * Get name of the nearest village where the record was found 
++	  * @return name of the nearest village where the record was found
++	  */
+ 	 public String getLocation() {
+ 		  return this.location;
+ 	   }
+-	
++	 
++	/**
++	 * Set name of the nearest village where the record was found
++	 * @param location name of the nearest village where the record was found 
++	 */
+ 	 public void setLocation(String location) {
+ 		  this.location = location;
+ 	}    
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -1,34 +1,39 @@
+-/**
+- * 
+- */
++
+ package net.sf.plantlore.client.history;
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+-import java.util.ArrayList;
+-import net.sf.plantlore.common.PlantloreHelp;
+-
+-
+-
+ import org.apache.log4j.Logger;
+ 
+ /**
+- * @author Lada
++ * Controller for the main History dialog (part of the History MVC).
++ * 
++ * @author Lada Oberreiterova
++ * @version 1.0
+  *
+  */
+ public class HistoryCtrl {
+ 
++	/** Instance of a logger */
+ 	private Logger logger;
++	/** Model of the History MVC */
+     private History model;
++    /** View of the History MVC */
+     private HistoryView view;
+     
+-    /** Creates a new instance of HistoryCtrl */
++    /** 
++     *  Creates a new instance of HistoryCtrl 
++     *  @param model model of the History MVC
++     *  @param view  view of the History MVC
++     * 
++     */
+     public HistoryCtrl(History model, HistoryView view)
+-    {
++    {    	
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+-        this.model = model;
++        this.model = model;        
+         this.view = view;
+              
++        //Add action listeners to buttons
+         view.okButton.addActionListener(new okButtonListener());
+         view.closeButton.addActionListener(new closeButtonListener());
+         view.previousButton.addActionListener(new previousButtonListener());
+@@ -39,9 +44,9 @@
+         view.toDisplayValueTextField.addActionListener(new rowSetDisplayChangeListener());           
+     }
+     
+-        /** 
+-    * On Ok makes the model store() the preferences and hides the view.
+-    * 
++   /** 
++    * ActionListener class controlling the &lt;b&gt;OK&lt;/b&gt; button on the form.
++    * On Ok makes the model store() the preferences and hides the view.     
+     */
+    class okButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+@@ -51,8 +56,8 @@
+    }
+   
+    /**
+-    * On Cancel just hides the view.
+-    *
++    * ActionListener class controlling the &lt;b&gt;CLOSE&lt;/b&gt; button on the form.
++    * On Close hides the view.
+     */
+    class closeButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+@@ -62,45 +67,60 @@
+    }
+    
+    /**
+-    * 
+-    *
++    *  ActionListener class controlling the &lt;b&gt;PREV&lt;/b&gt; button on the form.
++    *  The button PREV is used for browsing the search results.
+     */
+    class previousButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {
+-    	   //   Call processResults only if we don't see the first page (should not happen, button should be disabled)
+-    	   logger.debug(&quot;FIRST&quot;);
+-    	   logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ view.getTable().getRowCount());      
++       {    	  
++    	   // Check whether an error flag is set
++           if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Get previous page of results
+            if (model.getCurrentFirstRow() &gt; 1) {
+                int firstRow = Math.max(model.getCurrentFirstRow()- model.getDisplayRows(), 1);
+                model.processResult(firstRow, model.getDisplayRows()); 
++               if (model.isError()) return;
+                if (model.getCurrentFirstRow() &gt; 1){
+                }
+                view.getTable().setModel(new HistoryTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.getTable().getRowCount() - 1;
+                view.setCurrentRowsInfo(from + &quot;-&quot; + to);
+-           }                           
++           }      
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.getTable().getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+    
+    /**
+-    * 
+-    *
++    * ActionListener class controlling the &lt;b&gt;NEXT&lt;/b&gt; button on the form.
++    * The button NEXT is used for browsing the search results.    
+     */
+    class nextButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   //Call processResults only if we don't see the last page
+-    	   logger.debug(&quot;NEXT&quot;);
+-           logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ model.getDisplayRows());
+-           logger.debug(&quot;num rows in table (view) &quot;+ view.getTable().getRowCount());              
++    	   // Check whether an error flag is set 
++           if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Get next page of result
+            if (model.getCurrentFirstRow()+ view.getTable().getRowCount()&lt;=model.getResultRows()) {
+                model.processResult(model.getCurrentFirstRow()+ model.getDisplayRows(), view.getTable().getRowCount());
++               if (model.isError()) return;
+                view.getTable().setModel(new HistoryTableModel(model));             
+                int from = model.getCurrentFirstRow();
+                int to = from + view.getTable().getRowCount() - 1;
+@@ -109,78 +129,114 @@
+                }else {
+             	   view.setCurrentRowsInfo(from + &quot;-&quot; + to);
+                }               
+-           }                       
++           }  
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.getTable().getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+    
+    /**
+-    * 
+-    *
++    *  ActionListener class controlling the &lt;b&gt;SelectALL&lt;/b&gt; button on the form.
++    *  On selectSll All record from active page will be selected. 
++    *  Each younger records with the same ITEM as seleced record will be selected too. 
+     */
+    class selectAllButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {    	   
+-    	   model.setSelectAll(true);
+-    	   model.processResult(1,model.getResultRows());    	   
++       {   
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }    	   
++    	   model.setSelectAll(true);    	  	   
+     	   view.getTable().setModel(new HistoryTableModel(model));  
+        }
+    }
+    
+    /**
+-    * 
+-    *
++    *  ActionListener class controlling the &lt;b&gt;UnselectAll&lt;/b&gt; button on the form.
++    *  On UnselecAll All record from active page will be unselected. 
++    *  Each older records with the same ITEM as unseleced record will be unselected too.
+     */
+    class unselectAllButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {    
+-    	   ArrayList&lt;Object[]&gt; markItem = new ArrayList();    	   
+-    	   model.setMarkItem(markItem); 
++       {   
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++    	   model.setUnselectedAll(true); 
+     	   view.getTable().setModel(new HistoryTableModel(model));
+        }
+    }
+    
+    /**
+-    * 
+-    *
++    * ActionListener class controlling the &lt;b&gt;UndoSelected&lt;/b&gt; button on the form.
++    * On UndoSelected All selected changes will be restored.
+     */
+    class undoSelectedButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {    	   
+-           model.undoSelected();            
+-           int okCancle = view.messageUndo(model.getMessageUndo());
+-           logger.debug(&quot;button &quot;+okCancle);
+-           if (okCancle == 0){
+-        	   //Button OK was press
+-        	   logger.debug(&quot;Button OK was press.&quot;);
+-        	   model.commitUpdate();
+-        	   model.deleteHistory(model.getResultRows(), true);
+-        	   model.searchEditHistory(model.getData());
+-        	   model.processResult(1,model.getDisplayRows());
+-        	   view.getTable().setModel(new HistoryTableModel(model));
+-        	   int resultRows = model.getResultRows();
+-        	   if (resultRows == 0) {
+-        		   view.setCurrentRowsInfo(&quot;0-0&quot;); 
+-        	   } else {
+-        		   int from = model.getCurrentFirstRow();
+-                   int to = from + view.getTable().getRowCount() - 1;               
+-                   view.setCurrentRowsInfo(from + &quot;-&quot; + to);    
+-        	   }               
+-                   view.setCountResutl(resultRows);
++       {   
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }    	   
++    	   // process selected record
++           model.undoSelected();  
++           // Check whether an error flag after processing selected records is set
++           if (!model.isError()) {
++        	   int okCancle = view.messageUndo(model.getMessageUndo());
++               logger.debug(&quot;button &quot;+okCancle);
++               if (okCancle == 0){
++            	   //Button OK was press
++            	   logger.debug(&quot;Button OK was press.&quot;);
++            	   model.commitUpdate();
++            	   model.deleteHistory(model.getResultRows(), true);            	   
++            	   model.searchEditHistory(model.getData());
++            	   model.processResult(1,model.getDisplayRows());
++            	   view.getTable().setModel(new HistoryTableModel(model));
++            	   int resultRows = model.getResultRows();
++            	   if (resultRows == 0) {
++            		   view.setCurrentRowsInfo(&quot;0-0&quot;); 
++            	   } else {
++            		   int from = model.getCurrentFirstRow();
++                       int to = from + view.getTable().getRowCount() - 1;               
++                       view.setCurrentRowsInfo(from + &quot;-&quot; + to);    
++            	   }               
++                       view.setCountResutl(resultRows);   
++               } else {            	  
++            	   logger.debug(&quot;Button Cancle was press.&quot;); 
++               }
+            } else {
+-        	   //Button Cancle was press
+-        	   //neco jako rollback - bude se volat nebo to bude zarizeno tim, ze se nezavola executeUpdate??
+-        	   logger.debug(&quot;Button Cancle was press.&quot;);
+-           }           
++        	   model.setError(null);        	           	  
++           }
+        }
+    }
+     
+ 
+    /**
+-    * 
++    * ActionListener class controlling the text field on the form for set number of rows to displayed.  
+     */
+     class rowSetDisplayChangeListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent) {
+-           // Save old value
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Save old value 
+            int oldValue = model.getDisplayRows();           
+            // Check whether new value &gt; 0
+            if (view.getDisplayRows() &lt; 1) {
+@@ -189,19 +245,31 @@
+            }
+            if (view.getDisplayRows() &gt; model.getResultRows()){
+         	   view.setDisplayRows(model.getResultRows());
+-           } 
+-           
++           }            
+            // Set new value in the model
+            model.setDisplayRows(view.getDisplayRows());
+            logger.debug(&quot;New display rows: &quot;+view.getDisplayRows());
+            // If neccessary reload search results
+            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
+                model.processResult(model.getCurrentFirstRow(), view.getDisplayRows());
++               if (model.isError()) return;
+                view.getTable().setModel(new HistoryTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.getTable().getRowCount() - 1;
+                view.setCurrentRowsInfo(from + &quot;-&quot; + to);               
+            }
++           // Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.getTable().getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }        	   
+    }
+   
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/HistoryTableModel.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -1,31 +1,34 @@
+ package net.sf.plantlore.client.history;
+ 
+ import java.text.DateFormat;
+-import java.text.DateFormat;
+ import java.util.ArrayList;
+ import java.util.Date;
+ import java.util.HashSet;
+ import javax.swing.table.AbstractTableModel;
+-
+ import org.apache.log4j.Logger;
+-
+ import net.sf.plantlore.common.record.HistoryRecord;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /** 
+- * Implements a table model for the history data.
++ * Implements a table model for the History.
++ * 
+  * @author Lada Oberreiterova
++ * @version 1.0
+  */
++
+ public class HistoryTableModel extends AbstractTableModel
+-{
+-    //Logger
++{    
++	private static final long serialVersionUID = 2027550749272023845L;
++	/** Instance of a logger */
+     private Logger logger;
+-    // History model
++    /** Model of the History MVC */
+     private History model; 
++    /** Results of a search query for displaying */
+     private ArrayList&lt;HistoryRecord&gt; editHistoryDataList;
++    /** List of identifier of selected item */
+     private HashSet markListId;
+-    private ArrayList&lt;Object[]&gt; markItem;
+-	
++    /** List of pairs (Item, identifier of the oldest change of this Item) */
++    private ArrayList&lt;Object[]&gt; markItem;	
+     /** Names of the columns */
+     private String[] columnNames;
+     /** Size of the columns */
+@@ -33,6 +36,7 @@
+     /** Data values displayed in the table*/
+     private Object[][] data;
+ 
++    /** Constants used for identification of columns of table */
+     public final static int MARK = 0;
+     public final static int DATE = 1; 
+     public final static int USER = 2;
+@@ -42,18 +46,20 @@
+     
+ 
+     /** 
+-     *  Creates a new instance of HistoryTableModel with the specified data values  
+-     *  @param model
++     *  Creates a new instance of HistoryTableModel  
++     *  @param model model of the Hisotry MVC
+      */
+     public HistoryTableModel(History model)
+     {
+     	logger = Logger.getLogger(this.getClass().getPackage().getName());
+     	this.model = model;        
+-    	initColumns();    	
+-        initColumnSize();
++    	initColumns();    	        
+     	initData();    	       
+     }  
+    
++    /**
++     * Init names of columns.
++     */
+     private void initColumns() {
+         columnNames = new String[6];        
+         columnNames[0] = L10n.getString(&quot;History.ColumnX&quot;);        
+@@ -64,6 +70,9 @@
+         columnNames[5] = L10n.getString(&quot;History.ColumnNewValue&quot;);           
+     }       
+     
++    /**
++     * Init size of columns.    
++     */
+     private void initColumnSize() {
+         columnSizes = new int[6];
+         columnSizes[0] = 30;
+@@ -75,12 +84,13 @@
+     }
+     
+     /**
+-     * Load data for dislaying 
++     * Load data for dislaying. 
+      */
+-    public void initData() {
+-    	
+-    	logger.debug(&quot;Init data.&quot;);
+-    	
++    public void initData() {    	
++    	logger.debug(&quot;HistoryTableModel: Init data for displaying.&quot;);
++    	// init size of column
++    	initColumnSize();
++    	// load data
+     	editHistoryDataList = model.getHistoryDataList();
+     	if (editHistoryDataList.size()==0 ){
+     		this.data = new Object[0][];
+@@ -91,48 +101,51 @@
+     	int countResult = Math.min(editHistoryDataList.size(), firstRow+ model.getDisplayRows()-1);
+     	int countRow = countResult - firstRow + 1;
+     	boolean mark = false;
+-    	int ii = 0;  
+-    	//If was use button &quot;sellect all&quot; we must init list of mark item
++    	int ii = 0;      	
+     	boolean selectAll = model.getSelectAll();
+-    	if (selectAll) {
+-    		initMarkAllItem();
++      	if (selectAll) {
++      		//If was pressed button SellectAll we must update list of mark item
++    		initMarkAllItem(firstRow-1, countResult, true);
+     		mark = true;    		
+-    	}                
+-        
+-    	//loud data for view
++    	}else if (model.getUnselectedAll()) {
++    		// If was pressed button UnsellectAll we must update list of mark item
++    		initMarkAllItem(firstRow-1, countResult, false);
++    	}        
++    	//load data for view
+         Object[][] editHistoryData = new Object[countRow][6];   
+     	for (int i=firstRow-1; i &lt; countResult; i++) { 
+                 String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
+                 String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
+     		String item = L10n.getString(tableName+&quot;.&quot;+columnName);    		
+-    		if (! selectAll){     			
+-    			mark = isMark(item, i);
+-    		}
++    		if (! selectAll)	
++    			mark = isMark(item, i);    		
+             editHistoryData[ii][0] = new Boolean(mark);  
+             Date when = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWhen();
+     	    editHistoryData[ii][1] = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(when); 
+     	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();    	   
+     	    editHistoryData[ii][3] = item;
++    	    logger.debug(&quot;XXXXXXXXXX: &quot;+ item);
+     	    editHistoryData[ii][4] = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
+     	    editHistoryData[ii][5] = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
+     	    ii++;
+     	}      	
+     	model.setSelectAll(false);
++    	model.setUnselectedAll(false);
+     	this.data = editHistoryData;    	
+     }    
+     
+     /**
+-     * Check marking row
+-     * @param item
+-     * @return
++     * Check marking rows.
++     * @param item string containing description of changed attribute
++     * @param itemId identifier of slelected record 
++     * @return true if record is selected, in other way false      
+      */
+     public boolean isMark(String item, int itemId) {    	
+     	int count = markItem.size();       	
+     	for( int i=0; i &lt; count; i++){
+     		Object[] itemList = (Object[])(markItem.get(i));
+     		String itemFromList = (String)itemList[0];
+-    		Integer maxId = (Integer)itemList[1];
+-    		logger.debug(&quot;IsMark - itemFromList: &quot;+itemFromList + &quot;, item: &quot;+ item + &quot;, maxId: &quot;+ maxId + &quot;, itemId: &quot;+ itemId);
++    		Integer maxId = (Integer)itemList[1];    		
+     		if (item.equals(itemFromList)) {
+     			if (itemId &lt;= maxId) {
+     				return true;
+@@ -143,21 +156,19 @@
+     }
+  
+     /**
+-     * 
+-     * @param row
+-     * @param value
++     * Update MarkList containing information about selected ITEMs and identifiers of their oldest change.
++     * @param item string containing description of changed attribute 
++     * @param row index of row in table of dialog
++     * @param value true if record is selected
+      */
+     public void updateMarkList(String item, int row, boolean value) {    	    	    	
+     	int itemId = row + model.getCurrentFirstRow() - 1;
+     	boolean contains = false;    	
+-    	int count = markItem.size();
+-    	logger.debug(&quot;Update markListItem. Count item: &quot;+count);
+-    	//ArrayList&lt;Object[]&gt; tmpMarkItem = markItem;
++    	int count = markItem.size();    	  
+     	for( int i=0; i &lt; count; i++){
+     		Object[] itemList = (Object[])(markItem.get(i));
+     		String itemFromList = (String)itemList[0];
+-    		Integer maxId = (Integer)itemList[1];    
+-    		logger.debug(&quot;MarkItem update - item: &quot;+ itemFromList + &quot;, maxId: &quot; + maxId);
++    		Integer maxId = (Integer)itemList[1];        		
+     		if (value) {    		    			    			
+     			if (item.equals(itemFromList)) { 
+     				contains = true;
+@@ -176,21 +187,20 @@
+ 		    			if (newId != -1) {
+ 		    				itemList[1] = newId;
+ 			    			markItem.set(i,itemList);
+-			    			logger.debug(&quot;Unmark - new itemId is &quot;+ itemList[1].toString());
++			    			//logger.debug(&quot;Unmark - new itemId is &quot;+ itemList[1].toString());
+ 		    			} else {
+ 		    				markItem.remove(i);
+-			    			logger.debug(&quot;Unmark - remote record has id: &quot;+ itemId);
++			    			//logger.debug(&quot;Unmark - remote record has id: &quot;+ itemId);
+ 			    			return;
+-		    			}
+-		    	    }else {		    		
+-		    			markItem.remove(i);
+-		    			logger.debug(&quot;Unmark - remote record has id: &quot;+ itemId);
++		    			}		    	    
++		    	    } else {		    			
++		    			//logger.debug(&quot;This situation is possible only for unselectedAll.&quot;);
+ 		    			return;
+ 		    		}
+ 		    	}				 
+ 			}      	
+     	}
+-    	if (! contains) {
++    	if (! contains &amp;&amp; value) {
+     		Object [] itemList = new Object[2];    		
+ 			itemList[0] = item;
+ 			itemList[1] = itemId;
+@@ -199,35 +209,33 @@
+     }
+  
+     /**
+-     * 
+-     *
++     *  Update list of selected item. Call after press SelectAll or UnselectAll buttons.
++     *  @param from indentifier of first record in table 
++     *  @param to identifier of last record in table
++     *  @param isSelect true if SelecteAll button has been pressed, false if UnselectAll button has been pressed
+      */
+-    public void initMarkAllItem() {    	
+-    	editHistoryDataList = model.getHistoryDataList();    	
+-    	int countResult = editHistoryDataList.size();    	
+-    	for (int i=0; i &lt; countResult; i++) {    
+-                String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
+-                String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    public void initMarkAllItem(int from, int to, boolean isSelect) {    	    	    	    	    	
++    	for (int i=to-1; i &gt;= from; i--) {    
++            String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++            String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
+     		String item = L10n.getString(tableName+&quot;.&quot;+columnName);        		
+-    		updateMarkList(item, i, true);
++    		updateMarkList(item, i - from, isSelect);
+     	} 
+     	model.setMarkItem(markItem);
+-    	updateMarkListId();
+-    	logger.debug(&quot;All records were selected.&quot;);    	
++    	updateMarkListId();    	   	
+     }
+-    
++        
+     /**
+-     * v markListId se drzi seznam polozek, ktere jsou oznaceny
+-     *
+-     */
+-    public void updateMarkListId() {
++     * Update list of identifiers of selected record.      
++     */    
++	public void updateMarkListId() {
+     	markListId = new HashSet();
+     	editHistoryDataList = model.getHistoryDataList();
+     	markItem = model.getMarkItem();
+     	int countResult = editHistoryDataList.size();    	
+     	for (int i=0; i &lt; countResult; i++) {  
+     		String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
+-                String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++            String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
+     		String item = L10n.getString(tableName+&quot;.&quot;+columnName);    
+     		if (isMark(item, i)){
+     			markListId.add(i);
+@@ -270,21 +278,25 @@
+         	 //Update list of selected record
+         	 updateMarkListId();
+         	 //update view
+-        	 this.fireTableDataChanged();
++        	 fireTableDataChanged();
+         }        
+     }
+ 
+     /**
+-     * 
+-     * @param item
+-     * @param itemId
+-     * @return
++     * Search younger change of ITEM.
++     * @param item string containing description of changed attribute
++     * @param itemId identifier of slelected record
++     * @return identifier of record containing younger change of ITEM or -1 if there isn1t younger change 
+      */
+-    public int searchSmaller(String item, int itemId) {    	    	
+-    	int firstRow = model.getCurrentFirstRow();
+-    	for( int i=itemId-firstRow; i &gt;=0 ; i--){
+-    		if (getValueAt(i,3).equals(item)){
+-    			return i+firstRow-1;
++    public int searchSmaller(String item, int itemId) {    	    	    	
++    	for( int i=itemId - 1; i &gt;=0 ; i--){
++    		String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
++            String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
++    		String itemData = L10n.getString(tableName+&quot;.&quot;+columnName); 
++    		logger.debug(&quot;itemData: &quot; + itemData + &quot; item:&quot; + item + &quot; itemId: &quot; + itemId );
++    		if (itemData.equals(item)){
++    			logger.debug(&quot;return &quot; + i);
++    			return i;    			
+     		}    		
+     	}
+     	return -1;
+@@ -296,7 +308,7 @@
+      * @param column index of column
+      */
+     public Object getValueAt(int row, int column)
+-    {
++    {    	
+         return data[row][column];
+     }    
+     
+@@ -318,7 +330,10 @@
+         return columnNames.length;
+     }
+      
+-     
++    /**
++     * Set size of columns
++     * @param columnSizes size of columns
++     */ 
+     public void setColumnSizes(int[] columnSizes) {
+           this.columnSizes=columnSizes;
+     }
+@@ -336,8 +351,8 @@
+      * Gets right Class for Boolean Object in the MARK column, Date Object in the DATE column and String Object in other columns. 
+      * @param column index of column
+      * @return the Class for Object instances in the specified column.
+-     */
+-    public Class getColumnClass(int column) {
++     */    
++	public Class getColumnClass(int column) {
+     	switch (column) {
+             case 0: return Boolean.class;
+             case 1: return DateFormat.class;
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/HistoryView.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -12,40 +12,56 @@
+ import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
+ import javax.swing.JTable;
+-import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+- *
+- * @author  Lada
++ * View for the main History dialog (part of the History MVC). Used for displaying the search results.
++ * @author  Lada Oberreiterov&#225;
++ * @version 1.0
+  */
+ public class HistoryView extends javax.swing.JDialog implements Observer{
++        
++	private static final long serialVersionUID = -6749177153586329145L;
++	/** Model of the History MVC*/
++	private History model;      
+     
+-    //History model
+-    private History model;  
+-    //data
+-    private Object[][] data;
+-    
+     /**
+      * Creates new form HistoryView
++     * @param model model of the History MVC
++     * @param parent parent of this dialog
++     * @param modal boolean flag whether the dialog should be modal or not
+      */
+     public HistoryView(History model, java.awt.Frame parent, boolean modal) {
+                 
+         super(parent, modal);
+         this.model = model;
++        // Register observer
++        model.addObserver(this);
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
++        //Init Help
+         PlantloreHelp.addKeyHelp(PlantloreHelp.HISTORY_MANAGER, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.HISTORY_MANAGER, this.helpButton);        
+-        getTable().setModel(new HistoryTableModel(model));           
++        getTable().setModel(new HistoryTableModel(model));         
++        previousButton.setEnabled(false);
++        if (getTable().getRowCount() &lt;= model.getDisplayRows()) {
++        	nextButton.setEnabled(false);
++        }
+     }
+     
++    /**
++     * Reload the view dialog or display some kind of error.
++     */
+       public void update(Observable observable, Object object)
+     {                                
+-       
++    	  //Check whether we have some kind of error to display
++          if (model.isError()) {
++              showErrorMessage(model.getError());                          
++              return;
++          } 
+     } 
+-    
++      
+     /** This method is called from within the constructor to
+      * initialize the form.
+      * WARNING: Do NOT modify this code. The content of this method is
+@@ -332,20 +348,21 @@
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+         pack();
+-    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents       
+     
+     /**
+-     * @param args the command line arguments
++     *  Display generic error message.
++     *  @param message Message we want to display
+      */
+-    public static void main(String args[]) {
+-        java.awt.EventQueue.invokeLater(new Runnable() {
+-            public void run() {
+-                new HistoryView(null, new javax.swing.JFrame(), true).setVisible(true);
+-            }
+-        });
+-    }
+-    
+-     
++    public void showErrorMessage(String message) {
++        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
++    }  
++   
++    /**
++     * Display generic message
++     * @param message Message we want to display
++     * @return information about user selection. &lt;ul&gt;&lt;li&gt; 0 if user press OK button&lt;/li&gt; &lt;li&gt;1 if user press Cancle button&lt;/li&gt; &lt;li&gt;2 if warnnig message has been displayed&lt;/li&gt;&lt;/ul&gt;
++     */
+     public int messageUndo(String message) {
+         if (message.equals(&quot;&quot;)) {
+             JOptionPane.showMessageDialog(this, L10n.getString(&quot;Warning.EmptySelection&quot;), L10n.getString(&quot;Warning.EmptySelectionTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+@@ -356,28 +373,44 @@
+         }
+     }
+ 
++    /**
++     * Close this dialog.     
++     */
+     public void close() {
+         dispose();
+     }
+   
++    /**
++     * Get main table whitch displays changes of Records
++     * @return main table whitch displays changes of Records
++     */
+     public JTable getTable()
+     {
+     	return this.tableEditList;
+     }
+     
+-    /** Total results */
++    /** 
++     * Set number of rows in results
++     * @param resultRows number of rows in results
++     */
+     public void setCountResutl(Integer resultRows)
+     {
+     	this.totalResultValueLabel.setText(resultRows.toString());
+     }
+     
+-    /**Displayed rows */
++    /**
++     * Set number of rows displayed on active page 
++     * @param displayedRows number of rows displayed on active page
++     */
+     public void setCurrentRowsInfo(String displayedRows)
+     {
+     	this.displayedValueLabel.setText(displayedRows);
+     }
+     
+-    /**Rows to display */
++    /**
++     * Get numger of rows to displaying on one page
++     * @return numger of rows to displaying on one page
++     */
+     public Integer getDisplayRows() {
+          Integer countRows;
+         try {
+@@ -388,7 +421,10 @@
+         return countRows;
+     }
+     
+-    /**Rows to display*/
++    /**
++     * Set numger of rows to displaying on one page
++     * @param value numger of rows to displaying on one page
++     */
+     public void setDisplayRows(Integer value) {
+         this.toDisplayValueTextField.setText(value.toString());
+     }  
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -11,30 +11,35 @@
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+-import java.text.DateFormat;
+-import java.util.Date;
+-import net.sf.plantlore.common.PlantloreHelp;
+-import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+-
+ /**
++ * Controller for the main WholeHistory dialog (part of the WholeHistory MVC).
+  *
+- * @author Lada
++ * @author Lada Oberreiterova
++ * @version 1.0
+  */
+ public class WholeHistoryCtrl {
+    
++	/** Instance of a logger */
+     private Logger logger;
++    /** Model of the WholeHistory MVC */
+     private History model;
++    /** View of the WholeHistory MVC */
+     private WholeHistoryView view;
+     
+-    /** Creates a new instance of WholeHistoryCtrl */
++    /** 
++     *  Creates a new instance of WholeHistoryCtrl 
++     *  @param model model of the WholeHistory MVC
++     *  @param view  view of the WholeHistory MVC
++     */
+     public WholeHistoryCtrl(History model, WholeHistoryView view) {
+       
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+         this.model = model;
+         this.view = view;
+-                  
++          
++        // Add action listeners to buttons
+         view.okButton.addActionListener(new okButtonListener());
+         view.closeButton.addActionListener(new closeButtonListener());
+         view.previousButton.addActionListener(new previousButtonListener());
+@@ -45,10 +50,10 @@
+         view.clearHistoryButton.addActionListener(new clearHistoryListener());
+     }
+     
+-            /** 
+-    * On Ok makes the model store() the preferences and hides the view.
+-    * 
+-    */
++    /** 
++     * ActionListener class controlling the &lt;b&gt;OK&lt;/b&gt; button on the form.
++     * On Ok makes the model store() the preferences and hides the view.     
++     */  
+    class okButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {       
+@@ -57,8 +62,8 @@
+    }
+   
+    /**
+-    * On Cancel just hides the view.
+-    *
++    * ActionListener class controlling the &lt;b&gt;CLOSE&lt;/b&gt; button on the form.
++    * On Close hides the view.
+     */
+    class closeButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+@@ -68,46 +73,61 @@
+    }
+    
+    /**
+-    * 
+-    *
++    *  ActionListener class controlling the &lt;b&gt;PREV&lt;/b&gt; button on the form.
++    *  The button PREV is used for browsing the search results.
+     */
+    class previousButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+-       {
+-    	   //   Call processResults only if we don't see the first page (should not happen, button should be disabled)
+-    	   logger.debug(&quot;FIRST&quot;);
+-    	   logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ view.tableHistoryList.getRowCount());      
++       {    	  
++    	   // Check whether an error flag is set
++           if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Get previous page of results
+            if (model.getCurrentFirstRow() &gt; 1) {
+                int firstRow = Math.max(model.getCurrentFirstRow()- model.getDisplayRows(), 1);
+                model.processResult(firstRow, model.getDisplayRows()); 
++               if (model.isError()) return;
+                if (model.getCurrentFirstRow() &gt; 1){
+                }
+                view.tableHistoryList.setModel(new WholeHistoryTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableHistoryList.getRowCount() - 1;
+                view.displayedValueLabel.setText(from + &quot;-&quot; + to);
+-           }                           
++           }      
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableHistoryList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+    
+    /**
+-    * 
+-    *
++    * ActionListener class controlling the &lt;b&gt;NEXT&lt;/b&gt; button on the form.
++    * The button NEXT is used for browsing the search results.    
+     */
+    class nextButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-    	   //Call processResults only if we don't see the last page
+-    	   logger.debug(&quot;NEXT&quot;);
+-           logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-           logger.debug(&quot;num rows in the result: &quot;+ model.getResultRows());            
+-           logger.debug(&quot;display rows: &quot;+ model.getDisplayRows());
+-           logger.debug(&quot;num rows in table (view) &quot;+ view.tableHistoryList.getRowCount());              
++    	   // Check whether an error flag is set 
++           if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Get next page of result
+            if (model.getCurrentFirstRow()+ view.tableHistoryList.getRowCount()&lt;=model.getResultRows()) {
+                model.processResult(model.getCurrentFirstRow()+ model.getDisplayRows(), view.tableHistoryList.getRowCount());
+-               view.tableHistoryList.setModel(new WholeHistoryTableModel(model));             
++               if (model.isError()) return;
++               view.tableHistoryList.setModel(new HistoryTableModel(model));             
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableHistoryList.getRowCount() - 1;
+                if (to &lt;= 0){
+@@ -115,16 +135,33 @@
+                }else {
+             	   view.displayedValueLabel.setText(from + &quot;-&quot; + to);
+                }               
+-           }                       
++           }  
++           //Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableHistoryList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }
+    }
+    
+-      /**
+-    * 
++   /**
++    * ActionListener class controlling the text field on the form for set number of rows to displayed.  
+     */
+-     class rowSetDisplayChangeListener implements ActionListener {
++    class rowSetDisplayChangeListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent) {
+-           // Save old value
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
++           // Save old value 
+            int oldValue = model.getDisplayRows();           
+            // Check whether new value &gt; 0
+            if (view.getDisplayRows() &lt; 1) {
+@@ -133,74 +170,102 @@
+            }
+            if (view.getDisplayRows() &gt; model.getResultRows()){
+         	   view.setDisplayRows(model.getResultRows());
+-           } 
+-           
++           }            
+            // Set new value in the model
+            model.setDisplayRows(view.getDisplayRows());
+            logger.debug(&quot;New display rows: &quot;+view.getDisplayRows());
+            // If neccessary reload search results
+            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
+                model.processResult(model.getCurrentFirstRow(), view.getDisplayRows());
+-               view.tableHistoryList.setModel(new WholeHistoryTableModel(model));
++               if (model.isError()) return;
++               view.tableHistoryList.setModel(new HistoryTableModel(model));
+                int from = model.getCurrentFirstRow();
+                int to = from + view.tableHistoryList.getRowCount() - 1;
+                view.displayedValueLabel.setText(from + &quot;-&quot; + to);               
+            }
++           // Set button prev active if we see the first page, in other way set it inactive
++           if (model.getCurrentFirstRow() &gt; 1) {
++        	   view.previousButton.setEnabled(true);
++           } else {
++        	   view.previousButton.setEnabled(false);
++           }
++           //Set button next inactive if we see the last page, in other way set it active
++           if (model.getCurrentFirstRow()+ view.tableHistoryList.getRowCount() - 1 &lt; model.getResultRows()) {
++        	   view.nextButton.setEnabled(true);
++           } else {
++        	   view.nextButton.setEnabled(false);
++           }
+        }        	   
+    }
+    
+-   /**
+-    *
+-    */  
++    /**
++     * ActionListener class controlling the &lt;b&gt;UndoToSelected&lt;/b&gt; button on the form.
++     * On UndoToSelected All changes from now to selected date will be restored.
++     */  
+     class undoToDateButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }
+            if (view.tableHistoryList.getSelectedRow() &lt; 0) {    
+                view.messageSelection();
+            } else {
+-               logger.debug(&quot;Undo to date - id of selected row: &quot;+ view.tableHistoryList.getSelectedRow());
++               logger.debug(&quot;Undo to date - id of selected row is: &quot;+ view.tableHistoryList.getSelectedRow());
+                int selectedRow = view.tableHistoryList.getSelectedRow();
+                int toResult = selectedRow + model.getCurrentFirstRow();
+                Object toDate = view.tableHistoryList.getValueAt(selectedRow, 0);                   	       
+                model.clearEditObjectList();
+                model.undoToDate(toResult);
+-               int okCancle = view.messageUndo(toDate.toString());     
+-               if (okCancle == 0){
+-                   //Button OK was press
+-                   logger.debug(&quot;Button OK was press.&quot;);    
+-                   model.commitUpdate();
+-                   model.deleteHistory(toResult, false);
+-                   model.searchWholeHistoryData();        	
+-                   model.processResult(1,model.getDisplayRows());
+-                   view.tableHistoryList.setModel(new WholeHistoryTableModel(model));
+-                   Integer resultRows = model.getResultRows();
+-                   if (resultRows == 0) {
+-                           view.displayedValueLabel.setText(&quot;0-0&quot;); 
+-                   } else {
+-                           int from = model.getCurrentFirstRow();
+-                   int to = from + view.tableHistoryList.getRowCount() - 1;               
+-                   view.displayedValueLabel.setText(from + &quot;-&quot; + to);    
+-                   }               
+-                   view.totalResultValueLabel.setText(resultRows.toString());
+-               } else {
+-                       //Button Cancle was press
+-                       //neco jako rollback - bude se volat nebo to bude zarizeno tim, ze se nezavola executeUpdate??
+-                       logger.debug(&quot;Button Cancle was press.&quot;);
+-               } 
+-           }
+-       }
+-    }
++               // Check whether an error flag after processing records is set
++               if (! model.isError()) {
++	               int okCancle = view.messageUndo(toDate.toString());     
++	               if (okCancle == 0){
++	                   //Button OK was press
++	                   logger.debug(&quot;Button OK was press.&quot;);    
++	                   model.commitUpdate();
++	                   model.deleteHistory(toResult, false);
++	                   model.searchWholeHistoryData();        	
++	                   model.processResult(1,model.getDisplayRows());
++	                   view.tableHistoryList.setModel(new WholeHistoryTableModel(model));
++	                   Integer resultRows = model.getResultRows();
++	                   if (resultRows == 0) {
++	                           view.displayedValueLabel.setText(&quot;0-0&quot;); 
++	                   } else {
++	                           int from = model.getCurrentFirstRow();
++	                   int to = from + view.tableHistoryList.getRowCount() - 1;               
++	                   view.displayedValueLabel.setText(from + &quot;-&quot; + to);    
++	                   }               
++	                   view.totalResultValueLabel.setText(resultRows.toString());
++	               } else {	                       	                     
++	                       logger.debug(&quot;Button Cancle was press.&quot;);
++	               } 
++                } else {
++                	model.setError(null);
++                }
++            }
++         }
++     }
+     
+     /**
+-    *
+-    */  
++     * ActionListener class controlling the &lt;b&gt;Details&lt;/b&gt; button on the form.
++     * Display dialog with details of record.
++     */  
+     class detailsHistoryListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-           if (view.tableHistoryList.getSelectedRow() &lt; 0) {    
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }        
++           if (view.tableHistoryList.getSelectedRow() &lt; 0) {
++        	   // No row is selected
+                view.messageSelection();
+            } else {
+-               //zobrazi se detailni informace o vybranem zaznamu
++               // Generate and display details of record
+                int resultNumber = view.tableHistoryList.getSelectedRow() + model.getCurrentFirstRow()-1;             
+                String detailsMessage = model.getDetailsMessage(resultNumber);
+                DetailsHistoryView detailsView = new DetailsHistoryView(view, true);
+@@ -212,20 +277,26 @@
+     }
+     
+     /**
+-    *
++    *   ActionListener class controlling the &lt;b&gt;CleareDatabase&lt;/b&gt; button on the form.
++    *   Delete data from history table and delete records, which have attribute cDelete set on one or greater.
+     */  
+     class clearHistoryListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+-           int okCancle = view.messageClearHistory();
++    	   // Check whether an error flag is set
++    	   if (model.isError()) {
++        	   view.showErrorMessage(model.getError());
++        	   return;
++           }       
++           int okCancle = view.messageUndo(&quot;CH&quot;);
+            if (okCancle == 0){
+                    //Button OK was press
+                    logger.debug(&quot;Button OK was press.&quot;);  
+-                   //smazani dat z tabulek tHistoryChange a tHistory
+-                   model.clearHistory();
+-                   //smaznamu, ktere maji deleted = 1
+-                   //model.clearDatabase
+-                   //aktualizovat zobrazeni dat
++                   // delete records whit contition cdelete &gt; 0
++                   model.clearDatabase();
++                   //deleta data from tables tHistoryChange and tHistory
++                   model.clearHistory();                   
++                   //load data
+                    model.searchWholeHistoryData();        	
+                    model.processResult(1,model.getDisplayRows());
+                    view.tableHistoryList.setModel(new WholeHistoryTableModel(model));
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryTableModel.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -18,22 +18,28 @@
+ import org.apache.log4j.Logger;
+ 
+ /**
++ * Implements a table model for the WholeHistory.
+  *
+  * @author Lada Oberreiterova
++ * @version 1.0
+  */
+ public class WholeHistoryTableModel extends AbstractTableModel {
+     
+-    //Logger
++	private static final long serialVersionUID = 5203388116532684569L;
++	/** Instance of a logger */
+     private Logger logger;
+-    // History model
+-    private History model; 
+-    private ArrayList&lt;HistoryRecord&gt; editHistoryDataList;
+-    
++    /** Model of the History MVC */
++    private History model;
++    /** Results of a search query for displaying */
++    private ArrayList&lt;HistoryRecord&gt; editHistoryDataList;    
+     /** Names of the columns */
+     private String[] columnNames;
++    /** Size of the columns */
++    private int[] columnSizes;
+     /** Data values displayed in the table*/
+     private Object[][] data;
+ 
++    /** Constants used for identification of columns of table */
+     public final static int DATE = 0;
+     public final static int OPERATION = 1; 
+     public final static int USER = 2;
+@@ -41,14 +47,20 @@
+     public final static int OLD_VALUE = 4;
+     public final static int NEW_VALUE = 5;
+     
+-    /** Creates a new instance of WholeHistoryTableModel */
++    /** 
++     *  Creates a new instance of WholeHistoryTableModel 
++     *  @param model model of the WholeHisotry MVC
++     */
+     public WholeHistoryTableModel(History model) {
+         logger = Logger.getLogger(this.getClass().getPackage().getName());
+     	this.model = model;        
+     	initColumns();    	
+-    	initData();    	
++    	initData();     	
+     }  
+    
++    /**
++     * Init names of columns.
++     */
+     private void initColumns() {
+         columnNames = new String[6];                      
+         columnNames[0] = L10n.getString(&quot;History.ColumnDate&quot;); 
+@@ -56,17 +68,29 @@
+         columnNames[2] = L10n.getString(&quot;History.ColumnUser&quot;);        
+         columnNames[3] = L10n.getString(&quot;History.ColumnItem&quot;);        
+         columnNames[4] = L10n.getString(&quot;History.ColumnOldValue&quot;);       
+-        columnNames[5] = L10n.getString(&quot;History.ColumnNewValue&quot;);     
+-        
+-    }       
++        columnNames[5] = L10n.getString(&quot;History.ColumnNewValue&quot;);            
++    }   
+     
+     /**
++     * Init size of columns.    
++     */
++    private void initColumnSize() {
++        columnSizes = new int[6];
++        columnSizes[0] = 30;
++        columnSizes[1] = 100;
++        columnSizes[2] = 100;
++        columnSizes[3] = 100;
++        columnSizes[4] = 100;
++        columnSizes[5] = 100;
++    }
++    
++    /**
+      * Load data for dislaying 
+      */
+     public void initData() {
+-    	
+-    	logger.debug(&quot;WholeHistory - Init data.&quot;);
+-    	
++    	logger.debug(&quot;WholeHistoryTableModel: Init data for displaying.&quot;);
++    	// init size of column
++    	initColumnSize();    	  	
+     	editHistoryDataList = model.getHistoryDataList();
+     	if (editHistoryDataList.size()==0 ){
+     		this.data = new Object[0][];
+@@ -76,9 +100,9 @@
+     	int countResult = Math.min(editHistoryDataList.size(), firstRow+ model.getDisplayRows()-1);
+     	int countRow = countResult - firstRow + 1;   
+         int ii = 0;
+-    	//loud data for view
++    	//load data for view
+         Object[][] editHistoryData = new Object[countRow][6];   
+-    	for (int i=firstRow-1; i &lt; countResult; i++) {     
++    	for (int i=firstRow-1; i &lt; countResult; i++) {         		
+             String columnName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getColumnName();
+             String tableName = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryColumn().getTableName();
+             String item = L10n.getString(tableName+&quot;.&quot;+columnName);             
+@@ -88,6 +112,7 @@
+             editHistoryData[ii][1] = L10n.getString( &quot;History.Operation&quot;+((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getOperation());
+     	    editHistoryData[ii][2] = ((HistoryRecord)editHistoryDataList.get(i)).getHistoryChange().getWho().getWholeName();    	   
+     	    editHistoryData[ii][3] = item;
++    	    logger.debug(&quot;WWWWWWWWWW: &quot;+ item);
+     	    editHistoryData[ii][4] = ((HistoryRecord)editHistoryDataList.get(i)).getOldValue();
+     	    editHistoryData[ii][5] = ((HistoryRecord)editHistoryDataList.get(i)).getNewValue();
+     	    ii++;
+@@ -136,8 +161,8 @@
+      * Gets right Class Integer Object for OPERATION column, Date Object in the DATE column and String Object in other columns. 
+      * @param column index of column
+      * @return the Class for Object instances in the specified column.
+-     */
+-    public Class getColumnClass(int column) {
++     */   
++	public Class getColumnClass(int column) {
+     	switch (column) {
+             case 0: return DateFormat.class;
+             case 1: return Integer.class;
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryView.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -15,30 +15,52 @@
+ import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+- *
+- * @author  Lada
++ * View for the main WholeHistory dialog (part of the WholeHistory MVC). Used for displaying the search results.
++ * @author  Lada Oberreiterov&#225;
++ * @version 1.0
+  */
+ public class WholeHistoryView extends javax.swing.JDialog implements Observer{
+-    
+-    //Whole History model
++       
++	private static final long serialVersionUID = -3610428060548385487L;
++	/** Model of the History MVC*/
+     private History model;  
+   
+-    /** Creates new form WholeHistoryView */
++    /**
++     * Creates new form WholeHistoryView
++     * @param model model of the WholeHistory MVC
++     * @param parent parent of this dialog
++     * @param modal boolean flag whether the dialog should be modal or not
++     */
+     public WholeHistoryView(History model, java.awt.Frame parent, boolean modal) {
+         
+         super(parent, modal);
+         this.model = model;
++        // Register observer
++        model.addObserver(this);
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
++        // Init Help
+         PlantloreHelp.addKeyHelp(PlantloreHelp.HISTORY_MANAGER, this.getRootPane());
+         PlantloreHelp.addButtonHelp(PlantloreHelp.HISTORY_MANAGER, this.helpButton);        
+         this.tableHistoryList.setRowSelectionAllowed(true);
+         this.tableHistoryList.setSelectionMode(DefaultListSelectionModel.SINGLE_SELECTION);
+-        this.tableHistoryList.setModel(new WholeHistoryTableModel(model));                
++        this.tableHistoryList.setModel(new WholeHistoryTableModel(model));     
++        previousButton.setEnabled(false);
++        if (this.tableHistoryList.getRowCount() &lt;= model.getDisplayRows()) {
++        	nextButton.setEnabled(false);
++        }
+     }
+     
++    /**
++     * Reload the view dialog or display some kind of error.
++     */
+     public void update(Observable observable, Object object)
+     {
++    	// Check whether we have some kind of error to display
++        if (model.isError()) {
++            showErrorMessage(model.getError());                          
++            return;
++        } 
+     }
+     
+     /** This method is called from within the constructor to
+@@ -218,40 +240,50 @@
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
++      
+     
+     /**
+-     * @param args the command line arguments
++     * Close this dialog.
+      */
+-    public static void main(String args[]) {
+-        java.awt.EventQueue.invokeLater(new Runnable() {
+-            public void run() {
+-                new WholeHistoryView(null, new javax.swing.JFrame(), true).setVisible(true);
+-            }
+-        });
+-    }
+-  
+-    /**
+-     *
+-     */
+     public void close() {
+         dispose();
+     }
+     
+-     public int messageUndo(String message) {
+-    	int okCancle = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;Question.Undo&quot;) + &quot;  &quot;+ message, L10n.getString(&quot;Question.UndoTitle&quot;), JOptionPane.OK_CANCEL_OPTION);
++    /**
++     *  Display generic error message.
++     *  @param message Message we want to display
++     */
++    public void showErrorMessage(String message) {
++        JOptionPane.showMessageDialog(this, message, L10n.getString(&quot;Common.ErrorMessageTitle&quot;), JOptionPane.ERROR_MESSAGE);               
++    }  
++    
++    /**
++     * Display generic message
++     * @param message Message we want to display
++     * @return information about user selection. &lt;ul&gt;&lt;li&gt; 0 if user press OK button&lt;/li&gt; &lt;li&gt;1 if user press Cancle button&lt;/li&gt;&lt;/ul&gt;
++     */
++    public int messageUndo(String message) {
++    	int okCancle = 1;
++    	if (message.equals(&quot;cHistory&quot;)) {
++    		okCancle = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;Question.ClearHistoryMessage&quot;), L10n.getString(&quot;Question.ClearHistoryMessageTitle&quot;), JOptionPane.OK_CANCEL_OPTION);
++    	}else {
++    		okCancle = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;Question.Undo&quot;) + &quot;  &quot;+ message, L10n.getString(&quot;Question.UndoTitle&quot;), JOptionPane.OK_CANCEL_OPTION);
++    	}
+     	return okCancle;
+     }
+-     
++    
++    /**
++     * Display generic warning message
++     * @param message Message we want to display     
++     */
+     public void messageSelection() {
+     	JOptionPane.showMessageDialog(this, L10n.getString(&quot;Warning.EmptySelection&quot;), L10n.getString(&quot;Warning.EmptySelectionTitle&quot;), JOptionPane.ERROR_MESSAGE);               
+     }
+-    
+-    public int messageClearHistory() {
+-    	int okCancle = JOptionPane.showConfirmDialog(this, L10n.getString(&quot;Question.ClearHistoryMessage&quot;), L10n.getString(&quot;Question.ClearHistoryMessageTitle&quot;), JOptionPane.OK_CANCEL_OPTION);
+-    	return okCancle;
+-    }
+-    
+-    /**Rows to display */
++      
++    /**
++     * Get numger of rows to displaying on one page
++     * @return numger of rows to displaying on one page
++     */
+     public Integer getDisplayRows() { 
+         Integer countRows;
+         try {
+@@ -262,7 +294,10 @@
+         return countRows;
+     }
+     
+-    /**Rows to display*/
++    /**
++     * Set numger of rows to displaying on one page
++     * @param value numger of rows to displaying on one page
++     */
+     public void setDisplayRows(Integer value) {
+         this.toDisplayValueTextField.setText(value.toString());
+     }  
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -34,6 +34,7 @@
+     private Double latitude;
+     private Double longitude;
+     private Integer deleted;
++    private User createdWho;
+     private String note;
+     
+     /** Constants with column mapping (used for building select queries) */
+@@ -48,6 +49,7 @@
+     public static final String LATITUDE = &quot;latitude&quot;;    
+     public static final String LONGITUDE = &quot;longitude&quot;;    
+     public static final String DELETED = &quot;deleted&quot;;    
++    public static final String CREATEDWHO = &quot;createdWho&quot;; 
+     public static final String NOTE = &quot;note&quot;;
+     
+     public static final String VILLAGE = &quot;village&quot;;
+@@ -93,6 +95,7 @@
+ 		else if(column.equals(QUADRANT)) setQuadrant((String)value);
+ 		else if(column.equals(DESCRIPTION)) setDescription((String)value);
+ 		else if(column.equals(COUNTRY)) setCountry((String)value);
++		else if(column.equals(CREATEDWHO)) setCreatedWho((User)value); 
+ 		else if(column.equals(ALTITUDE)) {
+ 			if (value != null &amp;&amp; value instanceof String) 
+ 				setAltitude(Double.parseDouble((String) value));
+@@ -446,4 +449,24 @@
+     public void setNote(String note) {
+         this.note = note;
+     }
++    
++    /**
++     *  Get user who created this Habitat 
++     *  @return User who created this Habitat
++     *  @see setCreatedWho
++     */
++    public User getCreatedWho() {        
++        //obligatory
++        return this.createdWho;
++    }
++    
++    /**
++     *  Set user who created this Habitat
++     *  @param createdWho user who created this Habitat
++     *  @see getCreatedWho
++     */
++    public void setCreatedWho(User createdWho) {
++        this.createdWho = createdWho;
++    }    
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -26,22 +26,19 @@
+     
+     /** Parameters of the HistoryChange. For detailed explanation see data model documentation. */
+     private Integer id;
+-    private Occurrence occurrence;
+-    private int recordId;
+-    private int oldRecordId;
++    private int recordId;    
+     private int operation;   
+     private java.util.Date when;
+     private User who;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;     
+-    public static final String RECORDID = &quot;recordId&quot;;
+-    public static final String OLDRECORDID = &quot;oldRecordId&quot;;
++    public static final String RECORDID = &quot;recordId&quot;;    
+     public static final String OPERATION = &quot;operation&quot;;
+     public static final String WHEN = &quot;when&quot;;
+     public static final String WHO = &quot;who&quot;;    
+     
+-    //public enum Column {ID, OCCURRENCE, RECORDID, OLDRECORDID, OPERATION, WHEN, WHO};
++    //public enum Column {ID, OCCURRENCE, RECORDID, OPERATION, WHEN, WHO};
+     
+     /**
+      *   Default constructor to create new class HistoryChange
+@@ -89,26 +86,6 @@
+     }
+ 
+     /**
+-     *   Get old identifier of the record before his changed. 
+-     *   This is defined only in case if the identifier was changed.
+-     *   @return identifier of the record before his changed. 
+-     *   @see setOldRecordId
+-     */
+-    public int getOldRecordId() {
+-        return this.oldRecordId;
+-    }
+-    
+-    /**
+-     *  Set old identifier of the record before his changed. 
+-     *  This is defined only in case if the identifier was changed.
+-     *  @param oldRecordId string containing identifier of the record before his changed.
+-     *  @see getOldRecordId
+-     */
+-    public void setOldRecordId(int oldRecordId) {
+-        this.oldRecordId = oldRecordId;
+-    }    
+-    
+-    /**
+      *   Get operation which was used. See constants defined for different operations.
+      *
+      *   @return operation which was used
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -19,6 +19,7 @@
+     private HistoryChange historyChange;
+     private String oldValue;
+     private String newValue;
++    private int oldRecordId;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -26,8 +27,9 @@
+     public static final String HISTORYCHANGE = &quot;historyChange&quot;;
+     public static final String OLDVALUE = &quot;oldValue&quot;;    
+     public static final String NEWVALUE = &quot;newValue&quot;;
++    public static final String OLDRECORDID = &quot;oldRecordId&quot;;
+ 
+-    //public enum Column {ID, HISTORYCOLUMN, HISTORYCHANGE, OLDVALUE, NEWVALUE};
++    //public enum Column {ID, HISTORYCOLUMN, HISTORYCHANGE, OLDVALUE, NEWVALUE, OLDRECORDID};
+     
+     /** Creates a new instance of HistoryRecord */
+     public HistoryRecord() {
+@@ -124,4 +126,25 @@
+     public void setNewValue(String newValue) {
+         this.newValue = newValue;
+     }
++    
++    /**
++     *   Get old identifier of the record before his changed. 
++     *   This is defined only in case if the identifier was changed.
++     *   @return identifier of the record before his changed. 
++     *   @see setOldRecordId
++     */
++    public int getOldRecordId() {
++        return this.oldRecordId;
++    }
++    
++    /**
++     *  Set old identifier of the record before his changed. 
++     *  This is defined only in case if the identifier was changed.
++     *  @param oldRecordId string containing identifier of the record before his changed.
++     *  @see getOldRecordId
++     */
++    public void setOldRecordId(int oldRecordId) {
++        this.oldRecordId = oldRecordId;
++    }    
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-07-22 02:28:35 UTC (rev 468)
+@@ -52,7 +52,11 @@
+                 length=&quot;4096&quot;
+                 name=&quot;note&quot;
+                 not-null=&quot;false&quot;                
+-                type=&quot;java.lang.String&quot;/&gt;                                           
++                type=&quot;java.lang.String&quot;/&gt;  
++      &lt;many-to-one name=&quot;createdWho&quot; 
++                   class=&quot;net.sf.plantlore.common.record.User&quot; 
++                   column=&quot;CCREATEWHO&quot;
++                   fetch=&quot;select&quot;/&gt;                                           
+       &lt;property column=&quot;CDELETE&quot;
+                 name=&quot;deleted&quot;
+                 not-null=&quot;true&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml	2006-07-22 02:28:35 UTC (rev 468)
+@@ -25,6 +25,10 @@
+                 length=&quot;4096&quot;
+                 name=&quot;newValue&quot;
+                 not-null=&quot;false&quot;                
+-                type=&quot;java.lang.String&quot;/&gt;                                              
++                type=&quot;java.lang.String&quot;/&gt;   
++      &lt;property column=&quot;COLDRECORDID&quot;                
++                name=&quot;oldRecordId&quot;
++                not-null=&quot;false&quot;
++                type=&quot;java.lang.Integer&quot;/&gt;                                                           
+    &lt;/class&gt;
+ &lt;/hibernate-mapping&gt;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml	2006-07-22 02:28:35 UTC (rev 468)
+@@ -12,11 +12,7 @@
+       &lt;property column=&quot;CRECORDID&quot;                
+                 name=&quot;recordId&quot;
+                 not-null=&quot;true&quot;
+-                type=&quot;java.lang.Integer&quot;/&gt;
+-      &lt;property column=&quot;COLDRECORDID&quot;                
+-                name=&quot;oldRecordId&quot;
+-                not-null=&quot;false&quot;
+-                type=&quot;java.lang.Integer&quot;/&gt;                
++                type=&quot;java.lang.Integer&quot;/&gt;      
+       &lt;property column=&quot;COPERATION&quot;               
+                 name=&quot;operation&quot;
+                 not-null=&quot;true&quot;
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-07-17 17:11:29 UTC (rev 467)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-07-22 02:28:35 UTC (rev 468)
+@@ -233,6 +233,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -296,6 +301,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -983,6 +993,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -1004,6 +1019,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -1053,6 +1073,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -1074,6 +1099,11 @@
+             occ.setUpdatedWho(this.plantloreUser);
+             data = occ;
+         }
++        if (data instanceof Habitat) {
++            Habitat hab = (Habitat)data;
++            hab.setCreatedWho(this.plantloreUser);
++            data = hab;
++        }
+         if (data instanceof Publication) {
+             Publication pub = (Publication)data;
+             pub.setCreatedWho(this.plantloreUser);
+@@ -1601,8 +1631,7 @@
+ 	        } else {
+ 	        	return;
+ 	        }
+-	        historyChange.setRecordId(recordId);            
+-            historyChange.setOldRecordId(0);
++	        historyChange.setRecordId(recordId);                        
+             historyChange.setOperation(INSERT);
+             historyChange.setWho(this.plantloreUser);
+             historyChange.setWhen(new java.util.Date());
+@@ -1626,6 +1655,7 @@
+             }                
+             HistoryRecord history = new HistoryRecord();
+             history.setHistoryColumn(column);
++            history.setOldRecordId(0);
+             history.setNewValue(null);
+             history.setOldValue(null);
+             // Save into the database
+@@ -1670,8 +1700,7 @@
+                 	table = &quot;&quot;;
+                 }
+                 if (delete == 1) {
+-                    // CDELETE was set to 1, we are deleting record
+-                    historyChange.setOldRecordId(0);
++                    // CDELETE was set to 1, we are deleting record                    
+                     historyChange.setOperation(DELETE);
+                     historyChange.setRecordId(id);
+                     historyChange.setWhen(new java.util.Date());
+@@ -1692,6 +1721,7 @@
+                     }
+                     Object[] hc = sr.get();
+                     hist.setHistoryChange(historyChange);
++                    hist.setOldRecordId(0);
+                     hist.setNewValue(null);
+                     hist.setOldValue(null);
+                     hist.setHistoryColumn((HistoryColumn)hc[0]);
+@@ -1704,8 +1734,7 @@
+                 (data instanceof Territory) || (data instanceof Phytochorion) ||
+                 (data instanceof Village) || (data instanceof Metadata) ||
+                 (data instanceof Occurrence) || (data instanceof Habitat) ||
+-                (data instanceof AuthorOccurrence)) {                               
+-                historyChange.setOldRecordId(0);                
++                (data instanceof AuthorOccurrence)) {                                                               
+                 historyChange.setOperation(UPDATE);
+                 historyChange.setWhen(new java.util.Date());
+                 historyChange.setWho(this.plantloreUser);
+@@ -1812,23 +1841,21 @@
+                     		// Create new history record
+                     		HistoryRecord historyRecord = new HistoryRecord();
+                     		// Save OldRecordId if neccessary
+-                    		                    		
+-                    		// TODO: Save oldRecordId
+                     		 if (((String)columnName).equals(Occurrence.PLANT)) {
+-                    			 //TODO: tato situace by nastat nemela - zmenou kytky dojde k vlozeni noveho nalezu
+-                    			 historyChange.setOldRecordId(((Plant)newRec.getValue(columnName)).getId());
++                    			 //this situation is improbability (new occurrence is insert into database during editinig of plant)   
++                    			 historyRecord.setOldRecordId(((Plant)newRec.getValue(columnName)).getId());
+                     			 historyRecord.setOldValue(((Plant)origValue).getTaxon());
+                          		 historyRecord.setNewValue(((Plant)newValue).getTaxon());
+                     		 } else if (((String)columnName).equals(Occurrence.PUBLICATION)) {
+-                    			 historyChange.setOldRecordId(((Publication)newRec.getValue(columnName)).getId());
++                    			 historyRecord.setOldRecordId(((Publication)newRec.getValue(columnName)).getId());
+                     			 historyRecord.setOldValue(((Publication)origValue).getReferenceCitation());
+                          		 historyRecord.setNewValue(((Publication)newValue).getReferenceCitation());
+                     		 } else if (((String)columnName).equals(Occurrence.HABITAT)) {
+-                    			 historyChange.setOldRecordId(((Habitat)newRec.getValue(columnName)).getId());
++                    			 historyRecord.setOldRecordId(((Habitat)newRec.getValue(columnName)).getId());
+                     			 historyRecord.setOldValue(((Habitat)origValue).getDescription());
+                          		 historyRecord.setNewValue(((Habitat)newValue).getDescription());
+                     		 } else if (((String)columnName).equals(Occurrence.METADATA)) {
+-                    			 historyChange.setOldRecordId(((Metadata)newRec.getValue(columnName)).getId());
++                    			 historyRecord.setOldRecordId(((Metadata)newRec.getValue(columnName)).getId());                    			 
+                     			 historyRecord.setOldValue(((Metadata)origValue).getDataSetTitle());
+                          		 historyRecord.setNewValue(((Metadata)newValue).getDataSetTitle());
+                     		 } else {
+@@ -1836,6 +1863,7 @@
+                          			   newValueString = (newValue == null) ? null : newValue.toString(); 
+                     			historyRecord.setOldValue(origValueString);
+                          		historyRecord.setNewValue(newValueString);
++                         		historyRecord.setOldRecordId(0);
+                     		 }
+                     		                     		 
+                     		 //Save the HistoryChange object
+@@ -1867,6 +1895,7 @@
+                         HistoryRecord hist = new HistoryRecord(); 
+                         hist.setHistoryChange(historyChange);                        
+                         hist.setHistoryColumn((HistoryColumn)hc[0]);
++                        hist.setOldRecordId(0);
+                         if ( newRec.getDeleted() == 1) {
+ 	                        hist.setNewValue(null);
+ 	                        hist.setOldValue(newRec.getAuthor().getWholeName());
+@@ -1903,6 +1932,7 @@
+ 	                            HistoryRecord hist = new HistoryRecord();
+ 	                            hist.setHistoryChange(historyChange);	                            	                           
+ 	                            hist.setHistoryColumn((HistoryColumn)colNames[0]);  
++	                            hist.setOldRecordId(0);
+ 	                            String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+ 	                           			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+ 	                      		hist.setOldValue(origValueString);
+@@ -1941,23 +1971,30 @@
+                             // Save OldRecordId if neccessary
+                             
+                     		 //TODO: Save oldRecordId
+-                    		 if (((String)cols.get(i)).equals(Habitat.TERRITORY)) {                    			 
+-                    			 historyChange.setOldRecordId(((Territory)newRec.getValue((String)cols.get(i))).getId());
++                    		 if (((String)cols.get(i)).equals(Habitat.TERRITORY)) { 
++                    			 logger.debug(&quot;TERRITORY: &quot; + ((Territory)newRec.getValue((String)cols.get(i))).getId());
++                    			 logger.debug(&quot;TERRITORY: &quot; + ((Territory)newRec.getValue((String)cols.get(i))).getName());
++                    			 hist.setOldRecordId(((Territory)newRec.getValue((String)cols.get(i))).getId());
+                     			 hist.setOldValue(((Territory)origRec.getValue((String)cols.get(i))).getName());
+                                  hist.setNewValue(((Territory)newRec.getValue((String)cols.get(i))).getName());
+                     		 } else if (((String)cols.get(i)).equals(Habitat.PHYTOCHORION)) {
+-                    			 historyChange.setOldRecordId(((Phytochorion)newRec.getValue((String)cols.get(i))).getId());
++                    			 logger.debug(&quot;PHYTOCHORION: &quot; + ((Phytochorion)newRec.getValue((String)cols.get(i))).getId());
++                    			 logger.debug(&quot;PHYTOCHORION: &quot; + ((Phytochorion)newRec.getValue((String)cols.get(i))).getName());
++                    			 hist.setOldRecordId(((Phytochorion)newRec.getValue((String)cols.get(i))).getId());
+                     			 hist.setOldValue(((Phytochorion)origRec.getValue((String)cols.get(i))).getName());
+                                  hist.setNewValue(((Phytochorion)newRec.getValue((String)cols.get(i))).getName());
+                     		 } else if (((String)cols.get(i)).equals(Habitat.VILLAGE)) {
+-                    			 historyChange.setOldRecordId(((Village)newRec.getValue((String)cols.get(i))).getId());
++                    			 logger.debug(&quot;VILLAGE: &quot; + ((Village)newRec.getValue((String)cols.get(i))).getId());
++                    			 logger.debug(&quot;VILLAGE: &quot; + ((Village)newRec.getValue((String)cols.get(i))).getName());
++                    			 hist.setOldRecordId(((Village)newRec.getValue((String)cols.get(i))).getId());
+                     			 hist.setOldValue(((Village)origRec.getValue((String)cols.get(i))).getName());
+                                  hist.setNewValue(((Village)newRec.getValue((String)cols.get(i))).getName());
+                     		 } else {
+                     			 String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                            			    newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                       			 hist.setOldValue(origValueString);
+-                           		 hist.setNewValue(newValueString);                    			
++                           		 hist.setNewValue(newValueString);  
++                           		 hist.setOldRecordId(0);
+                     		 }
+                     		 
+                             // Save the HistoryChange object
+@@ -1997,7 +2034,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                           
++                        	hist.setNewValue(newValueString); 
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);                            
+                         }
+                     }
+@@ -2030,7 +2068,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                            
++                        	hist.setNewValue(newValueString);  
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);     
+                         }
+                     }
+@@ -2063,7 +2102,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                            
++                        	hist.setNewValue(newValueString); 
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);                            
+                         }
+                     }
+@@ -2096,7 +2136,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                            
++                        	hist.setNewValue(newValueString); 
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);
+                         }
+                     }                    
+@@ -2129,7 +2170,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                            
++                        	hist.setNewValue(newValueString); 
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);
+                         }
+                     }
+@@ -2162,7 +2204,8 @@
+                             String origValueString = (origRec.getValue((String)cols.get(i)) == null) ? null : origValue.toString(),
+                         			   newValueString = (newRec.getValue((String)cols.get(i)) == null) ? null : newValue.toString(); 
+                    			hist.setOldValue(origValueString);
+-                        	hist.setNewValue(newValueString);                           
++                        	hist.setNewValue(newValueString);  
++                        	hist.setOldRecordId(0);
+                             sess.save(hist);
+                         }
+                     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000605.html">[Plantlore-dev] Import &amp; Export
+</A></li>
+	<LI>Next message: <A HREF="000607.html">[Plantlore-dev] r469 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#606">[ date ]</a>
+              <a href="thread.html#606">[ thread ]</a>
+              <a href="subject.html#606">[ subject ]</a>
+              <a href="author.html#606">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

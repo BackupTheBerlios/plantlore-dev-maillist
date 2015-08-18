@@ -1,0 +1,600 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r77 - in trunk/src/net/sf/plantlore: client common l10n server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r77%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n%20server&In-Reply-To=%3C200603261833.k2QIXkak012476%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000072.html">
+   <LINK REL="Next"  HREF="000074.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r77 - in trunk/src/net/sf/plantlore: client common l10n server</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r77%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n%20server&In-Reply-To=%3C200603261833.k2QIXkak012476%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r77 - in trunk/src/net/sf/plantlore: client common l10n server">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun Mar 26 20:33:46 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000072.html">[Plantlore-dev] r76 - trunk/src/net/sf/plantlore/server
+</A></li>
+        <LI>Next message: <A HREF="000074.html">[Plantlore-dev] podklady
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#73">[ date ]</a>
+              <a href="thread.html#73">[ thread ]</a>
+              <a href="subject.html#73">[ subject ]</a>
+              <a href="author.html#73">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-03-26 20:33:38 +0200 (Sun, 26 Mar 2006)
+New Revision: 77
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/common/ComponentAdjust.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+Log:
+Overview improvements. List of columns updated, record selection and
+corresponding buttons added.
+A bug in ComponentAdjust fixed.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -25,7 +25,8 @@
+ {
+     private Preferences prefs;
+     private int recordsPerPage;
+-    private DBLayer database;    
++    private DBLayer database;  
++    private OverviewTableModel tableModel;
+ 
+     /** Creates a new instance of AppCore */
+     public AppCore()
+@@ -42,6 +43,7 @@
+         	System.err.println(&quot;Kdykoliv se pracuje s DBLayer nebo SelectQuery, musite hendlovat RemoteException&quot;);
+         }
+         
++        tableModel = new OverviewTableModel(database);
+     }
+     
+     /*********************************************************
+@@ -59,4 +61,33 @@
+     public DBLayer getDatabase() {
+         return this.database;
+     }    
++    
++    public OverviewTableModel getTableModel() {
++        return this.tableModel;
++    }
++    
++    /** 
++     * TODO: make methods of OverviewTableModel call setChanged() of this observable.
++     * and then remove from appCore methods duplicating those from OverviewTableModel
++     */
++    public void setModelChanged() {
++        setChanged();
++    }
++    
++    public void selectAll() {
++        tableModel.selectAll();
++        setChanged();
++        notifyObservers();
++    }
++
++    public void selectNone() {
++        tableModel.selectNone();
++        setChanged();
++        notifyObservers();
++    }
++    public void invertSelected() {
++        tableModel.invertSelected();
++        setChanged();
++        notifyObservers();
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -72,6 +72,12 @@
+         view.addDataAuthorsListener(new DataAuthorsListener());
+         view.addDataPublicationsListener(new DataPublicationsListener());
+         view.addDataHistoryListener(new DataHistoryListener());
++        view.setAddAction(new AddAction());
++        view.setEditAction(new EditAction());
++        view.setDeleteAction(new DeleteAction());
++        view.setSelectAllAction(new SelectAllAction());
++        view.setSelectNoneAction(new SelectNoneAction());
++        view.setInvertSelectedAction(new InvertSelectedAction());
+     }
+     
+     /** Handles click to menu item Settings.
+@@ -203,6 +209,78 @@
+         }
+     }
+ 
++    class AddAction extends AbstractAction {
++        public AddAction() {
++            putValue(NAME, L10n.getString(&quot;recordAdd&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;recordAddTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;recordAdd&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Add pressed&quot;);
++        }
++    }
++    
++    class EditAction extends AbstractAction {
++        public EditAction() {
++            putValue(NAME, L10n.getString(&quot;recordEdit&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;recordEditTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;recordEdit&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Edit pressed&quot;);
++        }
++    }
++    
++    class DeleteAction extends AbstractAction {
++        public DeleteAction() {
++            putValue(NAME, L10n.getString(&quot;recordDelete&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;recordDeleteTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;recordDelete&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            System.out.println(&quot;Delete pressed&quot;);
++        }
++    }
++
++    class SelectAllAction extends AbstractAction {
++        public SelectAllAction() {
++            putValue(NAME, L10n.getString(&quot;selectAll&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;selectAllTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;selectAll&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            model.selectAll();
++        }
++    }
++
++    class SelectNoneAction extends AbstractAction {
++        public SelectNoneAction() {
++            putValue(NAME, L10n.getString(&quot;selectNone&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;selectNoneTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;selectNone&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            model.selectNone();
++        }
++    }
++    
++    class InvertSelectedAction extends AbstractAction {
++        public InvertSelectedAction() {
++            putValue(NAME, L10n.getString(&quot;invertSelected&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;invertSelectedTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;invertSelected&quot;));            
++        } 
++
++        public void actionPerformed(ActionEvent actionEvent) {
++            model.invertSelected();
++        }
++    }
++
+     class SearchAction extends AbstractAction {
+         public SearchAction() {
+             putValue(NAME, L10n.getString(&quot;dataSearch&quot;));
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.BorderLayout;
++import java.awt.Color;
+ import java.awt.Container;
+ import java.awt.Dimension;
+ import java.awt.FlowLayout;
+@@ -18,6 +19,7 @@
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
++import javax.swing.BorderFactory;
+ import javax.swing.JButton;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JFrame;
+@@ -29,8 +31,10 @@
+ import javax.swing.JScrollPane;
+ import javax.swing.JTable;
+ import javax.swing.JTextField;
++import javax.swing.JToggleButton;
+ import javax.swing.JToolBar;
+ import javax.swing.border.BevelBorder;
++import javax.swing.table.TableColumn;
+ import net.sf.plantlore.common.ComponentAdjust;
+ import net.sf.plantlore.common.StatusBarManager;
+ 
+@@ -72,7 +76,13 @@
+     private JButton 
+             importButton = new JButton(),
+             exportButton = new JButton(), 
+-            searchButton = new JButton();
++            searchButton = new JButton(),
++            addButton = new JButton(),
++            editButton = new JButton(),
++            deleteButton = new JButton(),
++            selectAll = new JButton(),
++            selectNone = new JButton(),
++            invertSelected  = new JButton();
+     
+     private JLabel statusLabel;
+     
+@@ -92,8 +102,10 @@
+ 
+     public void update(Observable observable, Object object)
+     {
++        frame.repaint();
++        overview.repaint();
+     }
+-
++    
+     /** Calls all the constructing init methods.
+      *
+      */
+@@ -104,6 +116,7 @@
+         initMenu();
+         initOverview();
+         initMainToolBar();
++        frame.pack();
+     }
+ 
+     /** Constructs the main Plantlore JFrame.
+@@ -159,13 +172,12 @@
+     private void initMainToolBar()
+     {
+         mainToolBar = new JToolBar();
+-        mainToolBar.add(importButton);
+-        mainToolBar.add(exportButton);
++        mainToolBar.add(addButton);
++        mainToolBar.add(editButton);
++        mainToolBar.add(deleteButton);
+         mainToolBar.add(searchButton);
+         container.add(mainToolBar, BorderLayout.NORTH);
+         
+-        sbm.add(importButton, &quot;Import some records&quot;);
+-        sbm.add(exportButton, &quot;Export some records&quot;);
+         sbm.add(searchButton, &quot;Search for records&quot;);
+     }
+     
+@@ -189,9 +201,19 @@
+      */
+     private void initOverview()
+     {
+-        overview = new JTable(new OverviewTableModel());
+-        overview.setPreferredScrollableViewportSize(new Dimension(600,70));
+-        JScrollPane sp = new JScrollPane(overview);
++        OverviewTableModel otm = model.getTableModel();
++        overview = new JTable(otm);
++        TableColumn tc;
++        for (int i = 0; i &lt; 23; i++) {
++            tc = overview.getColumnModel().getColumn(i);
++            tc.setPreferredWidth(otm.getColumnName(i).length()*10);
++        }
++        JPanel tablePanel = new JPanel();
++        tablePanel.setLayout(new BorderLayout());
++        JScrollPane sp = new JScrollPane(tablePanel);
++        tablePanel.add(overview.getTableHeader(), BorderLayout.PAGE_START);
++        tablePanel.add(overview, BorderLayout.CENTER);
++        sp.setPreferredSize(new Dimension(800, (otm.getRowCount()+1)*25));
+         mainPane.add(sp, BorderLayout.CENTER);
+         
+         pageToolBar = new JToolBar();
+@@ -199,22 +221,36 @@
+         recordsPerPage = new JFormattedTextField();
+         recordsPerPage.setValue(new Integer(prefs.getInt(&quot;recordsPerPage&quot;, 10)));
+         JButton next = new JButton(L10n.getString(&quot;nextButton&quot;));
+-        pageToolBar.add(prev);
+-        pageToolBar.add(recordsPerPage);
+-        pageToolBar.add(next);
+-//        pageToolBar.setPreferredSize(new Dimension(150, pageToolBar.getPreferredSize().height));
+         recordsPerPage.setPreferredSize(new Dimension(50, recordsPerPage.getPreferredSize().height));
+         recordsPerPage.setHorizontalAlignment(JTextField.CENTER);
+         pageToolBar.setFloatable(false);
+         pageToolBar.setRollover(true);
+ 
++        JToolBar selectToolBar = new JToolBar();
++        JButton refresh = new JButton(&quot;Refresh&quot;);
++        pageToolBar.add(selectAll);
++        pageToolBar.add(selectNone);
++        pageToolBar.add(invertSelected);
++        pageToolBar.addSeparator();        
++        pageToolBar.add(invertSelected);
++        pageToolBar.addSeparator();        
++        pageToolBar.add(prev);
++        pageToolBar.add(recordsPerPage);
++        pageToolBar.add(next);
++        
+         JPanel toolBarPane = new JPanel(new FlowLayout());
++//        toolBarPane.add(selectToolBar);
+         toolBarPane.add(pageToolBar);
+         mainPane.add(toolBarPane, BorderLayout.SOUTH);
+         ComponentAdjust ca = new ComponentAdjust();
+         ca.add(prev);
+         ca.add(next);
+         ca.setMaxWidth();
++        ca.clear();
++        ca.add(selectAll);
++        ca.add(selectNone);
++        ca.add(invertSelected);
++        ca.setMaxWidth();
+         
+         sbm.add(prev, &quot;Previous page&quot;);
+         sbm.add(next, &quot;Next page&quot;);
+@@ -266,7 +302,29 @@
+     public void setHelpAboutAction(AbstractAction a) {
+         helpAbout.setAction(a);
+     }
++
++    /** Sets an action to the addButton.
++     *
++     */
++    public void setAddAction(AbstractAction a) {
++        addButton.setAction(a);
++    }
+     
++    /** Sets an action to the editButton.
++     *
++     */
++    public void setEditAction(AbstractAction a) {
++        editButton.setAction(a);
++    }
++    
++    /** Sets an action to the deleteButton.
++     *
++     */
++    public void setDeleteAction(AbstractAction a) {
++        deleteButton.setAction(a);
++    }
++    
++    
+     /** Sets an action to the Data-&gt;Search menu item and to the Search toolbar button.
+      *
+      */
+@@ -275,6 +333,27 @@
+         searchButton.setAction(a);
+     }
+ 
++    /** Sets an action to the selectAll button.
++     *
++     */
++    public void setSelectAllAction(AbstractAction a) {
++        selectAll.setAction(a);
++    }
++
++    /** Sets an action to the selectAll button.
++     *
++     */
++    public void setSelectNoneAction(AbstractAction a) {
++        selectNone.setAction(a);
++    }
++
++    /** Sets an action to the selectAll button.
++     *
++     */
++    public void setInvertSelectedAction(AbstractAction a) {
++        invertSelected.setAction(a);
++    }
++
+     /** Sets an action to the Data-&gt;import menu item and to the Import toolbar button.
+      *
+      */
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -8,6 +8,10 @@
+ package net.sf.plantlore.client;
+ 
+ import javax.swing.table.AbstractTableModel;
++import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.server.DBLayerException;
++import net.sf.plantlore.middleware.SelectQuery;
+ 
+ /** Implements a table model for the main data overview.
+  *
+@@ -15,12 +19,15 @@
+  */
+ public class OverviewTableModel extends AbstractTableModel
+ {
+-    private String[] columnNames = { &quot;Name&quot;, &quot;Author&quot;, &quot;Location&quot;, &quot;Year&quot;, &quot;Habitat&quot;,
+-    &quot;Phytochorion&quot;, &quot;Region&quot;, &quot;Quadrant&quot;, &quot;Altitude&quot;, &quot;Longitude&quot;, &quot;Latitude&quot; };
++    private DBLayer db;
++    private String[] columnNames = { &quot;X&quot;,&quot;Name&quot;, &quot;Author&quot;, &quot;Nearest bigger seat&quot;, &quot;Place description&quot;, &quot;Year&quot;, 
++    &quot;Territory&quot;, &quot;Territory code&quot;,&quot;Phytochorion&quot;,&quot;Phytochorion code&quot;,&quot;Country&quot;,&quot;Quadrant&quot;,
++    &quot;Ocurrence note&quot;, &quot;Location note&quot;, &quot;Altitude&quot;, &quot;Longitude&quot;, &quot;Latitude&quot;, &quot;Source&quot;, &quot;Publication&quot;,
++    &quot;Herbarium&quot;, &quot;Metadata&quot;, &quot;Month&quot;, &quot;Day&quot;, &quot;Time&quot;};
+     
+     private Object[][] data = {
+-        {&quot;Pampeliska&quot;, &quot;neznamy&quot;, &quot;Praha&quot;, new Integer(1995), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(false), new Integer(10), new Integer(12), new Integer(-5)},
+-        {&quot;Hermanek&quot;, &quot;Jakub&quot;, &quot;Zelezny Brod&quot;, new Integer(1990), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(true), new Integer(10), new Integer(12), new Integer(-5)}        
++        {true, &quot;Pampeliska&quot;, &quot;neznamy&quot;, &quot;Praha&quot;, new Integer(1995), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(false), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;},
++        {false,&quot;Hermanek&quot;, &quot;Jakub&quot;, &quot;Zelezny Brod&quot;, new Integer(1990), &quot;none&quot;, &quot;phy&quot;, &quot;cechy&quot;, new Boolean(true), new Integer(10), new Integer(12), new Integer(-5), &quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;,&quot;&quot;}        
+     };
+     
+     /** Simple mode if true - only first three columns are displayed
+@@ -30,8 +37,17 @@
+     private boolean simple = true;
+     
+     /** Creates a new instance of OverviewTableModel */
+-    public OverviewTableModel()
+-    {
++    public OverviewTableModel(DBLayer db) {
++       /* int resultid = 0;
++        this.db = db;
++        SelectQuery sq = db.createQuery(Occurrence.class);
++        try {
++            resultid = db.executeQuery(sq);
++        } catch (DBLayerException ex) {
++            ex.printStackTrace();
++        }
++        System.out.println(&quot;OverviewTableModel: &quot;+db.getNumRows(resultid)+&quot; retrieved.&quot;);
++        */
+     }
+ 
+     public int getRowCount()
+@@ -56,7 +72,20 @@
+     public String getColumnName(int c){
+         return columnNames[c];
+     }
++
++    public void setValueAt(Object value, int row, int column)
++    {
++        data[row][column] = value;
++    }
+     
++    public boolean isCellEditable(int row, int column) 
++    {
++    	if (column == 0 )
++    	{
++    		return true;
++    	}
++    	return false;
++    }
+     
+     public boolean isSimple()
+     {
+@@ -67,4 +96,28 @@
+     {
+         this.simple = simple;
+     }
++    
++    public void selectAll() 
++    {
++        for (int i = 0; i &lt; data.length; i++) {
++            data[i][0] = true;
++        }
++    }
++    
++    public void selectNone() 
++    {
++        for (int i = 0; i &lt; data.length; i++) {
++            data[i][0] = false;
++        }
++    }
++    
++    public void invertSelected()
++    {
++        for (int i = 0; i &lt; data.length; i++) {
++            if ((Boolean)data[i][0] == true)
++                data[i][0] = false;
++            else
++                data[i][0] = true;
++        }        
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/ComponentAdjust.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ComponentAdjust.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/common/ComponentAdjust.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -53,6 +53,7 @@
+      */
+     public void clear() {
+         list.clear();
++        computed = false;
+     }
+     
+     /** Computes minimum, maximum and average widht and height of stored components.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-03-26 18:33:38 UTC (rev 77)
+@@ -31,6 +31,22 @@
+ dataSearch=&amp;Search
+ dataSearchTooltip=Invokes the search dialog
+ 
++recordAdd=&amp;Add
++recordAddTT=Add a new occurence record
++recordEdit=&amp;Edit
++recordEditTT=Edit selected record
++recordDelete=&amp;Delete
++recordDeleteTT=Delete selected records
++
++selectAll=All
++selectAllTT=Selects all visible occurence records
++selectNone=None
++selectNoneTT=Deselects all occurence records
++invertSelected=Invert
++invertSelectedTT=Inverts the selection
++
++
++
+ authorMgr=Author manager
+ 
+ publicationMgr=Publication manager
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-26 17:23:00 UTC (rev 76)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-03-26 18:33:38 UTC (rev 77)
+@@ -89,6 +89,7 @@
+         }
+         
+         cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/DatabaseTest/database/plantlore.fdb&quot;);
++        //cfg.setProperty(&quot;hibernate.connection.url&quot;, &quot;jdbc:firebirdsql:localhost/3050:/mnt/data/temp/plantloreDBdata.fdb&quot;);
+         cfg.setProperty(&quot;hibernate.connection.username&quot;, &quot;sysdba&quot;);
+         cfg.setProperty(&quot;hibernate.connection.password&quot;, &quot;masterkey&quot;);        
+         try {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000072.html">[Plantlore-dev] r76 - trunk/src/net/sf/plantlore/server
+</A></li>
+	<LI>Next message: <A HREF="000074.html">[Plantlore-dev] podklady
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#73">[ date ]</a>
+              <a href="thread.html#73">[ thread ]</a>
+              <a href="subject.html#73">[ subject ]</a>
+              <a href="author.html#73">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

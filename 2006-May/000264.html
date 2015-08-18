@@ -1,0 +1,887 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r226 - in trunk/src/net/sf/plantlore: client/login middleware server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r226%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20middleware%20server&In-Reply-To=%3C200605062331.k46NVhi4007115%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000263.html">
+   <LINK REL="Next"  HREF="000265.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r226 - in trunk/src/net/sf/plantlore: client/login middleware server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r226%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20middleware%20server&In-Reply-To=%3C200605062331.k46NVhi4007115%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r226 - in trunk/src/net/sf/plantlore: client/login middleware server">kovo at berlios.de
+       </A><BR>
+    <I>Sun May  7 01:31:43 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000263.html">[Plantlore-dev] r225 - in trunk/src/net/sf/plantlore: client client/user common/record config/hibernate l10n
+</A></li>
+        <LI>Next message: <A HREF="000265.html">[Plantlore-dev] r227 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#264">[ date ]</a>
+              <a href="thread.html#264">[ thread ]</a>
+              <a href="subject.html#264">[ subject ]</a>
+              <a href="author.html#264">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-07 01:31:38 +0200 (Sun, 07 May 2006)
+New Revision: 226
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/middleware/DBLayer.java
+   trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+Update of DBLayer and SelectQuery. Added method to group restrictions with OR, execute conditional delete and return currentlz logged user and his rights. Updated initialize() to return user Object and Right object.
+Login updated using new initilize().
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-05-06 23:29:27 UTC (rev 225)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-05-06 23:31:38 UTC (rev 226)
+@@ -4,6 +4,7 @@
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Observable;
++import net.sf.plantlore.common.record.User;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -47,6 +48,7 @@
+ 	
+ 	
+ 	private Right accessRights;
++        private User plantloreUser;
+ 	
+ 	/**
+ 	 * Create a new login model. The DBLayer factory will be used to produce 
+@@ -71,24 +73,23 @@
+ 		
+ 
+ 		 // TEMPORARY CODE STARTS HERE
+-		dbinfo.add(new DBInfo(&quot;Kovo Home&quot;, &quot;86.49.59.39&quot;, -1,
+-				&quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/PlantloreClean/plantloreHIBdataUTF.fdb&quot;, 
+-				new String[] { &quot;sysdba&quot;, null, null, null, null }));
+-		
+-		
+-		dbinfo.add(new DBInfo(&quot;Local Database But Via RMI&quot;, &quot;data.kolej.mff.cuni.cz&quot;, -1,
+-				&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdata.fdb&quot;, 
+-				new String[] { &quot;sysdba&quot;, null, null, null, null }));
+-		
+-				dbinfo.add(new DBInfo(&quot;Local Database in UTF-8&quot;, &quot;localhost&quot;, -1,
++
++				dbinfo.add(new DBInfo(&quot;Local Database But Via RMI&quot;, &quot;data.kolej.mff.cuni.cz&quot;, -1,
++						&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdata.fdb&quot;, 
++						new String[] { &quot;sysdba&quot;, null, null, null, null }));                
++
++				dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;&quot;, -1,
++							&quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/PlantloreClean/plantloreHIBdataUTF.fdb&quot;, 
++							new String[] { &quot;sysdba&quot;, null, null, null, null }));
++                                
++                                dbinfo.add(new DBInfo(&quot;Local Database in UTF-8&quot;, &quot;localhost&quot;, -1,
+ 						&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdataUTF.fdb&quot;, 
+ 						new String[] { &quot;sysdba&quot;, null, null, null, null }));
+ 		
+ 				dbinfo.add(new DBInfo(&quot;Local Database&quot;, &quot;localhost&quot;, -1,
+ 							&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdata.fdb&quot;, 
+-							new String[] { &quot;sysdba&quot;, null, null, null, null }));
+-				
+-				
++							new String[] { &quot;sysdba&quot;, null, null, null, null }));				
++
+ 		 // TEMPORARY CODE ENDS HERE
+ 		
+ 		this.setChanged(); this.notifyObservers();
+@@ -230,7 +231,9 @@
+ 		// Initialize the database layer.
+ 		logger.debug(&quot;Initializing that DBLayer (&quot; + selected.db + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+ 		try {
+-			accessRights = dblayer.initialize(selected.db,name, password);
++			Object[] init = dblayer.initialize(selected.db,name, password);
++                        plantloreUser = (User)init[0];
++                        accessRights = (Right)init[1];
+ 		} 
+ 		catch (DBLayerException exception) {
+ 			logger.error(&quot;The initialization of the DBLayer failed! Here's why: &quot; + exception);
+
+Modified: trunk/src/net/sf/plantlore/middleware/DBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-05-06 23:29:27 UTC (rev 225)
++++ trunk/src/net/sf/plantlore/middleware/DBLayer.java	2006-05-06 23:31:38 UTC (rev 226)
+@@ -11,6 +11,7 @@
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
+ import net.sf.plantlore.common.record.Right;
++import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.server.DBLayerException;
+ 
+ /**
+@@ -22,36 +23,153 @@
+  */
+ public interface DBLayer extends Remote, Serializable {
+     
+-    /** Initialize database connection */
+-    Right initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
+-    
++    /**
++     *  Initialize database connection. Authenticate user and Load rights of this user
++     *
++     *  @param dbID identifier of the database we want to connect to
++     *  @param user username for the access to plantlore on the server
++     *  @param password password for the access to plantlore on the server
++     *  @return array with two objects - User object with logged in user (index 0) and user's rights 
++     *          (Right object, index 1)
++     *  @throws DBLayerException when the database connection cannot be initialized
++     */
++    public Object[] initialize(String dbID, String user, String password) throws DBLayerException, RemoteException;
++
++    /**
++     *  Insert data into the database.
++     *
++     *  @param data data to insert (one of the data holder objects)
++     *  @return identifier (primary key) of the inserted row
++     *  @throws DBLayerException when saving data into the database fails
++     */    
+     public int executeInsert(Object data) throws DBLayerException, RemoteException;
+     
++    /**
++     *  Delete data from the database.
++     *
++     *  @param data data we want to delete (must be one of the holder objects)
++     *  @throws DBLayerException when deleting data fails
++     */    
+     public void executeDelete(Object data) throws DBLayerException, RemoteException;
+-        
++
++    /**
++     *  Update data in the database.
++     *
++     *  @param data to update (must be one of the holder objects)
++     *  @throws DBLayerException when updating data fails
++     */    
+     public void executeUpdate(Object data) throws DBLayerException, RemoteException;
+-    
++
++    /**
++     *  Insert data into the database without modifying history tables
++     *
++     *  @param data data to insert (one of the data holder objects)
++     *  @return identifier (primary key) of the inserted row
++     *  @throws DBLayerException when saving data into the database fails
++     */    
+     public int executeInsertHistory(Object data) throws DBLayerException, RemoteException;
+     
++    /**
++     *  Delete data from the database without modifying history tables
++     *
++     *  @param data data we want to delete (must be one of the holder objects)
++     *  @throws DBLayerException when deleting data fails
++     */    
+     public void executeDeleteHistory(Object data) throws DBLayerException, RemoteException;
+         
++    /**
++     *  Update data in the database without modifying history tables.
++     *
++     *  @param data to update (must be one of the holder objects)
++     *  @throws DBLayerException when updating data fails
++     */    
+     public void executeUpdateHistory(Object data) throws DBLayerException, RemoteException;
+-    
++
++    /**
++     *  Get more rows from the current result set.
++     *
++     *  @param resultId id of the result from which we want to read
++     *  @param from index of the first record we want to load
++     *  @param to index of the last row we want to load
++     *  @return array of records from the current result set. Each item in the array can be an
++     *          array as well (in case associated entities are fetched)
++     *  @throws DBLayerException
++     */    
+     public Object[] more(int resultId, int from, int to) throws DBLayerException, RemoteException;
+-    
++
++    /**
++     *  Get next result from the current result set.
++     *
++     *  @param resultId id of the result from which we want to read
++     *  @return next record from the active result set. Array can contain more objects in case
++     *          associated entities were fetched.
++     *  @throws DBLayerException when loading the results fails
++     */    
+     public Object[] next(int resultId) throws DBLayerException, RemoteException;
+ 
++    /**
++     *  Get the number of rows returned in the result.
++     *
++     *  @param  resultId id of the result we want the number of rows for     
++     *  @return number of rows in the given result
++     */    
+     public int getNumRows(int resultId) throws RemoteException;
+-        
++       
++    /**
++     *  Close the DBLayer. Close the session factory
++     *
++     *  @throws DBLayerException when closing session fails
++     */    
+     public void close() throws DBLayerException, RemoteException;
+     
+-    // TODO: Pridat throws DBLayerException
++    /**
++     *  Start building a select query.
++     *
++     *  @param classname entity we want to select from the database (given holder object class)
++     *  @return an instance of &lt;code&gt;SelectQuery&lt;/code&gt; used for building a query by client
++     *
++     */
+     public SelectQuery createQuery(Class classname) throws RemoteException;
+ 
++    /**
++     *  Execute constructed SELECT query. Only executes query, for retrieving results use next() and more()
++     *
++     *  @param query query we want to execute
++     *  @throws DBLayerException when selecting records from the database fails
++     */    
+     public int executeQuery(SelectQuery query) throws DBLayerException, RemoteException;
+     
++    /**
++     *  Close the select query.
++     *
++     *  @param query query we want to close
++     */    
+     public void closeQuery(SelectQuery query);
++
++    /**
++     *  Execute SQL delete with condition. Only administrator should be allowed to run this.
++     *  The method doesn't handle foreign key constraints
++     *  
++     *  @param tableClass class representing the table we want to delete data from
++     *  @param column name of the column in the condition
++     *  @param operation operation in the condition (must be SQL compatible, e.g. =, &gt;, &lt;)
++     *  @param value value in the condition. Must be either String, Integer or Date
++     *  @return number of rows deleted
++     */    
++    public int conditionDelete(Class tableClass, String column, String operation, Object value) throws DBLayerException;
++
++    /**
++     *  Method to get the currently logged user. Returns null if there is no user logged in.
++     *  @return currently logged in user or null, if there is no user logged in.
++     */    
++    public User getUser() throws RemoteException;
+     
++    /**
++     *  Method to get the rights of the currently logged in user. Returns null if there is no user logged in
++     *  @return rights of the currently logged in user or null if there is no user logged in.
++     */    
++    public Right getUserRights() throws RemoteException;
++        
+     public void shutdown() throws RemoteException;
+         
+ }
+
+Modified: trunk/src/net/sf/plantlore/middleware/SelectQuery.java
+===================================================================
+--- trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-05-06 23:29:27 UTC (rev 225)
++++ trunk/src/net/sf/plantlore/middleware/SelectQuery.java	2006-05-06 23:31:38 UTC (rev 226)
+@@ -14,7 +14,6 @@
+  * explanation refer to Plantlore dosumnetation.
+  *
+  * FIXME Tie metody by asi mali hadzat DBLayerException a prekladat vyhadzovane HibernateExceptions
+- * FIXME Chyba tu zoskupovanie podmienok vo WHERE klauzuli pomocou AND a OR
+  *
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>), Tom&#225;&#353; Kova&#345;&#237;k (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">kovo at matfyz.cz</A>)
+  * @since 2006-03-26
+@@ -29,8 +28,13 @@
+      *  @param propertyName name of the column for which we want to create an alias (foreign key column)
+      *  @param aliasName name of the new alias
+      */    
+-    void createAlias(String propertyName, String aliasName)  throws RemoteException;
+-    
++    void createAlias(String propertyName, String aliasName) throws RemoteException;
++
++    /**
++     *  Make the rows of the results to be distinct from each other. This checks whether whole rows
++     *  are distinct from each other. The check is done by Hibernate after the results are retrieved
++     *  from the database.
++     */    
+     void setDistinct() throws RemoteException;
+     
+     /**
+@@ -43,6 +47,23 @@
+      *  @param values collection of values for restrictions working with more values (RESTR_IN)
+      */
+     void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values)  throws RemoteException;
++
++    /**
++     *  Connect restrictions with disjunction (OR) in the WHERE clause.
++     *  
++     *  @param items array of objects with the following structure:
++     *               &lt;ul&gt;
++     *                  &lt;li&gt;Index 0: type of the restriction (see PlantloreConstants for constants)&lt;/li&gt;
++     *                  &lt;li&gt;Index 1: first property name (column name). Used to compare column with value&lt;/li&gt;
++     *                  &lt;li&gt;Index 2: second property name (column name). Used when comparing two columns&lt;/li&gt;
++     *                  &lt;li&gt;Index 3: value for the comparison. Used to compare column with value&lt;/li&gt;
++     *              &lt;/ul&gt;
++     *              4 values make one restriction, you can pass unlimited number of restrictions which will
++     *              be grouped together and connected in disjunction.
++     *  @throws IllegalArgumentException in case the input array is not of the correct length 
++     *  (must be at least 4 items and number of items must be divisible by 4)
++     */    
++    public void addOrRestriction(Object[] items) throws IllegalArgumentException, RemoteException;
+     
+     /**
+      *  Add projection to constructed criteria. Projections are columns we want to select
+@@ -51,7 +72,7 @@
+      *  @param propertyName name of the column for the projection
+      *  @see PlantloreConstants
+      */
+-    void addProjection(int type, String propertyName)  throws RemoteException;
++    void addProjection(int type, String propertyName) throws RemoteException;
+     
+     /**
+      *  Set method of fetching the results.
+@@ -59,7 +80,7 @@
+      *  @param associationPath
+      *  @param mode
+      */
+-    void setFetchMode(String associationPath, int mode)  throws RemoteException;
++    void setFetchMode(String associationPath, int mode) throws RemoteException;
+     
+     /**
+      *  Add orderby clause to the constructed criteria.
+@@ -67,7 +88,7 @@
+      *  @param direction direction of ordering (ASC or DESC)
+      *  @param propertyName property we want to use for ordering the results
+      */
+-    void addOrder(int direction, String propertyName)  throws RemoteException;
++    void addOrder(int direction, String propertyName) throws RemoteException;
+     
+     /**
+      *  Add association to the criteria. Association means that given associated record (from a
+@@ -75,6 +96,6 @@
+      *
+      *  @param associationPath path of associated entities
+      */
+-    void addAssociation(String associationPath)  throws RemoteException;
++    void addAssociation(String associationPath) throws RemoteException;
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-06 23:29:27 UTC (rev 225)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-06 23:31:38 UTC (rev 226)
+@@ -27,6 +27,7 @@
+ import net.sf.plantlore.common.record.Village;
+ import org.apache.log4j.Logger;
+ import org.hibernate.HibernateException;
++import org.hibernate.Query;
+ import org.hibernate.ScrollableResults;
+ import org.hibernate.Session;
+ import org.hibernate.SessionFactory;
+@@ -66,7 +67,7 @@
+     private User plantloreUser;
+     /** Rights of the authenticated user */
+     private Right rights;    
+-    
++
+     private static final int INITIAL_POOL_SIZE = 8;
+     
+     /**
+@@ -93,15 +94,20 @@
+         queries = new Hashtable&lt;SelectQuery, SelectQuery&gt;(INITIAL_POOL_SIZE);        
+         sessions = new Hashtable&lt;SelectQuery, Session&gt;(INITIAL_POOL_SIZE);
+         logger.debug(&quot;      completed.&quot;);
+-    }    
++    }
+     
+     /**
+      *  Initialize database connection. Fire up Hibernate and open a session.
+      *  Authenticate user and Load rights of this user
+-     *  
++     *
++     *  @param dbID identifier of the database we want to connect to
++     *  @param user username for the access to plantlore on the server
++     *  @param password password for the access to plantlore on the server
++     *  @return array with two objects - User object with logged in user (index 0) and user's rights 
++     *          (Right object, index 1)
+      *  @throws DBLayerException when the hibernate or database connection cannot be initialized
+      */
+-    public Right initialize(String dbID, String user, String password) throws DBLayerException {
++    public Object[] initialize(String dbID, String user, String password) throws DBLayerException {
+         Configuration cfg;
+         int result = 0;
+         
+@@ -127,7 +133,6 @@
+             throw new DBLayerException(&quot;Cannot build Hibernate session factory. Details: &quot;+e.getMessage());
+         }   
+         
+-/* ===== SWITCH OFF THE SILLY AUTHENTICATION ===========================================        
+         // Authenticate user
+         try {
+             SelectQuery sq = this.createQuery(User.class);            
+@@ -144,12 +149,14 @@
+             logger.warn(&quot;Authentication of user &quot;+user+&quot; failed!&quot;);
+             return null;
+         } else {
+-            User clientUser = (User)userinfo[0];
++            User clientUser = (User)userinfo[0];            
+             this.rights = clientUser.getRight();           
+             this.plantloreUser = clientUser;
+         }
+-*/
+-        return rights;
++        Object[] retValue = new Object[2];
++        retValue[0] = this.plantloreUser;
++        retValue[1] = this.rights;
++        return retValue;
+     }    
+     
+     /**
+@@ -288,8 +295,7 @@
+     public void executeDelete(Object data) throws DBLayerException {
+         String table;
+         int id, result = 0;
+-        HistoryColumn column;
+-        
++        HistoryColumn column;        
+         if (sessionFactory == null) {
+             logger.warn(&quot;SessionFactory not avilable&quot;);
+             throw new DBLayerException(&quot;SessionFactory not available&quot;);
+@@ -402,16 +408,50 @@
+      *  @throws DBLayerException when updating data fails
+      */
+     public void executeUpdate(Object data) throws DBLayerException {
++        int id;
++        
+         if (sessionFactory == null) {
+             logger.warn(&quot;SessionFactory not avilable&quot;);
+             throw new DBLayerException(&quot;SessionFactory not available&quot;);
+         }
+         Session session = sessionFactory.openSession();
+-        Transaction tx = null;
++        Transaction tx = null;        
+         try {
++            tx = session.beginTransaction();            
++/*            
+             // Save data into history tables if required
+-            // TODO
+-            tx = session.beginTransaction();
++            if ((data instanceof Occurrence) || (data instanceof Author) ||
++                (data instanceof Publication) || (data instanceof Territory) ||
++                (data instanceof Village) || (data instanceof Phytochorion)) {
++                
++                HistoryChange historyChange = new HistoryChange();            
++                historyChange.setOperation(PlantloreConstants.UPDATE);
++                historyChange.setWhen(new java.util.Date());
++                historyChange.setWho(this.plantloreUser);
++                if (data instanceof Occurrence) {
++                    historyChange.setOccurrence((Occurrence)data);
++                    
++                    id = ((Publication)data).getId();                    
++                } else {
++                    historyChange.setOccurrence(null);
++                    historyChange.setOldRecordId(0);
++                    if (data instanceof Publication) {
++                        id = ((Publication)data).getId();
++                    } else if (data instanceof Author) {
++                        id = ((Author)data).getId();
++                    } else if (data instanceof Territory) {
++                        id = ((Territory)data).getId();                        
++                    } else if (data instanceof Village) {
++                        id = ((Village)data).getId();
++                    } else if (data instanceof Phytochorion) {
++                        id = ((Phytochorion)data).getId();
++                    } else {
++                        id = 0;
++                    }
++                    historyChange.setRecordId(id);
++                }                
++            }
++*/            
+             // Save item into the database
+             session.update(data);
+             // Commit transaction
+@@ -460,6 +500,7 @@
+     /**
+      *  Get more rows from the current result set.
+      *
++     *  @param resultId id of the result from which we want to read
+      *  @param from index of the first record we want to load
+      *  @param to index of the last row we want to load
+      *  @return array of records from the current result set. Each item in the array can be an
+@@ -494,6 +535,7 @@
+         Object[] data = new Object[to-from+1];
+         // Read all the selected rows
+         try {
++            System.out.println(&quot;to-from = &quot;+(to-from));
+             for (int i=0; i&lt;=(to-from); i++) {
+                 logger.debug(&quot;About to get result number &quot;+i);
+                 if (res.next()) {
+@@ -514,6 +556,7 @@
+     /**
+      *  Get next result from the current result set.
+      *
++     *  @param resultId id of the result from which we want to read
+      *  @return next record from the active result set. Array can contain more objects in case
+      *          associated entities were fetched.
+      *  @throws DBLayerException when loading the results fails
+@@ -533,6 +576,12 @@
+         return res.get();        
+     }
+     
++    /**
++     *  Get the number of rows returned in the result.
++     *
++     *  @param  resultId id of the result we want the number of rows for
++     *  @return number of rows in the given result
++     */
+     public int getNumRows(int resultId) {
+         int numRows;
+                 
+@@ -550,13 +599,13 @@
+     }
+     
+     /**
+-     *  Close hibernate session.
++     *  Close the DBLayer. Close the session factory
+      *
+      *  @throws DBLayerException when closing session fails
+      */
+     public void close() throws DBLayerException {    
+         if (sessionFactory == null) {
+-            logger.warn(&quot;SessionFactory not avilable&quot;);
++            logger.warn(&quot;SessionFactory not available&quot;);
+             throw new DBLayerException(&quot;SessionFactory not available&quot;);
+         }        
+         try {
+@@ -568,7 +617,7 @@
+     }
+     
+     /**
+-     *  Start building select query.
++     *  Start building a select query.
+      *
+      *  @param classname entity we want to select from the database (given holder object class)
+      *  @return an instance of &lt;code&gt;SelectQuery&lt;/code&gt; used for building a query by client
+@@ -605,7 +654,7 @@
+     	
+     	if(undertaker != null) 
+     		try { UnicastRemoteObject.unexportObject(selectQuery, true); }
+-    		catch(NoSuchObjectException e) {}
++                catch(NoSuchObjectException e) {}
+     	
+     	assert(selectQuery instanceof SelectQueryImplementation);
+     	SelectQueryImplementation sq = (SelectQueryImplementation) selectQuery;
+@@ -634,6 +683,58 @@
+         return maxResultId;
+     }
+     
++    /**
++     *  Execute SQL delete with condition. Only administrator should be allowed to run this.
++     *  The method doesn't handle foreign key constraints
++     *  
++     *  @param tableClass class representing the table we want to delete data from
++     *  @param column name of the column in the condition
++     *  @param operation operation in the condition (must be SQL compatible, e.g. =, &gt;, &lt;)
++     *  @param value value in the condition. Must be either String, Integer or Date
++     *  @return number of rows deleted
++     */
++    public int conditionDelete(Class tableClass, String column, String operation, Object value) throws DBLayerException {
++        String tableName;
++        int deletedEntities = 0;
++        
++        if (sessionFactory == null) {
++            logger.warn(&quot;SessionFactory not avilable&quot;);
++            // throw new DBLayerException(&quot;SessionFactory not available&quot;);
++        }
++        Transaction tx = null;
++        try {
++            Session session = sessionFactory.openSession();
++            tx = session.beginTransaction();
++            Query hqlQuery;
++            String hqlDelete = &quot;delete &quot;+tableClass.getName(); 
++            if (column != null) {
++                hqlDelete += &quot; where &quot;+column+&quot; &quot;+operation+&quot; :value&quot;;
++                hqlQuery = session.createQuery(hqlDelete);
++                if (value instanceof String) {                
++                    hqlQuery.setString(&quot;value&quot;, ((String)value));
++                } else if (value instanceof Integer) {
++                    hqlQuery.setInteger(&quot;value&quot;, ((Integer)value));
++                } else if (value instanceof java.util.Date) {
++                    hqlQuery.setDate(&quot;value&quot;, ((java.util.Date)value));
++                }
++            } else {
++                hqlQuery = session.createQuery(hqlDelete);            
++            }
++            deletedEntities = hqlQuery.executeUpdate();
++            tx.commit();
++            session.close();                    
++        } catch (HibernateException e) {
++            logger.fatal(&quot;Cannot execute conditional delete on table &quot;+tableClass.getName());
++            throw new DBLayerException(&quot;Cannot execute conditional delete on table &quot;+tableClass.getName());
++        }
++        return deletedEntities;
++    }
++    
++    /**
++     *  Close the select query.
++     *
++     *  @param query query we want to close
++     */
+     public void closeQuery(SelectQuery query) {
+         Session session = sessions.get(query);
+         session.close();
+@@ -641,6 +742,22 @@
+     }
+     
+     /**
++     *  Method to get the currently logged user. Returns null if there is no user logged in.
++     *  @return currently logged in user or null, if there is no user logged in.
++     */
++    public User getUser() {
++        return this.plantloreUser;
++    }
++    
++    /**
++     *  Method to get the rights of the currently logged in user. Returns null if there is no user logged in
++     *  @return rights of the currently logged in user or null if there is no user logged in.
++     */
++    public Right getUserRights() {
++        return this.rights;
++    }
++    
++    /**
+      * This method is intended for final cleanup. &lt;b&gt;Do not call this method yourself!
+      * The proper way for you to get rid of a DBLayer is to call DBLayer.destroy() method!&lt;/b&gt;
+      * &lt;br/&gt;
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-06 23:29:27 UTC (rev 225)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-06 23:31:38 UTC (rev 226)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.server;
+ 
+ 
++import java.rmi.RemoteException;
+ import java.util.Collection;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.middleware.SelectQuery;
+@@ -15,9 +16,11 @@
+ import org.hibernate.Criteria;
+ import org.hibernate.FetchMode;
+ import org.hibernate.criterion.CriteriaSpecification;
++import org.hibernate.criterion.Disjunction;
+ import org.hibernate.criterion.Order;
+ import org.hibernate.criterion.Projections;
+ import org.hibernate.criterion.Restrictions;
++import org.hibernate.criterion.SimpleExpression;
+ 
+ /**
+  * Implemetation of SelectQuery using Hibernate OR Mapping for database querying. Creates Hibernate
+@@ -57,11 +60,16 @@
+      *  @param propertyName name of the column for which we want to create an alias (foreign key column)
+      *  @param aliasName name of the new alias
+      */
+-    public void createAlias(String propertyName, String aliasName) {
++    public void createAlias(String propertyName, String aliasName) throws RemoteException {
+         criteria.createAlias(propertyName, aliasName);
+     }
+     
+-    public void setDistinct() {
++    /**
++     *  Make the rows of the results to be distinct from each other. This checks whether whole rows
++     *  are distinct from each other. The check is done by Hibernate after the results are retrieved
++     *  from the database.
++     */
++    public void setDistinct() throws RemoteException {
+         criteria.setResultTransformer(CriteriaSpecification.DISTINCT_ROOT_ENTITY);
+     }
+     
+@@ -74,10 +82,13 @@
+      *  @param value value for restrictions containg values
+      *  @param values collection of values for restrictions working with more values (RESTR_IN)
+      */
+-    public void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values) {
++    public void addRestriction(int type, String firstPropertyName, String secondPropertyName, Object value, Collection values) throws RemoteException {
+         switch (type) {
+             case PlantloreConstants.RESTR_BETWEEN:
+-                criteria.add(Restrictions.like(firstPropertyName, value));
++                Object[] vals = values.toArray();
++                if (vals.length &gt;= 2) {
++                    criteria.add(Restrictions.between(firstPropertyName, vals[0], vals[1]));
++                }
+                 break;
+             case PlantloreConstants.RESTR_EQ:
+                 criteria.add(Restrictions.eq(firstPropertyName, value));
+@@ -139,6 +150,93 @@
+             default:
+                 
+         }
++    }   
++    
++    /**
++     *  Connect restrictions with disjunction (OR) in the WHERE clause.
++     *  
++     *  @param items array of objects with the following structure:
++     *               &lt;ul&gt;
++     *                  &lt;li&gt;Index 0: type of the restriction (see PlantloreConstants for constants)&lt;/li&gt;
++     *                  &lt;li&gt;Index 1: first property name (column name). Used to compare column with value&lt;/li&gt;
++     *                  &lt;li&gt;Index 2: second property name (column name). Used when comparing two columns&lt;/li&gt;
++     *                  &lt;li&gt;Index 3: value for the comparison. Used to compare column with value&lt;/li&gt;
++     *              &lt;/ul&gt;
++     *              4 values make one restriction, you can pass unlimited number of restrictions which will
++     *              be grouped together and connected in disjunction.
++     *  @throws IllegalArgumentException in case the input array is not of the correct length 
++     *  (must be at least 4 items and number of items must be divisible by 4)
++     */
++    public void addOrRestriction(Object[] items) throws IllegalArgumentException, RemoteException {
++        int type;
++        SimpleExpression se;
++        Disjunction disj = Restrictions.disjunction();
++        if ((items.length % 4) != 0) {
++            throw new IllegalArgumentException(&quot;Incorrect number of values in the input array&quot;);
++        }
++        int conditions = items.length / 4;        
++        for (int i=0;i&lt;conditions;i++) {
++            type = (Integer)items[0+i*4];            
++            switch (type) {
++                case PlantloreConstants.RESTR_EQ:
++                    disj.add(Restrictions.eq(((String)items[1+i*4]), items[3+i*4]));
++                    break;          
++                case PlantloreConstants.RESTR_GE:
++                    disj.add(Restrictions.ge(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_GT:
++                    disj.add(Restrictions.gt(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_LE:
++                    disj.add(Restrictions.le(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_LIKE:
++                    disj.add(Restrictions.like(((String)items[1+i*4]), items[3+i*4]));
++                    break;
++                case PlantloreConstants.RESTR_LT:
++                    disj.add(Restrictions.lt(((String)items[1+i*4]), items[3+i*4]));
++                    break;                
++                case PlantloreConstants.RESTR_NE:
++                    disj.add(Restrictions.ne(((String)items[1+i*4]), items[3+i*4]));
++                    break;
++                case PlantloreConstants.RESTR_EQ_PROPERTY:
++                    disj.add(Restrictions.eqProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_GE_PROPERTY:
++                    disj.add(Restrictions.geProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_GT_PROPERTY:
++                    disj.add(Restrictions.gtProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_ILIKE:
++                    disj.add(Restrictions.ilike(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_EMPTY:
++                    disj.add(Restrictions.isEmpty(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_NOT_EMPTY:
++                    disj.add(Restrictions.isNotEmpty(((String)items[1+i*4])));                
++                    break;
++                case PlantloreConstants.RESTR_IS_NULL:
++                    disj.add(Restrictions.isNull(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_IS_NOT_NULL:
++                    disj.add(Restrictions.isNotNull(((String)items[1+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_LE_PROPERTY:
++                    disj.add(Restrictions.leProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;                
++                case PlantloreConstants.RESTR_LT_PROPERTY:
++                    disj.add(Restrictions.ltProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                case PlantloreConstants.RESTR_NE_PROPERTY:
++                    disj.add(Restrictions.neProperty(((String)items[1+i*4]), ((String)items[2+i*4])));
++                    break;
++                default:
++                    disj.add(Restrictions.eq(((String)items[1+i*4]), items[3+i*4]));
++            }
++        }
++        criteria.add(disj);
+     }
+     
+     /**
+@@ -148,7 +246,7 @@
+      *  @param propertyName name of the column for the projection
+      *  @see PlantloreConstants
+      */
+-    public void addProjection(int type, String propertyName) {
++    public void addProjection(int type, String propertyName) throws RemoteException {
+         switch (type) {
+             case PlantloreConstants.PROJ_AVG:
+                 criteria.setProjection(Projections.avg(propertyName));
+@@ -190,7 +288,7 @@
+      *  @param associationPath
+      *  @param mode 
+      */
+-    public void setFetchMode(String associationPath, int mode) {
++    public void setFetchMode(String associationPath, int mode) throws RemoteException {
+         switch (mode) {
+             case PlantloreConstants.FETCH_SELECT:
+                 criteria.setFetchMode(associationPath, FetchMode.SELECT);
+@@ -209,7 +307,7 @@
+      *  @param direction direction of ordering (ASC or DESC)
+      *  @param propertyName property we want to use for ordering the results
+      */
+-    public void addOrder(int direction, String propertyName) {
++    public void addOrder(int direction, String propertyName) throws RemoteException {
+         switch (direction) {
+             case PlantloreConstants.DIRECT_ASC: criteria.addOrder(Order.asc(propertyName));                    
+                                 break;
+@@ -225,7 +323,7 @@
+      *
+      *  @param associationPath path of associated entities
+      */
+-    public void addAssociation(String associationPath) {
++    public void addAssociation(String associationPath) throws RemoteException {
+         criteria.createCriteria(associationPath);
+     }
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000263.html">[Plantlore-dev] r225 - in trunk/src/net/sf/plantlore: client client/user common/record config/hibernate l10n
+</A></li>
+	<LI>Next message: <A HREF="000265.html">[Plantlore-dev] r227 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#264">[ date ]</a>
+              <a href="thread.html#264">[ thread ]</a>
+              <a href="subject.html#264">[ subject ]</a>
+              <a href="author.html#264">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,460 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r224 - trunk/src/net/sf/plantlore/client/imports
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r224%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605061836.k46Ia1BA007131%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000261.html">
+   <LINK REL="Next"  HREF="000263.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r224 - trunk/src/net/sf/plantlore/client/imports</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r224%20-%20trunk/src/net/sf/plantlore/client/imports&In-Reply-To=%3C200605061836.k46Ia1BA007131%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r224 - trunk/src/net/sf/plantlore/client/imports">krater at berlios.de
+       </A><BR>
+    <I>Sat May  6 20:36:01 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000261.html">[Plantlore-dev] r223 - in trunk/src/net/sf/plantlore: client/imports common/exception common/record l10n
+</A></li>
+        <LI>Next message: <A HREF="000263.html">[Plantlore-dev] r225 - in trunk/src/net/sf/plantlore: client client/user common/record config/hibernate l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#262">[ date ]</a>
+              <a href="thread.html#262">[ thread ]</a>
+              <a href="subject.html#262">[ subject ]</a>
+              <a href="author.html#262">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-06 20:35:59 +0200 (Sat, 06 May 2006)
+New Revision: 224
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/imports/Parser.java
+Log:
+Further improvements to the ImportDefaultDirector.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-06 15:56:24 UTC (rev 223)
++++ trunk/src/net/sf/plantlore/client/imports/DefaultDirector.java	2006-05-06 18:35:59 UTC (rev 224)
+@@ -19,7 +19,18 @@
+ import net.sf.plantlore.client.imports.Parser.Action;
+ 
+ 
+-
++/**
++ * The Director for the import of the Occurrence data.
++ * &lt;br/&gt;
++ * The Director continually fetches records from the &lt;code&gt;Parser&lt;/code&gt;
++ * i.e. from a file, and stores them in the database.
++ * The &lt;code&gt;Parser&lt;/code&gt; is responsible for reading and re-creating 
++ * records from the given file. 
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @since 2006-05-06
++ * @version alpha
++ */
+ public class DefaultDirector extends Observable implements Runnable {
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+@@ -42,7 +53,8 @@
+ 	private Calendar now = Calendar.getInstance();
+ 	
+ 	private Record 
+-		processedRecord = null,
++		recordFromFile = null,
++		recordInDatabase = null,
+ 		problematicRecord = null;
+ 
+ 	/**
+@@ -184,11 +196,18 @@
+ 	/**
+ 	 * @return The currently processed record (from the file).
+ 	 */
+-	public Record getProcessed() {
+-		return processedRecord;		
++	public Record getProcessedRecordFromFile() {
++		return recordFromFile;		
+ 	}
+ 	
+ 	/**
++	 * @return The currently processed record (in the database).
++	 */
++	public Record getProcessedRecordInDatabase() {
++		return recordInDatabase;
++	}
++	
++	/**
+ 	 * @return	The (sub)record that caused the problem. 
+ 	 */
+ 	public Record getProblematic() {
+@@ -208,12 +227,14 @@
+ 			
+ 			// Go through the whole file.
+ 			while( !aborted &amp;&amp; parser.hasNext() ) {
+-				logger.debug(&quot;New record fetched.&quot;);
+ 				// Get a new Occurrence.
+ 				Occurrence occ = (Occurrence) parser.next();
+-				processedRecord = occ;
++				recordFromFile = occ;
++				logger.debug(&quot;New record fetched: &quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue());
+ 				// What is supposed to happen with the occurrence. 
+ 				Action intention = parser.intentedFor();
++				logger.debug(&quot;Intention: &quot; + intention);
++				
+ 				count++;
+ 				boolean isValid = 
+ 					(intention == Action.DELETE) ? 
+@@ -224,7 +245,9 @@
+ 					logger.info(&quot;The record No. &quot;+count+&quot; is not valid! Some of the not-null values are not specified!&quot;);
+ 					continue;
+ 				}
++				logger.debug(&quot;The record is valid = all necessary columns are set.&quot;);
+ 				
++				
+ 				/*----------------------------------------------------------
+ 				 * Try to find this Occurrence record in the database.
+ 				 *----------------------------------------------------------*/
+@@ -238,9 +261,14 @@
+ 							&quot;records with the same Unique Identifier (&quot;+occ.getUnitIdDb()+&quot;-&quot;+occ.getUnitValue()+&quot;)!&quot;);
+ 				Occurrence
+ 				occInDB = isInDB ? (Occurrence)((Object[])db.more(resultId, 1, 1)[0])[0]  :  null;
++				recordInDatabase = occInDB;
+ 				db.closeQuery(q); resultId = -1;
+ 				boolean isDead = isInDB ? occInDB.isDead() : false;
++
++				logger.debug(&quot;The record is in the database already: &quot; + 
++						occInDB.getUnitIdDb() + &quot;-&quot; + occInDB.getUnitValue());
+ 				
++				
+ 				/*----------------------------------------------------------
+ 				 * Time check. Inform the User that he may want to make changes to 
+ 				 * a newer record.
+@@ -252,6 +280,7 @@
+ 					
+ 					// The record in the database is newer than the record in the file.
+ 					if(updateInDBOccurred.after(updateInFile)) {
++						logger.debug(&quot;The record in the file is OLDER than the record stored in the database.&quot;);
+ 						if( !doNotAskAboutDateAgain ) 
+ 							dateDecision = expectDecision( occInDB );
+ 						
+@@ -260,6 +289,8 @@
+ 					}
+ 				}
+ 				
++				logger.debug(&quot;Performing the requested operation.&quot;);
++				
+ 				try {
+ 				/*----------------------------------------------------------
+ 				 * The `occ` IS in the database as `occInDB` already.  
+@@ -271,16 +302,16 @@
+ 							// Nothing to be done.
+ 							break;
+ 						default:
+-							update( occInDB, occ );
++							occInDB = (Occurrence) update( occInDB, occ );
+ 							break;
+ 						}
+ 					else
+ 						switch(intention) {
+ 						case DELETE:
+-							delete( occInDB );
++							occInDB = (Occurrence) delete( occInDB );
+ 							break;
+ 						default:
+-							update( occInDB, occ );
++							occInDB = (Occurrence) update( occInDB, occ );
+ 							break;
+ 						}
+ 				}
+@@ -292,7 +323,7 @@
+ 					case DELETE:	
+ 						break;
+ 					default:
+-						insert( occ );
++						occInDB = (Occurrence) insert( occ );
+ 						break;
+ 					}
+ 				}
+@@ -301,24 +332,67 @@
+ 					logger.error(&quot;The exception occured during insert/update: &quot; + ie);
+ 					// The user cannot do a thing. Should he be informed?					
+ 				}
++				
++				
++				imported++;
++				
++				logger.debug(&quot;Adding the associated information about Users.&quot;);
++				
++				/*----------------------------------------------------------
++				 * Now, deal with Authors associated with this Occurrence.
++				 *----------------------------------------------------------*/
++				while( parser.hasNextPart(AuthorOccurrence.class) ) 
++					try {
++						AuthorOccurrence ao = (AuthorOccurrence)parser.nextPart(AuthorOccurrence.class);
++						intention = parser.intentedFor();
++						
++						logger.debug(&quot;New author-occurence.&quot;);
++						logger.debug(&quot;Intented for: &quot; + intention);
++						
++						Record aoInDB = findMatchInDB( ao );
++
++						logger.debug(&quot;Performing the requested operation.&quot;);
++						// The AuthorOccurrence is not in the database.
++						if( aoInDB == null ) {
++							switch(intention) {
++							case DELETE:
++								break;
++							default:
++								aoInDB = insert( ao );
++							break;
++							}
++						}
++						// The AuthorOccurrence is in the database already.
++						else {
++							switch(intention) {
++							case DELETE:
++								aoInDB = (AuthorOccurrence) delete( (AuthorOccurrence) aoInDB );
++								break;
++							default:
++								aoInDB = update( aoInDB, ao );
++							break;
++							}
++						}
++						
++						logger.debug(&quot;Author-occurence processed.&quot;);
++						
++					} catch(ImportException ie) {
++						logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful!&quot;);
++						logger.error(&quot;The exception occured during insert/update: &quot; + ie);
++					}
+ 			}
+-			
+-			imported++;
+-			
+-			/*
+-			 * Now, deal with Authors!
+-			 */
+-			
+ 		} 
+ 		catch(DBLayerException e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+ 			logger.error(&quot;The exception was caused by the DBLayer: &quot; + e);
+-			/*e.printStackTrace();*/
++			setChanged(); notifyObservers(e);
+ 		}
+ 		catch(RemoteException e) {
+ 			logger.error(&quot;The import ended prematurely. &quot;+imported+&quot; records imported into the database.&quot;);
+ 			logger.error(&quot;The exception was caused by the the transport layer (RMI): &quot; + e);
++			setChanged(); notifyObservers(e);
+ 		}
++		logger.info(&quot;Import ended. &quot; + imported + &quot; records have been imported (out of &quot; + count + &quot;).&quot;);
+ 	}
+ 	
+ 	
+@@ -380,6 +454,8 @@
+ 	 */
+ 	public Record insert(Record record) 
+ 	throws RemoteException, DBLayerException, ImportException {
++		logger.debug(&quot;INSERTING&quot;);
++		
+ 		// Is this part of the record from an immutable table?
+ 		boolean immutable = user.isAdmin() ?
+ 				Record.IMMUTABLE.contains( record.getClass() ) :
+@@ -388,13 +464,18 @@
+ 		// This part of the record is from an immutable table -
+ 		// try to find it in the table.
+ 		if( immutable ) {
++			logger.debug(&quot;Processing an immutable table &quot;+record.getClass().getSimpleName());
+ 			Record counterpart = findMatchInDB( record );
+-			if( counterpart == null )
++			if( counterpart == null ) {
++				logger.warn(&quot;The counterpart for the record (in the immutable table &quot; +
++						record.getClass().getSimpleName()	+ &quot;) was not found!&quot;);
+ 				throw new ImportException(L10n.getString(&quot;errorNotInAnImmutableTable&quot;), record);
++			}
+ 			return counterpart;
+ 		} 
+ 		// The part of the record is from a common table.
+ 		else {
++			logger.debug(&quot;Processing a common table.&quot;);
+ 			// Insert all of its sub-records.
+ 			ArrayList&lt;String&gt; keys = record.getForeignKeys();
+ 			// Inserting a new AuthorOccurrence MUSTN'T cause the insertion of the Occurrence.
+@@ -421,6 +502,7 @@
+ 			
+ 			// The record is not in the database.
+ 			if(counterpart == null) {
++				logger.debug(&quot;The record is not in the database. It will be inserted.&quot;);
+ 				// Insert it!
+ 				Integer newId = db.executeInsert(record);
+ 				record.setId( newId );
+@@ -429,9 +511,12 @@
+ 				return record;
+ 			}
+ 			// The record is in the database.
+-			else
++			else {
++				logger.debug(&quot;The record is in the database already (ID = &quot; +
++						counterpart.getId() + &quot;). It will be used.&quot;);
+ 				// Do not insert anything, use that record instead.
+ 				return counterpart;
++			}
+ 		}
+ 	}
+ 	
+@@ -442,6 +527,9 @@
+ 	 * The &lt;code&gt;source&lt;/code&gt; record is
+ 	 * always kept up-to-date and its 
+ 	 * members always belong to the database.
++	 * &lt;br/&gt;
++	 * It is possible that nothing will be inserted or updated at all 
++	 * (if everything is up-to-date).
+ 	 * 
+ 	 * @param current	The source record - the record from the database that needs to be updated.
+ 	 * @param replacement	The record containing changes the &lt;code&gt;current&lt;/code&gt; record must undergo.
+@@ -450,6 +538,8 @@
+ 	 */
+ 	public Record update(Record current, Record replacement) 
+ 	throws RemoteException, DBLayerException, ImportException {
++		logger.debug(&quot;UPDATING&quot;);
++		
+ 		boolean immutable = user.isAdmin() ?
+ 				Record.IMMUTABLE.contains( current.getClass() ) :
+ 				current instanceof Plant;
+@@ -459,13 +549,17 @@
+ 		 * that is in the database already.
+ 		 */
+ 		if( immutable ) {
++			logger.debug(&quot;Processing an immutable table &quot;+current.getClass().getSimpleName());
+ 			// Don't they happen to be the same?
+ 			if( doPropertiesMatch(current, replacement) )
+ 				return current;
+ 			// Try to find that record in the database.
+ 			Record counterpart = findMatchInDB( replacement );
+-			if( counterpart == null )
++			if( counterpart == null ) {
++				logger.warn(&quot;The counterpart for the record (in the immutable table &quot; +
++						current.getClass().getSimpleName()	+ &quot;) was not found!&quot;);
+ 				throw new ImportException(L10n.getString(&quot;errorNotInAnImmutableTable&quot;), replacement);
++			}
+ 			return counterpart;
+ 		}
+ 		/*
+@@ -476,6 +570,8 @@
+ 			ArrayList&lt;String&gt; keys = replacement.getForeignKeys();
+ 			boolean propertiesMatch = doPropertiesMatch(current, replacement);
+ 			
++			logger.debug(&quot;Updating a record from a common table.&quot;);
++			
+ 			// [A] There are no foreign keys.
+ 			// (Publication)
+ 			if( keys.size() == 0 ) {
+@@ -504,12 +600,14 @@
+ 					insertUpdateDecision = expectDecision( replacement );
+ 				
+ 				if( insertUpdateDecision == Action.UPDATE ) { // update the current record
++					logger.debug(&quot;Updating the current record...&quot;);
+ 					// Replace the values with new ones - fortunately, there are no FK involved.
+ 					current.replaceWith( replacement );
+ 					db.executeUpdate( current );
+ 					return current;
+ 				}
+ 				else /*if( decision == Action.INSERT )*/ {
++					logger.debug(&quot;Inserting a new record...&quot;);
+ 					// Insert the replacement as a new record [DEFAULT OPERATION].
+ 					Integer newId = db.executeInsert(replacement);
+ 					replacement.setId( newId );
+@@ -519,6 +617,8 @@
+ 			// [B] There are some foreign keys.
+ 			// (Habitat, Occurrence)
+ 			else {
++				logger.debug(&quot;Updating a record from a table with Foreign Keys.&quot;);
++				
+ 				// Indicate, whether the record needed some changes.
+ 				boolean dirty = false;
+ 				// Deal with the AuthorOccurence - 
+@@ -557,6 +657,7 @@
+ 						occ.setUpdatedWhen(now.getTime());
+ 						occ.setUpdatedWho(user);
+ 					}
++					logger.debug(&quot;Updating the current record.&quot;);
+ 					db.executeUpdate(current);
+ 				}
+ 				// Return the current record (updated).
+@@ -596,7 +697,7 @@
+ 	 * to belong to the database layer (ie. it must be something previously
+ 	 * obtained directly from the database layer).
+ 	 */
+-	public void delete(Deletable record) 
++	public Deletable delete(Deletable record) 
+ 	throws RemoteException, DBLayerException {
+ 		record.setDeleted(1);
+ 		if( record instanceof Occurrence ) {
+@@ -605,6 +706,7 @@
+ 			occ.setUpdatedWho(user);
+ 		}
+ 		db.executeUpdate( record );
++		return record;
+ 	}
+ 	
+ 	
+@@ -613,6 +715,7 @@
+ 	 */
+ 	public void abort() {
+ 		aborted = true;
++		logger.info(&quot;Import aborted!&quot;);
+ 	}
+ 	
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/imports/Parser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-06 15:56:24 UTC (rev 223)
++++ trunk/src/net/sf/plantlore/client/imports/Parser.java	2006-05-06 18:35:59 UTC (rev 224)
+@@ -17,5 +17,7 @@
+ 	
+ 	Action intentedFor(); 
+ 	
+-	Record part(Class table);
++	Record nextPart(Class table);
++	
++	boolean hasNextPart(Class table);
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000261.html">[Plantlore-dev] r223 - in trunk/src/net/sf/plantlore: client/imports common/exception common/record l10n
+</A></li>
+	<LI>Next message: <A HREF="000263.html">[Plantlore-dev] r225 - in trunk/src/net/sf/plantlore: client client/user common/record config/hibernate l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#262">[ date ]</a>
+              <a href="thread.html#262">[ thread ]</a>
+              <a href="subject.html#262">[ subject ]</a>
+              <a href="author.html#262">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

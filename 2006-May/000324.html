@@ -1,0 +1,712 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r274 - in trunk/src/net/sf/plantlore/client: . login
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r274%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200605142005.k4EK55PE026824%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000323.html">
+   <LINK REL="Next"  HREF="000325.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r274 - in trunk/src/net/sf/plantlore/client: . login</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r274%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20login&In-Reply-To=%3C200605142005.k4EK55PE026824%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r274 - in trunk/src/net/sf/plantlore/client: . login">fraktalek at berlios.de
+       </A><BR>
+    <I>Sun May 14 22:05:05 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000323.html">[Plantlore-dev] r273 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+        <LI>Next message: <A HREF="000325.html">[Plantlore-dev] r275 - trunk/lib
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#324">[ date ]</a>
+              <a href="thread.html#324">[ thread ]</a>
+              <a href="subject.html#324">[ subject ]</a>
+              <a href="author.html#324">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-14 22:05:04 +0200 (Sun, 14 May 2006)
+New Revision: 274
+
+Added:
+   trunk/src/net/sf/plantlore/client/MainConfig.java
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/Column.java
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/login/DBInfo.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+Log:
+Support for configuration loading and saving. Needs to be tested and further bound to the application.
+Also minor fix to time interval search in Search.java.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -7,10 +7,13 @@
+ 
+ package net.sf.plantlore.client;
+ 
++import java.io.IOException;
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
+ import java.util.Hashtable;
+ import java.util.Observable;
+ import java.util.prefs.Preferences;
++import net.sf.plantlore.client.login.DBInfo;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Author;
+@@ -39,6 +42,8 @@
+ public class AppCore extends Observable
+ {
+     private Preferences prefs;
++    private MainConfig mainConfig;
++    
+     private int recordsPerPage = 30;
+     private int currentPage = 1;
+     private DBLayer database;  
+@@ -63,11 +68,13 @@
+     
+     
+     /** Creates a new instance of AppCore */
+-    public AppCore()
++    public AppCore(MainConfig mainConfig)
+     {
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+         prefs = Preferences.userNodeForPackage(this.getClass());
+         
++        this.mainConfig = mainConfig;
++        
+         // This is here in order to skip login procedure and connect to the database automatically
+         // For developement purposes only - so that we don't have to go through login each time we run Plantlore 
+ /*        
+@@ -270,9 +277,15 @@
+         return tableModel.getRow(selectedRow);
+     }
+     
+-    public void savePreferences() {
++    public Integer getSelectedOccurrence() {
++        Object[] row = tableModel.getRow(selectedRow);
++        return (Integer)row[row.length-1];
++    }
++    
++    public void savePreferences() throws IOException {
+         logger.info(&quot;Saving main window preferences.&quot;);
+         prefs.putInt(&quot;recordsPerPage&quot;, recordsPerPage);
++        mainConfig.save();
+     }
+     
+     public void setResultId(int resultId) {
+@@ -630,4 +643,8 @@
+             return projects;
+     }
+     
++    public MainConfig getMainConfig() {
++        return mainConfig;
++    }
++    
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -14,6 +14,7 @@
+ import java.awt.event.WindowEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.io.IOException;
+ import java.lang.Integer;
+ import java.rmi.RemoteException;
+ import java.util.Observable;
+@@ -21,6 +22,7 @@
+ import java.util.prefs.Preferences;
+ import javax.swing.AbstractAction;
+ import javax.swing.JFormattedTextField;
++import javax.swing.JOptionPane;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.event.ListSelectionEvent;
+ import javax.swing.event.ListSelectionListener;
+@@ -252,9 +254,13 @@
+      * Maybe settings should be stored first?
+      */
+     class ExitListener implements ActionListener {
+-        public void actionPerformed(ActionEvent actionEvent)
++        public void actionPerformed(ActionEvent actionEvent) 
+         {
+-            model.savePreferences();
++            try {
++                model.savePreferences();
++            } catch (IOException ex) {
++                JOptionPane.showMessageDialog(view, &quot;Problem while saving configuration: &quot;+ex.getMessage());
++            }
+             System.exit(0);
+         }
+     }
+@@ -495,7 +501,11 @@
+     class AppWindowListener extends WindowAdapter {
+         public void windowClosing(WindowEvent e)
+         {
+-            model.savePreferences();
++            try {
++                model.savePreferences();
++            } catch (IOException ex) {
++                JOptionPane.showMessageDialog(view, &quot;Problem while saving configuration: &quot;+ex.getMessage());
++            }
+         }
+     }
+ 
+@@ -637,7 +647,7 @@
+         public void actionPerformed(ActionEvent arg0) {
+                 // Reuse the existing dialogs, hide'em when they're no longer needed.
+                 if(loginModel == null) {
+-                	loginModel = new Login(new RMIDBLayerFactory());
++                	loginModel = new Login(new RMIDBLayerFactory(), model.getMainConfig());
+                 	loginModel.addObserver(new DatabaseChange());
+                 }
+                 if(loginView == null) loginView = new LoginView(loginModel);
+
+Modified: trunk/src/net/sf/plantlore/client/Column.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Column.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/Column.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -193,8 +193,9 @@
+         return preferredSize;
+     }
+     
+-    public void setPreferredSize(int size) {
+-        preferredSize = size;
++    public void setPreferredSize(Integer size) {
++        if (size != null)
++            preferredSize = size;
+     }
+     
+     public Type getType() {
+@@ -208,6 +209,10 @@
+     public String getL10nName() {
+         return L10n.getString(l10nKey);
+     }
++    
++    public String toString() {
++        return type.toString();
++    }
+ }
+ 
+ /*
+
+Added: trunk/src/net/sf/plantlore/client/MainConfig.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/MainConfig.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/MainConfig.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -0,0 +1,198 @@
++/*
++ * MainConfigParser.java
++ *
++ * Created on 13. kv&#283;ten 2006, 15:37
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.client;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Iterator;
++import java.util.List;
++import net.sf.plantlore.client.login.DBInfo;
++import org.apache.log4j.Logger;
++import org.dom4j.Document;
++import org.dom4j.DocumentException;
++import org.dom4j.DocumentHelper;
++import org.dom4j.Element;
++import org.dom4j.Node;
++import org.dom4j.io.OutputFormat;
++import org.dom4j.io.SAXReader;
++import org.dom4j.io.XMLWriter;
++
++/**
++ *
++ * @author fraktalek
++ */
++public class MainConfig {
++    Logger logger;
++    Document document;
++    String file;
++    Column[] columns = null;
++    ArrayList&lt;DBInfo&gt; dbinfos = null;
++    
++    /** Creates a new instance of MainConfigParser */
++    public MainConfig(String file) throws DocumentException {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());        
++        this.file = file;
++        document = DocumentHelper.createDocument();
++        document.addElement(&quot;config&quot;);
++    }
++    
++    public static void createEmptyConfig(String file) throws IOException {
++        Document doc = DocumentHelper.createDocument();
++        doc.addElement(&quot;config&quot;);
++        FileWriter out = new FileWriter(file);
++        doc.write(out);
++        out.close();
++    }
++    
++    public Document load() throws DocumentException {
++        SAXReader reader = new SAXReader();
++        logger.info(&quot;Loading main configuration file &quot;+file);
++        Document document = reader.read(file);
++        this.document = document;
++        return document;        
++    }
++    
++    public Document load(String file) throws DocumentException {
++        this.file = file;
++        return load();
++    }
++    
++    public Column[] getColumns() {
++        ArrayList&lt;Column&gt; columns = new ArrayList&lt;Column&gt;();
++        
++        List columnList = document.selectNodes(&quot;//config/overview/columns/column&quot;);
++        Iterator it = columnList.iterator();
++        while (it.hasNext()) {
++            Node n = (Node)it.next();
++            String text = n.getText();
++            Column c = null;
++            try {
++                Column.Type ct = Column.Type.valueOf(text);
++                c = new Column(ct);
++            } catch(IllegalArgumentException e) {
++                logger.warn(&quot;The config file &quot;+file+&quot; is corrupted: &quot;+text+&quot; is not allowed column type!&quot;);
++            }
++            if (c != null) {
++                Number preferredSize = n.numberValueOf(&quot;@preferredSize&quot;);
++                if (!preferredSize.toString().equals(&quot;NaN&quot;)) //FIXME: better way to recognize a NaN?
++                    c.setPreferredSize(preferredSize.intValue());
++                columns.add(c);
++            }
++        }
++        Column[] tmp = new Column[columns.size()];
++        columns.toArray(tmp);
++        return tmp;
++    }
++    
++    public ArrayList&lt;DBInfo&gt; getDBinfos() {
++        ArrayList&lt;DBInfo&gt; result = new ArrayList&lt;DBInfo&gt;();
++
++        List columnList = document.selectNodes(&quot;//config/login/triplet&quot;);
++        Iterator it = columnList.iterator();
++        while (it.hasNext()) {
++            Node n = (Node)it.next();
++            String alias = n.valueOf(&quot;alias&quot;),
++                    host = n.valueOf(&quot;host&quot;),
++                    database = n.valueOf(&quot;database&quot;);
++            Number port = n.numberValueOf(&quot;port&quot;);
++
++            List userList = n.selectNodes(&quot;user&quot;);
++            String[] users = new String[userList.size()];
++            Node user = null;
++            Iterator it2 = userList.iterator(); int i = 0;
++            while (it2.hasNext()) {
++                user = (Node) it2.next();
++                users[i] = user.getText();
++                i++;
++            }
++                        
++            DBInfo dbi = new DBInfo(alias,host,port.intValue(),database,users);
++            result.add(dbi);
++        }
++        return result;
++    }
++    
++    public void setColumns(Column[] columns) {
++        this.columns = columns;
++    }
++    
++    public void setDBInfos(ArrayList&lt;DBInfo&gt; dbinfos) {
++        this.dbinfos = dbinfos;
++    }
++    
++    private void storeColumns() {
++        Node colsNode = document.selectSingleNode(&quot;//config/overview/columns&quot;);
++        if (colsNode != null)
++            colsNode.detach();
++        org.dom4j.Element root = document.getRootElement();
++        Iterator it = root.elementIterator(&quot;overview&quot;);
++        org.dom4j.Element overview;
++        if (it.hasNext())
++            overview = (Element) it.next();
++        else {
++            logger.warn(&quot;Main config was missing overview section. Adding it.&quot;);
++            overview = root.addElement(&quot;overview&quot;);
++        }
++        Element e = overview.addElement(&quot;columns&quot;);
++        
++        for (int i = 0; i &lt; columns.length; i++) {
++            e.addElement(&quot;column&quot;).addAttribute(&quot;preferredSize&quot;,&quot;&quot;+columns[i].getPreferredSize()).setText(columns[i].type.toString());
++        }        
++    }
++    
++    private void storeDBInfos() {
++        Node colsNode = document.selectSingleNode(&quot;//config/login&quot;);
++        if (colsNode != null)
++            colsNode.detach();
++        org.dom4j.Element root = document.getRootElement();
++        org.dom4j.Element login = root.addElement(&quot;login&quot;);
++        
++        for (int i = 0; i &lt; dbinfos.size(); i++) {
++            DBInfo dbi = dbinfos.get(i);
++            Element triplet = login.addElement(&quot;triplet&quot;);
++            if (dbi.getAlias() != null)
++                triplet.addElement(&quot;alias&quot;).setText(dbi.getAlias());
++            if (dbi.getHost() != null)
++                triplet.addElement(&quot;host&quot;).setText(dbi.getHost());
++            if (dbi.getDb() != null)
++                triplet.addElement(&quot;database&quot;).setText(dbi.getDb());
++            triplet.addElement(&quot;port&quot;).setText(&quot;&quot;+dbi.getPort());
++            String[] usrs = dbi.getUsers();
++            for (int u = 0; u &lt; usrs.length; u++) {
++                if (usrs[u] != null)
++                    triplet.addElement(&quot;user&quot;).setText(usrs[u]);
++            }
++        }                
++    }
++    
++    
++    public void save() throws IOException {
++        if (columns != null)
++            storeColumns();
++        if (dbinfos != null)
++            storeDBInfos();
++        
++        File f = new File(file);
++        if (!f.exists())
++            f.createNewFile();
++            
++        FileOutputStream out = new FileOutputStream(f);
++        
++        // Pretty print the document to System.out
++        OutputFormat format = OutputFormat.createPrettyPrint();
++        XMLWriter writer = new XMLWriter( out, format );
++        writer.write( document );
++        
++    }
++}
++
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.client;
+ 
+ import java.awt.EventQueue;
++import java.io.File;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.util.Iterator;
+@@ -15,12 +16,14 @@
+ import java.util.Set;
+ 
+ import javax.swing.JFrame;
++import javax.swing.JOptionPane;
+ import javax.swing.UIManager;
+ 
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.BasicConfigurator;
+ import org.apache.log4j.Logger;
+ import org.apache.log4j.PropertyConfigurator;
++import org.dom4j.DocumentException;
+ 
+ /** The main class of Plantlore. This is where all begins.
+  *
+@@ -30,9 +33,12 @@
+     AppCore model;
+     AppCoreView view;
+     AppCoreCtrl ctrl;
++    MainConfig mainConfig = null;
+     Logger logger;
+     private static SplashScreen splashScreen;   
+     private static final String LOGGER_PROPS = &quot;net/sf/plantlore/config/log4j.properties&quot;;
++    private static final String PLANTLORE=&quot;plantlore&quot;;
++    private static final String MAIN_CONFIG_NAME=PLANTLORE+&quot;.xml&quot;;
+     
+     /**
+      * Creates a new instance of Plantlore
+@@ -75,25 +81,61 @@
+         plantlore.run();
+     }
+     
++    
++    private void loadConfiguration() throws IOException, DocumentException {
++        String userHome = System.getProperty(&quot;user.home&quot;);
++        String osName = System.getProperty(&quot;os.name&quot;);
++        String plantloreDirName;
++        if (osName.equals(&quot;Linux&quot;)) {
++            plantloreDirName = &quot;.&quot;+PLANTLORE;
++        } else {
++            plantloreDirName = PLANTLORE;
++        }
++        String plantloreConfDir = userHome+File.separator+plantloreDirName;
++        File plantloreConfDirFile = new File(plantloreConfDir);
++        if (!plantloreConfDirFile.exists()) {
++            logger.info(&quot;Creating user configuration directory &quot;+plantloreConfDir);
++            plantloreConfDirFile.mkdir();
++        }
++        
++        String mainConfig = plantloreConfDir + File.separator + MAIN_CONFIG_NAME;
++        File mainConfigFile = new File(mainConfig);
++        if (!mainConfigFile.exists()) {
++            logger.info(&quot;Creating main configuration file &quot;+mainConfig);
++            MainConfig.createEmptyConfig(mainConfig);
++        }
++        
++        this.mainConfig = new MainConfig(mainConfig);
++        this.mainConfig.load();
++    }
++    
+     /** Constructs the main MVC
+      *
+      */
+     private void run() {
+         try {
+-        logger.info(&quot;Constructing AppCore MVC&quot;);
+-        splashScreen = new SplashScreen(&quot;resources/splashscreen.gif&quot;);
+-        splashScreen.splash();
+-        model = new AppCore();
+-        view = new AppCoreView(model);
+-        ctrl = new AppCoreCtrl(model, view);
+-        view.init();
+-        view.setVisible(true);
+-        EventQueue.invokeLater( new SplashScreenCloser() );
+-        logger.info(&quot;AppCore MVC constructed. Plantlore client should be visible now.&quot;);
++            try {
++                loadConfiguration();
++            } catch (IOException e) {
++                JOptionPane.showMessageDialog(null,&quot;Couldn't load configuration file: &quot;+e.getMessage());
++            } catch (DocumentException e) {               
++                JOptionPane.showMessageDialog(null,&quot;Problem while loading configuration file: &quot;+e.getMessage());
++            }
++            
++            logger.info(&quot;Constructing AppCore MVC&quot;);
++            splashScreen = new SplashScreen(&quot;resources/splashscreen.gif&quot;);
++            splashScreen.splash();
++            model = new AppCore(mainConfig);
++            view = new AppCoreView(model);
++            ctrl = new AppCoreCtrl(model, view);
++            view.init();
++            view.setVisible(true);
++            EventQueue.invokeLater( new SplashScreenCloser() );
++            logger.info(&quot;AppCore MVC constructed. Plantlore client should be visible now.&quot;);
+         } catch(RuntimeException e) {
+             //new ExceptionDialog(view,&quot;Some exception was thrown: &quot;+e);
+             e.printStackTrace();
+-        }
++        } 
+     }
+     
+     /**
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -458,12 +458,16 @@
+             if (isNotEmpty(fromDate) &amp;&amp; isNotEmpty(toDate)) {
+                 Calendar from = Calendar.getInstance(), to = Calendar.getInstance();
+                 from.setTime(fromDate); to.setTime(toDate);
++                
++                //zero fields not set by the user so that the comparison below is correct
+                 from.set(Calendar.HOUR,0);
+                 from.set(Calendar.MINUTE, 0);
++                from.set(Calendar.SECOND, 0);
+                 from.set(Calendar.MILLISECOND, 0);
+                 
+                 to.set(Calendar.HOUR,0);
+                 to.set(Calendar.MINUTE, 0);
++                to.set(Calendar.SECOND, 0);
+                 to.set(Calendar.MILLISECOND, 0);
+                 
+                 if (to.compareTo(from) &lt; 0)
+@@ -698,9 +702,25 @@
+                 }
+                 
+                 if (timeChoice == INTERVAL &amp;&amp; isNotEmpty(fromDate)) {
++                    Calendar from = Calendar.getInstance(), to = Calendar.getInstance();
++                    from.setTime(fromDate); to.setTime(toDate);
++                    
++                    //set the begining of the day
++                    from.set(Calendar.HOUR_OF_DAY,0);
++                    from.set(Calendar.MINUTE, 0);
++                    from.set(Calendar.SECOND, 0);
++                    from.set(Calendar.MILLISECOND, 0);
++
++                    //set the end of the day
++                    to.set(Calendar.HOUR_OF_DAY,23);
++                    to.set(Calendar.MINUTE, 59);
++                    to.set(Calendar.SECOND, 59);
++                    to.set(Calendar.MILLISECOND, 999);
++                    
+                     ArrayList a = new ArrayList();
+-                    a.add(fromDate);
+-                    a.add(toDate);
++                    a.add(from.getTime());
++                    a.add(to.getTime());
++                    System.out.println(&quot;Searching between &quot;+from.getTime()+&quot; and &quot;+to.getTime());
+                     sq.addRestriction(PlantloreConstants.RESTR_BETWEEN,&quot;occ.&quot;+Occurrence.ISODATETIMEBEGIN,null,null,a);
+                 }
+                 
+
+Modified: trunk/src/net/sf/plantlore/client/login/DBInfo.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/login/DBInfo.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -55,5 +55,25 @@
+ 	public String toString() {
+ 		return alias;
+ 	}
++
++    public String getAlias() {
++        return alias;
++    }
++
++    public String getHost() {
++        return host;
++    }
++
++    public String getDb() {
++        return db;
++    }
++
++    public String[] getUsers() {
++        return users;
++    }
++
++    public int getPort() {
++        return port;
++    }
+ 		
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-05-14 20:01:19 UTC (rev 273)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-05-14 20:05:04 UTC (rev 274)
+@@ -4,6 +4,7 @@
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Observable;
++import net.sf.plantlore.client.MainConfig;
+ import net.sf.plantlore.common.record.User;
+ 
+ import org.apache.log4j.Logger;
+@@ -42,6 +43,7 @@
+ 	
+ 	//private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
+ 	
++        private MainConfig mainConfig = null;
+ 	private DBLayerFactory factory = null;
+ 	private DBLayer dblayer;
+ 	private Logger logger;
+@@ -56,8 +58,9 @@
+ 	 *  
+ 	 * @param factory The factory that will be used to create a new DBLayer. 
+ 	 */
+-	public Login(DBLayerFactory factory) {
++	public Login(DBLayerFactory factory, MainConfig mainConfig) {
+ 		this.factory = factory;
++                this.mainConfig = mainConfig;
+ 		logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 		load();
+ 	}
+@@ -78,12 +81,12 @@
+ 						&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdata.fdb&quot;, 
+ 						new String[] { &quot;sysdba&quot;, null, null, null, null }));                
+ */
+-				dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;&quot;, -1,
++/*				dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;&quot;, -1,
+ 							&quot;jdbc:firebirdsql:localhost/3050:c:/Kovo/PlantloreClean/plantloreHIBdataUTF.fdb&quot;, 
+ 							new String[] { &quot;sysdba&quot;, null, null, null, null }));
+-                                
++*/                                
+                                 dbinfo.add(new DBInfo(&quot;Local Database in UTF-8&quot;, &quot;localhost&quot;, -1,
+-						&quot;jdbc:firebirdsql:localhost/3050:c:/downloaded/plantloreHIBdataUTF.fdb&quot;, 
++						&quot;jdbc:firebirdsql:localhost/3050:/data/plantloreHIBdataUTF.fdb&quot;, 
+ 						new String[] { &quot;sysdba&quot;, null, null, null, null }));
+ 		
+ 				dbinfo.add(new DBInfo(&quot;Local Database&quot;, &quot;localhost&quot;, -1,
+@@ -91,7 +94,8 @@
+ 							new String[] { &quot;sysdba&quot;, null, null, null, null }));				
+ 
+ 		 // TEMPORARY CODE ENDS HERE
+-		
++                                
++		//dbinfo = mainConfig.getDBinfos();
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+@@ -102,7 +106,10 @@
+ 	protected void save() {
+ 		logger.debug(&quot;Saving the list of databases.&quot;);
+ 		// TODO: JAKUB: ulozit kolekci dbinfo zpatky do XML souboru se jmenem `file`.
+-		
++		mainConfig.setDBInfos(dbinfo);
++                
++                //ukladat uz tady?! spis ne - co kdyby se ukladani nepovedlo? bylo by divny to porad hlasit
++                //mainConfig.save();
+ 	}
+ 	
+ 
+@@ -283,4 +290,5 @@
+ 	public Right getAccessRights() {
+ 		return accessRights;
+ 	}
++        
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000323.html">[Plantlore-dev] r273 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+	<LI>Next message: <A HREF="000325.html">[Plantlore-dev] r275 - trunk/lib
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#324">[ date ]</a>
+              <a href="thread.html#324">[ thread ]</a>
+              <a href="subject.html#324">[ subject ]</a>
+              <a href="author.html#324">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

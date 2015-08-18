@@ -1,0 +1,939 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r164 - in trunk/src/net/sf/plantlore: client/login server server/manager
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r164%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20server%20server/manager&In-Reply-To=%3C200604202219.k3KMJ6mk003346%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000168.html">
+   <LINK REL="Next"  HREF="000170.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r164 - in trunk/src/net/sf/plantlore: client/login server server/manager</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r164%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/login%20server%20server/manager&In-Reply-To=%3C200604202219.k3KMJ6mk003346%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r164 - in trunk/src/net/sf/plantlore: client/login server server/manager">krater at berlios.de
+       </A><BR>
+    <I>Fri Apr 21 00:19:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000168.html">[Plantlore-dev] r163 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000170.html">[Plantlore-dev] r165 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#169">[ date ]</a>
+              <a href="thread.html#169">[ thread ]</a>
+              <a href="subject.html#169">[ subject ]</a>
+              <a href="author.html#169">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-21 00:19:05 +0200 (Fri, 21 Apr 2006)
+New Revision: 164
+
+Modified:
+   trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+   trunk/src/net/sf/plantlore/client/login/AuthView.java
+   trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+   trunk/src/net/sf/plantlore/client/login/ItemView.java
+   trunk/src/net/sf/plantlore/client/login/Login.java
+   trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+   trunk/src/net/sf/plantlore/client/login/LoginView.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+   trunk/src/net/sf/plantlore/server/RMIServer.java
+   trunk/src/net/sf/plantlore/server/Server.java
+   trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+Log:
+All classes from the net.sf.plantlore.client.login package now use L10n properties and have extended comments/javadoc. Exception handling added.
+Some classes from the net.sf.plantlore.server package have been simplified.
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/AuthCtrl.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -1,34 +1,65 @@
+ package net.sf.plantlore.client.login;
+ 
+ import java.awt.event.ActionEvent;
++import java.rmi.NotBoundException;
++import java.rmi.RemoteException;
+ 
+ import javax.swing.AbstractAction;
++import javax.swing.JOptionPane;
+ 
++import org.apache.log4j.Logger;
++
++import net.sf.plantlore.l10n.L10n;
++import net.sf.plantlore.server.DBLayerException;
++
+ public class AuthCtrl {
+ 	
+ 	private AuthView view;
+ 	private Login model;
+ 	
++	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
++	
+ 	public AuthCtrl(Login login, AuthView authview) {
+ 		this.model = login; this.view = authview;
+ 		view.next.addActionListener(new Next());
++	}
+ 
+-	}
+ 	
+ 	class Next extends AbstractAction {
+ 		public void actionPerformed(ActionEvent arg0) {
+ 			try {
+-				// Go very carefully here!
+ 				String user = (view.user.getSelectedItem() != null) ? view.user.getSelectedItem().toString() : null;
+ 				if(user != null) {
+ 					model.connectToSelected(user, new String(view.password.getPassword()));
+ 					view.setVisible(false);
+ 				}
+-				else ; // TODO: fire something must be selected info!
++				else 
++					JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;warningNoUsername&quot;),
++					    L10n.getString(&quot;warningNoUsernameTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
+ 			} 
+-			catch(Exception e) { 
+-				System.err.println(&quot;The connection to the database couldn't be established!\n&quot; + e); 
++			catch(NotBoundException e) {
++				logger.warn(&quot;The server is either not running or it is unreachable (java security policy). Details: &quot; + e);
++				JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;errorNotBoundException&quot;),
++					    L10n.getString(&quot;errorNotBoundExceptionTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
+ 			}
++			catch(RemoteException e) {
++				logger.warn(&quot;Either the network connection has failed or the server has crashed or gone off. Details: &quot; + e);
++				JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;errorRemoteException&quot;),
++					    L10n.getString(&quot;errorRemoteExceptionTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
++			}
++			catch(DBLayerException e) {
++				logger.warn(&quot;Unable to initialize the database layer. Details: &quot; + e);
++				JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;errorDBLayerException&quot;) + &quot;\n&quot; + e,
++					    L10n.getString(&quot;errorDBLayerExceptionTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
++			}
+ 			finally { view.password.setText(&quot;&quot;); }
+ 		}
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/login/AuthView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/AuthView.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -1,5 +1,5 @@
+ /*
+- * AuthView2.java
++ * AuthView.java
+  *
+  * Created on 9. duben 2006, 18:04
+  */
+@@ -9,9 +9,8 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+-import javax.swing.JDialog;
+-
+ import net.sf.plantlore.common.AutoComboBox;
++import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+  *
+@@ -21,13 +20,12 @@
+ 	
+ 	private Login model;
+     
+-    /** Creates new form AuthView2 */
++    /** Creates new form AuthView */
+     public AuthView(Login model) {
+     	this.model = model;
+     	model.addObserver(this);
+         initComponents();
+         setLocationRelativeTo(null); // center of the screen
+-        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         setModal(true);
+     }
+     
+@@ -44,14 +42,14 @@
+         password = new javax.swing.JPasswordField();
+         next = new javax.swing.JButton();
+ 
+-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+-        jLabel1.setText(&quot;Username:&quot;);
++        setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
++        jLabel1.setText(L10n.getString(&quot;Username&quot;) + &quot;:&quot;);
+ 
+-        jLabel2.setText(&quot;Password:&quot;);
++        jLabel2.setText(L10n.getString(&quot;Password&quot;) + &quot;:&quot;);
+         
+         user.setStrict(false);
+         
+-        next.setText(&quot;Authorize&quot;);
++        next.setText(L10n.getString(&quot;Authorize&quot;));
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+@@ -92,15 +90,17 @@
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+     
+     
+-    
++    /**
++     * Reload the list of usernames according to the currently selected record.
++     */
+     public void update(Observable arg0, Object arg1) {
+ 		DBInfo selected = model.getSelected();
+-		if(selected == null) return; // FIXME: DIALOG: SAMTIN MUST BE SELECTED
+-		//System.out.println(&quot;AuthView [98] :: selected record is &quot; + selected);
++		if(selected == null) return;
++
+ 		user.removeAllItems();
+ 		user.addItems(selected.users);
+ 		
+-		setTitle(&quot;Connecting to &quot; + selected.toString());
++		setTitle(L10n.getString(&quot;ConnectingTo&quot;) + &quot; &quot; + selected.toString());
+ 	}
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/ItemCtrl.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -4,6 +4,8 @@
+ 
+ import javax.swing.AbstractAction;
+ 
++import net.sf.plantlore.l10n.L10n;
++
+ public class ItemCtrl {
+ 	
+ 	private Login model;
+@@ -19,13 +21,13 @@
+ 		this.mode = m;
+ 		switch(m) {
+ 		case ADD:
+-			view.setTitle(&quot;ADD&quot;);
++			view.setTitle(L10n.getString(&quot;AddTitle&quot;));
+ 			view.alias.setText(&quot;&quot;); 
+ 			view.host.setText(&quot;&quot;);
+ 			view.db.setText(&quot;&quot;);
+ 			break;
+ 		case EDIT:
+-			view.setTitle(&quot;EDIT&quot;);
++			view.setTitle(L10n.getString(&quot;EditTitle&quot;));
+ 			break;
+ 		}
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/login/ItemView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/ItemView.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -1,5 +1,5 @@
+ /*
+- * ItemView2.java
++ * ItemView.java
+  *
+  * Created on 9. duben 2006, 17:55
+  */
+@@ -9,8 +9,9 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+-import javax.swing.JDialog;
+ 
++import net.sf.plantlore.l10n.L10n;
++
+ /**
+  *
+  * @author  yaa
+@@ -19,14 +20,13 @@
+ 	
+ 	private Login model;
+     
+-    /** Creates new form ItemView2 */
++    /** Creates new form ItemView */
+     public ItemView(Login model) {
+ 		this.model = model;
+ 		model.addObserver(this);
+ 		initComponents();
+ 		setResizable(false);
+ 		setLocationRelativeTo(null);
+-		setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+ 		setModal(true);
+     }
+     
+@@ -45,14 +45,14 @@
+         db = new javax.swing.JTextField();
+         next = new javax.swing.JButton();
+ 
+-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+-        jLabel1.setText(&quot;Alias:&quot;);
++        setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
++        jLabel1.setText(L10n.getString(&quot;Alias&quot;) + &quot;:&quot;);
+ 
+-        jLabel2.setText(&quot;Hostname:&quot;);
++        jLabel2.setText(L10n.getString(&quot;Hostname&quot;) + &quot;:&quot;);
+ 
+-        jLabel3.setText(&quot;Database:&quot;);
++        jLabel3.setText(L10n.getString(&quot;Database&quot;) + &quot;:&quot;);
+ 
+-        next.setText(&quot;Change&quot;);
++        next.setText(L10n.getString(&quot;Change&quot;));
+ 
+         org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
+         getContentPane().setLayout(layout);
+@@ -97,7 +97,9 @@
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+     
+     
+-    
++    /**
++     * Fill all fields with information obtained from the currently selected record.
++     */
+     public void update(Observable arg0, Object arg1) {
+ 		DBInfo info = model.getSelected();
+ 		if(info == null) return;
+
+Modified: trunk/src/net/sf/plantlore/client/login/Login.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/Login.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -2,8 +2,8 @@
+ 
+ import java.rmi.NotBoundException;
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
+ import java.util.Observable;
+-import java.util.Vector;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -12,22 +12,30 @@
+ import net.sf.plantlore.server.DBLayerException;
+ 
+ /**
+- * 
+- * Preliminary usage: &lt;br/&gt;
++ * Login is responsible for the following:
+  * &lt;ul&gt;
+- * &lt;li&gt;Login login = new Login(new RMIDBLayerFactory());&lt;/li&gt;
+- * &lt;li&gt;login.connectToSelected(...)&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;management of the list of databases&lt;/b&gt; - 
++ * 			adding, editing, removing records from the list, and the persistent storage of that list,&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;creating and initializing a new dblayer&lt;/b&gt; - only one at a time is active,&lt;/li&gt;
++ * &lt;li&gt;&lt;b&gt;destroying the current dblayer (logout)&lt;/b&gt; - so as to make another connection possible&lt;/li&gt;
+  * &lt;/ul&gt;
+  * 
+  * 
+- * @author Erik Kratochv&#237;l, Jakub Kotowski
+- * @version 0.9
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @version 1.0
+  */
+ public class Login extends Observable {
+ 	
++	/** The maximum number of usernames the System will store for each database record.*/
+ 	public static final int MAX_NAMES = 5;
+ 
+-	private Vector&lt;DBInfo&gt; dbinfo = new Vector&lt;DBInfo&gt;(10);
++	/** 
++	 * The list of databases the User has accessed. This list is unique for every User
++	 * and is stored in his home directory. 
++	 */
++	private ArrayList&lt;DBInfo&gt; dbinfo = new ArrayList&lt;DBInfo&gt;(10);
++	
++	/** The currently selected record. Null means nothing is selected. */
+ 	private DBInfo selected = null;
+ 	
+ 	//private String  file = System.getProperty(&quot;user.home&quot;) + &quot;/.plantlore/db.info.xml&quot;;
+@@ -51,18 +59,26 @@
+ 	
+ 	/**
+ 	 * Load saved information about the database connections.
+-	 *
++	 * TODO: -IMPLEMENTATION MISSING-
+ 	 */
+ 	protected void load() {
+ 		logger.debug(&quot;Loading the stored list of databases.&quot;);
+ 		// TODO: JAKUB: nacist z XML souboru se jmenem `file` informace o databazich (triplety) do kolekce dbinfo.
+-		dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;localhost&quot;, -1,
+-				&quot;jdbc:firebirdsql:localhost/3050:c:/Temp/plantloreHIBdata.fdb&quot;, 
+-				new String[] { &quot;sysdba&quot;, null, null, null, null }));
+ 		
++
++		 // TEMPORARY CODE STARTS HERE
++				dbinfo.add(new DBInfo(&quot;My Home Database&quot;, &quot;localhost&quot;, -1,
++							&quot;jdbc:firebirdsql:localhost/3050:c:/Temp/plantloreHIBdata.fdb&quot;, 
++							new String[] { &quot;sysdba&quot;, null, null, null, null }));
++		 // TEMPORARY CODE ENDS HERE
++		
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
++	/**
++	 * Save the list of database connections for further usage.
++	 * TODO: -IMPLEMENTATION MISSING-
++	 */
+ 	protected void save() {
+ 		logger.debug(&quot;Saving the list of databases.&quot;);
+ 		// TODO: JAKUB: ulozit kolekci dbinfo zpatky do XML souboru se jmenem `file`.
+@@ -72,7 +88,7 @@
+ 
+ 	/**
+ 	 * Create a new record, add it to the list of connections and save that information for
+-	 * future use.
++	 * the future use.
+ 	 * 
+ 	 * @param alias	Alias of the database.
+ 	 * @param host	Hostname of the computer where the server dwells.
+@@ -80,7 +96,7 @@
+ 	 * @param db		Identifier of the database to which the User wants to connect.
+ 	 */
+ 	public void createRecord(String alias, String host, int port, String db) {
+-		DBInfo r = new DBInfo(alias, host, port, db, new String[5]);
++		DBInfo r = new DBInfo(alias, host, port, db, new String[MAX_NAMES]);
+ 		dbinfo.add(r);
+ 		logger.debug(&quot;New database record has been created &quot; + r);
+ 		save();
+@@ -88,10 +104,11 @@
+ 	}
+ 	
+ 	/**
+-	 * Delete the selected record.
++	 * Delete the selected record from the list.
+ 	 *
+ 	 */
+ 	public void deleteSelectedRecord() {
++		if(selected == null) return;
+ 		dbinfo.remove(selected);
+ 		logger.debug(&quot;The selected record has been removed &quot; + selected);
+ 		selected = null;
+@@ -108,20 +125,16 @@
+ 	 * @param db		Identifier of the database to which the User wants to connect.
+ 	 */
+ 	public void updateSelectedRecord(String alias, String host, int port, String db) {
+-		selected.alias = alias;
+-		selected.host = host;
+-		selected.port = port;
+-		selected.db = db;
++		if(selected == null) return;
++		selected.alias = alias; selected.host = host; selected.port = port; selected.db = db;
+ 		logger.debug(&quot;The selected record has been updated &quot; + selected);
+ 		this.setChanged(); this.notifyObservers();
+ 	}
+ 	
+ 	/**
+-	 * 
+-	 * @return
++	 * @return the list of all records.
+ 	 */
+ 	public DBInfo[] getRecords() {
+-		// Well, this sucks! The ugliest way to do things... is to have a Cloneable interface and don't use it.
+ 		// Seeing is believing: <A HREF="http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[">http://java.sun.com/j2se/1.5.0/docs/api/java/util/Collection.html#toArray(T[</A>])
+ 		return dbinfo.toArray(new DBInfo[0]);
+ 	}
+@@ -129,14 +142,16 @@
+ 	/**
+ 	 * Set the selected record.
+ 	 * 
+-	 * @param index	The index of the selected record. Zero means first. Negative means nothing gets selected.
++	 * @param index	The index of the selected record. Zero means first. 
++	 * Negative means nothing gets selected (deselect).
+ 	 */
+ 	public void setSelected(int index) {
+-		if(index &gt;= 0) selected = dbinfo.elementAt(index); else selected = null;
++		if(index &gt;= 0) selected = dbinfo.get(index); 
++		else selected = null;
++		
+ 		logger.debug(&quot;Selected database is &quot; + selected);
+ 		this.setChanged(); 
+ 		/*------------------------------------------------------------
+-		 * This here is a particularly mystique code.
+ 		 * The reason why a parameter is used here is simple:
+ 		 * 1. you select something in the choice list in the LoginView -&gt;
+ 		 * 2. ListSelectionEvent is fired -&gt;
+@@ -158,11 +173,33 @@
+ 	}
+ 	
+ 	
++	/**
++	 * Connect to the selected database. 
++	 * First, a new database layer is created,
++	 * and second, that database layer is initialized.
++	 * &lt;br/&gt;
++	 * &lt;b&gt;Warning:&lt;/b&gt;If there is a previously created DBLayer, 
++	 * it will be destroyed using the &lt;code&gt;logout()&lt;/code&gt; method. 
++	 * 	  
++	 * @param name The account name (used to access the database).  
++	 * @param password The password to the account.
++	 * @return The created and initialized DBLayer.
++	 * @throws NotBoundException if the server is unreachable (most likely because it is not running). 
++	 * @throws RemoteException if the RMI encounters an error.  
++	 * @throws DBLayerException if the initialization of the DBLayer failed - most common reasons are:
++	 * 		wrong username or password, or incorrect database model (server and client have different versions).
++	 */
+ 	public DBLayer connectToSelected(String name, String password) throws NotBoundException, RemoteException, DBLayerException {
+ 		if(selected == null) {
+ 			logger.debug(&quot;The System cannot create a connection when nothing was selected!&quot;);
+ 			return null;
+ 		}
++		
++		try {
++			logout();
++		} catch (RemoteException e) { logger.info(&quot;Unable to disconnect from the server. &quot; + e); }
++		
++		// The current username is moved to the top of the list of names :) Nice feature.
+ 		selected.promoteUser(name);
+ 		// Save the current state.
+ 		save();
+@@ -173,15 +210,15 @@
+ 		
+ 		// Initialize the database layer.
+ 		logger.debug(&quot;Initializing that DBLayer (&quot; + selected.db + &quot;, &quot; + name + &quot;, &quot; + password + &quot;...&quot;);
+-		
+ 		try {
+ 			dblayer.initialize(selected.db,name, password);
+ 		} 
+ 		catch (DBLayerException exception) {
++			logger.warn(&quot;The initialization of the DBLayer failed! Here's why: &quot; + exception);
+ 			// If the initialization of the DBLayer failed, the uninitialized DBLayer must be destroyed!
+-			logger.warn(&quot;The initialization of the DBLayer failed. Here's why: &quot; + exception);
++			// If it is not, the server's policy may not allow another connection from this client!
+ 			factory.destroy(dblayer);
+-			throw exception; // rethrow that exception
++			throw exception; // rethrow that exception [so that the User also knows what happened]
+ 		}
+ 
+ 		logger.debug(&quot;DBLayer initialized.&quot;);
+@@ -191,12 +228,25 @@
+ 		return dblayer;
+ 	}
+ 	
+-	public void reconnect() {
+-		
++	
++	/**
++	 * Disconnect from the current database. 
++	 * The database connection is lost, any operation in progress will cause an exception.
++	 * 
++	 * @throws RemoteException if the RMI encounters an error.
++	 */
++	public void logout() throws RemoteException {
++		if(dblayer != null) {
++			factory.destroy(dblayer);
++			dblayer = null;
++			logger.info(&quot;The client disconnected itself from the server. The communication may no longer be possible.&quot;);
++			this.setChanged(); this.notifyObservers();
++		}
+ 	}
+ 	
++		
+ 	/**
+-	 * @return The last DBLayer that was created.  
++	 * @return The last DBLayer that has been created.  
+ 	 */	
+ 	public DBLayer getDBLayer() { 
+ 		return dblayer; 
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/LoginCtrl.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -4,10 +4,13 @@
+ 
+ import javax.swing.AbstractAction;
+ import javax.swing.JDialog;
++import javax.swing.JOptionPane;
+ import javax.swing.event.ListSelectionEvent;
+ import javax.swing.event.ListSelectionListener;
+ 
++import net.sf.plantlore.l10n.L10n;
+ 
++
+ public class LoginCtrl {
+ 	
+ 	private Login model;
+@@ -35,6 +38,7 @@
+ 		view.remove.addActionListener(new RemoveRecord());
+ 		view.next.addActionListener(new Next());
+ 		
++		// Select something.
+ 		view.choice.setSelectedIndex(0);
+ 	}
+ 	
+@@ -45,13 +49,14 @@
+ 			dialog = authView;
+ 		}
+ 		
+-		//UNCOMMENT THIS:      dialog.setVisible(visible);
++		//UNCOMMENT THIS:      
++		//dialog.setVisible(visible);
+ 		
+-		//==TEMPORARY CODE=================================================
+-		System.out.println(&quot;HYPERACTIVE-LOGIN&quot;);
+-		authView.password.setText(&quot;masterkey&quot;);
+-		authView.next.doClick(); // outrageous!
+-		//================================================================
++		// TEMPORARY CODE STARTS HERE
++			System.out.println(&quot;HYPERACTIVE-LOGIN&quot;);
++			authView.password.setText(&quot;masterkey&quot;);
++			authView.next.doClick(); 
++		// TEMPORARY CODE ENDS HERE
+ 	}
+ 	
+ 	
+@@ -86,15 +91,26 @@
+ 	
+ 	class EditRecord extends AbstractAction {
+ 		public void actionPerformed(ActionEvent arg0) {
+-			if(model.getSelected() == null) return;
+-			itemCtrl.setMode(ItemCtrl.Mode.EDIT);
+-			itemView.setVisible(true);
++			if(model.getSelected() == null)
++				JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;warningEmptySelection&quot;),
++					    L10n.getString(&quot;warningEmptySelectionTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
++			else {
++				itemCtrl.setMode(ItemCtrl.Mode.EDIT);
++				itemView.setVisible(true);
++			}
+ 		}
+ 	}
+ 	
+ 	class Next extends AbstractAction {
+ 		public void actionPerformed(ActionEvent arg0) {
+-			if(model.getSelected() != null)
++			if(model.getSelected() == null)
++				JOptionPane.showMessageDialog(view,
++						L10n.getString(&quot;warningEmptySelection&quot;),
++					    L10n.getString(&quot;warningEmptySelectionTitle&quot;),
++					    JOptionPane.WARNING_MESSAGE);
++			else
+ 				authView.setVisible(true);
+ 		}
+ 	}
+
+Modified: trunk/src/net/sf/plantlore/client/login/LoginView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/client/login/LoginView.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -1,5 +1,5 @@
+ /*
+- * LoginView2.java
++ * LoginView.java
+  *
+  * Created on 9. duben 2006, 16:35
+  */
+@@ -9,8 +9,7 @@
+ import java.util.Observable;
+ import java.util.Observer;
+ 
+-import javax.swing.JDialog;
+-
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ 
+ /**
+@@ -21,13 +20,13 @@
+ 	
+ 	private Login model;
+     
+-    /** Creates new form LoginView2 */
++    /** Creates new form LoginView */
+     public LoginView(Login model) {
+ 		this.model = model;
+ 		model.addObserver(this);
+         initComponents();
+         setLocationRelativeTo(null); // center of the screen
+-        setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++        
+         setModal(true);
+         // See what's new.
+         update(null, null);
+@@ -49,25 +48,25 @@
+         choice = new javax.swing.JList();
+         remember = new javax.swing.JCheckBox();
+ 
+-        popup.setName(&quot;popup&quot;);
+-        add.setText(&quot;Add&quot;);
++        
++        add.setText(L10n.getString(&quot;loginAdd&quot;));
+         popup.add(add);
+ 
+-        edit.setText(&quot;Edit&quot;);
++        edit.setText(L10n.getString(&quot;loginEdit&quot;));
+         popup.add(edit);
+ 
+-        remove.setText(&quot;Remove&quot;);
++        remove.setText(L10n.getString(&quot;loginRemove&quot;));
+         popup.add(remove);
+ 
+-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+-        next.setText(&quot;Continue&quot;);
+-        next.setName(&quot;next&quot;);
++        setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
++        next.setText(L10n.getString(&quot;Continue&quot;));
++        
+ 
+         choice.setComponentPopupMenu(popup);
+         choice.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+         jScrollPane1.setViewportView(choice);
+ 
+-        remember.setText(&quot;select automatically&quot;);
++        remember.setText(L10n.getString(&quot;AutoSelect&quot;));
+         remember.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+         remember.setMargin(new java.awt.Insets(0, 0, 0, 0));
+         remember.setSelected(true);
+@@ -100,17 +99,11 @@
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+     
++ 
+     
+-        
+-    @Override
+-    public void setVisible(boolean visible) {
+-    	if(!visible) super.setVisible(false);
+-    	else {
+-    		
+-    	}
+-    }
+-    
+-    
++    /**
++     * Update the list of records (in case there were some changes).
++     */
+     public void update(Observable source, Object parameter) {
+     	// Ignore setSelected() event
+     	if(parameter == null) {
+@@ -119,7 +112,6 @@
+     		// This is probably because every time an item is inserted 
+     		// into the list, it is also selected!
+     		choice.setListData(model.getRecords());
+-    		
+     	}
+     	else if(parameter != null &amp;&amp; parameter instanceof DBLayer)
+     		this.setVisible(false); // the database layer has been created, we are no longer neccessary
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -3,9 +3,10 @@
+ 
+ import java.io.IOException;
+ import java.io.InputStream;
++/*
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+-import java.util.Collection;
++*/
+ import java.util.Properties;
+ 
+ import org.apache.log4j.PropertyConfigurator;
+@@ -56,7 +57,9 @@
+ 		
+ 		new Plantlore().run();
+ 		
+-		/*
++		/* ============================================================
++		 *  THIS HERE MAY COME IN HANDY...
++		 * ============================================================
+ 		int m = args.length, port = RMIServer.DEFAULT_PORT, id = -1;
+ 		String command = &quot;start&quot;, host = null;
+ 		
+@@ -103,7 +106,7 @@
+ 					
+ 			}
+ 		} catch(Exception e) { System.err.println(e); }
+-		*/
++		============================================================ */
+ 	}
+ 
+ }
+
+Modified: trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/server/RMIRemoteDBLayerFactory.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -6,7 +6,6 @@
+ import java.rmi.server.UnicastRemoteObject;
+ import java.util.Collection;
+ import java.util.Hashtable;
+-import java.util.Vector;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -69,8 +68,10 @@
+ 	 * 
+ 	 *  @return Collection holding information about currently connected clients.
+ 	 */
+-	protected synchronized Collection&lt;ConnectionInfo&gt; getClients() { 
+-		return new Vector&lt;ConnectionInfo&gt;(client.values()); 
++	protected synchronized ConnectionInfo[] getClients() {
++		Collection&lt;ConnectionInfo&gt; clients = client.values();
++		if(clients != null) return clients.toArray(new ConnectionInfo[0]);
++		else return null;
+ 	}
+ 	
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/server/RMIServer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/server/RMIServer.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -6,7 +6,6 @@
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+ import java.rmi.server.UnicastRemoteObject;
+-import java.util.Collection;
+ 
+ 
+ import org.apache.log4j.Logger;
+@@ -27,7 +26,7 @@
+  * @since 2006-03-11
+  * @version 1.0
+  */
+-public class RMIServer extends UnicastRemoteObject implements Server&lt;ConnectionInfo&gt; {
++public class RMIServer extends UnicastRemoteObject implements Server {
+ 	
+ 	/** The default port where the rmiregistry listens. To that rmiregistry the RemoteDBLayerFactory will be bound to. */
+ 	public static final int DEFAULT_PORT = Registry.REGISTRY_PORT;
+@@ -57,7 +56,10 @@
+ 	}
+ 	
+ 	/** Get the information about the connected clients. */
+-	public synchronized Collection&lt;ConnectionInfo&gt; getClients() { return remoteFactory.getClients(); }
++	public synchronized ConnectionInfo[] getClients() {
++		if(remoteFactory == null) return null;
++		else return remoteFactory.getClients(); 
++	}
+ 
+ 	/**
+ 	 * Disconnect the selected client.
+
+Modified: trunk/src/net/sf/plantlore/server/Server.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Server.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/server/Server.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -4,18 +4,15 @@
+ import java.rmi.AlreadyBoundException;
+ import java.rmi.Remote;
+ import java.rmi.RemoteException;
+-import java.util.Collection;
+ 
+ /**
+  * Server management.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+- * @since 29.3.2006
++ * @since 2006-03-29
+  * @version 1.0 final
+- *
+- * @param &lt;E&gt;	The class storing information about currently connected clients.
+  */
+-public interface Server&lt;E&gt; extends Remote, Serializable {
++public interface Server extends Remote, Serializable {
+ 	
+ 	/**
+ 	 * Return a collection of currently connected clients.
+@@ -23,7 +20,7 @@
+ 	 * @return Currently connected clients.
+ 	 * @throws RemoteException	if the RMI encounters an error (network/server).
+ 	 */
+-	Collection&lt;/*? extends */E&gt;	getClients() throws RemoteException;
++	ConnectionInfo[]	getClients() throws RemoteException;
+ 	
+ 	/**
+ 	 * &quot;Kick&quot; the specified client. The client is disconnected immediately.
+@@ -31,7 +28,7 @@
+ 	 * @param client The client to be kicked from the server.
+ 	 * @throws RemoteException if the RMI encounters an error (network/server).
+ 	 */
+-	void disconnect(E client) throws RemoteException;
++	void disconnect(ConnectionInfo client) throws RemoteException;
+ 	
+ 	/**
+ 	 * Run the server on the specified port.
+
+Modified: trunk/src/net/sf/plantlore/server/manager/ServerMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-20 21:43:13 UTC (rev 163)
++++ trunk/src/net/sf/plantlore/server/manager/ServerMng.java	2006-04-20 22:19:05 UTC (rev 164)
+@@ -5,7 +5,6 @@
+ import java.rmi.RemoteException;
+ import java.rmi.registry.LocateRegistry;
+ import java.rmi.registry.Registry;
+-import java.util.Collection;
+ import java.util.Observable;
+ 
+ import org.apache.log4j.Logger;
+@@ -16,8 +15,8 @@
+ 
+ public class ServerMng extends Observable {
+ 	
+-	private Server&lt;ConnectionInfo&gt; server;
+-	private Collection&lt;ConnectionInfo&gt; clients;
++	private Server server;
++	private ConnectionInfo[] clients;
+ 	
+ 	public enum Mode { CREATE_NEW, CONNECT_EXISTING };
+ 	
+@@ -52,11 +51,11 @@
+ 		if(server == null) return null;
+ 		if(refresh)
+ 			try {
+-				clients = /*(Collection&lt;ConnectionInfo&gt;)*/server.getClients();
++				clients = server.getClients();
+ 				logger.debug(&quot;Clients connected to the server received.&quot;);
+-				setChanged(); notifyObservers(&quot;PH&quot;);
++				setChanged(); notifyObservers(&quot;PHear me!&quot;);
+ 			} catch( RemoteException e) { logger.warn(&quot;Unable to obtain the list of connected users - network error?&quot;); }
+-		return clients.toArray(new ConnectionInfo[0]);
++		return clients;
+ 	}
+ 	
+ 	
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000168.html">[Plantlore-dev] r163 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000170.html">[Plantlore-dev] r165 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#169">[ date ]</a>
+              <a href="thread.html#169">[ thread ]</a>
+              <a href="subject.html#169">[ subject ]</a>
+              <a href="author.html#169">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

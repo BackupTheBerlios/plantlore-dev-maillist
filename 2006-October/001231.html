@@ -1,0 +1,308 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r855 - in trunk/src/net/sf/plantlore:	client/authors client/overview common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-October/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r855%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/authors%20client/overview%20common&In-Reply-To=%3C200610191503.k9JF3Fse023321%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001230.html">
+   <LINK REL="Next"  HREF="001232.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r855 - in trunk/src/net/sf/plantlore:	client/authors client/overview common</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r855%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/authors%20client/overview%20common&In-Reply-To=%3C200610191503.k9JF3Fse023321%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r855 - in trunk/src/net/sf/plantlore:	client/authors client/overview common">krater at mail.berlios.de
+       </A><BR>
+    <I>Thu Oct 19 17:03:15 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001230.html">[Plantlore-dev] [Bug #7749] Selecting an Author Name or a Revision	transfers focus
+</A></li>
+        <LI>Next message: <A HREF="001232.html">[Plantlore-dev] r856 - in trunk/src/net/sf/plantlore: client	client/login client/overview client/overview/tree	common/exception config l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1231">[ date ]</a>
+              <a href="thread.html#1231">[ thread ]</a>
+              <a href="subject.html#1231">[ subject ]</a>
+              <a href="author.html#1231">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-10-19 17:03:14 +0200 (Thu, 19 Oct 2006)
+New Revision: 855
+
+Added:
+   trunk/src/net/sf/plantlore/common/DialogSwitcher.java
+   trunk/src/net/sf/plantlore/common/VisibilityChanger.java
+Modified:
+   trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/common/Resurrector.java
+Log:
+A slightly more elegant solution to the problem (switching between two dialogs that share the same parent).
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-10-18 21:05:21 UTC (rev 854)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-10-19 15:03:14 UTC (rev 855)
+@@ -12,8 +12,8 @@
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.table.DefaultTableModel;
++import net.sf.plantlore.common.DialogSwitcher;
+ import net.sf.plantlore.common.PlantloreHelp;
+-import net.sf.plantlore.common.Resurrector;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -73,6 +73,9 @@
+         PlantloreHelp.addButtonHelp(PlantloreHelp.AUTHOR_MANAGER, this.helpBtn);
+         // Center the dialog on the screen
+         this.setLocationRelativeTo(null);
++        
++        // Dialog resurrector
++        //DialogSwitcher.involve( this, closeBtn );
+     }
+     
+     /** This method is called from within the constructor to
+@@ -705,16 +708,6 @@
+                                       L10n.getString(&quot;Author.NoAuthorSelectedTitle&quot;), JOptionPane.WARNING_MESSAGE);
+     }
+     
+-    
+-    //---- DIALOG RESURRECTION BLOCK ----
+-    private Resurrector resurrector = new Resurrector();
+-    
+-    /**
+-     * Set the dialog that should be reopened after this dialog is closed.
+-     */
+-    public void setDialogToRevive(JDialog dialog) {
+-        resurrector.setDialog( dialog );
+-    }
+ 
+     /**
+      * Handle the visibility properly. Sometimes it may happen that after this dialog is closed,
+@@ -727,10 +720,8 @@
+         
+         super.setVisible(b);
+         
+-        if( !b ) {
+-            // Reopen the poor dialog (but do it carefully!)
+-            resurrector.bringItBackIfPossible();
+-        }
++        if( !b )
++            DialogSwitcher.switchBack();
+     }
+     
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-18 21:05:21 UTC (rev 854)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-10-19 15:03:14 UTC (rev 855)
+@@ -49,6 +49,7 @@
+ import java.io.ObjectOutputStream;
+ import net.sf.plantlore.client.authors.AuthorManagerView;
+ import net.sf.plantlore.common.DefaultExceptionHandler;
++import net.sf.plantlore.common.DialogSwitcher;
+ import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.StandardAction;
+@@ -190,26 +191,8 @@
+         
+         public void actionPerformed(ActionEvent isUseless) {
+             // Do nothing if the Author manager View is not supplied.
+-            if( authView == null )
+-                return;
+-            
+-            // Make place for the (also modal) Author manager
+-            java.awt.EventQueue.invokeLater(new Runnable() {
+-                public void run() {
+-                    view.setVisible(false);
+-                }
+-            });
+-            
+-            // Remind the Author manager to reopen this dialog
+-            authView.setDialogToRevive( view );
+-            
+-            // Display the Author manager
+-            java.awt.EventQueue.invokeLater(new Runnable() {
+-                public void run() {
+-                    authView.setVisible(true);
+-                }
+-            });
+-            
++            if( authView != null )
++                DialogSwitcher.switchFromTo(view, authView);
+         }
+         
+     }
+
+Added: trunk/src/net/sf/plantlore/common/DialogSwitcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DialogSwitcher.java	2006-10-18 21:05:21 UTC (rev 854)
++++ trunk/src/net/sf/plantlore/common/DialogSwitcher.java	2006-10-19 15:03:14 UTC (rev 855)
+@@ -0,0 +1,71 @@
++/*
++ * DialogSwitcher.java
++ *
++ * Created on 19. &#345;&#237;jen 2006, 14:27
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.common;
++
++import java.awt.Component;
++import java.awt.Window;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.awt.event.WindowAdapter;
++import java.awt.event.WindowEvent;
++import java.util.Stack;
++
++/**
++ * The problem with Swing is that two modal windows that share the same parent
++ * cannot be visible at the same time. If we wish to switch from one window
++ * to another, the first one must go, i.e. it must be hidden first.
++ *
++ * There is no other way because it is not possible to change the parent window
++ * of any dialog.
++ *
++ * @author kaimu
++ * @version not tested
++ */
++public class DialogSwitcher /*extends WindowAdapter implements ActionListener*/ {
++    
++    private static Stack&lt;Component&gt; components = new Stack&lt;Component&gt;();
++    private static DialogSwitcher switcher;
++    
++    private DialogSwitcher() {}
++    
++    /*
++    public static void involve(Window w, javax.swing.AbstractButton...buttons) {
++        if(switcher == null)
++            switcher = new DialogSwitcher();
++        w.addWindowListener( switcher );
++        if(buttons != null)
++            for(javax.swing.AbstractButton b : buttons)
++                b.addActionListener( switcher );
++    }
++     */
++    
++    public static void switchFromTo(Component from, Component to) {
++        components.push(from);
++        new VisibilityChanger(from, false);
++        new VisibilityChanger(to, true);
++     }
++
++    public static void switchBack() {
++        if( !components.empty() )
++            new VisibilityChanger(components.pop(), true);
++    }
++
++    /*
++    @Override
++    public synchronized void windowClosing(WindowEvent e) {
++        switchBack();
++    }
++
++    public void actionPerformed(ActionEvent e) {
++        switchBack();
++    }
++     */
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/common/Resurrector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Resurrector.java	2006-10-18 21:05:21 UTC (rev 854)
++++ trunk/src/net/sf/plantlore/common/Resurrector.java	2006-10-19 15:03:14 UTC (rev 855)
+@@ -15,11 +15,12 @@
+  * This class can store a dialog and bring it back (make it visible) again.
+  * It used to have much greater scope but that proved to be problematic.
+  * It should be probably incorporated back into the AuthorManagerCtrl 
+- * from where it came.
++ * whence it came.
+  *
+  * @author kaimu
+  * @version beta
+  */
+<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">+ at Deprecated</A>
+ public class Resurrector {
+     
+     private JDialog dialog;
+
+Added: trunk/src/net/sf/plantlore/common/VisibilityChanger.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/VisibilityChanger.java	2006-10-18 21:05:21 UTC (rev 854)
++++ trunk/src/net/sf/plantlore/common/VisibilityChanger.java	2006-10-19 15:03:14 UTC (rev 855)
+@@ -0,0 +1,34 @@
++/*
++ * VisibilityChanger.java
++ *
++ * Created on 19. &#345;&#237;jen 2006, 15:59
++ *
++ * To change this template, choose Tools | Template Manager
++ * and open the template in the editor.
++ */
++
++package net.sf.plantlore.common;
++
++import java.awt.Component;
++
++/**
++ *
++ * @author yaa
++ */
++public class VisibilityChanger implements Runnable {
++    
++        private Component c;
++        private boolean visible;
++        
++        public VisibilityChanger(Component c, boolean visible) {
++            this.c = c; this.visible = visible;
++            // Preposterous!
++            java.awt.EventQueue.invokeLater( this );
++        }
++
++        public void run() {
++            if(c != null)
++                c.setVisible( visible );
++        }
++    
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001230.html">[Plantlore-dev] [Bug #7749] Selecting an Author Name or a Revision	transfers focus
+</A></li>
+	<LI>Next message: <A HREF="001232.html">[Plantlore-dev] r856 - in trunk/src/net/sf/plantlore: client	client/login client/overview client/overview/tree	common/exception config l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1231">[ date ]</a>
+              <a href="thread.html#1231">[ thread ]</a>
+              <a href="subject.html#1231">[ subject ]</a>
+              <a href="author.html#1231">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

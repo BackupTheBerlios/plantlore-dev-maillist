@@ -1,0 +1,306 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r311 - in trunk/src/net/sf/plantlore/client: . export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r311%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20export&In-Reply-To=%3C200605201647.k4KGlgt8016665%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000362.html">
+   <LINK REL="Next"  HREF="000367.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r311 - in trunk/src/net/sf/plantlore/client: . export</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r311%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20export&In-Reply-To=%3C200605201647.k4KGlgt8016665%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r311 - in trunk/src/net/sf/plantlore/client: . export">krater at berlios.de
+       </A><BR>
+    <I>Sat May 20 18:47:42 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000362.html">[Plantlore-dev] r310 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+        <LI>Next message: <A HREF="000367.html">[Plantlore-dev] r312 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#361">[ date ]</a>
+              <a href="thread.html#361">[ thread ]</a>
+              <a href="subject.html#361">[ subject ]</a>
+              <a href="author.html#361">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-20 18:47:34 +0200 (Sat, 20 May 2006)
+New Revision: 311
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/export/ExportMng.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+   trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+   trunk/src/net/sf/plantlore/client/export/ExportTask.java
+Log:
+ExportManager acts as an ExportTask factory now. Tasks returned by it must be executed.
+Export framework tested - several bugs fixed.
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -419,25 +419,31 @@
+             // Display the Export dialog.
+             else {
+             	try {
+-            		// Update the database.
+-            		//exportModel.setDBLayer(model.getDatabase());
+-            		
+-            		Object[] queryParam = searchModel.constructExportQuery();
+-            		SelectQuery query = (SelectQuery)queryParam[0];
+-            		Boolean useProjections = (Boolean)queryParam[1];
+-            		Class rootTable = (Class)queryParam[2];
+-            		
+-            		if(useProjections) {
+-            			exportModel.useProjections(true);
+-            			exportModel.setRootTable(rootTable);
++            		/*==============================================================
++            		 * Right after the startup the searchModel may not be initialized!
++            		 * (if Export is called prior to Search...)
++            		 * 
++            		 * FIXME: Solve this with Jakub.
++            		 *==============================================================*/
++            		SelectQuery query;
++            		if(searchModel == null) 
++            			query = model.getDatabase().createQuery(Occurrence.class); // fake the query
++            		else {
++            			Object[] queryParam = searchModel.constructExportQuery();
++            			query = (SelectQuery)queryParam[0];
++            			if( (Boolean)queryParam[1] ) { // use projections
++            				exportModel.useProjections(true);
++            				exportModel.setRootTable( (Class)queryParam[2] );
++            			}
+             		}
+             		exportModel.setSelectQuery( query );
+-            		
+             		exportModel.setSelection(model.getTableModel().getSelection());
+-            		
+-            	} catch (Exception ex) {
+-            		JOptionPane.showMessageDialog(view, ex);
++            	} catch (DBLayerException e) {
++            		JOptionPane.showMessageDialog(view, &quot;DBLayer Exception: &quot;+e);
+             		return;
++            	} catch (RemoteException e) {
++            		JOptionPane.showMessageDialog(view, &quot;Remote Exception: &quot;+e);
++            		return;
+             	}
+             	exportCtrl.setVisible(true);
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMng.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/export/ExportMng.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -184,7 +184,8 @@
+ 	synchronized public void setTemplate(Template template) {
+ 		if(template == null)
+ 			this.template = null;
+-		else this.template = template.clone();
++		else 
++			this.template = template.clone();
+ 	}
+ 	
+ 	/**
+@@ -195,7 +196,7 @@
+ 		if(selection == null)
+ 			this.selection = null;
+ 		else 
+-			selection = selection.clone();
++			this.selection = selection.clone();
+ 	}
+ 	
+ 	/**
+@@ -244,7 +245,7 @@
+ 	 * @throws ExportException	If information provided is not complete.
+ 	 * @throws IOException	If anything with the file goes wrong (insufficient disk space, insufficient permissions).
+ 	 */
+-	synchronized public ExportTask startExport() 
++	synchronized public ExportTask createExportTask() 
+ 	throws ExportException, IOException, DBLayerException {
+ 		if( exportTasks.size() &gt; 4 )
+ 			throw new ExportException(L10n.getString(&quot;Error.TooManyTasks&quot;));
+@@ -306,7 +307,6 @@
+ 		ExportTask t = new ExportTask(db, query, director, writer, selection.size(0));
+ 		exportTasks.add(t);
+ 		t.addObserver(this);
+-		t.execute();
+ 		
+ 		// Reset variables.
+ 		query = null;
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlA.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -46,9 +46,12 @@
+ 				if( filter.isColumnSelectionEnabled() )
+ 					viewB.setVisible(true);
+ 				else try {
+-					ExportTask task = model.startExport();
++					ExportTask task = model.createExportTask();
+ 					progressCtrl.setModel(task); 
+ 					progressView.setModel(task);
++					
++					task.execute();
++					
+ 					progressView.setVisible(true);
+ 				} catch(Exception e) {
+ 					JOptionPane.showMessageDialog(null,
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrlB.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -38,10 +38,12 @@
+ 				try {
+ 					model.setTemplate( t ); // Set the new template.
+ 
+-					ExportTask task = model.startExport();
++					ExportTask task = model.createExportTask();
+ 					progressCtrl.setModel(task); 
+ 					progressView.setModel(task);
+ 					
++					task.execute();
++					
+ 					progressView.setVisible(true);
+ 				}
+ 				catch(Exception e) {
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportProgressView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/export/ExportProgressView.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -94,7 +94,7 @@
+     @Override
+     public void setVisible(boolean visible) {
+     	status.setText(L10n.getString(&quot;Export.Initializing&quot;));
+-    	total = model.getNumberOfResults();
++    	total = (model == null) ? 0 : model.getNumberOfResults();
+     	if(total &gt; 0) {
+     		progress.setIndeterminate(false);
+     		progress.setMaximum( total );
+@@ -106,9 +106,7 @@
+     	}
+     	
+     	abort.setText(L10n.getString(&quot;Export.Abort&quot;));
+-    	
+     	super.setVisible(visible);
+-    	
+     	update(null, null);
+     }
+     
+@@ -123,18 +121,25 @@
+ 		if( parameter != null &amp;&amp; parameter instanceof Exception ) {
+ 			Exception e = (Exception) parameter;
+ 			setTitle(L10n.getString(&quot;Export.Failed&quot;));
++			progress.setIndeterminate(false);
++    		progress.setStringPainted(true);
+ 			status.setText(e.toString());
+ 			progress.setValue(0);
+ 			progress.setString(&quot;&quot;);
+ 			abort.setText(L10n.getString(&quot;Export.Hide&quot;));
+ 			exceptionOccured = true;
+ 		}
++		else if(model == null) {
++			return;
++		}
+ 		else if(model.isAborted()) {
+ 			setTitle(L10n.getString(&quot;Export.Aborted&quot;));
+ 			if(total &gt; 0)
+ 				status.setText(count +&quot;/&quot; + total + &quot; &quot; + L10n.getString(&quot;Export.RecordsExported&quot;));
+ 			else
+ 				status.setText(count + &quot; &quot; + L10n.getString(&quot;Export.RecordsExported&quot;));
++			progress.setIndeterminate(false);
++    		progress.setStringPainted(true);
+ 			progress.setValue(0);
+ 			progress.setString(&quot;&quot;);
+ 			abort.setText(L10n.getString(&quot;Export.Hide&quot;));
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportTask.java	2006-05-20 13:54:28 UTC (rev 310)
++++ trunk/src/net/sf/plantlore/client/export/ExportTask.java	2006-05-20 16:47:34 UTC (rev 311)
+@@ -2,6 +2,7 @@
+ 
+ import java.io.Writer;
+ import java.util.Observable;
++import java.util.Observer;
+ 
+ import org.apache.log4j.Logger;
+ 
+@@ -9,7 +10,7 @@
+ import net.sf.plantlore.middleware.SelectQuery;
+ 
+ 
+-public class ExportTask extends Observable {
++public class ExportTask extends Observable implements Observer {
+ 	
+ 	private Logger logger = Logger.getLogger(this.getClass().getPackage().getName());
+ 	private DBLayer dblayer;
+@@ -23,6 +24,7 @@
+ 	
+ 	public ExportTask(DBLayer dblayer, SelectQuery query, DefaultDirector director, Writer writer, int results) {
+ 		this.dblayer = dblayer; this.exportQuery = query; this.director = director; this.writer = writer; this.results = results;
++		director.addObserver(this);
+ 	}
+ 	
+ 	public boolean isExportInProgress() {
+@@ -42,7 +44,6 @@
+ 	}
+ 	
+ 	public void abort() {
+-		if(!exportInProgress) return;
+ 		aborted = true; exportInProgress = false;
+ 		director.abort();
+ 		setChanged(); notifyObservers(this);
+@@ -78,4 +79,9 @@
+ 			monitor.start();
+ 		}
+ 	}
++
++	// Re-send notifications.
++	public void update(Observable source, Object arg) {
++		setChanged(); notifyObservers(arg);
++	}
+ }
+\ No newline at end of file
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000362.html">[Plantlore-dev] r310 - in trunk/src/net/sf/plantlore/client: . export
+</A></li>
+	<LI>Next message: <A HREF="000367.html">[Plantlore-dev] r312 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#361">[ date ]</a>
+              <a href="thread.html#361">[ thread ]</a>
+              <a href="subject.html#361">[ subject ]</a>
+              <a href="author.html#361">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

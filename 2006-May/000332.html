@@ -1,0 +1,965 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r280 - in trunk/src/net/sf/plantlore: client client/checklist client/resources common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r280%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/checklist%20client/resources%20common&In-Reply-To=%3C200605161429.k4GETrFV010506%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000331.html">
+   <LINK REL="Next"  HREF="000333.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r280 - in trunk/src/net/sf/plantlore: client client/checklist client/resources common</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r280%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20client/checklist%20client/resources%20common&In-Reply-To=%3C200605161429.k4GETrFV010506%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r280 - in trunk/src/net/sf/plantlore: client client/checklist client/resources common">krater at berlios.de
+       </A><BR>
+    <I>Tue May 16 16:29:53 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000331.html">[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+        <LI>Next message: <A HREF="000333.html">[Plantlore-dev] r281 - trunk/src/net/sf/plantlore/client/checklist
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#332">[ date ]</a>
+              <a href="thread.html#332">[ thread ]</a>
+              <a href="subject.html#332">[ subject ]</a>
+              <a href="author.html#332">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-16 16:29:47 +0200 (Tue, 16 May 2006)
+New Revision: 280
+
+Added:
+   trunk/src/net/sf/plantlore/client/checklist/
+   trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form
+   trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+   trunk/src/net/sf/plantlore/client/resources/Checked.gif
+   trunk/src/net/sf/plantlore/client/resources/Clear.gif
+   trunk/src/net/sf/plantlore/client/resources/Load.gif
+   trunk/src/net/sf/plantlore/client/resources/Save.gif
+   trunk/src/net/sf/plantlore/client/resources/Unchecked.gif
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/common/AutoTextArea.java
+Log:
+The cheklist created. Bound to the AddEdit Dialog.
+[BUG: for an unknown reason the Checklist doesn't respond to the user's input.]
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -21,6 +21,8 @@
+ import java.beans.PropertyChangeListener;
+ import java.util.ArrayList;
+ import java.util.Date;
++
++import javax.swing.AbstractAction;
+ import javax.swing.DefaultCellEditor;
+ import javax.swing.JButton;
+ import javax.swing.JComboBox;
+@@ -33,10 +35,14 @@
+ import javax.swing.event.ChangeListener;
+ import javax.swing.table.TableColumn;
+ import javax.swing.text.BadLocationException;
++
++import net.sf.plantlore.client.checklist.ChecklistCtrl;
++import net.sf.plantlore.client.checklist.ChecklistView;
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.record.Occurrence;
++import net.sf.plantlore.l10n.L10n;
+ 
+ /**
+  *
+@@ -48,6 +54,10 @@
+     private AddEdit model;
+     private AddEditView view;
+     
++    //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
++    private ChecklistView checklistView;
++    
++    
+     /** Creates a new instance of AddEditCtrl */
+     public AddEditCtrl(AddEdit model, AddEditView view, boolean edit) {
+         this.inEditMode = edit;
+@@ -94,8 +104,26 @@
+         view.okButton.addMouseListener(new OkButtonListener());
+         view.cancelButton.addMouseListener(new CancelButtonListener());
+         view.helpButton.addMouseListener(new HelpButtonListener());
++        view.checklistButton.setAction(new ChecklistAction());
+     }
+     
++    
++    class ChecklistAction extends AbstractAction {
++    	public ChecklistAction() {
++    		putValue(NAME, L10n.getString(&quot;Checklist.Title&quot;)); 
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.Description&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;Checklist.Title&quot;));
++    	}
++		public void actionPerformed(ActionEvent isUseless) {
++			if(checklistView == null) {
++				checklistView = new ChecklistView( view.taxonTextArea );
++				new ChecklistCtrl( checklistView, view.taxonTextArea );
++			}
++			checklistView.setVisible(true);			
++		}
++    }
++    
++    
+     class CommonActionListener implements ActionListener {
+         public void actionPerformed(ActionEvent e) {
+             JComboBox c = null;
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -28,6 +28,7 @@
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -60,6 +61,7 @@
+         this.pack();        
+     }
+     
++           
+     /** This method is called from within the constructor to
+      * initialize the form.
+      * WARNING: Do NOT modify this code. The content of this method is
+@@ -899,7 +901,7 @@
+     protected javax.swing.JTextField quadrantTextField;
+     protected javax.swing.JComboBox sourceCombo;
+     protected javax.swing.JLabel sourceLabel;
+-    protected javax.swing.JTextArea taxonTextArea;
++    protected AutoTextArea taxonTextArea;
+     protected javax.swing.JComboBox territoryNameCombo;
+     protected javax.swing.JFormattedTextField timeFormattedTextField;
+     protected javax.swing.JComboBox townComboBox;
+
+Added: trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -0,0 +1,194 @@
++package net.sf.plantlore.client.checklist;
++
++import java.awt.Component;
++import java.awt.Font;
++import java.awt.event.KeyAdapter;
++import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
++import java.awt.event.MouseMotionListener;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.ObjectInputStream;
++import java.io.ObjectOutputStream;
++import java.util.Vector;
++
++import javax.swing.DefaultListCellRenderer;
++import javax.swing.DefaultListSelectionModel;
++import javax.swing.Icon;
++import javax.swing.ImageIcon;
++import javax.swing.JList;
++import javax.swing.ListSelectionModel;
++import javax.swing.text.Position;
++
++/**
++ * The checklist holds records. Save/load. Me good english!
++ * 
++ * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
++ * @version 1.0
++ */
++public class Checklist extends JList {
++	
++	public Checklist(Object[] values) {
++		for(int i = 0; i &lt; values.length; i++) 
++			values[i] = values[i].toString();
++		
++		setListData( (String[])values );
++		
++		setCellRenderer( new CheckCellRenderer() );
++		setSelectionModel( new ToggleSelectionModel() );
++		setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
++		setLayoutOrientation(JList.VERTICAL_WRAP);
++		setPrototypeCellValue(&quot;VERY LONG NAME MOMENTS AGO&quot;);
++		setDragEnabled(false);
++		setVisibleRowCount(20);
++		
++		// Remove the nasty hyperactive listeners
++		for(Object listener : getListeners(KeyListener.class)) 
++			removeKeyListener((KeyListener) listener);
++		for(Object listener : getListeners(MouseMotionListener.class))
++			removeMouseMotionListener((MouseMotionListener) listener);
++		
++		addKeyListener(new KeyHelper(true));	
++	}
++	
++	
++	private int selectedIndex = -1;
++	
++	
++	protected void redraw() {
++		if(selectedIndex &gt;= 0) {
++			ensureIndexIsVisible(selectedIndex);
++			repaint();
++		}
++	}
++	
++	
++	class KeyHelper extends KeyAdapter {
++		private long lastEvent = 0;
++		private StringBuilder cache = new StringBuilder(32);
++		private boolean selectMovesDown = false;
++		
++		public KeyHelper(boolean selectMovesDown) {
++			this.selectMovesDown = selectMovesDown;
++		}
++		
++		@Override
++		public void keyPressed(KeyEvent key) {
++			key.consume();
++			
++			if(key.getWhen() - lastEvent &gt; 1000 || cache.length() &gt; 16)
++				cache.delete(0, 31);
++			
++			if(key.getKeyCode() &gt; 64) {
++				cache.append(key.getKeyChar());
++				lastEvent = key.getWhen();
++//				System.out.println(cache.toString());
++				selectedIndex = getNextMatch(cache.toString(), 0, Position.Bias.Forward);
++				redraw();
++			} else 
++				switch(key.getKeyCode()) {
++				case KeyEvent.VK_SPACE:
++					setSelectionInterval(selectedIndex, selectedIndex);
++					if(!selectMovesDown) break;
++				case KeyEvent.VK_DOWN:
++					if(selectedIndex &lt; getModel().getSize() - 1) {
++						selectedIndex ++ ; 
++						redraw();
++					}
++					break;
++				case KeyEvent.VK_UP:
++					if(selectedIndex &gt; 0) {
++						selectedIndex -- ; 
++						redraw();
++					}
++					break;
++				case KeyEvent.VK_LEFT:
++					selectedIndex -= getVisibleRowCount();
++					if(selectedIndex &lt; 0) selectedIndex = 0;
++					redraw();
++					break;
++				case KeyEvent.VK_RIGHT:
++					selectedIndex += getVisibleRowCount();
++					if(selectedIndex &gt; getModel().getSize()) selectedIndex = getModel().getSize() - 1;
++					redraw();						
++					break;
++				}
++		}
++	}
++	
++
++	
++	class CheckCellRenderer extends DefaultListCellRenderer {
++	    private Icon 
++	    	checked = new ImageIcon(&quot;checked.gif&quot;), 
++	    	unchecked = new ImageIcon(&quot;unchecked.gif&quot;);
++	    private Font font;
++	    
++	    public CheckCellRenderer() {
++	    	font = getFont();
++	    	font = new Font(font.getName(), Font.BOLD, font.getSize());
++	    }
++
++	    @Override
++	    public Component getListCellRendererComponent(
++	    		JList list,
++	    		Object value,
++	    		int index, // cell index
++	    		boolean selected,
++	    		boolean focus)   {
++
++	    	super.getListCellRendererComponent(list, value, index, false, index == selectedIndex);
++	    	if( selected ) {
++	    		setForeground( getSelectionBackground() );
++	    		setFont( font );
++	    	}
++	    	setIcon( selected ? checked : unchecked );
++	    	return this;
++	    }
++	}
++
++	
++	class ToggleSelectionModel extends DefaultListSelectionModel {
++	    @Override
++	    public void setSelectionInterval(int from, int to) {
++	    	if (isSelectedIndex(from))
++	    		super.removeSelectionInterval(from, to);
++	    	else
++	    		super.addSelectionInterval(from, to);
++	    	selectedIndex = from;
++	    }
++	}
++	
++	
++	
++	public void save(String filename) 
++	throws IOException {
++		if(isSelectionEmpty())
++			throw new RuntimeException(&quot;The selection is empty!&quot;);
++		FileOutputStream fos = new FileOutputStream(filename);
++		ObjectOutputStream oos = new ObjectOutputStream(fos);
++		Vector&lt;String&gt; selected = new Vector&lt;String&gt;( 100 );
++		for(Object obj : getSelectedValues())
++			selected.add( obj.toString() );
++		oos.writeObject( selected );
++		oos.close();
++	}
++	
++	
++	@SuppressWarnings(&quot;unchecked&quot;)
++	public void load(String filename) 
++	throws IOException, ClassNotFoundException {
++		FileInputStream fis = new FileInputStream(filename);
++		ObjectInputStream ois = new ObjectInputStream(fis);
++		Vector&lt;String&gt; listData = (Vector&lt;String&gt;) ois.readObject();
++		ois.close();
++		Object[] selected = getSelectedValues();
++		clearSelection();
++		setListData(listData);
++		for(Object r : selected)
++			setSelectedValue(r, false);
++	}
++	
++	
++}
+
+Added: trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistCtrl.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -0,0 +1,96 @@
++package net.sf.plantlore.client.checklist;
++
++import java.awt.event.ActionEvent;
++
++import javax.swing.AbstractAction;
++import javax.swing.ImageIcon;
++import javax.swing.JFileChooser;
++import javax.swing.JOptionPane;
++
++import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.l10n.L10n;
++
++public class ChecklistCtrl {
++	
++	private ChecklistView view;
++	private AutoTextArea model;
++	
++	public ChecklistCtrl(ChecklistView view, AutoTextArea model) {
++		this.view = view;
++		this.model = model;
++		view.load.setAction(new LoadCreate(0));
++		view.save.setAction(new LoadCreate(1));
++		view.clear.setAction(new ClearSelection());
++		view.submit.setAction(new Submit());
++	}
++	
++	class Submit extends AbstractAction {
++		public Submit() {
++			putValue(NAME, L10n.getString(&quot;Checklist.Submit&quot;)); 
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.SubmitTT&quot;));
++        } 
++		public void actionPerformed(ActionEvent arg0) {
++			model.addLines( view.checklist.getSelectedValues() );
++			view.setVisible(false);
++		}
++	}
++	
++	class LoadCreate extends AbstractAction {
++		private int type;
++		
++		public LoadCreate(int type) {
++			this.type = type;
++			switch(type){
++			case 0:
++				putValue(SMALL_ICON, new ImageIcon(&quot;net/sf/plantlore/client/resources/Load.gif&quot;));
++				putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.LoadTT&quot;));
++				break;
++			case 1:
++				putValue(SMALL_ICON, new ImageIcon(&quot;net/sf/plantlore/client/resources/Save.gif&quot;));
++				putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.SaveTT&quot;));
++				break;
++			}
++			
++		}
++		
++		public void actionPerformed(ActionEvent arg0) {
++			int result = view.choice.showDialog( null, type == 0 ? &quot;Open&quot; : &quot;Create&quot; );
++			if( result == JFileChooser.APPROVE_OPTION ) {
++				if(view.choice.getSelectedFile() == null) {
++					JOptionPane.showMessageDialog(null,
++							L10n.getString(&quot;error.MissingFileName&quot;),
++							L10n.getString(&quot;error.NothingSelected&quot;),
++							JOptionPane.WARNING_MESSAGE);
++					return;
++				}
++				try {
++					switch(type) {
++					case 0:
++						view.checklist.load(view.choice.getSelectedFile().getAbsolutePath());
++						break;
++					case 1:
++						view.checklist.save(view.choice.getSelectedFile().getAbsolutePath());
++						break;
++					}
++				} catch(Exception e) {
++					JOptionPane.showMessageDialog(null,
++							L10n.getString(&quot;error.InvalidChecklist&quot;),
++							L10n.getString(&quot;error.NothingSelected&quot;),
++							JOptionPane.WARNING_MESSAGE);
++					return;
++				}
++			}
++		}
++	}
++	
++	
++	class ClearSelection extends AbstractAction {
++		public ClearSelection() {
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Checklist.ClearTT&quot;));
++            putValue(SMALL_ICON, new ImageIcon(&quot;net/sf/plantlore/client/resources/Clear.gif&quot;));
++        } 
++		public void actionPerformed(ActionEvent arg0) {
++			view.checklist.clearSelection();
++		}
++	}
++}
+
+Added: trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistView.form	2006-05-16 14:29:47 UTC (rev 280)
+@@ -0,0 +1,111 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JFrameFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;3&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Component id=&quot;jToolBar1&quot; alignment=&quot;0&quot; pref=&quot;400&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace pref=&quot;325&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;submit&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;scrollpane&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;Component id=&quot;jToolBar1&quot; min=&quot;-2&quot; pref=&quot;25&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;scrollpane&quot; pref=&quot;229&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;submit&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Container class=&quot;javax.swing.JToolBar&quot; name=&quot;jToolBar1&quot;&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.DesignBoxLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;load&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Load&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;save&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Save&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++        &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;clear&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Clear&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;scrollpane&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JList&quot; name=&quot;checklist&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;model&quot; type=&quot;javax.swing.ListModel&quot; editor=&quot;org.netbeans.modules.form.editors2.ListModelEditor&quot;&gt;
++              &lt;StringArray count=&quot;5&quot;&gt;
++                &lt;StringItem index=&quot;0&quot; value=&quot;Item 1&quot;/&gt;
++                &lt;StringItem index=&quot;1&quot; value=&quot;Item 2&quot;/&gt;
++                &lt;StringItem index=&quot;2&quot; value=&quot;Item 3&quot;/&gt;
++                &lt;StringItem index=&quot;3&quot; value=&quot;Item 4&quot;/&gt;
++                &lt;StringItem index=&quot;4&quot; value=&quot;Item 5&quot;/&gt;
++              &lt;/StringArray&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;submit&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Submit&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/client/checklist/ChecklistView.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -0,0 +1,108 @@
++package net.sf.plantlore.client.checklist;
++
++import java.awt.Dimension;
++
++import javax.swing.JFileChooser;
++import javax.swing.JScrollPane;
++
++import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.l10n.L10n;
++
++/*
++ * ChecklistView.java
++ *
++ * Created on 15. kv&#283;ten 2006, 22:26
++ */
++
++/**
++ *
++ * @author  yaa
++ */
++public class ChecklistView extends javax.swing.JFrame {
++	
++	private AutoTextArea model;
++    
++    /** Creates new form ChecklistView */
++    public ChecklistView(AutoTextArea model) {
++    	this.model = model;
++        initComponents();
++        choice = new JFileChooser();
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jToolBar1 = new javax.swing.JToolBar();
++        load = new javax.swing.JButton();
++        save = new javax.swing.JButton();
++        clear = new javax.swing.JButton();
++        scrollpane = new javax.swing.JScrollPane();
++        checklist = new Checklist( model.getAllowedValues() );
++        submit = new javax.swing.JButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
++        setTitle(L10n.getString(&quot;Checklist.Title&quot;));
++        load.setText(&quot;Load&quot;);
++        jToolBar1.add(load);
++
++        save.setText(&quot;Save&quot;);
++        jToolBar1.add(save);
++
++        clear.setText(&quot;Clear&quot;);
++        jToolBar1.add(clear);
++
++        scrollpane.setViewportView(checklist);
++        scrollpane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
++		scrollpane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
++		scrollpane.setPreferredSize( 
++				new Dimension( 2*checklist.getFixedCellWidth() + 2, 
++						checklist.getVisibleRowCount()*checklist.getFixedCellHeight() + 30) );
++
++        submit.setText(&quot;Submit&quot;);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jToolBar1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 400, Short.MAX_VALUE)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                .addContainerGap(325, Short.MAX_VALUE)
++                .add(submit)
++                .addContainerGap())
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(scrollpane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .add(jToolBar1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 25, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(scrollpane, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 229, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(submit)
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected Checklist checklist;
++    protected javax.swing.JButton clear;
++    private javax.swing.JToolBar jToolBar1;
++    protected javax.swing.JButton load;
++    protected javax.swing.JButton save;
++    protected javax.swing.JScrollPane scrollpane;
++    protected javax.swing.JButton submit;
++    // End of variables declaration//GEN-END:variables
++    protected JFileChooser choice;
++
++    
++}
+
+Added: trunk/src/net/sf/plantlore/client/resources/Checked.gif
+===================================================================
+(Binary files differ)
+
+
+Property changes on: trunk/src/net/sf/plantlore/client/resources/Checked.gif
+___________________________________________________________________
+Name: svn:mime-type
+   + application/octet-stream
+
+Added: trunk/src/net/sf/plantlore/client/resources/Clear.gif
+===================================================================
+(Binary files differ)
+
+
+Property changes on: trunk/src/net/sf/plantlore/client/resources/Clear.gif
+___________________________________________________________________
+Name: svn:mime-type
+   + application/octet-stream
+
+Added: trunk/src/net/sf/plantlore/client/resources/Load.gif
+===================================================================
+(Binary files differ)
+
+
+Property changes on: trunk/src/net/sf/plantlore/client/resources/Load.gif
+___________________________________________________________________
+Name: svn:mime-type
+   + application/octet-stream
+
+Added: trunk/src/net/sf/plantlore/client/resources/Save.gif
+===================================================================
+(Binary files differ)
+
+
+Property changes on: trunk/src/net/sf/plantlore/client/resources/Save.gif
+___________________________________________________________________
+Name: svn:mime-type
+   + application/octet-stream
+
+Added: trunk/src/net/sf/plantlore/client/resources/Unchecked.gif
+===================================================================
+(Binary files differ)
+
+
+Property changes on: trunk/src/net/sf/plantlore/client/resources/Unchecked.gif
+___________________________________________________________________
+Name: svn:mime-type
+   + application/octet-stream
+
+Modified: trunk/src/net/sf/plantlore/common/AutoTextArea.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-15 14:01:45 UTC (rev 279)
++++ trunk/src/net/sf/plantlore/common/AutoTextArea.java	2006-05-16 14:29:47 UTC (rev 280)
+@@ -1,23 +1,13 @@
+ package net.sf.plantlore.common;
+ 
+-import java.awt.Container;
+-import java.awt.Rectangle;
+-import java.awt.event.FocusEvent;
+-import java.awt.event.FocusListener;
+-import java.awt.event.KeyEvent;
+-import java.awt.event.KeyListener;
+-import java.awt.event.MouseEvent;
+-import java.awt.event.MouseListener;
++import java.awt.*;
++import java.awt.event.*;
++import java.util.HashSet;
+ 
++import javax.swing.*;
++import javax.swing.text.*;
+ 
+-import javax.swing.JDialog;
+-import javax.swing.JFrame;
+-import javax.swing.JList;
+-import javax.swing.JTextArea;
+-import javax.swing.text.BadLocationException;
+-import javax.swing.text.Position;
+ 
+-
+ /**
+  * AutoTextArea is an extension of the default &lt;code&gt;JTextArea&lt;/code&gt;. It operates in two modes:
+  * &lt;dl&gt;
+@@ -84,7 +74,7 @@
+  * &lt;/ul&gt;   
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+- * @version 1.1
++ * @version 1.3
+  */
+ public class AutoTextArea extends JTextArea implements KeyListener, FocusListener, MouseListener {
+ 	
+@@ -210,9 +200,10 @@
+ 			case KeyEvent.VK_ENTER: // insert the current selection, switch to the FreeRoam
+ 				mode = Mode.FREE_ROAM;
+ 				assistant.setVisible(false);
+-				String newline = (capacity &lt;= this.getLineCount()) ? &quot;&quot; : &quot;\n&quot;;
+-				if(eoln) end++;
+-				if(list.isSelectionEmpty()) replaceRange(&quot;&quot;, start, end);
++				String newline = &quot;\n&quot;;
++				if( eoln || getLineCount() &gt;= capacity ) newline = &quot;&quot;;
++//				if(eoln) end++;
++				if(list.isSelectionEmpty()) replaceRange(&quot;&quot;, start, end + (eoln ? 1 : 0));
+ 				else {
+ 					Object value = list.getSelectedValue();
+ 					replaceRange(value.toString() + newline, start, end);
+@@ -328,13 +319,49 @@
+ 		assistant = new Assistant(choices, container);
+ 		assistant.getList().addMouseListener(this);
+ 		addKeyListener(this); addFocusListener(this);
++		this.choices = choices;
++		this.values = new HashSet&lt;Object&gt;(choices.length);
++		for(Object obj : choices)
++			this.values.add(obj);
+ 	}
+ 	
+-	@Deprecated
+-	public void adjustOffset() {
+-		assistant.adjustOffset(this);
++	/**
++	 * The list of choices, or &quot;allowed values&quot; - for fast searching.
++	 */
++	private HashSet&lt;Object&gt; values;
++	/**
++	 * The list of choices, or &quot;allowed values&quot; - to return.
++	 */
++	private Object[] choices;
++	
++	/**
++	 * 
++	 * @return The list of all allowed values.
++	 */
++	public Object[] getAllowedValues() {
++		return choices;
+ 	}
++
++	/**
++	 * Append new lines to the current text.
++	 * Only accepts records that are in the list of choices
++	 * and respects the capacity of the TextArea
++	 * (the capacity cannot be crossed).
++	 * 
++	 * @param record	The list of new records that are to be appended to the end of the text.
++	 */
++	public void addLines(Object[] record) {
++		keyPressed(escapeEmulator);
++		int line = getLineCount();
++		for(Object obj : record) {
++			if(line &lt;= capacity &amp;&amp; values.contains(obj)) {
++				append(obj.toString() + (line == capacity ? &quot;&quot; : &quot;\n&quot;));
++				line++;
++			}
++		}
++	}
+ 	
++	
+ 	/** Set the maximum number of records that can be inserted into this text area. */
+ 	public void setCapacity(int capacity) {
+ 		this.capacity = capacity;
+@@ -342,29 +369,76 @@
+ 
+ 
+ 	/**
++	 * Return the content of the specified line.
++	 * Trims the trailing newline character, if there's any. 
+ 	 * 
+ 	 * @param line	Line number (starts with 0).
+ 	 * @return	The string on the specified line.
+ 	 * @throws BadLocationException	If there is no such line.
+ 	 */
+ 	public String getLine(int line) {
+-            int start, end;
+-            String s;
+-            try {
+-		start = getLineStartOffset(line);
+-                end = getLineEndOffset(line);
+-                s = getText(start, end - start);
+-            } catch (BadLocationException ble) {
+-                throw new IndexOutOfBoundsException(&quot;&quot;+line);
+-            }
+-            if (s.length() &gt; 0 &amp;&amp; s.charAt(s.length()-1) == '\n')
+-                return s.substring(0,s.length()-1);
+-            else
+-                return s;
++		int start, end;
++		String s;
++		try {
++			start = getLineStartOffset(line);
++			end = getLineEndOffset(line);
++			s = getText(start, end - start);
++		} catch (BadLocationException ble) {
++			throw new IndexOutOfBoundsException(&quot;&quot;+line);
++		}
++		if (s.length() &gt; 0 &amp;&amp; s.charAt(s.length()-1) == '\n')
++			return s.substring(0,s.length()-1);
++		else
++			return s;
+ 	}
++
+ 	
++//	public static void main(String[] args) throws InterruptedException {
++//		String lookAndFeel = UIManager.getSystemLookAndFeelClassName();
++//        try { UIManager.setLookAndFeel(lookAndFeel); }
++//        catch (Exception e) { JFrame.setDefaultLookAndFeelDecorated(true); }
++//        
++//        String[]
++//        	ch = {&quot;Anubis&quot;, &quot;Apophis&quot;, &quot;Ayiana&quot;, &quot;Baal&quot;, &quot;Baldur&quot;, &quot;Camulus&quot;, &quot;Cronus&quot;, &quot;Daniel Jackson&quot;,
++//					&quot;Elizabeth Weir&quot;, &quot;Freir&quot;, &quot;George Hammond&quot;, &quot;Hallowed are the Ori&quot;, &quot;Heimdall&quot;, &quot;Hermiod&quot;,
++//					&quot;Chaya Sar&quot;, &quot;Imhotep&quot;, &quot;Jack O'Neill&quot;, &quot;John Sheppard&quot;, &quot;Jonas Quinn&quot;, &quot;Khalek&quot;, &quot;Klorel&quot;,
++//					&quot;Loki&quot;, &quot;Martoufe&quot;, &quot;Master Bra'tac&quot;, &quot;Nerus&quot;, &quot;Oma Desala&quot;, &quot;Penegal&quot;, &quot;Qetesh&quot;,
++//					&quot;Ra&quot;, &quot;Radek Zelenka&quot;, &quot;Replicarter&quot;, &quot;Rodney McKay&quot;, &quot;Ronon Dex&quot;,
++//					&quot;Samantha Carter&quot;, &quot;Sokar&quot;, &quot;&#352;evron&quot;, 
++//					&quot;Teyla Emmagan&quot;, &quot;The Eight&quot;, &quot;The Fifth&quot;, &quot;The First&quot;, &quot;The Fourth&quot;,
++//					&quot;The Second&quot;, &quot;The Seventh&quot;, &quot;The Sixth&quot;, &quot;The Third&quot;, &quot;Thor&quot;, &quot;Ty'alc&quot;, &quot;Vala Mal Doran&quot;, &quot;Yu&quot;};
++//        
++//		JFrame f = new JFrame();
++//		f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
++//		AutoTextArea a = new AutoTextArea(ch, f); 
++//		a.setPreferredSize(new Dimension(400, 300));
++//		a.setFont(new Font(&quot;Verdana&quot;, 0, 12));
++//		a.setCapacity(5);
++//		JScrollPane sp = new JScrollPane(a);
++//		sp.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
++//		
++//		
++//		JPanel ugly = new JPanel(new BorderLayout());
++//		ugly.add(new JButton(&quot;foooooooo&quot;), BorderLayout.WEST);
++//		ugly.add(new JButton(&quot;sue&quot;), BorderLayout.NORTH);
++//		ugly.add(/*a*/sp, BorderLayout.CENTER);
++//		
++//				
++//		JButton b = new JButton(&quot;Done&quot;);
++//		f.getContentPane().add(new JLabel(&quot;be ugly and give some space&quot;), BorderLayout.WEST);
++//		f.getContentPane().add(new JLabel(&quot;be ugly and give more space&quot;), BorderLayout.NORTH);
++//		f.getContentPane().add(ugly/*a*/, BorderLayout.CENTER);
++//		f.getContentPane().add(b, BorderLayout.SOUTH);
++//		f.pack();
++//		f.setVisible(true);
++//		
++//		Thread.sleep(10000);
++//		a.addLines(new String[]{&quot;Martoufe&quot;, &quot;The Fourth&quot;,  &quot;Baldur&quot;, &quot;Chaya Sar&quot;, &quot;Ygzotot&quot;});
++//		
++//	}
++
++
+ 	
+-	
+ 	/*======================================================================
+ 	 	Unimplemented &amp; uninteresting methods
+ 	  ======================================================================*/
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000331.html">[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+	<LI>Next message: <A HREF="000333.html">[Plantlore-dev] r281 - trunk/src/net/sf/plantlore/client/checklist
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#332">[ date ]</a>
+              <a href="thread.html#332">[ thread ]</a>
+              <a href="subject.html#332">[ subject ]</a>
+              <a href="author.html#332">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

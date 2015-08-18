@@ -1,0 +1,202 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r417 - trunk/src/net/sf/plantlore/client/imports/table
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r417%20-%20trunk/src/net/sf/plantlore/client/imports/table&In-Reply-To=%3C200606011459.k51ExERd015244%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000512.html">
+   <LINK REL="Next"  HREF="000514.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r417 - trunk/src/net/sf/plantlore/client/imports/table</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r417%20-%20trunk/src/net/sf/plantlore/client/imports/table&In-Reply-To=%3C200606011459.k51ExERd015244%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r417 - trunk/src/net/sf/plantlore/client/imports/table">krater at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 16:59:14 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000512.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+        <LI>Next message: <A HREF="000514.html">[Plantlore-dev] r418 - trunk/src/net/sf/plantlore/client/imports/table
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#513">[ date ]</a>
+              <a href="thread.html#513">[ thread ]</a>
+              <a href="subject.html#513">[ subject ]</a>
+              <a href="author.html#513">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-06-01 16:59:14 +0200 (Thu, 01 Jun 2006)
+New Revision: 417
+
+Modified:
+   trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+Log:
+Problem with null ID's fixed.
+
+Modified: trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-06-01 12:07:38 UTC (rev 416)
++++ trunk/src/net/sf/plantlore/client/imports/table/TableImportTask.java	2006-06-01 14:59:14 UTC (rev 417)
+@@ -54,7 +54,7 @@
+ 	}
+ 	
+ 	
+-
++	
+ 	/**
+ 	 * 
+ 	 * @param db	The database where the data will be imported.
+@@ -107,11 +107,12 @@
+ 			int resultId = db.executeQuery( q ),
+ 			rows = db.getNumRows( resultId );
+ 			
+-			Collection&lt;Record&gt; cache = new HashSet&lt;Record&gt;(rows);
++			Map&lt;Record, Record&gt; cache = new Hashtable&lt;Record, Record&gt;(rows);
+ 			
+ 			for(int i = 0; i &lt; rows; i++) {
+ 				Object[] pulp = db.more(resultId, i, i);
+-				cache.add( (Record)((Object[])(pulp[0]))[0] );
++				Record rec = (Record)((Object[])(pulp[0]))[0]; 
++				cache.put( rec, rec );
+ 			}
+ 			
+ 			db.closeQuery( q );
+@@ -148,41 +149,48 @@
+ 								&quot; ==&gt; &quot; + data.replacement :
+ 								&quot;&quot;));
+ 				
++				
++				Record recordInDB = cache.get( data.record );
++				boolean isRecordInDB = recordInDB != null;
++								
+ 				// Take action.
+ 				try {
+ 					switch(data.action) {
+ 					case INSERT:
+-						if( !cache.contains(data.record) ) {
++						if( !isRecordInDB ) {
+ 							insert( data.record );
+-							cache.add( data.record );
++							cache.put( data.record, data.record );
+ 						}
+ 						inserted++;						
+ 						break;
+ 					case DELETE:
+-						if( cache.contains(data.record) ) {
+-							delete( data.record );
++						if( isRecordInDB ) {
++							delete( recordInDB );
+ 							cache.remove( data.record );
+ 						}
+ 						deleted++;
+ 						break;
+ 					case UPDATE:
+-						if( !cache.contains(data.replacement) )
+-							if( !cache.remove(data.record) ) {
++						Record replacementInDB = cache.get(data.replacement); 
++						if( replacementInDB == null )
++							if( !isRecordInDB ) {
+ 								insert( data.replacement );
+-								cache.add( data.replacement );
++								cache.put( data.replacement, data.replacement );
+ 							}
+ 							else {
+-								update( data.record, data.replacement );
+-								cache.add( data.replacement );
++								cache.remove(data.record);
++								update( recordInDB, data.replacement );
++								cache.put( data.replacement, data.replacement );
+ 							}
+ 						updated ++;
+ 						break;
+ 					}
+ 				} catch(ImportException ie) {
+-					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful! &quot; + ie);
++					logger.error(&quot;The import of the record No. &quot; + count + &quot; was unsuccessful! &quot; + ie.getMessage());
+ 					setStatusMessage( ie.getMessage() );
+ 				} catch(DBLayerException de) {
+-					logger.error(&quot;Delete/update/insert failed! &quot; + de);
++					logger.error(&quot;Delete/update/insert failed! &quot; + de.getMessage());
++					de.printStackTrace();
+ 					setStatusMessage( L10n.getFormattedString(&quot;Error.UnableToProcess&quot;, count) + &quot; &quot; + 
+ 							((de.getMessage() == null) ? L10n.getString(&quot;Import.UnknownReason&quot;) : de.getMessage()) );
+ 				}
+@@ -231,6 +239,9 @@
+ 	 */
+ 	protected int sharedBy(Record record) 
+ 	throws RemoteException {
++		if(record.getId() == null)
++			return 0;
++		
+ 		SelectQuery q = null;
+ 		int rows = 0;
+ 		try {
+@@ -264,8 +275,11 @@
+ 	 */
+ 	protected void update(Record current, Record replacement) 
+ 	throws RemoteException, DBLayerException {
+-		for(String property : current.getProperties())
++		
++		for(String property : current.getProperties()) {
++			System.out.println(&quot;                 replacing &quot;+property);
+ 			current.setValue(property, replacement.getValue(property));
++		}
+ 		
+ 		db.executeUpdateInTransaction( current );
+ 	}
+@@ -274,12 +288,14 @@
+ 	 */
+ 	protected void delete(Record record) 
+ 	throws RemoteException, DBLayerException, ImportException {
+-		int sharers = sharedBy( record );
+-		if( sharers &gt; 0 ) {
+-			logger.error(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
+-			throw new ImportException(L10n.getFormattedString(&quot;Error.DeletingSharedRecord&quot;, record, sharers));
++		if(record.getId() != null) {
++			int sharers = sharedBy( record );
++			if( sharers &gt; 0 ) {
++				logger.error(&quot;The &quot;+record+&quot; is in use by &quot;+sharers+&quot; other records. It cannot be deleted!&quot;);
++				throw new ImportException(L10n.getFormattedString(&quot;Error.DeletingSharedRecord&quot;, record, sharers));
++			}
++			db.executeDeleteInTransaction( record );
+ 		}
+-		db.executeDeleteInTransaction( record );
+ 	}
+ 	
+ 	
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000512.html">[Plantlore-dev] [Bug #7708] Easier adding of many occurrences for the same authors
+</A></li>
+	<LI>Next message: <A HREF="000514.html">[Plantlore-dev] r418 - trunk/src/net/sf/plantlore/client/imports/table
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#513">[ date ]</a>
+              <a href="thread.html#513">[ thread ]</a>
+              <a href="subject.html#513">[ subject ]</a>
+              <a href="author.html#513">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

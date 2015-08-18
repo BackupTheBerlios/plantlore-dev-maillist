@@ -1,0 +1,323 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r568 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common/record
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r568%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/occurrenceimport%20client/occurrenceimport/parsers%0A%09common/record&In-Reply-To=%3C200608251652.k7PGqfea017913%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000772.html">
+   <LINK REL="Next"  HREF="000774.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r568 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common/record</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r568%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/occurrenceimport%20client/occurrenceimport/parsers%0A%09common/record&In-Reply-To=%3C200608251652.k7PGqfea017913%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r568 - in trunk/src/net/sf/plantlore:	client/occurrenceimport client/occurrenceimport/parsers	common/record">krater at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 25 18:52:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000772.html">[Plantlore-dev] Import zaznamu - naposled.
+</A></li>
+        <LI>Next message: <A HREF="000774.html">[Plantlore-dev] r569 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#773">[ date ]</a>
+              <a href="thread.html#773">[ thread ]</a>
+              <a href="subject.html#773">[ subject ]</a>
+              <a href="author.html#773">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-08-25 18:52:39 +0200 (Fri, 25 Aug 2006)
+New Revision: 568
+
+Modified:
+   trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+   trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/Record.java
+Log:
+Occurrence import improved - it can handle files of virtually any size.
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-08-25 10:32:00 UTC (rev 567)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/OccurrenceImportTask.java	2006-08-25 16:52:39 UTC (rev 568)
+@@ -5,10 +5,9 @@
+ import java.util.HashSet;
+ import java.util.Set;
+ 
+-//import org.apache.log4j.Logger;
++import org.apache.log4j.Logger;
+ import org.xml.sax.SAXException;
+ 
+-
+ import net.sf.plantlore.common.DBLayerUtils;
+ import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.PlantloreConstants.Table;
+@@ -19,7 +18,7 @@
+ 
+ public class OccurrenceImportTask extends Task implements RecordProcessor {
+ 	
+-	//private Logger logger = Logger.getLogger(OccurrenceImportTask.class.getPackage().getName());
++	private Logger logger = Logger.getLogger(OccurrenceImportTask.class.getPackage().getName());
+ 	
+ 	private OccurrenceParser parser;
+ 	private int count;
+@@ -84,6 +83,10 @@
+ 		count++;
+ 		setStatusMessage(L10n.getFormattedString(&quot;Import.RecordsProcessed&quot;, count));
+ 		try {
++			if(aos == null || aos.length == 0) {
++				logger.error(&quot;The occurrence record is either corrupted or incomplete. It will be skipped.&quot;);
++				throw new DBLayerException(L10n.getString(&quot;Error.CorruptedRecord&quot;));
++			}
+ 			dbutils.processRecord(aos[0].getOccurrence(), aos);
+ 		} 
+ 		catch(DBLayerException e) {
+
+Modified: trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java	2006-08-25 10:32:00 UTC (rev 567)
++++ trunk/src/net/sf/plantlore/client/occurrenceimport/parsers/XMLOccurrenceParser.java	2006-08-25 16:52:39 UTC (rev 568)
+@@ -16,6 +16,7 @@
+ import net.sf.plantlore.client.occurrenceimport.RecordProcessor;
+ import net.sf.plantlore.common.record.Author;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
++import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.Record;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -30,10 +31,13 @@
+ 	private Reader reader;
+ 	
+ 	private AuthorOccurrence ao; 
++	private Occurrence occ;
+ 	private ArrayList&lt;AuthorOccurrence&gt; aos = new ArrayList&lt;AuthorOccurrence&gt;(30);
+ 	private Stack&lt;Record&gt; stack = new Stack&lt;Record&gt;();
+ 	private StringBuffer textCache = new StringBuffer( 4096 );
+ 	
++	private boolean rootNodeValidated = false;
++	
+ 	private static AuthorOccurrence[] AUTHOR_OCCURRENCE_ARRAY = new AuthorOccurrence[0];
+ 	
+ 	
+@@ -64,60 +68,82 @@
+ 	}
+ 	
+ 	
+-	
+-	@Override
+-	public void startDocument() {
+-		ao = (AuthorOccurrence) new AuthorOccurrence().createTorso();
+-		stack.push(ao);
++	private void signalCorruptedFileIf(boolean condition) throws SAXException {
++		if( condition ) {
++			logger.error(&quot;Format of the file is corrupted! Parsing will be terminated.&quot;);
++			throw new SAXException(L10n.getString(&quot;Error.CorruptedFileFormat&quot;));
++		}
+ 	}
+ 	
++	
++
+ 	@Override
+ 	public void startElement(String uri, String name, String qname, Attributes attr) 
+ 	throws SAXException {
+-		if( stack.peek() == null )
+-			throw new SAXException(L10n.getString(&quot;Error.CorruptedFileFormat&quot;));
+-		
+-		Record subRecord = &quot;authoroccurrence&quot;.equalsIgnoreCase(name) ? 
+-				ao : stack.peek().findSubrecord( name );
+-		// Open the sub-record for processing
+-		if( subRecord != null )
+-			stack.push(subRecord);
+-		// or prepare the text cache.
+-		else
+-			textCache.delete(0, textCache.capacity());
+-		
+-		if( &quot;occurrence&quot;.equalsIgnoreCase(name) )
++		if( !rootNodeValidated ) {
++			if( &quot;occurrences&quot;.equalsIgnoreCase(name) )
++				rootNodeValidated = true;
++			else
++				signalCorruptedFileIf( true );
++		}
++		else if( &quot;occurrence&quot;.equalsIgnoreCase(name) ) {
++			signalCorruptedFileIf( occ != null );
++			stack.push( occ = (Occurrence) new Occurrence().createTorso() );
+ 			aos.clear();
++		} 
++		else if( &quot;authoroccurrence&quot;.equalsIgnoreCase(name) ) {
++			signalCorruptedFileIf( occ == null || ao != null );
++			ao = new AuthorOccurrence();
++			ao.setAuthor( new Author() );
++			ao.setOccurrence( occ );
++			stack.push( ao );
++		}
++		else {
++			Record current = null;
++			try {
++				current = stack.peek();
++			} catch(Exception e) {
++				signalCorruptedFileIf( true );
++			}
++			if( current.isForeignKey(name) ) 
++				stack.push( current.findSubrecord(name) );
++			else if( current.isColumn(name) ) 
++				textCache.delete(0, textCache.capacity());
++			else
++				signalCorruptedFileIf( true );
++		}
+ 	}
+ 	
+ 	@Override
+ 	public void endElement(String uri, String name, String qname) 
+-	throws SAXException{
+-		Record current = stack.peek();
+-		if( current == null )
+-			throw new SAXException(L10n.getString(&quot;Error.CorruptedFileFormat&quot;));
++	throws SAXException {
++		Record current = null;
++		try {
++			current = stack.peek();
++		} catch(Exception e) {
++			signalCorruptedFileIf( ! &quot;occurrences&quot;.equalsIgnoreCase(name) );
++			return;
++		}
+ 		
+-		if( current.getClass().getSimpleName().equalsIgnoreCase(name) )
++		if( current.getClass().getSimpleName().equalsIgnoreCase(name) ) {
+ 			stack.pop();
++			if( &quot;authoroccurrence&quot;.equalsIgnoreCase(name) ) {
++				aos.add( ao );
++				ao = null;
++			} 
++			else if( &quot;occurrence&quot;.equalsIgnoreCase(name) ) {
++				try {
++					occ = null;
++					if(processor != null)
++						processor.processRecord( aos.toArray(AUTHOR_OCCURRENCE_ARRAY) );
++				} catch(Exception e) {
++					// Wrap the exception, we cannot throw anything else.
++					throw new SAXException( e );
++				}
++			}
++		}
+ 		else
+ 			current.setValueSafe(name, textCache.toString());
+-		
+-		if( name.equalsIgnoreCase(&quot;authoroccurrence&quot;) ) {
+-			aos.add( ao );
+-			AuthorOccurrence newAO = new AuthorOccurrence();
+-			newAO.setAuthor( new Author() );
+-			newAO.setOccurrence( ao.getOccurrence() );
+-			ao = newAO;
+-		}
+-		else if (name.equalsIgnoreCase(&quot;occurrence&quot;) ) {
+-			ao = (AuthorOccurrence) new AuthorOccurrence().createTorso();
+-			try {
+-				processor.processRecord( aos.toArray(AUTHOR_OCCURRENCE_ARRAY) );
+-			} catch(Exception e) {
+-				// Wrap the exception, we cannot throw anything else.
+-				throw new SAXException( e );
+-			}
+-		}
+ 	}
+ 	
+ 	@Override
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-25 10:32:00 UTC (rev 567)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-25 16:52:39 UTC (rev 568)
+@@ -73,11 +73,11 @@
+     
+     @Override
+     public List&lt;String&gt; getForeignKeys() { 
+-    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE ); 
++    	return asList( TERRITORY, PHYTOCHORION, /*NEAREST*/VILLAGE ); 
+     }
+     
+     public List&lt;String&gt; getColumns() {
+-    	return asList( TERRITORY, PHYTOCHORION, NEARESTVILLAGE, 
++    	return asList( TERRITORY, PHYTOCHORION, /*NEAREST*/VILLAGE, 
+     			QUADRANT, DESCRIPTION, COUNTRY, ALTITUDE, LATITUDE, LONGITUDE, NOTE, DELETED );
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/record/Record.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-25 10:32:00 UTC (rev 567)
++++ trunk/src/net/sf/plantlore/common/record/Record.java	2006-08-25 16:52:39 UTC (rev 568)
+@@ -291,11 +291,27 @@
+ 	 */
+ 	public List&lt;String&gt; getForeignKeys() { return new ArrayList&lt;String&gt;(0); }
+ 	
++	
++	public boolean isForeignKey(String key) {
++		for(String fk : getForeignKeys())
++			if( key.equalsIgnoreCase(fk) )
++				return true;
++		return false;
++	}
++	
+ 	/**
+ 	 * @return The set of names of all columns of the table.
+ 	 */
+ 	public List&lt;String&gt; getColumns() { return new ArrayList&lt;String&gt;(0); }
+ 	
++	
++	public boolean isColumn(String property) {
++		for(String column : getColumns())
++			if( property.equalsIgnoreCase(column) )
++				return true;
++		return false;
++	}
++	
+ 	/**
+ 	 * @return The set of names of columns that are not foreign keys.
+ 	 */
+@@ -434,6 +450,10 @@
+ 	 */
+ 	@Override
+ 	public String toString() {
++		return this.getClass().getSimpleName();
++	}
++	
++	public String toFullString() {
+ 		
+ 		StringBuilder sigma = new StringBuilder();
+ 		for(String property : this.getProperties())
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000772.html">[Plantlore-dev] Import zaznamu - naposled.
+</A></li>
+	<LI>Next message: <A HREF="000774.html">[Plantlore-dev] r569 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#773">[ date ]</a>
+              <a href="thread.html#773">[ thread ]</a>
+              <a href="subject.html#773">[ subject ]</a>
+              <a href="author.html#773">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

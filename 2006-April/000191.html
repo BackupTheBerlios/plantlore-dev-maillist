@@ -1,0 +1,259 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r176 - trunk/src/net/sf/plantlore/common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-April/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r176%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200604221859.k3MIxVDJ022329%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000190.html">
+   <LINK REL="Next"  HREF="000192.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r176 - trunk/src/net/sf/plantlore/common</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r176%20-%20trunk/src/net/sf/plantlore/common&In-Reply-To=%3C200604221859.k3MIxVDJ022329%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r176 - trunk/src/net/sf/plantlore/common">krater at berlios.de
+       </A><BR>
+    <I>Sat Apr 22 20:59:31 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000190.html">[Plantlore-dev] r175 - trunk/src/net/sf/plantlore/client
+</A></li>
+        <LI>Next message: <A HREF="000192.html">[Plantlore-dev] r177 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#191">[ date ]</a>
+              <a href="thread.html#191">[ thread ]</a>
+              <a href="subject.html#191">[ subject ]</a>
+              <a href="author.html#191">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-04-22 20:59:28 +0200 (Sat, 22 Apr 2006)
+New Revision: 176
+
+Modified:
+   trunk/src/net/sf/plantlore/common/AutoComboBox.java
+Log:
+Simplified better behaving AutoComboBox.
+
+Modified: trunk/src/net/sf/plantlore/common/AutoComboBox.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-22 18:30:40 UTC (rev 175)
++++ trunk/src/net/sf/plantlore/common/AutoComboBox.java	2006-04-22 18:59:28 UTC (rev 176)
+@@ -1,13 +1,16 @@
+ package net.sf.plantlore.common;
+ 
+-
++import java.awt.BorderLayout;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+ 
++import javax.swing.JButton;
+ import javax.swing.JComboBox;
++import javax.swing.JFrame;
+ import javax.swing.JTextField;
++import javax.swing.UIManager;
+ import javax.swing.text.AttributeSet;
+ import javax.swing.text.BadLocationException;
+ import javax.swing.text.PlainDocument;
+@@ -34,7 +37,7 @@
+  * record &quot;------&quot; or &quot;not specified&quot; instead.
+  * 
+  * @author Erik Kratochv&#237;l (<A HREF="https://lists.berlios.de/mailman/listinfo/plantlore-dev">discontinuum at gmail.com</A>)
+- * @version 1.2
++ * @version 1.1
+  * @since The beginning of time.
+  */
+ public class AutoComboBox extends JComboBox {
+@@ -42,10 +45,10 @@
+ 	protected boolean allowNew = false;
+ 	protected int capacity = 32;
+ 	
++	private Object last;
+ 	
+-	public AutoComboBox() {
+-		this(new String[] { null });		
+-	}
++	
++	
+ 
+ 	/**
+ 	 * Create the AutoComboBox with given array of choices.
+@@ -53,15 +56,26 @@
+ 	 * @param choices	&lt;b&gt;Sorted&lt;/b&gt; list of available choices (items).
+ 	 */
+ 	public AutoComboBox(Object[] choices) {
++		super(choices); // base class constructor
+ 		setEditable(true);
+-
+-		addItems(choices);
+ 		
+ 		JTextField editor = (JTextField)getEditor().getEditorComponent();
+ 		AutoDocument a = new AutoDocument(); // change the model ~~&gt; AutoDocument 
+-		editor.setDocument(a); editor.addKeyListener(a); editor.addFocusListener(a);;
++		editor.setDocument(a); editor.addKeyListener(a); editor.addFocusListener(a);
+ 	}
+ 	
++	
++	public AutoComboBox() {
++		this(new String[] { null });		
++	} 
++	
++	public void addItems(Object[] items) {
++		for(Object item : items)
++			if(item != null) 
++				this.addItem(item);
++	}
++
++	
+ 	/**
+ 	 * Specify whether the component should also accept strings that are not part of the list of choices.
+ 	 * 
+@@ -76,51 +90,30 @@
+ 	 */
+ 	public void setCapacity(int capacity) { this.capacity = capacity; }
+ 	
+-		
+-	public void addItems(Object[] items) {
+-		for(Object item : items)
+-			if(item != null) 
+-				this.addItem(item);
+-	}
+ 	
+ 	
+-	
+ 	private class AutoDocument extends PlainDocument implements KeyListener, FocusListener {
+ 		
+-		/** Prevent entering the setMatch method recursively. */
+-		private boolean prevent = false;
+ 		
++		
+ 		/** 
+ 		 * Select the first suitable choice beginnig with &lt;code&gt;prefix&lt;/code&gt;.
+ 		 * 
+ 		 * @param prefix		The prefix of the string. 
+-		 * @param popupl	Display the string only (no popup selection)? 
+ 		 */
+-		synchronized private void setMatch(String prefix, boolean popup) {
+-			if (!prevent) {
+-				prevent = true;
+-				/*----------------------------------------------------------------
+-				 * Another amazing example of hyperactivity of this component.
+-				 * When someone calls addItem(), that item gets automatically selected.
+-				 * This means insertString() and setMatch() are called.
+-				 * 
+-				 * The problem is, that this method is likely to show the popup
+-				 * part of the ComboBox; if the AutoComboBox is not currently
+-				 * visible on the screen, that call will throw an exception.
+-				 *----------------------------------------------------------------*/
+-				if(isShowing()) setPopupVisible(popup); // make sure popup is/isn't visible
++		synchronized private void setMatch(String prefix) {
+ 				try {
+ 					boolean noMatch = true;
+ 					if (prefix == null) prefix = getText(0, getLength());
++					
+ 					// Find the first suitable choice and select it.
+ 					for(int i = 0; i &lt; getItemCount(); i++) {
+ 						String item = getItemAt(i).toString(); // test the i-th choice
+ 						if( prefix.length() &lt;= item.length() &amp;&amp; prefix.equalsIgnoreCase(item.substring(0, prefix.length())) ) {
+-							setSelectedIndex(i); // CRAP! This method calls remove() &amp; insertString()!!!
+-							if(popup) item = item.substring(0, prefix.length()); // trim the string
+ 							super.remove(0, getLength());
+-							super.insertString(0, item, null); // rewrite the text
++							super.insertString(0, item.substring(0, prefix.length()), null); // rewrite the text
+ 							noMatch = false;
++							last = getItemAt(i);
+ 							break;
+ 						}
+ 					}
+@@ -129,28 +122,26 @@
+ 						super.insertString(0, prefix, null);
+ 					}
+ 				} catch (BadLocationException e) {} 
+-				finally { prevent = false; }
+-			}
+ 		}
+ 		
+ 		@Override
+ 		public void insertString(int offset, String insert, AttributeSet attr) throws BadLocationException {
+-			setMatch(getText(0, offset) + insert, true);
++			setMatch(getText(0, offset) + insert);
+ 		}
+ 		
+ 		@Override
+ 		public void remove(int offset, int length) throws BadLocationException {
+-			setMatch(getText(0, offset), true);
++			setMatch(getText(0, offset));
+ 		}
+ 
+ 		/** Ensure something got selected. */
+ 		public void keyPressed(KeyEvent e) {
+-			if(e.getKeyCode() == KeyEvent.VK_ENTER) setMatch(null, false);
++			if(e.getKeyCode() == KeyEvent.VK_ENTER) setMatch(null);
+ 		}
+ 		
+ 		/** Make sure something is selected even if the AutoComboBox loses focus. */
+ 		public void focusLost(FocusEvent e) {
+-			setMatch(null, false); 
++			setMatch(null); 
+ 		}
+ 
+ 		/* Bunch of uninteresting methods... */
+@@ -160,4 +151,22 @@
+ 	}
+ 
+ 	
++/* ================================================================================== */
++	public static void main(String[] args) {
++		String lookAndFeel = UIManager.getSystemLookAndFeelClassName();
++        try { UIManager.setLookAndFeel(lookAndFeel); }
++        catch (Exception e) { JFrame.setDefaultLookAndFeelDecorated(true); }
++		
++		JFrame f = new JFrame();
++		//String[] ch = { &quot;Daniel Jackson&quot;, &quot;Etrachlorethylen&quot;, &quot;Jack O'Neill&quot;, &quot;Samantha Carter&quot;, &quot;Tetrachlorethylen&quot;, &quot;Tetraethylen&quot;, &quot;Thor&quot;, &quot;Ty'alc&quot; };
++		String[] ch = new String[1000];
++		for(int i = 0; i &lt; 1000; i++) ch[i] = Integer.toBinaryString(i);
++		
++		f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
++		f.getContentPane().add(new AutoComboBox(ch), BorderLayout.NORTH);
++		f.getContentPane().add(new JButton(&quot;Done&quot;), BorderLayout.SOUTH);
++		f.pack();
++		f.setVisible(true);
++	}
++
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000190.html">[Plantlore-dev] r175 - trunk/src/net/sf/plantlore/client
+</A></li>
+	<LI>Next message: <A HREF="000192.html">[Plantlore-dev] r177 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#191">[ date ]</a>
+              <a href="thread.html#191">[ thread ]</a>
+              <a href="subject.html#191">[ subject ]</a>
+              <a href="author.html#191">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

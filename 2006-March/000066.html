@@ -1,0 +1,263 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r71 - trunk/src/net/sf/plantlore/client/authors
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r71%20-%20trunk/src/net/sf/plantlore/client/authors&In-Reply-To=%3C200603260131.k2Q1Vf2J032206%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000065.html">
+   <LINK REL="Next"  HREF="000067.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r71 - trunk/src/net/sf/plantlore/client/authors</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r71%20-%20trunk/src/net/sf/plantlore/client/authors&In-Reply-To=%3C200603260131.k2Q1Vf2J032206%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r71 - trunk/src/net/sf/plantlore/client/authors">kovo at berlios.de
+       </A><BR>
+    <I>Sun Mar 26 03:31:41 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000065.html">[Plantlore-dev] r70 - in trunk/src/net/sf/plantlore/client: . resources
+</A></li>
+        <LI>Next message: <A HREF="000067.html">[Plantlore-dev] r72 - trunk/src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#66">[ date ]</a>
+              <a href="thread.html#66">[ thread ]</a>
+              <a href="subject.html#66">[ subject ]</a>
+              <a href="author.html#66">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-03-26 03:31:05 +0200 (Sun, 26 Mar 2006)
+New Revision: 71
+
+Modified:
+   trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+   trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+Log:
+Modified to correctly display results of a search
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-03-25 23:51:14 UTC (rev 70)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManager.java	2006-03-26 01:31:05 UTC (rev 71)
+@@ -64,7 +64,7 @@
+     /** Flag telling whether a long running operation has already finished */
+     private boolean done;
+     /** Result of the search query */
+-    private Result queryResult;
++    private int resultId = 0;
+     /** Constant with default number of rows to display */
+     private static final int DEFAULT_DISPLAY_ROWS = 10;    
+     /** Actual number of rows to display */
+@@ -213,11 +213,11 @@
+                     query.addOrder(PlantloreConstants.DIRECT_ASC, field);
+                 } else {
+                     query.addOrder(PlantloreConstants.DIRECT_DESC, field);                    
+-                }                
+-                Result qRes = null;
++                }   
++                int resultId = 0;
+                 try {
+                     // Execute query                    
+-                    database.executeQuery(query);        
++                    resultId = database.executeQuery(query);        
+                 } catch (DBLayerException e) {
+                     // Log and set an error                   
+                     logger.error(&quot;Searching authors failed. Unable to execute search query.&quot;);
+@@ -227,8 +227,8 @@
+                     // Set operation state to finished
+                     done = true;                    
+                     // Save the results
+-                    setResult(qRes);
+-                    return qRes;                    
++                    setResult(resultId);
++                    return resultId;                    
+                 } 
+             }
+         };
+@@ -257,25 +257,25 @@
+      *  @param count number of rows to retrieve 
+      */
+     public void processResults(int from, int count) {
+-        if (this.queryResult != null) {
+-//            logger.debug(&quot;Rows in the result: &quot;+this.queryResult.getNumRows());
++        if (this.resultId != 0) {
++            logger.debug(&quot;Rows in the result: &quot;+getResultRows());
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+-//            int to = Math.min(this.queryResult.getNumRows(), from+count-1);
+-            int to = from+count-1;
++            int to = Math.min(getResultRows(), from+count-1);
+             if (to == 0) {
+                 this.data = new ArrayList();                
+             } else {
+                 logger.debug(&quot;Retrieving query results: &quot;+from+&quot; - &quot;+to);                
+                 try {
+                     // Retrieve selected row interval
+-                    Object[] objArray = database.more(from, to);                
++                    Object[] objArray = database.more(resultId, from, to);                
+                     logger.debug(&quot;Results retrieved. Count: &quot;+objArray.length);
+                     // Create storage for the results
+                     this.data = new ArrayList(objArray.length);
+                     // Cast the results to the AuthorRecord objects
+                     for (int i=0;i&lt;objArray.length;i++) {
+-                        this.data.add((Author)objArray[i]);
++                        Object[] objAuth = (Object[])objArray[i];
++                        this.data.add((Author)objAuth[0]);
+                     }
+                 } catch (DBLayerException e) {
+                     // Log and set error in case of an exception
+@@ -319,18 +319,26 @@
+      *  Set result of a database operation. This is used only for search operations.
+      *  @param qRes &lt;code&gt;QueryResult&lt;/code&gt; object with the details about the result of a database operation
+      */
+-    public void setResult(Result qRes) {
+-        this.queryResult = qRes;
++    public void setResult(int resultId) {
++        this.resultId = resultId;
+     }
+     
+     /**
+      *  Get results of last database operation. This is used only for search operations.
+      *  @return &lt;code&gt;QueryResult&lt;/code&gt; object with the details about the result of last database operation
+      */
+-    public Result getResult() {
+-        return this.queryResult;
++    public int getResult() {
++        return this.resultId;
+     }
+-        
++       
++    public int getResultRows() {
++        if (resultId != 0) {
++            return database.getNumRows(resultId);
++        } else {
++            return 0;
++        }
++    }
++    
+     /**
+      *  Set an error flag (message).
+      *  @param msg  message explaining the error which occured
+@@ -428,7 +436,7 @@
+      *  @return true if search query result is available
+      */
+     public boolean isResultAvailable() {
+-        if (this.queryResult != null) {
++        if (this.resultId!= 0) {
+             return true;
+         }
+         return false;
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java	2006-03-25 23:51:14 UTC (rev 70)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManagerCtrl.java	2006-03-26 01:31:05 UTC (rev 71)
+@@ -71,9 +71,9 @@
+                     view.setDialogEnabled(true);    // Enable view dialog                
+                     // Check for errors which might have occured. If none occured, tell model to process the result
+                     if (model.processErrors() == false) {
+-//                        if (model.getResult().getNumRows() == 0) {
++                        if (model.getResultRows() == 0) {
+                             view.showSearchInfoMessage();
+-//                        }
++                        }
+                         model.setCurrentFirstRow(1);                                                    
+                         // Display first n rows (n = model.getDisplayRows())                        
+                         model.processResults(1, model.getDisplayRows());                        
+@@ -94,7 +94,7 @@
+                         // Update curent first row so that it is not greater than number of rows in the result
+                         // (this happens in case the last record in the list has been deleted and it was set as 
+                         // the current first row)
+-                        if (model.getCurrentFirstRow() &gt; model.getResult().getNumRows()) {                           
++                        if (model.getCurrentFirstRow() &gt; model.getResultRows()) {                           
+                             int row = model.getCurrentFirstRow()-model.getDisplayRows();
+                             if (row &lt; 1) {
+                                 model.setCurrentFirstRow(1);                                
+@@ -226,10 +226,10 @@
+         public void actionPerformed(ActionEvent e) {
+             // Call processResults only if we don't see the last page (should not happen, button should be disabled)
+             logger.debug(&quot;current first row: &quot;+model.getCurrentFirstRow());
+-            logger.debug(&quot;num rows in the result: &quot;+model.getResult().getNumRows());            
++            logger.debug(&quot;num rows in the result: &quot;+model.getResultRows());            
+             logger.debug(&quot;display rows: &quot;+view.getDisplayRows());
+-            if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResult().getNumRows()) {
+-                model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());                                
++            if (model.getCurrentFirstRow()+view.getDisplayRows()&lt;=model.getResultRows()) {
++                model.processResults(model.getCurrentFirstRow()+view.getDisplayRows(), view.getDisplayRows());
+             }
+         }
+     }    
+@@ -320,7 +320,7 @@
+             model.setDisplayRows(view.getDisplayRows());
+             logger.debug(&quot;New display rows: &quot;+view.getDisplayRows());
+             // If neccessary reload search results
+-            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResult().getNumRows())) {
++            if ((oldValue != view.getDisplayRows()) &amp;&amp; (model.getDisplayRows() &lt;= model.getResultRows())) {
+                 model.processResults(model.getCurrentFirstRow(), view.getDisplayRows());
+                 logger.debug(&quot;Search results reloaded. First row: &quot;+model.getCurrentFirstRow()+&quot;; Display rows: &quot;+view.getDisplayRows());
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-03-25 23:51:14 UTC (rev 70)
++++ trunk/src/net/sf/plantlore/client/authors/AuthorManagerView.java	2006-03-26 01:31:05 UTC (rev 71)
+@@ -471,7 +471,7 @@
+         }
+         listTable.setModel(new DefaultTableModel(this.tableData, this.columnNames));       
+         // Set total number of rows in the result
+-        totalRowsLabel.setText(model.getResult().getNumRows()+&quot;&quot;);
++        totalRowsLabel.setText(model.getResultRows()+&quot;&quot;);
+         // Set the status of &quot;Previous&quot; button
+         if (model.getCurrentFirstRow() &gt; 1) {
+             previousBtn.setEnabled(true);
+@@ -479,12 +479,12 @@
+             previousBtn.setEnabled(false);
+         }
+         // Set the status of the &quot;Next&quot; button        
+-        if (model.getResult().getNumRows() &gt;= (model.getDisplayRows()+model.getCurrentFirstRow())) {
++        if (model.getResultRows() &gt;= (model.getDisplayRows()+model.getCurrentFirstRow())) {
+             nextBtn.setEnabled(true);
+         } else {
+             nextBtn.setEnabled(false);            
+         }
+-        int to = Math.min(model.getCurrentFirstRow()+model.getDisplayRows()-1, model.getResult().getNumRows());
++        int to = Math.min(model.getCurrentFirstRow()+model.getDisplayRows()-1, model.getResultRows());
+         displayedLabel.setText(model.getCurrentFirstRow()+&quot; - &quot;+to);
+     }
+     
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000065.html">[Plantlore-dev] r70 - in trunk/src/net/sf/plantlore/client: . resources
+</A></li>
+	<LI>Next message: <A HREF="000067.html">[Plantlore-dev] r72 - trunk/src/net/sf/plantlore/server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#66">[ date ]</a>
+              <a href="thread.html#66">[ thread ]</a>
+              <a href="subject.html#66">[ subject ]</a>
+              <a href="author.html#66">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

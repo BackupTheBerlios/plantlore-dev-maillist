@@ -1,0 +1,752 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r669 - in trunk/src/net/sf/plantlore: client/export	common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r669%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%0A%09common%20l10n&In-Reply-To=%3C200609041939.k84Jd7IN007147%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000928.html">
+   <LINK REL="Next"  HREF="000930.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r669 - in trunk/src/net/sf/plantlore: client/export	common l10n</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r669%20-%20in%20trunk/src/net/sf/plantlore%3A%20client/export%0A%09common%20l10n&In-Reply-To=%3C200609041939.k84Jd7IN007147%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r669 - in trunk/src/net/sf/plantlore: client/export	common l10n">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  4 21:39:07 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000928.html">[Plantlore-dev] r668 - in trunk/src/net/sf/plantlore/client: .	overview/tree
+</A></li>
+        <LI>Next message: <A HREF="000930.html">[Plantlore-dev] r670 - in trunk/src/net/sf/plantlore: client/export	common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#929">[ date ]</a>
+              <a href="thread.html#929">[ thread ]</a>
+              <a href="subject.html#929">[ subject ]</a>
+              <a href="author.html#929">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-04 21:38:59 +0200 (Mon, 04 Sep 2006)
+New Revision: 669
+
+Added:
+   trunk/src/net/sf/plantlore/common/SimpleProgressBar.form
+   trunk/src/net/sf/plantlore/common/SimpleProgressBar.java
+   trunk/src/net/sf/plantlore/common/SimpleProgressBar2.form
+   trunk/src/net/sf/plantlore/common/SimpleProgressBar2.java
+Modified:
+   trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+   trunk/src/net/sf/plantlore/common/Dispatcher.java
+   trunk/src/net/sf/plantlore/common/Task.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+Log:
+A feeble attempt to change the progress bar for cancellable operations to something more sturdy.
+
+Modified: trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/client/export/ExportMngCtrl2.java	2006-09-04 19:38:59 UTC (rev 669)
+@@ -1,15 +1,20 @@
+ package net.sf.plantlore.client.export;
+ 
++import java.awt.Cursor;
+ import java.awt.event.ActionEvent;
+ 
+ import javax.swing.JFileChooser;
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
++import javax.swing.SwingUtilities;
+ import javax.swing.filechooser.FileFilter;
+ 
+ import net.sf.plantlore.client.export.component.FileFormat;
+ import net.sf.plantlore.common.DefaultCancelAction;
+ import net.sf.plantlore.common.DefaultProgressBarEx;
++import net.sf.plantlore.common.Dispatcher;
++import net.sf.plantlore.common.SimpleProgressBar;
++import net.sf.plantlore.common.SimpleProgressBar2;
+ import net.sf.plantlore.common.StandardAction;
+ import net.sf.plantlore.l10n.L10n;
+ 
+@@ -100,9 +105,9 @@
+ 	private void performExport() {
+ 		try {
+ 			ExportTask2 export = model.createExportTask();
+-			new DefaultProgressBarEx(export, parentView, true);
+-			export.start();
++			new SimpleProgressBar2(export, parentView).setVisible(true);
+ 		} catch(Exception e) {
++			e.printStackTrace();
+ 			JOptionPane.showMessageDialog(parentView,
+ 					e.getMessage(),
+ 					L10n.getString(&quot;Export.Failed&quot;),
+
+Modified: trunk/src/net/sf/plantlore/common/Dispatcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-04 19:38:59 UTC (rev 669)
+@@ -9,12 +9,9 @@
+ 
+ package net.sf.plantlore.common;
+ 
+-import java.util.Observable;
+-import java.util.Observer;
+ import javax.swing.JDialog;
+ import javax.swing.JFrame;
+ import javax.swing.JProgressBar;
+-import javax.swing.SwingUtilities;
+ import org.apache.log4j.Logger;
+ 
+ /**
+@@ -31,6 +28,19 @@
+     
+     private Dispatcher() {
+     }
++    
++    
++    public synchronized boolean justDispatch(Task task) {
++        if (taskRunning) {
++            logger.debug(&quot;Dispatcher: task already RUNNING, RETURNING.&quot;);
++            return false;
++        }
++        
++        taskRunning = true;
++        task.start();
++
++        return true;
++    }
+  
+     public synchronized boolean dispatch(Task task, JFrame parent, boolean stoppable) {
+         if (taskRunning) {
+@@ -78,9 +88,7 @@
+         taskRunning = false;
+         pbm.removeTask();
+         pbm.setParent((JDialog)null);
+-/*        do{
+-        	try{ Thread.sleep(50); } catch(Exception e) {}
+-        } while( dpb.isShowing() ); */
++
+         logger.debug(&quot;Dispatcher: &quot;+task+&quot; finished, free to dispatch another.&quot;);
+     }    
+     
+
+Added: trunk/src/net/sf/plantlore/common/SimpleProgressBar.form
+===================================================================
+--- trunk/src/net/sf/plantlore/common/SimpleProgressBar.form	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/SimpleProgressBar.form	2006-09-04 19:38:59 UTC (rev 669)
+@@ -0,0 +1,94 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;modal&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++    &lt;Property name=&quot;resizable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;Property name=&quot;undecorated&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;progress&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;cancel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;progress&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;cancel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;progress&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++          &lt;Border info=&quot;null&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;status&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;background&quot; type=&quot;java.awt.Color&quot; editor=&quot;org.netbeans.beaninfo.editors.ColorEditor&quot;&gt;
++              &lt;Color blue=&quot;ed&quot; green=&quot;e9&quot; id=&quot;MenuBar.background&quot; palette=&quot;3&quot; red=&quot;eb&quot; type=&quot;palette&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++            &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++            &lt;Property name=&quot;tabSize&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++            &lt;Property name=&quot;autoscrolls&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;enabled&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Common.Cancel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/common/SimpleProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/SimpleProgressBar.java	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/SimpleProgressBar.java	2006-09-04 19:38:59 UTC (rev 669)
+@@ -0,0 +1,176 @@
++/*
++ * SimpleProgressBar.java
++ *
++ * Created on 4. z&#225;&#345;&#237; 2006, 18:44
++ */
++
++package net.sf.plantlore.common;
++
++import java.awt.Cursor;
++import java.awt.Window;
++import java.util.Observable;
++import java.util.Observer;
++
++import javax.swing.SwingUtilities;
++
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ *
++ * @author  yaa
++ */
++public class SimpleProgressBar extends javax.swing.JDialog implements Observer {
++	
++	protected Task task;
++	protected Window parent;
++    
++    /** Creates new form SimpleProgressBar */
++    public SimpleProgressBar(Task task, java.awt.Frame parent) {
++    	super(parent, true);
++    	this.task = task;
++    	this.parent = parent;
++    	
++        initComponents();
++        initialize();
++    }
++    
++    public SimpleProgressBar(Task task, java.awt.Dialog parent) {
++    	super(parent, true);
++    	this.task = task;
++    	this.parent = parent;
++    	
++        initComponents();
++        initialize();
++    }
++    
++    private void initialize() {
++    	setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
++        cancel.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++        task.addObserver( this );
++    	
++        if (task.isDeterminate()) {
++            progress.setIndeterminate(false);
++            progress.setMinimum(0);
++            progress.setMaximum(task.getLength());
++        } 
++        else
++            progress.setIndeterminate(true);
++        
++        cancel.setAction( new StandardAction(&quot;Common.Cancel&quot;) {
++        	public void actionPerformed(java.awt.event.ActionEvent arg0) {
++        		task.kill();
++        		task.deleteObservers();
++        		 SwingUtilities.invokeLater(new Runnable() {
++                     public void run() {
++                         setVisible( false );
++                         Dispatcher.getDispatcher().finished();
++                     }
++                 });
++        	}
++        });
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        progress = new javax.swing.JProgressBar();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        status = new javax.swing.JTextArea();
++        cancel = new javax.swing.JButton();
++
++        setModal(true);
++        setResizable(false);
++        setUndecorated(true);
++
++        jScrollPane1.setBorder(null);
++        status.setBackground(javax.swing.UIManager.getDefaults().getColor(&quot;MenuBar.background&quot;));
++        status.setColumns(20);
++        status.setEditable(false);
++        status.setRows(2);
++        status.setTabSize(2);
++        status.setAutoscrolls(false);
++        status.setEnabled(false);
++        jScrollPane1.setViewportView(status);
++
++        cancel.setText(L10n.getString(&quot;Common.Cancel&quot;));
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(progress, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, cancel))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(progress, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(cancel)
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton cancel;
++    private javax.swing.JScrollPane jScrollPane1;
++    protected javax.swing.JProgressBar progress;
++    protected javax.swing.JTextArea status;
++    // End of variables declaration//GEN-END:variables
++    
++    
++    
++    public void update(Observable source, Object parameter) {
++    	if(parameter instanceof Pair) {
++    		Pair p = (Pair)parameter;
++            Object first = p.getFirst();
++            if (first instanceof Task.Message) {
++            	Task.Message msg = (Task.Message)first;
++                Object value = p.getSecond();
++                
++                switch (msg) {
++                case POSITION_CHANGED:
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            progress.setValue(task.getPosition());
++                        }
++                    });
++                    break;
++                case MESSAGE_CHANGED:
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            status.setText( task.getStatusMessage() );
++                        }
++                    });
++                    break;
++                case STOPPING:
++                case STOPPED:
++                	SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                        	setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++                        	cancel.setText(L10n.getString(&quot;Common.Hide&quot;));
++                        }
++                    });
++                
++                }
++            }
++    	}
++    	else if (parameter instanceof Exception) {
++            DefaultExceptionHandler.handle(this, (Exception)parameter);
++        }
++    }
++    
++}
+
+Added: trunk/src/net/sf/plantlore/common/SimpleProgressBar2.form
+===================================================================
+--- trunk/src/net/sf/plantlore/common/SimpleProgressBar2.form	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/SimpleProgressBar2.form	2006-09-04 19:38:59 UTC (rev 669)
+@@ -0,0 +1,94 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;0&quot;/&gt;
++    &lt;Property name=&quot;title&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++      &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Common.Progress&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++    &lt;/Property&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;jProgressBar1&quot; alignment=&quot;0&quot; pref=&quot;380&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;cancel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jProgressBar1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;cancel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Component class=&quot;javax.swing.JProgressBar&quot; name=&quot;jProgressBar1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;status&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;background&quot; type=&quot;java.awt.Color&quot; editor=&quot;org.netbeans.beaninfo.editors.ColorEditor&quot;&gt;
++              &lt;Color blue=&quot;ed&quot; green=&quot;e9&quot; id=&quot;Panel.background&quot; palette=&quot;3&quot; red=&quot;eb&quot; type=&quot;palette&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++            &lt;Property name=&quot;editable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++            &lt;Property name=&quot;tabSize&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++            &lt;Property name=&quot;autoscrolls&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++              &lt;Border info=&quot;null&quot;/&gt;
++            &lt;/Property&gt;
++            &lt;Property name=&quot;enabled&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++            &lt;Property name=&quot;focusable&quot; type=&quot;boolean&quot; value=&quot;false&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancel&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++          &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Common.Cancel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++        &lt;/Property&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/common/SimpleProgressBar2.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/SimpleProgressBar2.java	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/SimpleProgressBar2.java	2006-09-04 19:38:59 UTC (rev 669)
+@@ -0,0 +1,173 @@
++/*
++ * SimpleProgressBar2.java
++ *
++ * Created on 4. z&#225;&#345;&#237; 2006, 19:37
++ */
++
++package net.sf.plantlore.common;
++
++import java.awt.Cursor;
++import java.util.Observable;
++import java.util.Observer;
++
++import javax.swing.SwingUtilities;
++
++import net.sf.plantlore.l10n.L10n;
++
++/**
++ *
++ * @author  yaa
++ */
++public class SimpleProgressBar2 extends javax.swing.JDialog implements Observer {
++	
++	private Task monitoredTask;
++    
++    /** Creates new form SimpleProgressBar2 */
++    public SimpleProgressBar2(Task task, java.awt.Frame parent) {
++    	super(parent, true);
++    	monitoredTask = task;
++    	task.addObserver( this );
++    	
++        initComponents();
++        
++        setLocationRelativeTo(null);
++        
++        cancel.setAction( new StandardAction(&quot;Common.Cancel&quot;) {
++        	public void actionPerformed(java.awt.event.ActionEvent arg0) {
++        		monitoredTask.kill();
++        		monitoredTask.deleteObservers();
++        		Dispatcher.getDispatcher().finished();
++        		
++        		 SwingUtilities.invokeLater(new Runnable() {
++                     public void run() {
++                         setVisible( false );
++                     }
++                 });
++        	}
++        });
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jProgressBar1 = new javax.swing.JProgressBar();
++        jScrollPane1 = new javax.swing.JScrollPane();
++        status = new javax.swing.JTextArea();
++        cancel = new javax.swing.JButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
++        setTitle(L10n.getString(&quot;Common.Progress&quot;));
++
++        status.setBackground(javax.swing.UIManager.getDefaults().getColor(&quot;Panel.background&quot;));
++        status.setColumns(20);
++        status.setEditable(false);
++        status.setRows(2);
++        status.setTabSize(2);
++        status.setAutoscrolls(false);
++        status.setBorder(null);
++        status.setEnabled(false);
++        status.setFocusable(false);
++        jScrollPane1.setViewportView(status);
++
++        cancel.setText(L10n.getString(&quot;Common.Cancel&quot;));
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(jProgressBar1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 380, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, cancel))
++                .addContainerGap())
++        );
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jProgressBar1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(cancel)
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++        
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton cancel;
++    protected javax.swing.JProgressBar jProgressBar1;
++    private javax.swing.JScrollPane jScrollPane1;
++    protected javax.swing.JTextArea status;
++    // End of variables declaration//GEN-END:variables
++    
++    
++    @Override
++    public void setVisible(boolean visible) {
++    	super.setVisible(visible);
++    	if( visible )
++    		Dispatcher.getDispatcher().justDispatch( monitoredTask );
++
++    }
++    
++    
++	public void update(Observable arg0, Object parameter) {
++		System.out.println(parameter);
++		// TODO Auto-generated method stub
++		if(parameter instanceof Pair) {
++    		Pair p = (Pair)parameter;
++            Object first = p.getFirst();
++            if (first instanceof Task.Message) {
++            	Task.Message msg = (Task.Message)first;
++                Object value = p.getSecond();
++                
++                switch (msg) {
++                case STARTING:
++                	SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                        	  setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
++                              cancel.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++                        }
++                    });
++                
++                case POSITION_CHANGED:
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                        	jProgressBar1.setValue(monitoredTask.getPosition());
++                        }
++                    });
++                    break;
++                case MESSAGE_CHANGED:
++                    SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                            status.setText( monitoredTask.getStatusMessage() );
++                        }
++                    });
++                    break;
++                case STOPPING:
++                case STOPPED:
++                	SwingUtilities.invokeLater(new Runnable() {
++                        public void run() {
++                        	setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
++                        	cancel.setText(L10n.getString(&quot;Common.Hide&quot;));
++                        }
++                    });
++                
++                }
++            }
++    	}
++    	else if (parameter instanceof Exception) {
++            DefaultExceptionHandler.handle(this, (Exception)parameter);
++        }
++		
++	}
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-09-04 19:38:59 UTC (rev 669)
+@@ -274,7 +274,8 @@
+     public void kill() {
+     	canceled = true;
+     	
+-    	worker.interrupt();
++    	if(worker != null)
++    		worker.interrupt();
+     	
+     	setChanged();
+         notifyObservers(new Pair&lt;Message,Object&gt;(Message.STOPPING,null));
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-04 19:27:14 UTC (rev 668)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-09-04 19:38:59 UTC (rev 669)
+@@ -1515,3 +1515,5 @@
+ AddEdit.OccurrenceNoteLabel=Occurrence note\:
+ 
+ AddEdit.LocationNoteLabel=Location note\:
++
++Common.Progress=Operation in progress
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000928.html">[Plantlore-dev] r668 - in trunk/src/net/sf/plantlore/client: .	overview/tree
+</A></li>
+	<LI>Next message: <A HREF="000930.html">[Plantlore-dev] r670 - in trunk/src/net/sf/plantlore: client/export	common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#929">[ date ]</a>
+              <a href="thread.html#929">[ thread ]</a>
+              <a href="subject.html#929">[ subject ]</a>
+              <a href="author.html#929">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,339 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r871 - in trunk/src/net/sf/plantlore/client:	overview synonyms
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-December/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r871%20-%20in%20trunk/src/net/sf/plantlore/client%3A%0A%09overview%20synonyms&In-Reply-To=%3C200612042144.kB4LiUJv016577%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001293.html">
+   <LINK REL="Next"  HREF="001294.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r871 - in trunk/src/net/sf/plantlore/client:	overview synonyms</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r871%20-%20in%20trunk/src/net/sf/plantlore/client%3A%0A%09overview%20synonyms&In-Reply-To=%3C200612042144.kB4LiUJv016577%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r871 - in trunk/src/net/sf/plantlore/client:	overview synonyms">krater at mail.berlios.de
+       </A><BR>
+    <I>Mon Dec  4 22:44:30 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001293.html">[Plantlore-dev] [Bug #9179] Insert a plant using a synonym
+</A></li>
+        <LI>Next message: <A HREF="001294.html">[Plantlore-dev] r872 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1292">[ date ]</a>
+              <a href="thread.html#1292">[ thread ]</a>
+              <a href="subject.html#1292">[ subject ]</a>
+              <a href="author.html#1292">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-12-04 22:44:30 +0100 (Mon, 04 Dec 2006)
+New Revision: 871
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java
+   trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java
+Log:
+synonyms:: Implemented and tested RFE #9179 Insert a plant using synonym.
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-12-04 21:18:26 UTC (rev 870)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-12-04 21:44:30 UTC (rev 871)
+@@ -1997,8 +1997,8 @@
+             String databaseID = database.getUniqueDatabaseIdentifier();
+             return storedValues.get( databaseID );            
+         } catch(Exception e) {
+-            logger.error(&quot;Unable to restore default values! &quot; + e.getMessage());
+-            e.printStackTrace();
++            logger.info(&quot;Unable to restore default values! (Incompatible version?)&quot; + e.getMessage());
++            //e.printStackTrace();
+         }
+         return null; 
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-12-04 21:18:26 UTC (rev 870)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-12-04 21:44:30 UTC (rev 871)
+@@ -146,7 +146,7 @@
+         view.okButton.setAction(new OkButtonAction());
+         view.cancelButton.setAction(new CancelButtonAction());
+         view.checklistButton.setAction(new ChecklistAction());
+-        //TODO----&gt;view.synonymSearchButton.setAction(new PlantSearchAction());
++        view.plantSearchButton.setAction(new PlantSearchAction());
+         view.clearLocationButton.setAction(new ClearLocationAction());
+         view.clearOccurrenceButton.setAction(new ClearOccurrenceAction());
+         view.calendarButton.setAction(new CalendarAction());
+@@ -177,6 +177,9 @@
+ 				PlantSearch plantSearchModel = new PlantSearch( model.getDatabase() );
+ 				plantSearchView = new PlantSearchView(view, plantSearchModel);
+ 				new PlantSearchCtrl(plantSearchView, plantSearchModel, (AutoTextArea) view.taxonTextArea);
++				
++				Task reloadPlants = plantSearchModel.createReloadPlantsFromDatabaseTask();
++				Dispatcher.getDispatcher().dispatch( reloadPlants, plantSearchView, false );
+ 			}
+ 			plantSearchView.setVisible(true);
+ 		}
+
+Modified: trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java	2006-12-04 21:18:26 UTC (rev 870)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearch.java	2006-12-04 21:44:30 UTC (rev 871)
+@@ -16,7 +16,9 @@
+ 
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Plant;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import net.sf.plantlore.middleware.SelectQuery;
+ 
+@@ -28,9 +30,9 @@
+ 
+ 	private Logger logger = Logger.getLogger(getClass().getPackage().getName());
+ 	
+-    private Plant[] plants;
++    private Plant[] plants = new Plant[] {};
+     private static String[] names = { Plant.TAXON, Plant.CZECHNAME, Plant.SYNONYMS };
+-    private ArrayList&lt;Pair&lt;String,Plant&gt;&gt; results;
++    private Pair&lt;String,Plant&gt;[] results;
+     private DBLayer database;
+ 
+ 
+@@ -38,67 +40,91 @@
+ 		this.database = database;
+ 	}
+     
+-//    public void setPlants(Plant[] plants) {
+-//        this.plants = plants;
+-//    }
+-    
+-    public void loadPlantsFromDatabase() {
+-    	// The good thing is that the database layer we have here is only a proxy 
+-    	// and when we get notified that it is necessary to reload the plants from the database
+-    	// the &quot;correct&quot; database layer is already there (i.e. we do not have to ask anyone for it).
+-    
+-    	// Erase the old plants.
+-    	plants = new Plant[] {};
+-    	SelectQuery plantQuery = null;
+-    	try {
+-    		// Try to retrieve the plants from the database.
+-    		plantQuery = database.createQuery(Plant.class);
+-    		plantQuery.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
+-    		Integer resultId = database.executeQuery(plantQuery);
+-    		int resultCount = database.getNumRows(resultId);
+-    		plants = new Plant[resultCount]; // Actually a non-trivial amount of memory!
+-    		
+-    		for(int i = 0; i &lt; resultCount; i++)
+-    			// This ~(Plant)((Object[])db.more()[0])[0]~ shit should have been fixed a very long time ago!
+-    			// In fact, the whole database layer should have been rewritten properly in the first place!
+-    			plants[i] = (Plant)((Object[])database.more( resultId, i, i )[0])[0];
+-    		
+-    	} catch(Exception e) {
+-    		// This better not happen...
+-    		logger.error(&quot;Unable to retrieve plants from the database! &quot; + e);
+-    		plants = new Plant[] {};
+-    	} finally {
+-    		if(plantQuery != null)
+-    			try { 	database.closeQuery(plantQuery); } catch(Exception ex) {/* At least I tried.. */}
+-    	}
++
++	
++	public Task createReloadPlantsFromDatabaseTask() {
++		return new Task(&quot;Load plants from the database.&quot;) {
++			@Override
++			public Object task() throws Exception {
++				// The good thing is that the database layer we have here is only a proxy 
++				// and when we get notified that it is necessary to reload the plants from the database
++				// the &quot;correct&quot; database layer is already there (i.e. we do not have to ask anyone for it).
++
++				// Erase the old plants.
++				plants = new Plant[] {};
++				SelectQuery plantQuery = null;
++				try {
++					logger.debug(&quot;Preparing for plants retrieval...&quot;);
++					setStatusMessage(L10n.getString(&quot;PlantSearch.ObtainPlants&quot;));
++					// Try to retrieve the plants from the database.
++					plantQuery = database.createQuery(Plant.class);
++					plantQuery.addOrder(PlantloreConstants.DIRECT_ASC, Plant.TAXON);
++					Integer resultId = database.executeQuery(plantQuery);
++					int resultCount = database.getNumRows(resultId);
++					plants = new Plant[resultCount]; // Actually a non-trivial amount of memory!
++
++					for(int i = 0; i &lt; resultCount; i++)
++						// This ~(Plant)((Object[])db.more()[0])[0]~ shit should have been fixed a very long time ago!
++						// In fact, the whole database layer should have been rewritten properly in the first place!
++						plants[i] = (Plant)((Object[])database.more( resultId, i, i )[0])[0];
++
++				} catch(Exception e) {
++					// This better not happen...
++					logger.error(&quot;Unable to retrieve plants from the database! &quot; + e);
++					plants = new Plant[] {};
++				} finally {
++					if(plantQuery != null)
++						try { 	database.closeQuery(plantQuery); } catch(Exception ex) {/* At least I tried.. */}
++				}
++				return null;
++			}
++		};
+     }
+     
+     @SuppressWarnings(&quot;unchecked&quot;)
+ 	public Pair&lt;String,Plant&gt;[] getResults() {
+-        if(results == null)
+-            return null;
+-        return (Pair&lt;String,Plant&gt;[])results.toArray();
++        return results;
+     }
+     
+     
+-    public void findPlants(String byName) {
++    @SuppressWarnings(&quot;unchecked&quot;)
++	public void findPlants(String byName) {
+         if(byName == null || &quot;&quot;.equals(byName))
+             return;
+         
++        if(plants == null || plants.length == 0) {
++        	logger.error(&quot;No plants available!!&quot;);
++        	return;
++        }
++        
+         String byNameLC = byName.toLowerCase();
+-        results = new ArrayList&lt;Pair&lt;String,Plant&gt;&gt;();
++        ArrayList&lt;Pair&lt;String,Plant&gt;&gt; preResults = new ArrayList&lt;Pair&lt;String,Plant&gt;&gt;();
+         for(Plant p : plants) {
+             for(String column : names) {
++            	if(p == null)
++            		continue;
+                 Object t = p.getValue( column );
+                 if( !(t instanceof String) )
+                     continue;
+                 String name = (String) t;
+                 if(name.toLowerCase().contains(byNameLC)) {
+-                    results.add( new Pair&lt;String,Plant&gt;(p.toString() + &quot; (&quot;+column+&quot; = &quot;+byName+&quot;)&quot;, p) );
++                    preResults.add( 
++                    		new Pair&lt;String,Plant&gt;(
++                    				p.getTaxon() + (column.equals(Plant.TAXON) ? &quot;&quot; : &quot; (&quot;+name+&quot;)&quot;), 
++                    				p) 
++                    );
+                     break;
+                 }
+             }
+         }
++        
++        results = new Pair[preResults.size()];
++        int i = 0;
++        for( Pair&lt;String, Plant&gt; p : preResults ) { 
++        	results[i] = p;
++        	i++;
++        }
++        
+         setChanged();
+         notifyObservers();
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java	2006-12-04 21:18:26 UTC (rev 870)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearchCtrl.java	2006-12-04 21:44:30 UTC (rev 871)
+@@ -10,13 +10,17 @@
+ package net.sf.plantlore.client.synonyms;
+ 
+ import java.awt.event.ActionEvent;
++import java.awt.event.KeyAdapter;
++import java.awt.event.KeyEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ 
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.DefaultCancelAction;
++import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.StandardAction;
++import net.sf.plantlore.common.Task;
+ import net.sf.plantlore.common.record.Plant;
+ 
+ /**
+@@ -52,11 +56,21 @@
+             }
+         });
+         
++        view.results.addKeyListener(
++        		new KeyAdapter() {
++        			@Override
++        			public void keyTyped(KeyEvent e) {
++        				if(e.getKeyChar() == ' ') // The idiot Java does not fill in the keyCode properly!
++        					view.insert.doClick();
++        			}
++        		});
++        
+         plantAbsorber.addPropertyChangeListener(
+ 				AutoTextArea.ALLOWED_VALUES_CHANGED,
+ 				new PropertyChangeListener() {
+ 					public void propertyChange(PropertyChangeEvent arg0) {
+-						model.loadPlantsFromDatabase();
++						Task reloadPlants = model.createReloadPlantsFromDatabaseTask();
++						Dispatcher.getDispatcher().dispatch( reloadPlants, view, false );
+ 					}
+ 				});
+         
+
+Modified: trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java	2006-12-04 21:18:26 UTC (rev 870)
++++ trunk/src/net/sf/plantlore/client/synonyms/PlantSearchView.java	2006-12-04 21:44:30 UTC (rev 871)
+@@ -108,8 +108,14 @@
+         java.awt.EventQueue.invokeLater(new Runnable() {
+             public void run() {
+                 Pair&lt;String,Plant&gt;[] plants = model.getResults();
+-                if(plants != null)
++                if(plants != null) {
+                     results.setListData( plants );
++                    if(plants.length &gt; 0) {
++                    	results.setSelectedIndex(0);
++                    	results.ensureIndexIsVisible(0);
++                    	results.requestFocus();
++                    }
++                }
+                 else
+                     results.setListData(new Object[0]);
+             }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001293.html">[Plantlore-dev] [Bug #9179] Insert a plant using a synonym
+</A></li>
+	<LI>Next message: <A HREF="001294.html">[Plantlore-dev] r872 - trunk/src/net/sf/plantlore/l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1292">[ date ]</a>
+              <a href="thread.html#1292">[ thread ]</a>
+              <a href="subject.html#1292">[ subject ]</a>
+              <a href="author.html#1292">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

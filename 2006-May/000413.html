@@ -1,0 +1,1387 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r362 - in trunk/src/net/sf/plantlore: client l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r362%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605261546.k4QFkRgR028218%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000412.html">
+   <LINK REL="Next"  HREF="000414.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r362 - in trunk/src/net/sf/plantlore: client l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r362%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20l10n&In-Reply-To=%3C200605261546.k4QFkRgR028218%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r362 - in trunk/src/net/sf/plantlore: client l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Fri May 26 17:46:27 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000412.html">[Plantlore-dev] r361 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+        <LI>Next message: <A HREF="000414.html">[Plantlore-dev] r363 - in trunk/src/net/sf/plantlore: client/imports client/resources common common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#413">[ date ]</a>
+              <a href="thread.html#413">[ thread ]</a>
+              <a href="subject.html#413">[ subject ]</a>
+              <a href="author.html#413">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-26 17:46:23 +0200 (Fri, 26 May 2006)
+New Revision: 362
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/AddEditView.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java
+   trunk/src/net/sf/plantlore/client/AuthorRevisionEditorSearch.java
+   trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+   trunk/src/net/sf/plantlore/client/AuthorTableModelSearch.java
+   trunk/src/net/sf/plantlore/client/ButtonEditor.java
+   trunk/src/net/sf/plantlore/client/ButtonEditorSearch.java
+   trunk/src/net/sf/plantlore/client/SearchCtrl.java
+   trunk/src/net/sf/plantlore/client/SearchView.form
+   trunk/src/net/sf/plantlore/client/SearchView.java
+   trunk/src/net/sf/plantlore/l10n/L10n.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented L10n.getFormattedString(String key, Object[] args) - allows you to get localized formatted messages. Like: &quot;You are about to delete {0} occurrences.&quot; where the {0} symbol will be replaced by args[0].
+
+Localized Search dialog. Localized a few missing items in AddEdit dialog.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AddEditCtrl.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -20,6 +20,7 @@
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
+ import java.text.DateFormat;
++import java.text.MessageFormat;
+ import java.text.NumberFormat;
+ import java.text.ParseException;
+ import java.util.ArrayList;
+@@ -46,14 +47,17 @@
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
+ 
+ /**
+  *
+  * @author reimei
+  */
+ public class AddEditCtrl {
++    private Logger logger;
+     private boolean inEditMode = false;
+     private boolean inAddMode = true;
+     private AddEdit model;
+@@ -70,6 +74,8 @@
+         this.model = model;
+         this.view = view;
+         
++        logger = Logger.getLogger(this.getClass().getPackage().getName());                
++
+         //------- ComboBoxes --------
+         view.townComboBox.addActionListener(new CommonActionListener());
+         view.territoryNameCombo.addActionListener(new CommonActionListener());
+@@ -439,6 +445,11 @@
+     }//ExtendedButtonListener
+     
+     class OkButtonListener extends MouseAdapter {
++        private String ALL = L10n.getString(&quot;AddEdit.All&quot;);
++        private String JUST_THIS = L10n.getString(&quot;AddEdit.JustThis&quot;);
++        private String CANCEL = L10n.getString(&quot;Common.Cancel&quot;);
++        private String TITLE = L10n.getString(&quot;AddEdit.QuestionDialogTitle&quot;);
++        
+         public void mouseClicked(MouseEvent e) {
+             int choice=-1;
+             Pair&lt;Boolean,String&gt; check = model.checkData();
+@@ -449,16 +460,18 @@
+             if (inEditMode) {
+                 Occurrence[] sharedOcc = model.getHabitatSharingOccurrences();
+                 if (sharedOcc.length &gt; 1) {
+-                    Object[] options = {&quot;All&quot;,&quot;Just this&quot;,&quot;Cancel&quot;};
++                    Object[] arg = {&quot;&quot;+(sharedOcc.length-1)};
++                    String formattedQuestion = L10n.getFormattedString(&quot;AddEdit.OkQuestion&quot;,arg);
++                    
++                    Object[] options = {ALL,JUST_THIS,CANCEL};
+                     choice = JOptionPane.showOptionDialog(view, 
+-                            &quot;This plant's habitat is shared by &quot;+sharedOcc.length+&quot; other occurrences. \nDo you want to edit all the plants or just this one?&quot;,
+-                            &quot;Multiple plants share the same habitat&quot;,
++                            formattedQuestion,
++                            TITLE,
+                             JOptionPane.YES_NO_CANCEL_OPTION,
+                             JOptionPane.QUESTION_MESSAGE,
+                             null,
+                             options,
+                             options[0]);
+-                    System.out.println(&quot;User selected &quot;+options[choice]);
+                     switch (choice) {
+                         case 0:
+                             model.storeRecord(true);
+@@ -492,7 +505,8 @@
+ 
+     class HelpButtonListener extends MouseAdapter {
+         public void mouseClicked(MouseEvent e) {
+-            System.out.println(&quot;Help&quot;);
++            logger.info(&quot;Help inovked from the AddEdit dialog.&quot;);
++            PlantloreHelp.showHelp(PlantloreHelp.ADD_OCCURRENCE);            
+         }
+     }//HelpButtonListener
+     
+
+Modified: trunk/src/net/sf/plantlore/client/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AddEditView.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -843,17 +843,14 @@
+         timeLabel.setText(L10n.getString(&quot;AddEdit.TimeLabel&quot;));
+         
+         helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
++        helpButton.setMnemonic(L10n.getMnemonic(&quot;Common.Help&quot;));
+         okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
++        okButton.setMnemonic(L10n.getMnemonic(&quot;Common.Ok&quot;));
+         cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++        cancelButton.setMnemonic(L10n.getMnemonic(&quot;Common.Cancel&quot;));
+         
+-        MessageFormat mf = new MessageFormat(L10n.getString(&quot;AddEdit.RequiredInfoLabel&quot;));
+-        try {
+-            Object[] arg = {REQUIRED_STRING};
+-            requiredInfoLabel.setText(mf.format(arg));
+-        } catch (IllegalArgumentException ex) {
+-            requiredInfoLabel.setText(&quot;&quot;);//pretend nothing happend
+-            logger.warn(&quot;Property AddEdit.RequiredInfoLabel has probably wrong format.&quot;);
+-        }
++        Object[] arg = {REQUIRED_STRING};
++        requiredInfoLabel.setText(L10n.getFormattedString(&quot;AddEdit.RequiredInfoLabel&quot;,arg));
+     }
+     
+     public void switchExtended() {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -480,7 +480,7 @@
+                 addModel.setTerritories(model.getTerritories());
+                 
+                 addView = new AddEditView(view, true, addModel, false);
+-                addView.setTitle(&quot;Add a new occurrence&quot;);
++                addView.setTitle(L10n.getString(&quot;AddEdit.AddDialogTitle&quot;));
+                 addCtrl = new AddEditCtrl(addModel, addView, false);
+             }
+             addModel.clear();
+@@ -515,7 +515,7 @@
+                 Object[] row = model.getSelectedRow();
+                 editModel.setRecord((Integer) row[row.length-1]);
+                 editView = new AddEditView(view, true, editModel, true);
+-                editView.setTitle(&quot;Edit occurrence&quot;);
++                editView.setTitle(L10n.getString(&quot;AddEdit.EditDialogTitle&quot;));
+                 editCtrl = new AddEditCtrl(editModel, editView, true);
+                 editView.loadComponentData();
+                 editView.setVisible(true);                
+@@ -594,7 +594,7 @@
+                 searchModel.setTerritories(model.getTerritories());
+                 
+                 searchView = new SearchView(view, true, searchModel);
+-                searchView.setTitle(&quot;Search&quot;);
++                searchView.setTitle(L10n.getString(&quot;Search.DialogTitle&quot;));
+                 searchCtrl = new SearchCtrl(searchModel, searchView);
+                 searchModel.addObserver(new SearchBridge());
+             }        
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AuthorRevisionEditor.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -34,15 +34,15 @@
+     
+     class RevisionAction extends AbstractAction {
+         public RevisionAction() {
+-            putValue(NAME, L10n.getString(&quot;addEditRevision&quot;));
+-            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;addEditRevisionTT&quot;));
+-            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;addEditRevision&quot;));            
++            putValue(NAME, L10n.getString(&quot;AddEdit.Revision&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.RevisionTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;AddEdit.Revision&quot;));            
+         } 
+ 
+         public void actionPerformed(ActionEvent e) {
+             JButton button = (JButton)e.getSource();
+             int row = buttonMapInverted.get(button);
+-            String s = (String)JOptionPane.showInputDialog(null,&quot;Enter the note, please&quot;,&quot;AuthorOccurrence note&quot;,JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
++            String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
+             value = s;
+             if (s != null) {
+                 aemodel.setResultRevision(row,s);
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorRevisionEditorSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorRevisionEditorSearch.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AuthorRevisionEditorSearch.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -34,15 +34,15 @@
+     
+     class RevisionAction extends AbstractAction {
+         public RevisionAction() {
+-            putValue(NAME, L10n.getString(&quot;addEditRevision&quot;));
+-            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;addEditRevisionTT&quot;));
+-            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;addEditRevision&quot;));            
++            putValue(NAME, L10n.getString(&quot;AddEdit.Revision&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.RevisionTT&quot;));
++            putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;AddEdit.Revision&quot;));            
+         } 
+ 
+         public void actionPerformed(ActionEvent e) {
+             JButton button = (JButton)e.getSource();
+             int row = buttonMapInverted.get(button);
+-            String s = (String)JOptionPane.showInputDialog(null,&quot;Enter the note, please&quot;,&quot;AuthorOccurrence note&quot;,JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
++            String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
+             value = s;
+             if (s != null) {
+                 aemodel.setResultRevision(row,s);
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AuthorTableModel.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -20,17 +20,21 @@
+ import javax.swing.table.AbstractTableModel;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.l10n.L10n;
++import org.apache.log4j.Logger;
+ 
+ 
+ /** Table model for the authors table in AddEditView.
+  *
+  */
+ public class AuthorTableModel extends AbstractTableModel {
++    Logger logger;
+     ArrayList&lt;Object[]&gt; data = new ArrayList&lt;Object[]&gt;();
+     Object[] row;
+     AddEdit aemodel;
+     
+     public AuthorTableModel(AddEdit aemodel) {
++        logger = Logger.getLogger(this.getClass().getPackage().getName());
++        
+         this.aemodel = aemodel;
+         row = new Object[4];
+         row[0] = new Pair(&quot;&quot;,0);
+@@ -97,7 +101,7 @@
+     }
+     
+     public void removeRow(int i) {
+-        System.out.println(&quot;AuthorTableModel: removing row #&quot;+i);
++        logger.debug(&quot;AuthorTableModel: removing row #&quot;+i);
+         Object[] row = data.remove(i);
+ 
+ /*        JButton b = (JButton)row[2];
+@@ -174,13 +178,13 @@
+     public String getColumnName(int col) {
+         switch (col) {
+             case 0:
+-                return &quot;Name&quot;;
++                return L10n.getString(&quot;AddEdit.NameColumn&quot;);
+             case 1:
+-                return &quot;Role&quot;;
++                return L10n.getString(&quot;AddEdit.RoleColumn&quot;);
+             case 2:
+                 return &quot;&quot;;
+             case 3:
+-                return &quot;Revision&quot;;
++                return L10n.getString(&quot;AddEdit.RevisionColumn&quot;);
+             default:
+                 return &quot;&quot;;
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/AuthorTableModelSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AuthorTableModelSearch.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/AuthorTableModelSearch.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -174,13 +174,13 @@
+     public String getColumnName(int col) {
+         switch (col) {
+             case 0:
+-                return &quot;Name&quot;;
++                return L10n.getString(&quot;AddEdit.NameColumn&quot;);
+             case 1:
+-                return &quot;Role&quot;;
++                return L10n.getString(&quot;AddEdit.RoleColumn&quot;);
+             case 2:
+                 return &quot;&quot;;
+             case 3:
+-                return &quot;Revision&quot;;
++                return L10n.getString(&quot;AddEdit.RevisionColumn&quot;);
+             default:
+                 return &quot;&quot;;
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/ButtonEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/ButtonEditor.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -22,6 +22,7 @@
+ import javax.swing.table.TableCellEditor;
+ import javax.swing.table.TableCellRenderer;
+ import javax.swing.table.TableModel;
++import net.sf.plantlore.l10n.L10n;
+ 
+ /** Button Editor and Renderer used by the author table in AddEdit dialog.
+  *
+@@ -29,6 +30,9 @@
+  * @author reimei
+  */
+ public class ButtonEditor extends AbstractCellEditor implements TableCellEditor, TableCellRenderer  {
++    private final static String ADD = L10n.getString(&quot;AddEdit.AuthorAdd&quot;);
++    private final static String REMOVE = L10n.getString(&quot;AddEdit.AuthorRemove&quot;);
++    
+     HashMap&lt;Integer,JButton&gt; editors = new HashMap&lt;Integer,JButton&gt;();
+     JButton addButton, removeButton;
+     AddEdit aemodel;
+@@ -45,7 +49,7 @@
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+             JButton btn = (JButton) actionEvent.getSource();
+-            if (btn.getText().equals(&quot;Add&quot;))
++            if (btn.getText().equals(ADD))
+                 aemodel.addAuthorRow();
+             else
+                 aemodel.removeAuthorRow(Integer.parseInt(actionEvent.getActionCommand()));     
+@@ -56,13 +60,12 @@
+     /** Creates a new instance of ButtonEditor */
+     public ButtonEditor(AddEdit aemodel) {
+         this.aemodel = aemodel;
+-        addButton = new JButton(&quot;Add&quot;);
+-        removeButton = new JButton(&quot;Remove&quot;);
++        addButton = new JButton(ADD);
++        removeButton = new JButton(REMOVE);
+     }
+ 
+     public Object getCellEditorValue() {
+-        System.out.println(&quot;ButtonEditor.java: returning cell editor value&quot;);
+-        return &quot;Kdo vi co a jak&quot;;
++        return &quot;&quot;;
+     }
+     public Component getTableCellEditorComponent(JTable table, Object value,
+                                                  boolean isSelected,
+@@ -79,10 +82,10 @@
+         
+         JButton button = editors.get(row);
+         if (row == (rowCount-1)) {
+-            button.setText(&quot;Add&quot;);
++            button.setText(ADD);
+             button.setActionCommand(&quot;&quot;);
+         } else {
+-            button.setText(&quot;Remove&quot;);
++            button.setText(REMOVE);
+             button.setActionCommand(&quot;&quot;+row);
+         }
+         
+
+Modified: trunk/src/net/sf/plantlore/client/ButtonEditorSearch.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/ButtonEditorSearch.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/ButtonEditorSearch.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -22,6 +22,7 @@
+ import javax.swing.table.TableCellEditor;
+ import javax.swing.table.TableCellRenderer;
+ import javax.swing.table.TableModel;
++import net.sf.plantlore.l10n.L10n;
+ 
+ /** Button Editor and Renderer used by the author table in AddEdit dialog.
+  *
+@@ -29,6 +30,9 @@
+  * @author reimei
+  */
+ public class ButtonEditorSearch extends AbstractCellEditor implements TableCellEditor, TableCellRenderer  {
++    private final static String ADD = L10n.getString(&quot;AddEdit.AuthorAdd&quot;);
++    private final static String REMOVE = L10n.getString(&quot;AddEdit.AuthorRemove&quot;);
++
+     HashMap&lt;Integer,JButton&gt; editors = new HashMap&lt;Integer,JButton&gt;();
+     JButton addButton, removeButton;
+     Search aemodel;
+@@ -45,7 +49,7 @@
+ 
+         public void actionPerformed(ActionEvent actionEvent) {
+             JButton btn = (JButton) actionEvent.getSource();
+-            if (btn.getText().equals(&quot;Add&quot;))
++            if (btn.getText().equals(ADD))
+                 aemodel.addAuthorRow();
+             else
+                 aemodel.removeAuthorRow(Integer.parseInt(actionEvent.getActionCommand()));     
+@@ -56,13 +60,12 @@
+     /** Creates a new instance of ButtonEditor */
+     public ButtonEditorSearch(Search aemodel) {
+         this.aemodel = aemodel;
+-        addButton = new JButton(&quot;Add&quot;);
+-        removeButton = new JButton(&quot;Remove&quot;);
++        addButton = new JButton(ADD);
++        removeButton = new JButton(REMOVE);
+     }
+ 
+     public Object getCellEditorValue() {
+-        System.out.println(&quot;ButtonEditor.java: returning cell editor value&quot;);
+-        return &quot;Kdo vi co a jak&quot;;
++        return &quot;&quot;;
+     }
+     public Component getTableCellEditorComponent(JTable table, Object value,
+                                                  boolean isSelected,
+@@ -79,10 +82,10 @@
+         
+         JButton button = editors.get(row);
+         if (row == (rowCount-1)) {
+-            button.setText(&quot;Add&quot;);
++            button.setText(ADD);
+             button.setActionCommand(&quot;&quot;);
+         } else {
+-            button.setText(&quot;Remove&quot;);
++            button.setText(REMOVE);
+             button.setActionCommand(&quot;&quot;+row);
+         }
+         
+
+Modified: trunk/src/net/sf/plantlore/client/SearchCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/SearchCtrl.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -400,7 +400,6 @@
+                 return;
+             }
+             
+-            System.out.println(&quot;Would create a query!&quot;);
+             model.constructQuery();
+             view.setVisible(false);
+         }
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/SearchView.form	2006-05-26 15:46:23 UTC (rev 362)
+@@ -29,6 +29,7 @@
+         &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+           &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+             &lt;TitledBorder title=&quot;Basic data&quot;&gt;
++              &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.BasicData&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+               &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+             &lt;/TitledBorder&gt;
+           &lt;/Border&gt;
+@@ -51,7 +52,7 @@
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;TaxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;taxonLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;jScrollPane3&quot; pref=&quot;245&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+@@ -59,8 +60,8 @@
+                   &lt;/Group&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; pref=&quot;85&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;TownLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;townLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;placeDescriptionLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+@@ -78,13 +79,13 @@
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;TownLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;townLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;16&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;townComboBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; pref=&quot;24&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;jScrollPane2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;placeDescriptionLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;extendedButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+@@ -94,7 +95,7 @@
+                           &lt;EmptySpace min=&quot;-2&quot; pref=&quot;14&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;jScrollPane3&quot; pref=&quot;67&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;TaxonLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;taxonLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+@@ -104,7 +105,7 @@
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+       &lt;SubComponents&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;TownLabel&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;townLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Nearest bigger seat:&quot;/&gt;
+           &lt;/Properties&gt;
+@@ -125,7 +126,7 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;TaxonLabel&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;taxonLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Taxon:&quot;/&gt;
+           &lt;/Properties&gt;
+@@ -133,7 +134,7 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel2&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;placeDescriptionLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Place description:&quot;/&gt;
+           &lt;/Properties&gt;
+@@ -224,6 +225,7 @@
+         &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+           &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+             &lt;TitledBorder title=&quot;Extended data&quot;&gt;
++              &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.ExtendedData&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+               &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+             &lt;/TitledBorder&gt;
+           &lt;/Border&gt;
+@@ -294,6 +296,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;Time&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.TimePanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+@@ -448,6 +451,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;Location&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.LocationPanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+@@ -465,8 +469,8 @@
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;jLabel10&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jLabel13&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;countryLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+@@ -476,15 +480,15 @@
+                           &lt;/Group&gt;
+                           &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;1&quot;&gt;
+                               &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel11&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;territoryLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;territoryNameCombo&quot; pref=&quot;173&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel9&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel14&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;quadrantLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;phytCodeLabel&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+@@ -502,25 +506,25 @@
+                   &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel11&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;territoryLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;territoryNameCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; alignment=&quot;0&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel13&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;phytNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;phytNameCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jLabel14&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;phytCodeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;phytCodeCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;Component id=&quot;jLabel10&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;countryLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;phytCountryCombo&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel9&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;quadrantLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;quadrantTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+@@ -529,7 +533,7 @@
+             &lt;/DimensionLayout&gt;
+           &lt;/Layout&gt;
+           &lt;SubComponents&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel9&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;quadrantLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Quadrant:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -537,7 +541,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel10&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;countryLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Country:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -545,7 +549,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel11&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;territoryLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Territory name:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -553,7 +557,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel13&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;phytNameLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Phytochoria name:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -561,7 +565,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel14&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;phytCodeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Phytochoria code:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -630,6 +634,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;Other&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.OtherPanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+@@ -770,6 +775,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;Location note&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.LocationNotePanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+@@ -825,6 +831,7 @@
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+                 &lt;TitledBorder title=&quot;GPS&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.GPSPanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;10&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+@@ -843,11 +850,11 @@
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;EmptySpace min=&quot;12&quot; pref=&quot;12&quot; max=&quot;12&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;jLabel7&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;latitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+-                              &lt;Component id=&quot;jLabel8&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;Component id=&quot;jLabel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+@@ -878,19 +885,19 @@
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;WGS84Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel6&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;altitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;altitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace min=&quot;6&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;S42Button&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel7&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;latitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;latitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Component id=&quot;SJTSKButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;jLabel8&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;longitudeLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;longitudeTextField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                       &lt;EmptySpace pref=&quot;60&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+@@ -899,7 +906,7 @@
+             &lt;/DimensionLayout&gt;
+           &lt;/Layout&gt;
+           &lt;SubComponents&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel6&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;altitudeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Altitude:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -907,7 +914,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel7&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;latitudeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Latitude:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -915,7 +922,7 @@
+                 &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+               &lt;/AuxValues&gt;
+             &lt;/Component&gt;
+-            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel8&quot;&gt;
++            &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;longitudeLabel&quot;&gt;
+               &lt;Properties&gt;
+                 &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Longitude:&quot;/&gt;
+               &lt;/Properties&gt;
+@@ -1016,7 +1023,8 @@
+           &lt;Properties&gt;
+             &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
+               &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
+-                &lt;TitledBorder title=&quot;Ocurrence note&quot;&gt;
++                &lt;TitledBorder title=&quot;Occurrence note&quot;&gt;
++                  &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;AddEdit.OccurrenceNotePanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
+                   &lt;Font PropertyName=&quot;font&quot; name=&quot;Dialog&quot; size=&quot;12&quot; style=&quot;0&quot;/&gt;
+                 &lt;/TitledBorder&gt;
+               &lt;/Border&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/client/SearchView.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -42,6 +42,9 @@
+         model.addObserver(this);
+         setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+         initComponents();
++        
++        setLabels();
++        
+         jPanel3.setVisible(visible);
+         jPanel2.setPreferredSize(new Dimension(DIALOG_WIDTH,210));
+         jPanel8.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+@@ -58,11 +61,11 @@
+         convertCoordinatesGroup = new javax.swing.ButtonGroup();
+         timeButtonGroup = new javax.swing.ButtonGroup();
+         jPanel2 = new javax.swing.JPanel();
+-        TownLabel = new javax.swing.JLabel();
++        townLabel = new javax.swing.JLabel();
+         //items = new Object[] {&quot;Praha&quot;, &quot;Brno&quot;, &quot;Turnov&quot;, &quot;Trebic&quot;};
+         townComboBox = new AutoComboBox(model.getVillages());
+-        TaxonLabel = new javax.swing.JLabel();
+-        jLabel2 = new javax.swing.JLabel();
++        taxonLabel = new javax.swing.JLabel();
++        placeDescriptionLabel = new javax.swing.JLabel();
+         jScrollPane2 = new javax.swing.JScrollPane();
+         descriptionArea = new javax.swing.JTextArea();
+         jScrollPane3 = new javax.swing.JScrollPane();
+@@ -86,11 +89,11 @@
+         intervalRadioButton = new javax.swing.JRadioButton();
+         monthRadioButton = new javax.swing.JRadioButton();
+         jPanel5 = new javax.swing.JPanel();
+-        jLabel9 = new javax.swing.JLabel();
+-        jLabel10 = new javax.swing.JLabel();
+-        jLabel11 = new javax.swing.JLabel();
+-        jLabel13 = new javax.swing.JLabel();
+-        jLabel14 = new javax.swing.JLabel();
++        quadrantLabel = new javax.swing.JLabel();
++        countryLabel = new javax.swing.JLabel();
++        territoryLabel = new javax.swing.JLabel();
++        phytNameLabel = new javax.swing.JLabel();
++        phytCodeLabel = new javax.swing.JLabel();
+         territoryNameCombo = new AutoComboBox(model.getTerritories());
+         phytNameCombo = new AutoComboBox(model.getPhytNames());
+         phytCodeCombo = new AutoComboBox(model.getPhytCodes());
+@@ -109,9 +112,9 @@
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+         jPanel1 = new javax.swing.JPanel();
+-        jLabel6 = new javax.swing.JLabel();
+-        jLabel7 = new javax.swing.JLabel();
+-        jLabel8 = new javax.swing.JLabel();
++        altitudeLabel = new javax.swing.JLabel();
++        latitudeLabel = new javax.swing.JLabel();
++        longitudeLabel = new javax.swing.JLabel();
+         WGS84Button = new javax.swing.JRadioButton();
+         S42Button = new javax.swing.JRadioButton();
+         SJTSKButton = new javax.swing.JRadioButton();
+@@ -128,17 +131,17 @@
+ 
+         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+         setResizable(false);
+-        jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Basic data&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.BasicData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         jPanel2.setPreferredSize(new java.awt.Dimension(700, 200));
+-        TownLabel.setText(&quot;Nearest bigger seat:&quot;);
++        townLabel.setText(&quot;Nearest bigger seat:&quot;);
+ 
+         ((AutoComboBox)townComboBox).setStrict(true);
+         townComboBox.setActionCommand(&quot;townComboBox&quot;);
+         townComboBox.insertItemAt(model.EMPTY_PAIR,0);
+ 
+-        TaxonLabel.setText(&quot;Taxon:&quot;);
++        taxonLabel.setText(&quot;Taxon:&quot;);
+ 
+-        jLabel2.setText(&quot;Place description:&quot;);
++        placeDescriptionLabel.setText(&quot;Place description:&quot;);
+ 
+         descriptionArea.setColumns(20);
+         descriptionArea.setRows(5);
+@@ -182,15 +185,15 @@
+             jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel2Layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(TaxonLabel)
++                .add(taxonLabel)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jScrollPane3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 245, Short.MAX_VALUE)
+                     .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 245, Short.MAX_VALUE))
+                 .add(85, 85, 85)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(TownLabel)
+-                    .add(jLabel2))
++                    .add(townLabel)
++                    .add(placeDescriptionLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, townComboBox, 0, 300, Short.MAX_VALUE)
+@@ -204,12 +207,12 @@
+                 .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel2Layout.createSequentialGroup()
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(TownLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                            .add(townLabel, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 16, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                             .add(townComboBox, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 24, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .add(19, 19, 19)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jScrollPane2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jLabel2))
++                            .add(placeDescriptionLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(extendedButton))
+                     .add(jPanel2Layout.createSequentialGroup()
+@@ -217,15 +220,15 @@
+                         .add(14, 14, 14)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jScrollPane3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 67, Short.MAX_VALUE)
+-                            .add(TaxonLabel))))
++                            .add(taxonLabel))))
+                 .addContainerGap())
+         );
+         getContentPane().add(jPanel2, java.awt.BorderLayout.NORTH);
+ 
+-        jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Extended data&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.ExtendedData&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         jPanel3.setMinimumSize(new java.awt.Dimension(800, 395));
+         jPanel3.setPreferredSize(new java.awt.Dimension(800, 415));
+-        jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Time&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.TimePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         fromDateChooser.setLocale(L10n.getCurrentLocale());
+ 
+         toDateChooser.setLocale(L10n.getCurrentLocale());
+@@ -298,16 +301,16 @@
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+-        jPanel5.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Location&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+-        jLabel9.setText(&quot;Quadrant:&quot;);
++        jPanel5.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.LocationPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        quadrantLabel.setText(&quot;Quadrant:&quot;);
+ 
+-        jLabel10.setText(&quot;Country:&quot;);
++        countryLabel.setText(&quot;Country:&quot;);
+ 
+-        jLabel11.setText(&quot;Territory name:&quot;);
++        territoryLabel.setText(&quot;Territory name:&quot;);
+ 
+-        jLabel13.setText(&quot;Phytochoria name:&quot;);
++        phytNameLabel.setText(&quot;Phytochoria name:&quot;);
+ 
+-        jLabel14.setText(&quot;Phytochoria code:&quot;);
++        phytCodeLabel.setText(&quot;Phytochoria code:&quot;);
+ 
+         ((AutoComboBox)territoryNameCombo).setStrict(true);
+         territoryNameCombo.setActionCommand(&quot;territoryNameCombo&quot;);
+@@ -336,21 +339,21 @@
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createSequentialGroup()
+                         .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                            .add(jLabel10)
+-                            .add(jLabel13))
++                            .add(countryLabel)
++                            .add(phytNameLabel))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(phytCountryCombo, 0, 173, Short.MAX_VALUE)
+                             .add(phytNameCombo, 0, 173, Short.MAX_VALUE)))
+                     .add(jPanel5Layout.createSequentialGroup()
+                         .add(19, 19, 19)
+-                        .add(jLabel11)
++                        .add(territoryLabel)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(territoryNameCombo, 0, 173, Short.MAX_VALUE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jLabel9)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jLabel14))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, quadrantLabel)
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, phytCodeLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createSequentialGroup()
+@@ -366,26 +369,26 @@
+             .add(jPanel5Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel11)
++                    .add(territoryLabel)
+                     .add(territoryNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                     .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                        .add(jLabel13)
++                        .add(phytNameLabel)
+                         .add(phytNameCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                     .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                        .add(jLabel14)
++                        .add(phytCodeLabel)
+                         .add(phytCodeCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(jLabel10)
++                    .add(countryLabel)
+                     .add(phytCountryCombo, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(jLabel9)
++                    .add(quadrantLabel)
+                     .add(quadrantTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+ 
+-        jPanel6.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Other&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel6.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.OtherPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         publicationLabel.setText(&quot;Publication:&quot;);
+ 
+         herbariumLabel.setText(&quot;Herbarium:&quot;);
+@@ -448,7 +451,7 @@
+                 .addContainerGap())
+         );
+ 
+-        jPanel7.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Location note&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel7.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.LocationNotePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         locationNoteArea.setColumns(20);
+         locationNoteArea.setRows(5);
+         locationNoteArea.setLineWrap(true);
+@@ -471,12 +474,12 @@
+                 .addContainerGap())
+         );
+ 
+-        jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;GPS&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 10)));
+-        jLabel6.setText(&quot;Altitude:&quot;);
++        jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.GPSPanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 10)));
++        altitudeLabel.setText(&quot;Altitude:&quot;);
+ 
+-        jLabel7.setText(&quot;Latitude:&quot;);
++        latitudeLabel.setText(&quot;Latitude:&quot;);
+ 
+-        jLabel8.setText(&quot;Longitude:&quot;);
++        longitudeLabel.setText(&quot;Longitude:&quot;);
+ 
+         convertCoordinatesGroup.add(WGS84Button);
+         WGS84Button.setText(&quot;WGS84&quot;);
+@@ -514,9 +517,9 @@
+                     .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                         .add(jPanel1Layout.createSequentialGroup()
+                             .add(12, 12, 12)
+-                            .add(jLabel7))
+-                        .add(jLabel8))
+-                    .add(jLabel6))
++                            .add(latitudeLabel))
++                        .add(longitudeLabel))
++                    .add(altitudeLabel))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel1Layout.createSequentialGroup()
+@@ -539,22 +542,22 @@
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(WGS84Button)
+-                    .add(jLabel6)
++                    .add(altitudeLabel)
+                     .add(altitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .add(6, 6, 6)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(S42Button)
+-                    .add(jLabel7)
++                    .add(latitudeLabel)
+                     .add(latitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(SJTSKButton)
+-                    .add(jLabel8)
++                    .add(longitudeLabel)
+                     .add(longitudeTextField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .addContainerGap(60, Short.MAX_VALUE))
+         );
+ 
+-        jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(null, &quot;Ocurrence note&quot;, javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
++        jPanel9.setBorder(javax.swing.BorderFactory.createTitledBorder(null, L10n.getString(&quot;AddEdit.OccurrenceNotePanel&quot;), javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font(&quot;Dialog&quot;, 0, 12)));
+         occurrenceNoteArea.setColumns(20);
+         occurrenceNoteArea.setRows(5);
+         occurrenceNoteArea.setLineWrap(true);
+@@ -744,6 +747,39 @@
+         jPanel8.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+         this.pack();        
+     }
++
++    private void setLabels() {
++        townLabel.setText(L10n.getString(&quot;AddEdit.TownLabel&quot;));
++        placeDescriptionLabel.setText(L10n.getString(&quot;AddEdit.PlaceDescriptionLabel&quot;));
++        taxonLabel.setText(L10n.getString(&quot;AddEdit.TaxonLabel&quot;));
++        
++        territoryLabel.setText(L10n.getString(&quot;AddEdit.TerritoryNameLabel&quot;));
++        phytNameLabel.setText(L10n.getString(&quot;AddEdit.PhytNameLabel&quot;));
++        phytCodeLabel.setText(L10n.getString(&quot;AddEdit.PhytCodeLabel&quot;));
++        quadrantLabel.setText(L10n.getString(&quot;AddEdit.QuadrantLabel&quot;));
++        countryLabel.setText(L10n.getString(&quot;AddEdit.CountryLabel&quot;));
++        
++        altitudeLabel.setText(L10n.getString(&quot;AddEdit.AltitudeLabel&quot;));
++        latitudeLabel.setText(L10n.getString(&quot;AddEdit.LatitudeLabel&quot;));
++        longitudeLabel.setText(L10n.getString(&quot;AddEdit.LongitudeLabel&quot;));
++        
++        sourceLabel.setText(L10n.getString(&quot;AddEdit.SourceLabel&quot;));
++        publicationLabel.setText(L10n.getString(&quot;AddEdit.PublicationLabel&quot;));
++        herbariumLabel.setText(L10n.getString(&quot;AddEdit.HerbariumLabel&quot;));
++        projectLabel.setText(L10n.getString(&quot;AddEdit.ProjectLabel&quot;));
++        
++        monthLabel.setText(L10n.getString(&quot;AddEdit.MonthLabel&quot;));
++        fromLabel.setText(L10n.getString(&quot;Search.FromLabel&quot;));
++        toLabel.setText(L10n.getString(&quot;Search.ToLabel&quot;));
++        
++        helpButton.setText(L10n.getString(&quot;Common.Help&quot;));
++        helpButton.setMnemonic(L10n.getMnemonic(&quot;Common.Help&quot;));
++        okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
++        okButton.setMnemonic(L10n.getMnemonic(&quot;Common.Ok&quot;));
++        cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++        cancelButton.setMnemonic(L10n.getMnemonic(&quot;Common.Cancel&quot;));
++        
++    }
+     
+     /**
+      * @param args the command line arguments
+@@ -784,13 +820,13 @@
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+     protected javax.swing.JRadioButton S42Button;
+     protected javax.swing.JRadioButton SJTSKButton;
+-    protected javax.swing.JLabel TaxonLabel;
+-    protected javax.swing.JLabel TownLabel;
+     protected javax.swing.JRadioButton WGS84Button;
++    protected javax.swing.JLabel altitudeLabel;
+     protected javax.swing.JTextField altitudeTextField;
+     protected javax.swing.JTable authorTable;
+     protected javax.swing.JButton cancelButton;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
++    protected javax.swing.JLabel countryLabel;
+     protected javax.swing.JTextArea descriptionArea;
+     protected javax.swing.JToggleButton extendedButton;
+     protected com.toedter.calendar.JDateChooser fromDateChooser;
+@@ -799,15 +835,6 @@
+     protected javax.swing.JLabel herbariumLabel;
+     protected javax.swing.JTextField herbariumTextField;
+     protected javax.swing.JRadioButton intervalRadioButton;
+-    protected javax.swing.JLabel jLabel10;
+-    protected javax.swing.JLabel jLabel11;
+-    protected javax.swing.JLabel jLabel13;
+-    protected javax.swing.JLabel jLabel14;
+-    protected javax.swing.JLabel jLabel2;
+-    protected javax.swing.JLabel jLabel6;
+-    protected javax.swing.JLabel jLabel7;
+-    protected javax.swing.JLabel jLabel8;
+-    protected javax.swing.JLabel jLabel9;
+     protected javax.swing.JPanel jPanel1;
+     protected javax.swing.JPanel jPanel2;
+     private javax.swing.JPanel jPanel3;
+@@ -822,8 +849,10 @@
+     private javax.swing.JScrollPane jScrollPane3;
+     private javax.swing.JScrollPane jScrollPane4;
+     private javax.swing.JScrollPane jScrollPane5;
++    protected javax.swing.JLabel latitudeLabel;
+     protected javax.swing.JTextField latitudeTextField;
+     protected javax.swing.JTextArea locationNoteArea;
++    protected javax.swing.JLabel longitudeLabel;
+     protected javax.swing.JTextField longitudeTextField;
+     protected com.toedter.calendar.JMonthChooser monthChooser;
+     protected javax.swing.JLabel monthLabel;
+@@ -831,21 +860,28 @@
+     protected javax.swing.JTextArea occurrenceNoteArea;
+     protected javax.swing.JButton okButton;
+     protected javax.swing.JComboBox phytCodeCombo;
++    protected javax.swing.JLabel phytCodeLabel;
+     protected javax.swing.JComboBox phytCountryCombo;
+     protected javax.swing.JComboBox phytNameCombo;
++    protected javax.swing.JLabel phytNameLabel;
++    protected javax.swing.JLabel placeDescriptionLabel;
+     protected javax.swing.JComboBox projectCombo;
+     protected javax.swing.JLabel projectLabel;
+     protected javax.swing.JComboBox publicationCombo;
+     protected javax.swing.JLabel publicationLabel;
++    protected javax.swing.JLabel quadrantLabel;
+     protected javax.swing.JTextField quadrantTextField;
+     protected javax.swing.JComboBox sourceCombo;
+     protected javax.swing.JLabel sourceLabel;
++    protected javax.swing.JLabel taxonLabel;
+     protected javax.swing.JTextArea taxonTextArea;
++    protected javax.swing.JLabel territoryLabel;
+     protected javax.swing.JComboBox territoryNameCombo;
+     private javax.swing.ButtonGroup timeButtonGroup;
+     protected com.toedter.calendar.JDateChooser toDateChooser;
+     protected javax.swing.JLabel toLabel;
+     protected javax.swing.JComboBox townComboBox;
++    protected javax.swing.JLabel townLabel;
+     // End of variables declaration//GEN-END:variables
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/l10n/L10n.java
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/L10n.java	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/l10n/L10n.java	2006-05-26 15:46:23 UTC (rev 362)
+@@ -8,6 +8,7 @@
+ package net.sf.plantlore.l10n;
+ 
+ import java.io.IOException;
++import java.text.MessageFormat;
+ import java.util.Locale;
+ import java.util.MissingResourceException;
+ import java.util.ResourceBundle;
+@@ -96,6 +97,30 @@
+     	}
+     }
+     
++    /** Gets string for the given key and formats it using given array of arguments
++     *
++     *
++     * @param key Key of the required value
++     * @param arg The array of arguments to be used to format the string.
++     * @throws NullPointerException in case that &lt;code&gt;load()&lt;/code&gt; wasn't called first or it failed.
++     */
++    public static String getFormattedString(String key, Object[] arg) {
++        String value = &quot;&quot;;
++    	try {
++                value = resource.getString(key);
++                String formattedValue;
++                MessageFormat mf = new MessageFormat(value);
++                formattedValue = mf.format(arg);
++    		return formattedValue;
++    	} catch( MissingResourceException e ) {
++    		logger.warn(&quot;The key \&quot;&quot; + key + &quot;\&quot; is not defined in the property file!&quot;);
++    		return key; // nothing else we can do...
++    	} catch (IllegalArgumentException e ) {
++                logger.warn(&quot;Property &quot;+key+&quot; has probably wrong format.&quot;);
++                return value; // nothing else we can do...
++        }
++    }
++
+     /** Returns mnemonic for the given key.
+      *
+      * If the mnemonic wasn't set in the string for the key then returns -1.
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-26 15:46:23 UTC (rev 362)
+@@ -108,8 +108,8 @@
+ overviewPageStatusTT=Current page / Total number of pages
+ 
+ #AddEdit
+-addEditRevision=&amp;Revision
+-addEditRevisionTT=Add revision details
++AddEdit.Revision=&amp;Revision
++AddEdit.RevisionTT=Click to modify revision result
+ 
+ authorMgr=Author manager
+ 
+@@ -839,3 +839,31 @@
+ AddEdit.RequiredInfoLabel=The symbol {0} marks required items.
+ 
+ Login.Edit=
++
++Search.FromLabel=From\: 
++
++Search.ToLabel=To\: 
++
++Search.DialogTitle=Occurrence search
++
++AddEdit.AddDialogTitle=Add a new occurrence
++
++AddEdit.EditDialogTitle=Occurrence edit
++
++AddEdit.NameColumn=Name
++
++AddEdit.RoleColumn=Role
++
++AddEdit.RevisionColumn=Revision
++
++AddEdit.RevisionDialogMessage=Set the note please
++
++AddEdit.RevisionDialogTitle=Add note
++
++AddEdit.AuthorAdd=&amp;Add
++
++AddEdit.AuthorRemove=&amp;Remove
++
++AddEdit.OkQuestion=Habitat of this occurrence is shared by {0} other occurrences.\\nDo you want to edit all occurrences or just this one?
++
++AddEdit.QuestionDialogTitle=Habitat of this occurrence is shared
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-26 15:46:23 UTC (rev 362)
+@@ -338,3 +338,35 @@
+ Common.ComboboxNothingSelected=-- NEZAD\u00C1NO --
+ 
+ AddEdit.RequiredInfoLabel={0} - ozna\u010Duje povinnou polo\u017Eku
++
++Search.FromLabel=Od\: 
++
++Search.ToLabel=Do\: 
++
++Search.DialogTitle=Hled\u00E1n\u00ED n\u00E1lez\u016F
++
++AddEdit.AddDialogTitle=Zad\u00E1n\u00ED nov\u00E9ho n\u00E1lezu
++
++AddEdit.EditDialogTitle=Editace n\u00E1lezu
++
++AddEdit.NameColumn=Jm\u00E9no
++
++AddEdit.RoleColumn=Role
++
++AddEdit.RevisionColumn=Revize
++
++AddEdit.Revision=Revize
++
++AddEdit.RevisionTT=Klikn\u011Bte pro \u00FApravu v\u00FDsledku revize
++
++AddEdit.RevisionDialogMessage=Zadejte pros\u00EDm pozn\u00E1mku
++
++AddEdit.RevisionDialogTitle=Zad\u00E1n\u00ED pozn\u00E1mky
++
++AddEdit.AuthorAdd=&amp;P\u0159idej
++
++AddEdit.AuthorRemove=&amp;Odeber
++
++AddEdit.OkQuestion=Habitat tohoto n\u00E1lezu je sd\u00EDlen {0} dal\u0161\u00EDmi n\u00E1lezy. \\nChcete upravit v\u0161echny n\u00E1lezy nebo jenom tento?
++
++AddEdit.QuestionDialogTitle=Habitat tohoto n\u00E1lezu je sd\u00EDlen
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-26 12:57:18 UTC (rev 361)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-26 15:46:23 UTC (rev 362)
+@@ -112,8 +112,8 @@
+ overviewPageStatusTT=Current page / Total number of pages
+ 
+ #AddEdit
+-addEditRevision=&amp;Revision
+-addEditRevisionTT=Add revision details
++AddEdit.Revision=&amp;Revision
++AddEdit.RevisionTT=Add revision details
+ 
+ authorMgr=Author manager
+ 
+@@ -657,3 +657,31 @@
+ Common.ComboboxNothingSelected=-- NOTHING SELECTED --
+ 
+ AddEdit.RequiredInfoLabel=The symbol {0} marks required items.
++
++Search.FromLabel=From\: 
++
++Search.ToLabel=To\: 
++
++Search.DialogTitle=Occurrence search
++
++AddEdit.AddDialogTitle=Add a new occurrence
++
++AddEdit.EditDialogTitle=Occurrence edit
++
++AddEdit.NameColumn=Name
++
++AddEdit.RoleColumn=Role
++
++AddEdit.RevisionColumn=Revision
++
++AddEdit.RevisionDialogMessage=Set the note please
++
++AddEdit.RevisionDialogTitle=Add note
++
++AddEdit.AuthorAdd=&amp;Add
++
++AddEdit.AuthorRemove=&amp;Remove
++
++AddEdit.OkQuestion=Habitat of this occurrence is shared by {0} other occurrences.\\nDo you want to edit all occurrences or just this one?
++
++AddEdit.QuestionDialogTitle=Habitat of this occurrence is shared
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000412.html">[Plantlore-dev] r361 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+	<LI>Next message: <A HREF="000414.html">[Plantlore-dev] r363 - in trunk/src/net/sf/plantlore: client/imports client/resources common common/record server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#413">[ date ]</a>
+              <a href="thread.html#413">[ thread ]</a>
+              <a href="subject.html#413">[ subject ]</a>
+              <a href="author.html#413">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

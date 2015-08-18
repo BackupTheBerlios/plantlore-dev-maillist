@@ -1,0 +1,260 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Jak napsat novy Builder pro export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Jak%20napsat%20novy%20Builder%20pro%20export&In-Reply-To=%3Cf4dc39b90605031552m487b122crcedb117d44808159%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000242.html">
+   <LINK REL="Next"  HREF="000244.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Jak napsat novy Builder pro export</H1>
+    <B>Erik Kratochvil</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Jak%20napsat%20novy%20Builder%20pro%20export&In-Reply-To=%3Cf4dc39b90605031552m487b122crcedb117d44808159%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Jak napsat novy Builder pro export">discontinuum at gmail.com
+       </A><BR>
+    <I>Thu May  4 00:52:51 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000242.html">[Plantlore-dev] Wiki
+</A></li>
+        <LI>Next message: <A HREF="000244.html">[Plantlore-dev] r212 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#243">[ date ]</a>
+              <a href="thread.html#243">[ thread ]</a>
+              <a href="subject.html#243">[ subject ]</a>
+              <a href="author.html#243">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Vsechno potrebne lze najit v package net.sf.plantlore.client.export.
+Zakladem je interface Builder. Muzete si ho implementovat kompletne sami,
+nebo pouzit predpripravenou tridu AbstractBuilder.
+
+Jak to funguje:
+Z &quot;venku&quot; prijde bud dotaz (ktery se provede) nebo uz rovnou identifikator
+vysledku nejakeho dotazu. Muze se jednat o naprosto libovolny dotaz (i nad
+kteroukoli tabulkou). Entita nazvana DefaultDirector se stara o nacitani
+jednoho kompletniho radku z resultsetu pomoci metody DBLayer.more(). Tento
+kompletni zaznam roztrha na &quot;podzaznamy&quot; odpovidajici tabulkam a predava je
+Builderu. Takto se to resi kvuli neprijemne vazbe one-to-many vime kde +
+vetsi obecnosti [diky tomu se lze snadno vyrovnat i s exporty z jinych
+tabulek]. Pokud byl dotaz proveden nad tabulkou TOccurrences,
+DefaultDirector k temto zaznamum jeste dohledava vsechny pridruzene autory.
+
+Cela akce z pohledu DefaultDirector vypada nasledovne (schematicky):
+
+build.header(); // vypis nejake obecne zahlavi souboru
+// Iterace pres vysledky dotazu
+for( int i = 0; i &lt; db.getNumRows(resultSetId); i++ ) {
+  Record record = db.more(resultSetId, i, i);
+  build.startRecord(); // zacina se novy zaznam, budou se posilat jeho casti
+  process( record );
+
+  if(record instanceof Occurrence) {
+    // Dohledej autory
+    ...zkonstruuje dotaz, kde k zaznamu record najde vsechny pridruzene
+autory...
+    for each AuthorOccurrence authorOccurrence do
+      process( authorOccurrence );
+  }
+
+  build.finishRecord(); // konec tohoto zaznamu
+}
+build.footer(); // finalni zapati na konci souboru
+
+
+Procedura process() vypada zhruba nasledovne - nikoho neprekvapi rekurze:
+
+void process(Record R) {
+  build.part( R ); // vypis cast zaznamu odpovidajiciho jedne tabulce
+  for each foreign key FK of the record R do
+    process( R.getFK() ); // zpracuj vsechny zaznamy, na ktere tento ukazuje
+}
+
+Co to teda znamena - co se deje se zaznamem v procedure process().
+
+  record = Occurrence -&gt; Habitat -&gt; Territory
+
+znamena, ze Builder dostane postupne:
+
+  build.part( Occurrence )
+  build.part( Habitat )
+  build.part( Territory )
+  build.part( AuthorOccurrence )
+  build.part( Author )
+  build.part( AuthorOccurrence )
+  build.part( Author )
+
+Je to proto, ze nakonec jeste k zaznamu &quot;donalezl&quot; 2 autory (treba).
+
+
+Ukolem Builderu je vypsat ten zaznam v danem formatu. Rozhrani Builderu je
+naprosto zrejme. Pokud jste neco nepochopili, muzete kdyztak dostudovat z
+..client.export.Builder.java z popisu metod. Ale myslim si, ze je zrejme,
+kdy se co kolikrat vola a proc to tam je.
+
+Zastavim se u metody Builder.part(Record). Ta dostane nejaky &quot;neznamy&quot;
+zaznam a jejim ukolem je projit vsechny sloupecky tohoto zaznamu, ktere
+nejsou odkazy na jine zaznamy (FOREIGN KEYS, FK), a vypsat je. Sloupecky,
+ktere nejsou FK, nazyvam PROPERTIES.
+
+Priklad:
+AuthorOccurence.AUTHOR a OCCURRENCE jsou FK, AuthorOccurrence.ROLE a
+RESULTREVISION jsou properties.
+
+Tedy ukolem metody part(Record r) je poznat, o jaky typ tabulky se jedna,
+projit vsechny properties a ty poslat na vystup - napr:
+
+  Occurrence.YearCollected = 2002
+  AuthorOccurrence.Role = collector
+  AuthorOccurrence.ResultRevision = null
+  Author.WholeName = EK
+
+nebo (priklad, nerikam, ze to tak ma byt!)
+
+  &lt;OccurrenceRecord yearCollected=&quot;2002&quot;&gt;
+    &lt;Plant taxon=&quot;pampeliska&quot;/&gt;
+    &lt;Author wholeName=&quot;EK&quot;/&gt;
+    &lt;Author wholeName=&quot;LO&quot;/&gt;
+...
+  &lt;/OccurrenceRecord&gt;
+
+Protoze prochazeni tech zaznamu po jejich jednotlivych sloupeccich by byla
+magorina a nadto by se v kazde implementaci Builderu musela opakovat, byl
+vytvoren AbstractBuilder s predimplementovanymi metodami, ktery tohle resi
+za vas. U neho se zastavime trochu vic.
+
+AbstractBuilder ma defaultni konstruktor prijimajici objekt Template. To je
+objekt, v nemz jsou ulozeny informace o tom, o ktere sloupecky ma uzivatel
+zajem. Cili tedy napr. Author.WholeName, Plant.Taxon,
+Occurrence.YearCollected, apod. Tuto informaci poskytuje vetsinou uzivatel
+vybranim sloupecku z klikaciho dialogu. Dulezite je, ze builder by mel tuto
+informaci pouzivat - pokud nejde o nejaky divny Builder napr. pro DarwinCore
+nebo ABCDSChema, ktery dostane slupecky vybrane vsechny.
+
+Tedy v metode part() pri vypisovani obsahu sloupecku, je zarizeno, ze se
+metodou template.isSet(table, column) zjisti, zda uzivatel vubec chtel tento
+sloupec vypsat.
+
+AbstractBuilder obsahuje getter a setter na Template, cili tim se zabyvat
+nemusite.
+Co byste si ale meli zaridit, ze nejakym zpusobem v konstruktoru zohlednite
+to, ze budete vypisovat do souboru. Entita zajistujici vytvareni Builderu a
+DefaultDirectora se jmenuje ExportMng - ta vam je schopna poskytnout, co jen
+si vas konstruktor bude prat. Uplne nejradsi poskytuje otevreny soubor
+wrapnuty FileWriterem.
+
+  File file = new File( ---name supplied by the user--- );
+  Writer writer = new FileWriter( file, append );
+  Builder builder = new VASBuilder( template, writer );
+
+Writer by vam mel snad stacit - na wrapnuti nejakym jinym objektem. Pokud
+byste radsi jenom jmeno souboru a fajl si vyrobite sami, proc ne, muzete to
+mit.
+
+Zpet k AbstractBuilderu. Metody
+startRecord(), finishRecord(), header() a footer() nijak neimplementuje,
+nechava je prazdne - ani by to nemelo smysl.
+
+Co ovsem implementuje, je ona pain-in-the-ass, cili urceni typu zaznamu a
+projiti vsech jeho properties, ktere uzivatel chce exportovat. Implementace
+schematicky:
+
+void part(Record R) {
+   table = R.getClass();
+   for each property P of the record R do
+     Object value = R.getP(); // napr. to znamena R.getWholeName() - no
+proste podle typu zaznamu
+     if( !Template.isSet(table, P) ) continue; // skip properties the user
+doesn't want
+     output( table, P, value ); // &lt;i&gt;
+   done
+
+}
+
+Metoda output(table, property, value) je abstraktni, musite ji dodefinovat.
+V ni dostanete teda uz troji informaci, ktera by mela byt dostacujici k
+tomu, abyste zaznam mohli exportovat - treba jako
+
+  table.property = value
+
+Co v podstate dostanete (= co bude volano jako parametry output) pro
+part(Record
+r), kde r je typu Habitat:
+
+  output( Habitat.class, Habitat.QUADRANT, r.getQuadrant() );
+  output( Habitat.class, Habitat.DESCRIPTION, r.getDescription() );
+  output( Habitat.class, Habitat.COUNTRY, r.getCountry() );
+  output( Habitat.class, Habitat.ALTITUDE, r.getAltitude() );
+  output( Habitat.class, Habitat.LATITUDE, r.getLatitude() );
+  output( Habitat.class, Habitat.LONGITUDE, r.getLongitude() );
+  output( Habitat.class, Habitat.NOTE, r.getNote() );
+
+To, co musite jenom udelat je, ze doimplementujete hlavicku a zapati ~
+header(), footer(), dale metody informujici o novem zaznamu ~ startRecord(),
+finishRecord() a samosebou novou abstraktni funkci output().
+
+Viz ukazkovy TrainingBuilder.java.
+
+
+Pokud se vam navrzene rozhrani nelibi, pouzivat ho nemusite. Nez se ho ale
+rozhodnete upravovat, tak zvazte, ze na teto konkretni implementaci
+AbstractBuilderu uz zavisi CSVBuilder (temer funkcni). Cili si budto podedte
+od AbstractBuilderu nebo zacnete novou implementaci primo toho interface
+Builder.
+
+Pokud se mi ozvete s nejakym pozadavkem na predelani toho interface - treba
+proto, ze ja nevim, treba se to na to buildovani XML uplne nehodi a chteli
+byste si treba jeste predavat nejaky parametr v te metode output:
+tj. deklarace output vypada:
+
+  Object output(Object parameter, Class table, String property, Object value
+);
+
+neni pak problem upravit ten zluty radek (pro Jakuba: ten radek obsahujici //
+&lt;i&gt; ) nasledovne:
+
+  parameter = output( parameter, table, P, value );
+
+Pokud se vam to rozhrani extra nehodi pro to zpracovani do XML, tak to o XML
+v tom pripade vim jeste min, nez sem si myslel.
+
+V pripade nejastnosti se na me obratte, ale snad sem to popsal dostatecne
+detailne.
+
+Uff.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060504/5ba08a04/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060504/5ba08a04/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000242.html">[Plantlore-dev] Wiki
+</A></li>
+	<LI>Next message: <A HREF="000244.html">[Plantlore-dev] r212 - trunk/analysis/database
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#243">[ date ]</a>
+              <a href="thread.html#243">[ thread ]</a>
+              <a href="subject.html#243">[ subject ]</a>
+              <a href="author.html#243">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,189 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r720 - in trunk/src/net/sf/plantlore:	client/checklist common server server/tools
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r720%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20common%20server%20server/tools&In-Reply-To=%3C200609062034.k86KYHkN028657%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000990.html">
+   <LINK REL="Next"  HREF="000992.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r720 - in trunk/src/net/sf/plantlore:	client/checklist common server server/tools</H1>
+    <B>krater at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r720%20-%20in%20trunk/src/net/sf/plantlore%3A%0A%09client/checklist%20common%20server%20server/tools&In-Reply-To=%3C200609062034.k86KYHkN028657%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r720 - in trunk/src/net/sf/plantlore:	client/checklist common server server/tools">krater at mail.berlios.de
+       </A><BR>
+    <I>Wed Sep  6 22:34:17 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000990.html">[Plantlore-dev] r719 - trunk/documentation
+</A></li>
+        <LI>Next message: <A HREF="000992.html">[Plantlore-dev] r721 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#991">[ date ]</a>
+              <a href="thread.html#991">[ thread ]</a>
+              <a href="subject.html#991">[ subject ]</a>
+              <a href="author.html#991">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-09-06 22:34:17 +0200 (Wed, 06 Sep 2006)
+New Revision: 720
+
+Modified:
+   trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+   trunk/src/net/sf/plantlore/common/Utils.java
+   trunk/src/net/sf/plantlore/server/Plantlore.java
+   trunk/src/net/sf/plantlore/server/tools/RMI.java
+Log:
+Codebase in linux should contain three slashes: <A HREF="file:///home/fraktalek/....">file:///home/fraktalek/....</A> Utils return now one more.
+
+Hostname is set automatically in order to allow remote connections (the host would not be resolved properly otherwise)!
+
+Cheklist's behaviour little bit modified (do not restore the selected records after Load is called).
+
+Modified: trunk/src/net/sf/plantlore/client/checklist/Checklist.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-09-06 20:01:43 UTC (rev 719)
++++ trunk/src/net/sf/plantlore/client/checklist/Checklist.java	2006-09-06 20:34:17 UTC (rev 720)
+@@ -276,11 +276,11 @@
+ 		ObjectInputStream ois = new ObjectInputStream(fis);
+ 		Vector&lt;String&gt; listData = (Vector&lt;String&gt;) ois.readObject();
+ 		ois.close();
+-		Object[] selected = getSelectedValues();
++//		Object[] selected = getSelectedValues();
+ 		clearSelection();
+ 		setListData(listData);
+-		for(Object r : selected)
+-			setSelectedValue(r, false);
++//		for(Object r : selected)
++//			setSelectedValue(r, false);
+ 	}
+ 	
+ 	
+
+Modified: trunk/src/net/sf/plantlore/common/Utils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Utils.java	2006-09-06 20:01:43 UTC (rev 719)
++++ trunk/src/net/sf/plantlore/common/Utils.java	2006-09-06 20:34:17 UTC (rev 720)
+@@ -82,7 +82,7 @@
+         	if (System.getProperty(&quot;os.name&quot;).toLowerCase().startsWith(&quot;win&quot;))
+         		dir = dir.substring(1, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;, &quot;/&quot;)));
+         	else
+-        		dir = dir.substring(0, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;,&quot;/&quot;)));            
++        		dir = &quot;/&quot; + dir.substring(0, dir.indexOf(Utils.class.getName().replaceAll(&quot;\\.&quot;,&quot;/&quot;)));            
+         }
+         
+         return dir;
+
+Modified: trunk/src/net/sf/plantlore/server/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-06 20:01:43 UTC (rev 719)
++++ trunk/src/net/sf/plantlore/server/Plantlore.java	2006-09-06 20:34:17 UTC (rev 720)
+@@ -17,6 +17,7 @@
+ import net.sf.plantlore.common.exception.PlantloreException;
+ import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.server.manager.*;
++import net.sf.plantlore.server.tools.RMI;
+ 
+ 
+ /**
+@@ -57,6 +58,9 @@
+         
+         // Disable reconnect
+         DefaultExceptionHandler.disableReconnect();
++        
++        // Set the hostname to make remote connections possible
++        RMI.setHostName();
+ 
+ 
+         java.awt.EventQueue.invokeLater(new Runnable(){
+
+Modified: trunk/src/net/sf/plantlore/server/tools/RMI.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-09-06 20:01:43 UTC (rev 719)
++++ trunk/src/net/sf/plantlore/server/tools/RMI.java	2006-09-06 20:34:17 UTC (rev 720)
+@@ -1,17 +1,23 @@
+ package net.sf.plantlore.server.tools;
+ 
++import java.net.InetAddress;
++import java.net.UnknownHostException;
+ import java.rmi.*;
+ import java.rmi.registry.*;
+ import java.rmi.server.UnicastRemoteObject;
+ 
++import org.apache.log4j.Logger;
+ 
+ 
+ 
++
+ public class RMI {
+ 	
++	private static Logger logger = Logger.getLogger(RMI.class.getPackage().getName());
+ 	
+ 	public static final String PROPERTY_CODEBASE = &quot;java.rmi.server.codebase&quot;;
+ 	public static final String PROPERTY_LEASEVALUE = &quot;java.rmi.dgc.leaseValue&quot;;
++	public static final String PROPERTY_HOSTNAME = &quot;java.rmi.server.hostname&quot;;
+ 	
+ 
+ 	public static void bind(Remote object, String name) 
+@@ -77,12 +83,24 @@
+ 			codebase = directory;
+ 		
+ 		System.setProperty(PROPERTY_CODEBASE, codebase);
+-		System.out.println(&quot;java.rmi.server.codebase = &quot; + codebase);
++		logger.info(&quot;java.rmi.server.codebase = &quot; + codebase);
+ 	}
+ 	
+ 	
+ 	public static void setLeaseValue(int value) {
+ 		System.setProperty( PROPERTY_LEASEVALUE, Integer.toString(value) ); 
+ 	}
++	
++	
++	public static void setHostName() {
++		try {
++			InetAddress address = InetAddress.getLocalHost();
++			String ip = address.getHostAddress();
++			System.setProperty(PROPERTY_HOSTNAME, ip);
++			logger.info(&quot;Hostname set to &quot; + ip);
++		} catch (UnknownHostException e) {
++			logger.fatal(&quot;Unable to obtain the host ip! Remote connections may not be possible! &quot; + e.getMessage());
++		}
++	}
+ 
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000990.html">[Plantlore-dev] r719 - trunk/documentation
+</A></li>
+	<LI>Next message: <A HREF="000992.html">[Plantlore-dev] r721 - trunk/src/net/sf/plantlore/common
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#991">[ date ]</a>
+              <a href="thread.html#991">[ thread ]</a>
+              <a href="subject.html#991">[ subject ]</a>
+              <a href="author.html#991">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

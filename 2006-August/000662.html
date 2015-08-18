@@ -1,0 +1,590 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r490 - in trunk/src/net/sf/plantlore: common/record	config/hibernate
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r490%20-%20in%20trunk/src/net/sf/plantlore%3A%20common/record%0A%09config/hibernate&In-Reply-To=%3C200608062224.k76MOmFm010505%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000661.html">
+   <LINK REL="Next"  HREF="000663.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r490 - in trunk/src/net/sf/plantlore: common/record	config/hibernate</H1>
+    <B>kovo at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r490%20-%20in%20trunk/src/net/sf/plantlore%3A%20common/record%0A%09config/hibernate&In-Reply-To=%3C200608062224.k76MOmFm010505%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r490 - in trunk/src/net/sf/plantlore: common/record	config/hibernate">kovo at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug  7 00:24:48 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000661.html">[Plantlore-dev] r489 - trunk/analysis/database
+</A></li>
+        <LI>Next message: <A HREF="000663.html">[Plantlore-dev] [Task #3057] Implement record locking in DBLayer
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#662">[ date ]</a>
+              <a href="thread.html#662">[ thread ]</a>
+              <a href="subject.html#662">[ subject ]</a>
+              <a href="author.html#662">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-08-07 00:24:40 +0200 (Mon, 07 Aug 2006)
+New Revision: 490
+
+Modified:
+   trunk/src/net/sf/plantlore/common/record/Author.java
+   trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+   trunk/src/net/sf/plantlore/common/record/Habitat.java
+   trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+   trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+   trunk/src/net/sf/plantlore/common/record/Metadata.java
+   trunk/src/net/sf/plantlore/common/record/Occurrence.java
+   trunk/src/net/sf/plantlore/common/record/Publication.java
+   trunk/src/net/sf/plantlore/common/record/Right.java
+   trunk/src/net/sf/plantlore/common/record/User.java
+   trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/Right.hbm.xml
+   trunk/src/net/sf/plantlore/config/hibernate/User.hbm.xml
+Log:
+Implement optimistic locking using Hibernate managed versioning. All the tables (except for TPLANTS, TTERRITORIES, TVILLAGES, TPHYTOCHORIA, TLASTDATAREVISION and THISTORYCOLUMN) now contain CVERSION column used internally by Hibernate for optimistic locking. In case a conflict is found, StaleObjectStateException is thrown. HibernateDBLayer should translate this into a DBLayerException and let client know conflict occurred.
+
+Modified: trunk/src/net/sf/plantlore/common/record/Author.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Author.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Author.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -34,6 +34,7 @@
+     private Integer deleted;    
+     private User createdWho;
+     private String note;
++    private Integer version;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -374,4 +375,20 @@
+     public void setNote(String note) {
+         this.note = note;
+     }
+-}
++
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/AuthorOccurrence.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -29,7 +29,8 @@
+     private String role;
+     private String note;
+     private Integer deleted;
+-        
++    private Integer version;
++    
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+     public static final String AUTHOR = &quot;author&quot;;    
+@@ -223,5 +224,20 @@
+     public void setDeleted(Integer deleted) {
+         this.deleted = deleted;
+     }   
++
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
+     
+-}
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/Habitat.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Habitat.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -36,6 +36,7 @@
+     private Integer deleted;
+     private User createdWho;
+     private String note;
++    private Integer version;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -468,5 +469,20 @@
+     public void setCreatedWho(User createdWho) {
+         this.createdWho = createdWho;
+     }    
++
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
+     
+-}
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryChange.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/HistoryChange.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -30,6 +30,7 @@
+     private int operation;   
+     private java.util.Date when;
+     private User who;
++    private Integer version;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;     
+@@ -139,4 +140,20 @@
+     public void setWho(User who) {
+         this.who= who;
+     }          
+-}
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/HistoryRecord.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/HistoryRecord.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -20,6 +20,7 @@
+     private String oldValue;
+     private String newValue;
+     private int oldRecordId;
++    private Integer version;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -146,5 +147,20 @@
+     public void setOldRecordId(int oldRecordId) {
+         this.oldRecordId = oldRecordId;
+     }    
++ 
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
+     
+-}
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/Metadata.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Metadata.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -40,6 +40,7 @@
+     private String recordBasis;
+     private String biotopeText;    
+     private Integer deleted;
++    private Integer version;
+     
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -519,5 +520,20 @@
+     public void setDeleted(Integer deleted) {
+     	this.deleted = deleted;
+     }    
+-}
+-
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
++}
+\ No newline at end of file
+
+Modified: trunk/src/net/sf/plantlore/common/record/Occurrence.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Occurrence.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -48,7 +48,8 @@
+     private Metadata metadata;
+     private Integer deleted;
+     private String note;
+-
++    private Integer version;
++    
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+     public static final String UNITIDDB = &quot;unitIdDb&quot;;    
+@@ -621,4 +622,20 @@
+     public void setNote(String note) {
+         this.note = note;
+     }   
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Publication.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Publication.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Publication.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -34,7 +34,8 @@
+     private Integer deleted = 0;
+     private User createdWho;
+     private String note;
+-
++    private Integer version;
++    
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+     public static final String COLLECTIONNAME = &quot;collectionName&quot;;    
+@@ -384,4 +385,20 @@
+     public void setNote(String note) {
+         this.note = note;
+     }    
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/Right.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/Right.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/Right.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -27,7 +27,8 @@
+     private String editGroup;
+     private String seeColumns;
+     private int add;    
+-
++    private Integer version;
++    
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+     public static final String ADMINISTRATOR = &quot;administrator&quot;;    
+@@ -153,4 +154,20 @@
+     public void setAdd(int add) {
+         this.add = add;
+     }    
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }        
+ }
+
+Modified: trunk/src/net/sf/plantlore/common/record/User.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/record/User.java	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/common/record/User.java	2006-08-06 22:24:40 UTC (rev 490)
+@@ -30,6 +30,7 @@
+     private java.util.Date dropWhen;
+     private Right right;
+     private String note;
++    private Integer version;
+ 
+     /** Constants with column mapping (used for building select queries) */
+     public static final String ID = &quot;id&quot;;
+@@ -279,5 +280,21 @@
+      */
+     public void setNote(String note) {
+         this.note = note;
+-    }   
++    }  
++    
++    /**
++     *  Set the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @param version version of the row
++     */    
++    public void setVersion(Integer version) {
++        this.version = version;
++    }
++    
++    /**
++     *  Get the row version. Version column is used by Hibernate to implement optimistic locking.
++     *  @return version of the row
++     */
++    public Integer getVersion() {
++        return version;
++    }    
+ }
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Authors.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-      
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;      
+       &lt;property column=&quot;CWHOLENAME&quot;
+                 length=&quot;50&quot;
+                 name=&quot;wholeName&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/AuthorsOccurrences.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,6 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;      
+       &lt;many-to-one name=&quot;author&quot; 
+                    class=&quot;net.sf.plantlore.common.record.Author&quot; 
+                    column=&quot;CAUTHORID&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Habitats.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-      
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;      
+       &lt;many-to-one name=&quot;territory&quot; 
+                    class=&quot;net.sf.plantlore.common.record.Territory&quot; 
+                    column=&quot;CTERRITORYID&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/History.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,6 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;      
+       &lt;many-to-one name=&quot;historyColumn&quot; 
+                    class=&quot;net.sf.plantlore.common.record.HistoryColumn&quot; 
+                    column=&quot;CCOLUMNID&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/HistoryChange.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-                 
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;                 
+       &lt;property column=&quot;CRECORDID&quot;                
+                 name=&quot;recordId&quot;
+                 not-null=&quot;true&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Metadata.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CTECHNICALCONTACTNAME&quot;
+                 length=&quot;50&quot;
+                 name=&quot;technicalContactName&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Occurrences.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CUNITIDDB&quot;
+                 length=&quot;30&quot;
+                 name=&quot;unitIdDb&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Publications.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CCOLLECTIONNAME&quot;
+                 length=&quot;30&quot;
+                 name=&quot;collectionName&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/Right.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/Right.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/Right.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CADMINISTRATOR&quot;                
+                 name=&quot;administrator&quot;
+                 not-null=&quot;true&quot;
+
+Modified: trunk/src/net/sf/plantlore/config/hibernate/User.hbm.xml
+===================================================================
+--- trunk/src/net/sf/plantlore/config/hibernate/User.hbm.xml	2006-08-06 21:41:49 UTC (rev 489)
++++ trunk/src/net/sf/plantlore/config/hibernate/User.hbm.xml	2006-08-06 22:24:40 UTC (rev 490)
+@@ -8,7 +8,7 @@
+       &lt;id column=&quot;CID&quot; name=&quot;id&quot; type=&quot;java.lang.Integer&quot;&gt;
+          &lt;generator class=&quot;increment&quot;/&gt;
+       &lt;/id&gt;
+-
++      &lt;version name=&quot;version&quot; column=&quot;CVERSION&quot;/&gt;
+       &lt;property column=&quot;CLOGIN&quot;
+                 length=&quot;20&quot;
+                 name=&quot;login&quot;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000661.html">[Plantlore-dev] r489 - trunk/analysis/database
+</A></li>
+	<LI>Next message: <A HREF="000663.html">[Plantlore-dev] [Task #3057] Implement record locking in DBLayer
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#662">[ date ]</a>
+              <a href="thread.html#662">[ thread ]</a>
+              <a href="subject.html#662">[ subject ]</a>
+              <a href="author.html#662">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

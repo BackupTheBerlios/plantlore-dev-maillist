@@ -1,0 +1,228 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r81 - trunk/src/net/sf/plantlore/client/history
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r81%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200603292236.k2TMaa9Q027067%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000079.html">
+   <LINK REL="Next"  HREF="000081.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r81 - trunk/src/net/sf/plantlore/client/history</H1>
+    <B>Lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r81%20-%20trunk/src/net/sf/plantlore/client/history&In-Reply-To=%3C200603292236.k2TMaa9Q027067%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r81 - trunk/src/net/sf/plantlore/client/history">Lada at berlios.de
+       </A><BR>
+    <I>Thu Mar 30 00:36:36 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000079.html">[Plantlore-dev] r80 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+        <LI>Next message: <A HREF="000081.html">[Plantlore-dev] r82 - in trunk/src/net/sf/plantlore: client config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#80">[ date ]</a>
+              <a href="thread.html#80">[ thread ]</a>
+              <a href="subject.html#80">[ subject ]</a>
+              <a href="author.html#80">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: Lada
+Date: 2006-03-30 00:36:15 +0200 (Thu, 30 Mar 2006)
+New Revision: 81
+
+Modified:
+   trunk/src/net/sf/plantlore/client/history/History.java
+Log:
+History - changes with work select query, repair error with occurrencesId, where,...
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-03-29 13:58:50 UTC (rev 80)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-03-29 22:36:15 UTC (rev 81)
+@@ -13,6 +13,7 @@
+ import net.sf.plantlore.middleware.SelectQuery;
+ import net.sf.plantlore.client.dblayer.result.Result;
+ import net.sf.plantlore.common.PlantloreConstants;
++import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.HistoryRecord;
+ import net.sf.plantlore.common.record.HistoryChange;
+@@ -50,6 +51,8 @@
+     private ArrayList editHistoryDataList;
+    
+     //**************Informations about HistoryRecord*************//
++    /** */
++    private Occurrence tmpOccurrence;
+     /** Name of the table where value was changed*/
+ 	private String tableName;  
+ 	/** Name of the column where value was changed*/
+@@ -97,16 +100,19 @@
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+        this.database = database;	
+        
+-       setOccurrenceId(0);
+-       setOccurrenceId(idOcc);
++       tmpOccurrence = new Occurrence();
++       tmpOccurrence.setId(idOcc);
++       
++       //setOccurrenceId(0);
++       //setOccurrenceId(idOcc);
+        setNamePlant(namePlant);
+        setNameAuthor(nameAuthor);
+        setLocation(location);
+ 	   
+        //Searching for information about data entries concerned with specified occurrence
+-       searchInsertInfo(occurrenceId);
++       searchInsertInfo();
+ 	   //Searching for information about data editing concerned with specified occurrence
+-	   searchEditHistory(occurrenceId);
++	   searchEditHistory();
+ 	   //Process results of a search &quot;edit&quot; query 
+ 	   processEditResult(1,displayRows);
+     }	
+@@ -115,8 +121,8 @@
+      *  Searches for information about data entries concerned with specified occurrence.
+      *  @param idOccurrence Unique value identified occurrence
+      */
+-    public void searchInsertInfo(Integer occurrenceId) {
+-     
++    public void searchInsertInfo() {
++            
+        // Create new Select query
+        SelectQuery query = null;
+        try {
+@@ -124,12 +130,10 @@
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException- searchInsertInfo(), createQuery&quot;);       	  
+        }
+-       if (occurrenceId &gt; 0 ) {
+-           //query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, occurrenceId, null);      
+-           //query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.INSERT, null);     
+-    	   query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OPERATION, null, this.EDIT.toString(), null);
+-       }
+        
++    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, tmpOccurrence, null);
++    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.EDIT, null);
++       
+        int resultIdInsert = 0;
+        try {
+            // Execute query                    
+@@ -156,9 +160,9 @@
+      * @param idOccurrence Unique value identified occurrence
+      */
+      
+-    public void searchEditHistory(Integer occurrenceId)
++    public void searchEditHistory()
+     {  
+-    	
++    	    	
+         //Create new Select query
+         SelectQuery query = null;
+         try {
+@@ -166,11 +170,10 @@
+         } catch(RemoteException e) {
+         	    System.err.println(&quot;RemoteException- searchEditHistory(), createQuery&quot;);       	  
+         }
+-        if (occurrenceId &gt; 0) {
+-            //query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OCCURRENCE, null, occurrenceId.toString(), null);      
+-            query.addRestriction(PlantloreConstants.RESTR_LIKE, HistoryChange.OPERATION, null, this.EDIT.toString(), null);
+-            //query.addOrder(PlantloreConstants.DIRECT_DESC, HistoryChange.WHEN); 
+-        }
++       
++    	query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OCCURRENCE, null, tmpOccurrence, null);
++        query.addRestriction(PlantloreConstants.RESTR_EQ, HistoryChange.OPERATION, null, this.EDIT, null);
++        //query.addOrder(PlantloreConstants.DIRECT_DESC, HistoryChange.WHEN);        
+     	
+         int resultIdEdit = 0;
+         try {
+@@ -200,10 +203,10 @@
+      */
+     public void setInsertResult(int resultIdInsert) {
+    	    	
+-    	//if (getResultRows() &gt; 1) {
++    	if (getResultRows() &gt; 1) {
+     		// Log an error                   
+-        //    logger.error(&quot;Too many results for inserting query.&quot;);  
+-    	//}
++            logger.error(&quot;Too many results for inserting query.&quot;);  
++    	}
+             	
+     	logger.debug(&quot;Retrieving query results.&quot;); 
+     	Object[] objectHistory = null;
+@@ -216,8 +219,8 @@
+              	logger.debug(&quot;RemoteException- setInsertResult, more&quot;);
+              	return;
+              }           	
+-            this.when = ((HistoryChange)objectHistory[1]).getWhen();
+-            this.nameUser = ((HistoryChange)objectHistory[0]).WHO;
++            //this.when = ((HistoryChange)objectHistory[0]).getWhen();
++            //this.nameUser = ((HistoryChange)objectHistory[0]).WHO;
+            
+         } catch (DBLayerException e) {
+             // Log and set error in case of an exception
+@@ -235,12 +238,11 @@
+     public void processEditResult(int from, int count) {
+     	
+     	if (this.resultId != 0) {
+-            //logger.debug(&quot;Rows in the result: &quot;+getResultRows());
++            logger.debug(&quot;Rows in the result: &quot;+getResultRows());
+             logger.debug(&quot;Max available rows: &quot;+(from+count-1));
+            
+             // Find out how many rows we can retrieve - it cannot be more than number of rows in the result
+-            //int to = Math.min(getResultRows(), from+count-1);
+-            int to = 2;
++            int to = Math.min(getResultRows(), from+count-1);           
+             if (to == 0) {
+                 this.editHistoryDataList = new ArrayList();                
+             } else {
+@@ -267,7 +269,7 @@
+                     // Log an error in case of an exception
+                     logger.error(&quot;Processing search results failed: &quot;+e.toString());            
+                 } finally { 
+-                	logger.debug(&quot;Sets 'edut' data ends successfully&quot;);
++                	logger.debug(&quot;Sets 'edit' data ends successfully&quot;);
+                 	//Update current first displayed row (only if data retrieval was successful)
+                     setCurrentFirstRow(from);                    
+                 }               
+@@ -282,6 +284,7 @@
+     public Object[][] getData() {
+     	
+     	//int count = editHistoryDataList.size();
++    	
+     	int count = 2;
+         editHistoryData = new Object[count][6];
+     	for (int i=0; i &lt; count; i++) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000079.html">[Plantlore-dev] r80 - trunk/src/net/sf/plantlore/client/history
+</A></li>
+	<LI>Next message: <A HREF="000081.html">[Plantlore-dev] r82 - in trunk/src/net/sf/plantlore: client config/hibernate
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#80">[ date ]</a>
+              <a href="thread.html#80">[ thread ]</a>
+              <a href="subject.html#80">[ subject ]</a>
+              <a href="author.html#80">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

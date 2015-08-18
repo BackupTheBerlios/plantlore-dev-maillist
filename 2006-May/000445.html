@@ -1,0 +1,295 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r388 - in trunk/src/net/sf/plantlore: client common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r388%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200605292230.k4TMUtNu027176%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000444.html">
+   <LINK REL="Next"  HREF="000446.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r388 - in trunk/src/net/sf/plantlore: client common</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r388%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common&In-Reply-To=%3C200605292230.k4TMUtNu027176%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r388 - in trunk/src/net/sf/plantlore: client common">fraktalek at berlios.de
+       </A><BR>
+    <I>Tue May 30 00:30:55 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000444.html">[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n
+</A></li>
+        <LI>Next message: <A HREF="000446.html">[Plantlore-dev] r389 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#445">[ date ]</a>
+              <a href="thread.html#445">[ thread ]</a>
+              <a href="subject.html#445">[ subject ]</a>
+              <a href="author.html#445">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-30 00:30:52 +0200 (Tue, 30 May 2006)
+New Revision: 388
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AddEdit.java
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/Search.java
+   trunk/src/net/sf/plantlore/client/TableSorter.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+Log:
+Proper SelectQuery closing in Overview, AddEdit, Search and connected classes (DBLayerUtils).
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/AddEdit.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -973,6 +973,7 @@
+                 occurrence = (Occurrence)tmp[0];
+                 habitatSharingOccurrences[i] = occurrence;
+             }
++            database.closeQuery(sq);
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         } catch (RemoteException ex) {
+@@ -1028,6 +1029,7 @@
+                 authorOccurrences.put(a.getId(),ao);
+                 resultRevision.add(ao.getNote());
+             }
++            database.closeQuery(sq);
+         } catch (DBLayerException ex) {
+             ex.printStackTrace();
+         } catch (RemoteException ex) {
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -308,10 +308,10 @@
+         mainConfig.save();
+     }
+     
+-    public void setResultId(int resultId) {
++    public void setResultId(int resultId, SelectQuery sq) throws RemoteException, DBLayerException {
+         setChanged();
+         notifyObservers(&quot;LOADING_NEW_DATA&quot;);
+-        tableSorter.setResultId(resultId);
++        tableSorter.setResultId(resultId, sq);
+         setChanged();
+         notifyObservers(&quot;NEW_QUERY&quot;);
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -332,7 +332,6 @@
+                     
+                     searchModel.setColumns(columns);
+                     searchModel.constructQuery();
+-                    model.setResultId(searchModel.getNewResultId());
+                 }
+             }
+         }        
+@@ -722,7 +721,15 @@
+         public void update(Observable o, Object arg) {
+             if (arg != null &amp;&amp; arg instanceof Integer) {
+                 logger.debug(&quot;Fetching new result id from Search model. Storing it to AppCore model.&quot;);
+-                model.setResultId(searchModel.getNewResultId());
++                try {
++                    model.setResultId(searchModel.getNewResultId(), searchModel.getNewSelectQuery());
++                } catch (RemoteException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.RemoteException&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.RemoteExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex);
++                } catch (DBLayerException ex) {
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.DBLayerException&quot;)+&quot;\n&quot;+ex.getErrorInfo(),L10n.getString(&quot;Error.DBLayerExceptionTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                    logger.error(ex+&quot;: &quot;+ex.getErrorInfo());
++                }
+                 //model.setExportQuery(searchModel.getExportQuery(), false, Occurrence.class);
+             }
+         }
+@@ -1044,7 +1051,6 @@
+                         constructSearchMVC();
+                         searchModel.setDatabase(model.getDatabase());
+                         searchModel.constructQuery();
+-                        model.setResultId(searchModel.getNewResultId());
+                         view.getSBM().displayDefaultText();
+                         
+     			view.initOverview();
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -48,6 +48,8 @@
+     private Selection selection = new Selection();    
+     private Object[][] data;
+     
++    private SelectQuery oldSelectQuery;
++    
+     /** Simple mode if true - only first three columns are displayed
+      * Extended mode if false - all columns are displayed
+      *
+@@ -278,21 +280,17 @@
+         return resultId;
+     }
+ 
+-    public void setResultId(int resultId) {
++    public void setResultId(int resultId, SelectQuery sq) throws RemoteException, DBLayerException {
++        if (oldSelectQuery != null)
++            db.closeQuery(oldSelectQuery);
++        
+         logger.debug(&quot;Setting resultid to &quot;+resultId);
+         this.resultId = resultId;
+         from = 0;
+         currentPage = 1;
+-        //FIXME
+-        try {
+-            loadData();
+-            fireTableDataChanged(); //let the table compoment know it should redraw itself
+-            //fireTableStructureChanged();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        }
++        loadData();
++        fireTableDataChanged(); //let the table compoment know it should redraw itself
++        //fireTableStructureChanged();
+     }
+ 
+     public int getResultsCount() {
+
+Modified: trunk/src/net/sf/plantlore/client/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Search.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/Search.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -102,9 +102,9 @@
+     
+     private ArrayList&lt;Column&gt; columns;
+     private int newResultId = -1;
++    private SelectQuery newSelectQuery;
+     
+     
+-    
+     /** Creates a new instance of AddEdit */
+     public Search(DBLayer database) {
+         this.database = database;
+@@ -530,7 +530,7 @@
+      * The ExportQuery is constructed according to the last known data from the Search dialog. 
+      */
+     public Object[] constructExportQuery() 
+-    throws DBLayerException, RemoteException {
++    throws DBLayerException, RemoteException {                
+     	String habitatAlias = Record.alias(Habitat.class) +&quot;.&quot;;
+     	SelectQuery exportQuery = database.createQuery(Occurrence.class);
+     	exportQuery.createAlias(Occurrence.HABITAT, Record.alias(Habitat.class));
+@@ -834,6 +834,7 @@
+                 }
+                 int resultId = database.executeQuery(sq);
+                 this.newResultId = resultId;
++                this.newSelectQuery = sq;
+                 logger.debug(&quot;Created new query. Number of results: &quot;+database.getNumRows(resultId));
+                 //let the SearchBridge in AppCoreCtrl know that new result is there
+                 setChanged(); 
+@@ -1035,6 +1036,10 @@
+         this.projects = projects;
+     }
+     
++    public SelectQuery getNewSelectQuery() {
++        return newSelectQuery;
++    }
++        
+     // The export query should not be returned - a new export query must be constructed each time!!
+ //    public SelectQuery getExportQuery() {
+ //        return exportQuery;
+
+Modified: trunk/src/net/sf/plantlore/client/TableSorter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/TableSorter.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/client/TableSorter.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -12,6 +12,7 @@
+ import javax.swing.table.*;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.middleware.DBLayer;
++import net.sf.plantlore.middleware.SelectQuery;
+ 
+ /**
+  * TableSorter is a decorator for TableModels; adding sorting
+@@ -542,8 +543,8 @@
+         return tableModel.getOccurrenceId(modelIndex(row));
+     }
+     
+-    public void setResultId(int resultId) {
+-        tableModel.setResultId(resultId);
++    public void setResultId(int resultId, SelectQuery sq) throws RemoteException, DBLayerException {
++        tableModel.setResultId(resultId, sq);
+     }
+     
+     public void setDatabase(DBLayer db) {
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-29 21:55:51 UTC (rev 387)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-05-29 22:30:52 UTC (rev 388)
+@@ -53,6 +53,7 @@
+             return null;
+         Object[] results = db.more(resultid, 0, 0);
+         Object[] tmp = (Object[]) results[0];
++        db.closeQuery(sq);
+         return (Record)tmp[0];
+     }
+ 
+@@ -72,6 +73,7 @@
+             ao = (AuthorOccurrence)tmp[0];
+             authorResults[i] = ao;
+         }
++        db.closeQuery(sq);
+         return authorResults;
+     }
+ 
+@@ -93,6 +95,7 @@
+         } else {
+             logger.debug(&quot;Leaving habitat id=&quot;+h.getId()+&quot; live. Live Occurrence records point at it.&quot;);
+         }
++        db.closeQuery(sq);
+     }
+     
+     public static void main(String[] args) throws DBLayerException, RemoteException {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000444.html">[Plantlore-dev] r387 - in trunk/src/net/sf/plantlore: client common config l10n
+</A></li>
+	<LI>Next message: <A HREF="000446.html">[Plantlore-dev] r389 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#445">[ date ]</a>
+              <a href="thread.html#445">[ thread ]</a>
+              <a href="subject.html#445">[ subject ]</a>
+              <a href="author.html#445">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,677 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r261 - trunk/src/net/sf/plantlore/server
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r261%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605120146.k4C1k64A020924%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000307.html">
+   <LINK REL="Next"  HREF="000308.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r261 - trunk/src/net/sf/plantlore/server</H1>
+    <B>kovo at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r261%20-%20trunk/src/net/sf/plantlore/server&In-Reply-To=%3C200605120146.k4C1k64A020924%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r261 - trunk/src/net/sf/plantlore/server">kovo at berlios.de
+       </A><BR>
+    <I>Fri May 12 03:46:06 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000307.html">[Plantlore-dev]Schuzka 
+</A></li>
+        <LI>Next message: <A HREF="000308.html">[Plantlore-dev] Upravy SelectQuery
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#306">[ date ]</a>
+              <a href="thread.html#306">[ thread ]</a>
+              <a href="subject.html#306">[ subject ]</a>
+              <a href="author.html#306">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: kovo
+Date: 2006-05-12 03:45:51 +0200 (Fri, 12 May 2006)
+New Revision: 261
+
+Modified:
+   trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+   trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+Log:
+Update handling of projections when creating a select query (multiple projections can now be added)
+
+Modified: trunk/src/net/sf/plantlore/server/HibernateDBLayer.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-11 16:48:15 UTC (rev 260)
++++ trunk/src/net/sf/plantlore/server/HibernateDBLayer.java	2006-05-12 01:45:51 UTC (rev 261)
+@@ -199,6 +199,22 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setCreatedWhen(new java.util.Date());
++            occ.setCreatedWho(this.plantloreUser);
++            data = occ;
++        }
++        if (data instanceof Publication) {
++            Publication pub = (Publication)data;
++            pub.setCreatedWho(this.plantloreUser);
++            data = pub;
++        }
++        if (data instanceof Author) {
++            Author aut = (Author)data;
++            aut.setCreatedWho(this.plantloreUser);
++            data = aut;
++        }        
+         Session session = sessionFactory.openSession();
+         Transaction tx = null;                
+         try {
+@@ -207,63 +223,7 @@
+             // Save item into the database
+             recordId = (Integer)session.save(data);            
+             // Save data to history tables - only for selected tables
+-            if ((data instanceof Publication) || (data instanceof Territory) ||
+-                (data instanceof Village) || (data instanceof Phytochorion) ||
+-                (data instanceof Author) || (data instanceof Occurrence)) {
+-                HistoryChange historyChange = new HistoryChange();
+-                if (data instanceof Occurrence) {
+-                    historyChange.setOccurrence((Occurrence)data);
+-                    historyChange.setRecordId(0);
+-                    table = PlantloreConstants.ENTITY_OCCURRENCE;
+-                } else {
+-                    historyChange.setOccurrence(null);
+-                    if (data instanceof Publication) {
+-                        table = PlantloreConstants.ENTITY_PUBLICATION;
+-                    } else if (data instanceof Territory) {
+-                        table = PlantloreConstants.ENTITY_TERRITORY;                        
+-                    } else if (data instanceof Village) {
+-                        table = PlantloreConstants.ENTITY_VILLAGE;                        
+-                    } else if (data instanceof Phytochorion) {
+-                        table = PlantloreConstants.ENTITY_PHYTOCHORION;                        
+-                    } else if (data instanceof Author) {
+-                        table = PlantloreConstants.ENTITY_AUTHOR;                        
+-                    } else {
+-                        table = &quot;&quot;;
+-                    }
+-                    historyChange.setRecordId(recordId);
+-                }
+-                historyChange.setOldRecordId(0);
+-                historyChange.setOperation(PlantloreConstants.INSERT);
+-                historyChange.setWho(this.plantloreUser);
+-                historyChange.setWhen(new java.util.Date());
+-                
+-                // Load record from THistoryColumn table
+-                try {
+-                    SelectQuery sq = this.createQuery(HistoryColumn.class);
+-                    sq.addRestriction(PlantloreConstants.RESTR_EQ, HistoryColumn.TABLENAME, null, table, null);
+-                    sq.addRestriction(PlantloreConstants.RESTR_IS_NULL, HistoryColumn.COLUMNNAME, null, null, null);
+-                    result = this.executeQuery(sq);
+-                } catch (RemoteException e) {
+-                    logger.fatal(&quot;Cannot load HistoryChange information. Details: &quot;+e.getMessage());
+-                }
+-                Object[] objCol = next(result);
+-                if (objCol == null) {                
+-                    logger.error(&quot;tHistoryColumn doesn't contain required data&quot;);
+-                    DBLayerException ex = new DBLayerException(&quot;tHistoryColumn doesn't contain required data&quot;);
+-                    ex.setError(ex.ERROR_DB, PlantloreConstants.ENTITY_HISTORYCOLUMN);
+-                    throw ex;
+-                } else {
+-                    column = (HistoryColumn)objCol[0];
+-                }                
+-                HistoryRecord history = new HistoryRecord();
+-                history.setHistoryColumn(column);
+-                history.setNewValue(null);
+-                history.setOldValue(null);
+-                // Save into the database
+-                recordId = (Integer)session.save(historyChange);
+-                history.setHistoryChange(historyChange);                
+-                recordId = (Integer)session.save(history);                
+-            }
++            // this.saveHistory(session, data, INSERT, recordId);
+             // Commit transaction
+             tx.commit();                                      
+         } catch (HibernateException e) {
+@@ -297,6 +257,22 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setCreatedWhen(new java.util.Date());
++            occ.setCreatedWho(this.plantloreUser);
++            data = occ;
++        }
++        if (data instanceof Publication) {
++            Publication pub = (Publication)data;
++            pub.setCreatedWho(this.plantloreUser);
++            data = pub;
++        }
++        if (data instanceof Author) {
++            Author aut = (Author)data;
++            aut.setCreatedWho(this.plantloreUser);
++            data = aut;
++        }
+         Session session = sessionFactory.openSession();
+         Transaction tx = null;        
+         try {
+@@ -464,6 +440,13 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        // Modify the input data - UPDATEWHEN and UPDATEWHO where applicable
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }
+         Session session = sessionFactory.openSession();
+         Transaction tx = null;        
+         try {
+@@ -533,6 +516,13 @@
+             ex.setError(ex.ERROR_CONNECT, null);
+             throw ex;
+         }
++        // Modify the input data - UPDATEWHEN and UPDATEWHO where applicable
++        if (data instanceof Occurrence) {
++            Occurrence occ = (Occurrence)data;
++            occ.setUpdatedWhen(new java.util.Date());
++            occ.setUpdatedWho(this.plantloreUser);
++            data = occ;
++        }        
+         Session session = sessionFactory.openSession();
+         Transaction tx = null;
+         try {
+@@ -741,7 +731,7 @@
+         try {
+             tx = session.beginTransaction();
+             // Execute detached criteria query
+-            System.out.println(sq.getCriteria().toString());            
++            sq.setProjectionList();
+             res = sq.getCriteria().scroll(); // retrieve Criteria from SelectQuery
+             // Commit transaction
+             tx.commit();                                      
+@@ -965,14 +955,31 @@
+                 }
+                 Object[] res = sc.get();
+                 Author aut = (Author)res[0];
+-                // Check for direct ownership first
+-                if (!aut.getCreatedWho().equals(this.plantloreUser)) {
++                boolean equal = false;
++                // Check for administrator rights
++                if (this.plantloreUser.getRight().getAdministrator() == 1) {
++                    equal = true;
++                }                
++                // Check for direct ownership first                
++                if (aut.getCreatedWho().equals(this.plantloreUser)) {
++                    equal = true;
+                 }
+                 // Then check for indirect (group) ownership
+-                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);                    
++                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);
++                String strId;
+                 for (int i=0;i&lt;group.length;i++) {
+-                    // if ()
++                    strId = this.plantloreUser.getId().toString();
++                    if (strId.equals(group[i])) {
++                        equal = true;
++                        break;
++                    }
+                 }
++                if (equal == false) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOR);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOR);
++                    throw ex;                    
++                }
+             }
+             if (type == INSERT) {
+                 // Insert only if CADD = 1
+@@ -1040,27 +1047,285 @@
+         if (data instanceof Publication) {
+             if ((type == DELETE) || (type == UPDATE)) {
+                 // Only data of the user and those listed in CEDITGROUP
++                sess = this.sessionFactory.openSession();
++                ScrollableResults sc = sess.createCriteria(Publication.class)
++                    .add(Restrictions.eq(Publication.ID, ((Publication)data).getId()))
++                    .scroll();
++                // If we haven't found the publication in the database, raise exception
++                if (sc.next()) {
++                    logger.error(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());
++                    ex = new DBLayerException(&quot;To-be-updated/deleted publication not found in the database. Publication ID:&quot;+((Publication)data).getId());
++                    ex.setError(ex.ERROR_OTHER, null);
++                    throw ex;                                        
++                }
++                Object[] res = sc.get();
++                Publication pub = (Publication)res[0];
++                boolean equal = false;
++                // Check for direct ownership first                
++                if (pub.getCreatedWho().equals(this.plantloreUser)) {
++                    equal = true;
++                }
++                // Check for administrator rights
++                if (this.plantloreUser.getRight().getAdministrator() == 1) {
++                    equal = true;
++                }                
++                // Then check for indirect (group) ownership
++                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);
++                String strId;
++                for (int i=0;i&lt;group.length;i++) {
++                    strId = this.plantloreUser.getId().toString();
++                    if (strId.equals(group[i])) {
++                        equal = true;
++                        break;
++                    }
++                }
++                if (equal == false) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_PUBLICATION);
++                    throw ex;
++                }
+             }
+             if (type == INSERT) {
+                 // Only if CADD = 1
++                if (this.rights.getAdd() == 0) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_PUBLICATION);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_PUBLICATION);
++                    throw ex;                    
++                }                
+             }                        
+         }
+         // Check rights for table TOCCURRENCES
+         if (data instanceof Occurrence) {
+-           
++            if ((type == DELETE) || (type == UPDATE)) {
++                // Only data of the user and those listed in CEDITGROUP
++                sess = this.sessionFactory.openSession();
++                ScrollableResults sc = sess.createCriteria(Occurrence.class)
++                    .add(Restrictions.eq(Occurrence.ID, ((Occurrence)data).getId()))
++                    .scroll();
++                // If we haven't found the occurrence in the database, raise exception
++                if (sc.next()) {
++                    logger.error(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
++                    ex = new DBLayerException(&quot;To-be-updated/deleted occurrence not found in the database. Occurrence ID:&quot;+((Publication)data).getId());
++                    ex.setError(ex.ERROR_OTHER, null);
++                    throw ex;                                        
++                }
++                Object[] res = sc.get();
++                Occurrence occ = (Occurrence)res[0];
++                boolean equal = false;
++                // Check for direct ownership first                
++                if (occ.getCreatedWho().equals(this.plantloreUser)) {
++                    equal = true;
++                }
++                // Check for administrator rights
++                if (this.plantloreUser.getRight().getAdministrator() == 1) {
++                    equal = true;
++                }
++                // Then check for indirect (group) ownership
++                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);
++                String strId;
++                for (int i=0;i&lt;group.length;i++) {
++                    strId = this.plantloreUser.getId().toString();
++                    if (strId.equals(group[i])) {
++                        equal = true;
++                        break;
++                    }
++                }
++                if (equal == false) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_OCCURRENCE);
++                    throw ex;
++                }
++            }
++            if (type == INSERT) {
++                // Insert only if CADD = 1
++                if (this.rights.getAdd() == 0) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_OCCURRENCE);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_OCCURRENCE);
++                    throw ex;                    
++                }                
++            }                            
+         }
+         // Check rights for table THABITATS
+         if (data instanceof Habitat) {
+-            
++            if ((type == DELETE) || (type == UPDATE)) {
++                // Only data of the user and those listed in CEDITGROUP
++                sess = this.sessionFactory.openSession();
++                ScrollableResults sc = sess.createCriteria(Occurrence.class)
++                    .add(Restrictions.eq(Occurrence.ID, ((Habitat)data).getId()))
++                    .scroll();
++                // If we haven't found the occurrence in the database, raise exception
++                if (sc.next()) {
++                    logger.error(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
++                    ex = new DBLayerException(&quot;To-be-updated/deleted habitat not found in the database. Occurrence ID:&quot;+((Habitat)data).getId());
++                    ex.setError(ex.ERROR_OTHER, null);
++                    throw ex;                                        
++                }
++                Object[] res = sc.get();
++                Habitat hab = (Habitat)res[0];
++                boolean equal = false;
++                // Check for direct ownership first                
++                // TODO - FINISH
++                /*
++                if (hab.getCreatedWho().equals(this.plantloreUser))) {
++                    equal = true;
++                }
++                 */
++                // Check for administrator rights
++                if (this.plantloreUser.getRight().getAdministrator() == 1) {
++                    equal = true;
++                }
++                // Then check for indirect (group) ownership
++                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);
++                String strId;
++                for (int i=0;i&lt;group.length;i++) {
++                    strId = this.plantloreUser.getId().toString();
++                    if (strId.equals(group[i])) {
++                        equal = true;
++                        break;
++                    }
++                }
++                if (equal == false) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_HABITAT);
++                    throw ex;
++                }
++            }            
++            if (type == INSERT) {
++                // Insert only if CADD = 1
++                if (this.rights.getAdd() == 0) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_HABITAT);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_HABITAT);
++                    throw ex;                    
++                }                
++            }                                        
+         }
+         // Check rights for table TAUTHORSOCCURRENCES
+         if (data instanceof AuthorOccurrence) {
+-            
++            if ((type == DELETE) || (type == UPDATE)) {
++                // Only data of the user and those listed in CEDITGROUP
++                sess = this.sessionFactory.openSession();
++                ScrollableResults sc = sess.createCriteria(Occurrence.class)
++                    .add(Restrictions.eq(AuthorOccurrence.ID, ((AuthorOccurrence)data).getId()))
++                    .scroll();
++                // If we haven't found the occurrence in the database, raise exception
++                if (sc.next()) {
++                    logger.error(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
++                    ex = new DBLayerException(&quot;To-be-updated/deleted authoroccurrence not found in the database. Occurrence ID:&quot;+((AuthorOccurrence)data).getId());
++                    ex.setError(ex.ERROR_OTHER, null);
++                    throw ex;                                        
++                }
++                Object[] res = sc.get();
++                AuthorOccurrence ao = (AuthorOccurrence)res[0];
++                boolean equal = false;
++                // Check for direct ownership first                
++                if (ao.getOccurrence().getCreatedWho().equals(this.plantloreUser)) {
++                    equal = true;
++                }
++                // Check for administrator rights
++                if (this.plantloreUser.getRight().getAdministrator() == 1) {
++                    equal = true;
++                }
++                // Then check for indirect (group) ownership
++                String[] group = this.rights.getEditGroup().split(&quot;,&quot;);
++                String strId;
++                for (int i=0;i&lt;group.length;i++) {
++                    strId = this.plantloreUser.getId().toString();
++                    if (strId.equals(group[i])) {
++                        equal = true;
++                        break;
++                    }
++                }
++                if (equal == false) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    throw ex;
++                }
++            }            
++            if (type == INSERT) {
++                // Insert only if CADD = 1
++                if (this.rights.getAdd() == 0) {
++                    logger.warn(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    ex = new DBLayerException(&quot;User doesn't have sufficient rights for this operation. Entity: &quot;+PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    ex.setError(ex.ERROR_RIGHTS, PlantloreConstants.ENTITY_AUTHOROCCURRENCE);
++                    throw ex;                    
++                }                
++            }            
+         }        
+     }
+     
+     private void saveHistory(Session sess, Object data, int type, Integer recordId) throws DBLayerException {
++        String table;
++        Integer result = 0;
++        HistoryColumn column;
++        Integer recId;
++        Object[] objCol = null;
+         
++        if (type == INSERT) {
++            if ((data instanceof Publication) || (data instanceof Author) ||
++                (data instanceof Occurrence)) {
++                HistoryChange historyChange = new HistoryChange();
++                if (data instanceof Occurrence) {
++                    historyChange.setOccurrence((Occurrence)data);
++                    historyChange.setRecordId(0);
++                    table = PlantloreConstants.ENTITY_OCCURRENCE;
++                } else {
++                    historyChange.setOccurrence(null);
++                    if (data instanceof Publication) {
++                        table = PlantloreConstants.ENTITY_PUBLICATION;
++                    } else if (data instanceof Author) {
++                        table = PlantloreConstants.ENTITY_AUTHOR;                        
++                    } else {
++                        table = &quot;&quot;;
++                    }
++                    historyChange.setRecordId(recordId);
++                }
++                historyChange.setOldRecordId(0);
++                historyChange.setOperation(PlantloreConstants.INSERT);
++                historyChange.setWho(this.plantloreUser);
++                historyChange.setWhen(new java.util.Date());
++                
++                // Load record from THistoryColumn table
++                try {
++                    SelectQuery sq = this.createQuery(HistoryColumn.class);
++                    sq.addRestriction(PlantloreConstants.RESTR_EQ, HistoryColumn.TABLENAME, null, table, null);
++                    sq.addRestriction(PlantloreConstants.RESTR_IS_NULL, HistoryColumn.COLUMNNAME, null, null, null);
++                    result = this.executeQuery(sq);
++                } catch (RemoteException e) {
++                    logger.fatal(&quot;Cannot load HistoryChange information. Details: &quot;+e.getMessage());
++                }
++                try {
++                    objCol = next(result);
++                } catch (RemoteException e) {
++                                        
++                }
++                if (objCol == null) {                
++                    logger.error(&quot;tHistoryColumn doesn't contain required data&quot;);
++                    DBLayerException ex = new DBLayerException(&quot;tHistoryColumn doesn't contain required data&quot;);
++                    ex.setError(ex.ERROR_DB, PlantloreConstants.ENTITY_HISTORYCOLUMN);
++                    throw ex;
++                } else {
++                    column = (HistoryColumn)objCol[0];
++                }                
++                HistoryRecord history = new HistoryRecord();
++                history.setHistoryColumn(column);
++                history.setNewValue(null);
++                history.setOldValue(null);
++                // Save into the database
++                recId = (Integer)sess.save(historyChange);
++                history.setHistoryChange(historyChange);                
++                recId = (Integer)sess.save(history);                
++            }            
++        }
++        if (type == UPDATE){
++            
++        }
+     }
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java
+===================================================================
+--- trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-11 16:48:15 UTC (rev 260)
++++ trunk/src/net/sf/plantlore/server/SelectQueryImplementation.java	2006-05-12 01:45:51 UTC (rev 261)
+@@ -9,7 +9,13 @@
+ 
+ 
+ import java.rmi.RemoteException;
++import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.HashSet;
++import java.util.Hashtable;
++import java.util.Iterator;
++import java.util.Map;
++import java.util.Set;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.middleware.SelectQuery;
+ 
+@@ -18,6 +24,7 @@
+ import org.hibernate.criterion.CriteriaSpecification;
+ import org.hibernate.criterion.Disjunction;
+ import org.hibernate.criterion.Order;
++import org.hibernate.criterion.ProjectionList;
+ import org.hibernate.criterion.Projections;
+ import org.hibernate.criterion.Restrictions;
+ import org.hibernate.criterion.SimpleExpression;
+@@ -37,7 +44,8 @@
+ public class SelectQueryImplementation implements SelectQuery {
+     // Hibernate criteria used in criteria query
+     private Criteria criteria;
+-    
++    /* List of projections for the query */
++    private HashSet projections = new HashSet();
+     /** Creates a new instance of SelectQueryImplementation */
+     public SelectQueryImplementation(Criteria criteria) {
+         this.criteria = criteria;
+@@ -247,39 +255,58 @@
+      *  @see PlantloreConstants
+      */
+     public void addProjection(int type, String propertyName) throws RemoteException {
+-        switch (type) {
+-            case PlantloreConstants.PROJ_AVG:
+-                criteria.setProjection(Projections.avg(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_COUNT:
+-                criteria.setProjection(Projections.count(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_COUNT_DISTINCT:
+-                criteria.setProjection(Projections.countDistinct(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_GROUP:
+-                criteria.setProjection(Projections.groupProperty(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_MAX:
+-                criteria.setProjection(Projections.max(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_MIN:
+-                criteria.setProjection(Projections.min(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_PROPERTY:
+-                criteria.setProjection(Projections.property(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_ROW_COUNT:
+-                criteria.setProjection(Projections.rowCount());
+-                break;
+-            case PlantloreConstants.PROJ_SUM:
+-                criteria.setProjection(Projections.sum(propertyName));
+-                break;
+-            case PlantloreConstants.PROJ_DISTINCT:
+-                criteria.setProjection(Projections.distinct(Projections.property(propertyName)));
+-            default:
+-                
++        ArrayList proj = new ArrayList(2);
++        proj.add(type);
++        proj.add(propertyName);
++        this.projections.add(proj);
++    }
++    
++    /**
++     *  Add the list of projections to the query. This method is only called by DBLayer method 
++     *  executeQuery() when executing Select query. Clients should add projections using 
++     *  addProjection() method.
++     */
++    void setProjectionList() {        
++        ProjectionList pList = Projections.projectionList();
++        if (projections.isEmpty()) {
++            return;
+         }
++        for (Iterator projIter = projections.iterator(); projIter.hasNext(); ) {
++            ArrayList proj = (ArrayList)projIter.next();
++            System.out.println(&quot;Processing projection for: &quot;+proj.get(1));
++            switch ((Integer)proj.get(0)) {
++                case PlantloreConstants.PROJ_AVG:
++                    pList.add(Projections.avg((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_COUNT:
++                    pList.add(Projections.count((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_COUNT_DISTINCT:
++                    pList.add(Projections.countDistinct((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_GROUP:
++                    pList.add(Projections.groupProperty((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_MAX:
++                    pList.add(Projections.max((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_MIN:
++                    pList.add(Projections.min((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_PROPERTY:
++                    pList.add(Projections.property((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_ROW_COUNT:
++                    pList.add(Projections.rowCount());
++                    break;
++                case PlantloreConstants.PROJ_SUM:
++                    pList.add(Projections.sum((String)proj.get(1)));
++                    break;
++                case PlantloreConstants.PROJ_DISTINCT:
++                    pList.add(Projections.distinct(Projections.property((String)proj.get(1))));
++            }
++        }
++        criteria.setProjection(pList);
+     }
+     
+     /**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000307.html">[Plantlore-dev]Schuzka 
+</A></li>
+	<LI>Next message: <A HREF="000308.html">[Plantlore-dev] Upravy SelectQuery
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#306">[ date ]</a>
+              <a href="thread.html#306">[ thread ]</a>
+              <a href="subject.html#306">[ subject ]</a>
+              <a href="author.html#306">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

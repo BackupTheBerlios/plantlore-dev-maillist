@@ -1,0 +1,763 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r457 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r457%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200606052226.k55MQjrU007201%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000587.html">
+   <LINK REL="Next"  HREF="000589.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r457 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r457%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200606052226.k55MQjrU007201%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r457 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Tue Jun  6 00:26:45 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000587.html">[Plantlore-dev] [Bug #7768] Searching should be case insensitive where applicable
+</A></li>
+        <LI>Next message: <A HREF="000589.html">[Plantlore-dev] [Bug #7675] Improve GUI - load as much rows as it is possible to display
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#588">[ date ]</a>
+              <a href="thread.html#588">[ thread ]</a>
+              <a href="subject.html#588">[ subject ]</a>
+              <a href="author.html#588">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-06-06 00:26:44 +0200 (Tue, 06 Jun 2006)
+New Revision: 457
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+   trunk/src/net/sf/plantlore/client/Settings.java
+   trunk/src/net/sf/plantlore/client/SettingsCtrl.java
+   trunk/src/net/sf/plantlore/client/SettingsView.form
+   trunk/src/net/sf/plantlore/client/SettingsView.java
+   trunk/src/net/sf/plantlore/client/TableSorter.java
+   trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Implemented dynamic records per page setting + apropriate option in Settings (very inefficient implementation unfortunately :( )
++fixed a possible future bug in overviewTableModel
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -58,6 +58,7 @@
+     private TableSorter tableSorter;
+     private Logger logger;
+     private ArrayList&lt;Column&gt; columns;
++    private boolean loggedIn = false;
+     
+     private SelectQuery exportQuery = null;
+     private boolean usingProjections = false;
+@@ -78,6 +79,7 @@
+     private Pair&lt;String, Integer&gt;[] publications = null;
+     private Pair&lt;String, Integer&gt;[] projects = null;
+     
++    protected boolean dynamicPageLoading;
+     
+     /** Creates a new instance of AppCore */
+     public AppCore(MainConfig mainConfig)
+@@ -85,6 +87,8 @@
+         logger = Logger.getLogger(this.getClass().getPackage().getName());        
+         prefs = Preferences.userNodeForPackage(this.getClass());
+         
++        dynamicPageLoading  = prefs.getBoolean(PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE,false);
++        
+         this.mainConfig = mainConfig;
+         ArrayList&lt;Column&gt; columns = mainConfig.getColumns();
+         if (columns.size() &lt; 1) {
+@@ -205,7 +209,7 @@
+             return 0;
+     }
+ 
+-    public void setRecordsPerPage(int recordsPerPage) {        
++    public void setRecordsPerPage(int recordsPerPage) throws RemoteException, DBLayerException {        
+         if (tableSorter != null)
+         {
+             logger.info(&quot;Setting records per page to &quot;+recordsPerPage);
+@@ -642,9 +646,14 @@
+     public void login() {
+         assert database != null;
+         
++        loggedIn = true;
+         tableSorter.setDatabase(database);
+     }
+ 
++    public boolean loggedIn() {
++        return loggedIn;
++    }
++    
+     public Pair&lt;String, Integer&gt;[] getPlants() {
+         return plants;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -13,6 +13,8 @@
+ import java.awt.HeadlessException;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.ComponentEvent;
++import java.awt.event.ComponentListener;
+ import java.awt.event.FocusListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+@@ -330,7 +332,8 @@
+ 		view.occurrencesRefresh.setAction(refreshAction);
+ 
+ 		view.overview.addKeyListener(new OverviewKeyListener());
+-
++                view.overviewScrollPane.addComponentListener(new OverviewResizeListener());
++                
+ 		view.addWindowListener(new AppWindowListener());
+ 		view
+ 				.setRecordsPerPageListener(new RecordsPerPagePropertyChangeListener());
+@@ -455,6 +458,9 @@
+ 					searchModel.clear();
+ 					searchModel.constructQuery();
+ 				}
++                                if (s.equals(&quot;DYNAMIC_PAGE_LOADING&quot;)) {
++                                    model.dynamicPageLoading = prefs.getBoolean(PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE,false);
++                                }                                
+ 			}
+ 		}
+ 	}
+@@ -1273,8 +1279,15 @@
+ 						// 1 anyway...
+ 						tf.setValue(1);
+ 				} else {
+-					model.setRecordsPerPage(i);
+-				}
++                                    try {
++                                       model.setRecordsPerPage(i);                    
++                                    } catch (RemoteException ex) {  
++                                        JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++                                        ex.printStackTrace();
++                                    } catch (DBLayerException ex) {
++                                        JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++                                        ex.printStackTrace();
++                                    }				}
+ 			}
+ 		}
+ 	}
+@@ -1298,12 +1311,20 @@
+ 
+ 	class OverviewMouseListener implements MouseListener {
+ 		public void mouseClicked(MouseEvent e) {
+-			if (e.getClickCount() == 2) {
+-				JOptionPane.showMessageDialog(view, &quot;Double click! On row #&quot;
+-						+ model.getSelectedRowNumber());
+-			}
+-			System.out.println(&quot;Click count = &quot; + e.getClickCount());
+-		}
++                    try {
++                        int resultNumber = model.getSelectedResultNumber();
++                        if (resultNumber != model.getResultsCount())
++                            model.selectAndShow(resultNumber);
++                        detailModel.load(model.getSelectedResultNumber());
++                        detailView.setVisible(true);
++                    } catch (RemoteException ex) {  
++                        JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++                        ex.printStackTrace();
++                    } catch (DBLayerException ex) {
++                        JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++                        ex.printStackTrace();
++                    }
++                }
+ 
+ 		public void mousePressed(MouseEvent e) {
+ 		}
+@@ -1321,9 +1342,6 @@
+ 
+ 	class OverviewKeyListener implements KeyListener {
+ 		public void keyTyped(KeyEvent e) {
+-			System.out.println(&quot;Typed key: char=&quot; + e.getKeyChar() + &quot; code=&quot;
+-					+ e.getKeyCode() + &quot; text=&quot; + e.getKeyText(e.getKeyChar())
+-					+ &quot; modif=&quot; + e.getKeyModifiersText(e.getModifiers()));
+ 			if (e.getKeyText(e.getKeyChar()).equals(&quot;Space&quot;))
+ 				model.invertSelectedOnCurrentRow();
+ 			if (e.getKeyText(e.getKeyChar()).equals(&quot;Enter&quot;)) {
+@@ -1625,5 +1643,37 @@
+ 			}// if arg instanceof Table[]
+ 		}// update()
+ 	}// class ManagerBridge
++        
++    class OverviewResizeListener implements ComponentListener {
++        private final static int sub = 20; //height of the header row perhaps
++        
++        public void componentResized(ComponentEvent e) {
++            if (!model.loggedIn() || !model.dynamicPageLoading)
++                return;
++            Component c = e.getComponent();
++            int tableHeight = c.getSize().height - sub; //height of the row part of JTable ( --&gt; without header)
++            int rowHeight = view.overview.getRowHeight();
++            int newRecordsCount = tableHeight / rowHeight;
++            try {
++                model.setRecordsPerPage(newRecordsCount);
++                view.recordsPerPage.setValue(newRecordsCount);
++            } catch (RemoteException ex) {  
++                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++                ex.printStackTrace();
++            } catch (DBLayerException ex) {
++                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++                ex.printStackTrace();
++            }
++        }
+ 
++        public void componentMoved(ComponentEvent e) {
++        }
++
++        public void componentShown(ComponentEvent e) {
++        }
++
++        public void componentHidden(ComponentEvent e) {
++        }        
++    }        
++
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/OverviewTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/OverviewTableModel.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -225,7 +225,13 @@
+         return pageSize;
+     }
+     
+-    public void setPageSize(int pageSize) {
++    public void setPageSize(int pageSize) throws DBLayerException, RemoteException {
++        if (pageSize &lt;= 0) {
++            data = null;
++            this.pageSize = 0;
++            fireTableDataChanged();
++            return;
++        }
+         this.pageSize = pageSize;
+         if (from + pageSize &gt; resultsCount)
+             from = resultsCount - pageSize;
+@@ -233,14 +239,7 @@
+             from = 0;
+         
+         currentPage = from / pageSize + 1;
+-        //FIXME: 
+-        try {
+-            loadData();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        }
++        loadData();
+         fireTableDataChanged();
+     }
+     
+@@ -340,8 +339,9 @@
+     }
+     
+     public Integer getResultNumber(int row) {
+-        if (data != null)
+-            return ((Integer)data[row][numberColumnIndex])-1; //displayed numbers are indexed from 1
++        if (data != null) 
++//            return ((Integer)data[row][numberColumnIndex])-1; //displayed numbers are indexed from 1
++            return from + row; //we do not depend on data array which is crucial because the Number column doesn't have to be between the displayed/projected columns
+         else
+             return -1;        
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/Settings.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Settings.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/Settings.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -10,6 +10,7 @@
+ import java.util.ArrayList;
+ import java.util.Observable;
+ import java.util.prefs.Preferences;
++import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+@@ -35,6 +36,8 @@
+     private String headerOne;
+     private String headerTwo;
+     
++    private boolean dynamicPageLoading;
++    
+     /** Creates a new instance of Settings */
+     public Settings()
+     {
+@@ -47,6 +50,8 @@
+         prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
+         headerOne = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set header one in settings.&quot;);
+         headerTwo = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set header two in settings.&quot;);
++        
++        dynamicPageLoading = prefs.getBoolean(PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE,false);
+     }
+     
+     /** Returns currently set language in this model.
+@@ -97,8 +102,13 @@
+         if (headerTwo != null)
+             prefs.put(&quot;HEADER_TWO&quot;,headerTwo);
+         
++        prefs.putBoolean(PlantloreConstants.PREF_DYNAMIC_PAGE_SIZE,dynamicPageLoading);
++        
+         setChanged();
+         notifyObservers(&quot;COLUMNS&quot;);        
++        
++        setChanged();
++        notifyObservers(&quot;DYNAMIC_PAGE_LOADING&quot;);
+     }//store()
+     
+     public void setSelectedColumns(ArrayList&lt;Column&gt; columns) {
+@@ -140,6 +150,14 @@
+         this.headerTwo = headerTwo;
+         logger.debug(&quot;Header two set to: &quot;+headerTwo);
+     }
++
++    public boolean isDynamicPageLoading() {
++        return dynamicPageLoading;
++    }
++
++    public void setDynamicPageLoading(boolean dynamicPageLoading) {
++        this.dynamicPageLoading = dynamicPageLoading;
++    }
+     
+     
+     
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsCtrl.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/SettingsCtrl.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -55,6 +55,8 @@
+         
+         view.headerOneField.addFocusListener(new SchedaFieldListener());
+         view.headerTwoField.addFocusListener(new SchedaFieldListener());
++        
++        view.dynamicPageCheckBox.addActionListener(new ButtonListener());
+     }
+     
+     /** Handles clicks on languages radio buttons.
+@@ -167,6 +169,11 @@
+                 
+                 return;
+             }
++            
++            if (s.equals(&quot;DYNAMIC_PAGE_LOADING&quot;)) {
++                boolean dynamic = view.dynamicPageCheckBox.isSelected();
++                model.setDynamicPageLoading(dynamic);
++            }
+         }
+     }//ButtonListener
+     
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsView.form	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/SettingsView.form	2006-06-05 22:26:44 UTC (rev 457)
+@@ -27,7 +27,7 @@
+               &lt;Component id=&quot;okButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+-          &lt;Component id=&quot;jTabbedPane1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Component id=&quot;jTabbedPane1&quot; alignment=&quot;0&quot; pref=&quot;622&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+@@ -76,7 +76,7 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jPanel2&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;145&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;144&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -116,7 +116,7 @@
+                           &lt;Component id=&quot;czechRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Component id=&quot;defaultRadioButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;EmptySpace pref=&quot;48&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;49&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+@@ -416,7 +416,7 @@
+                   &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jPanel6&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;160&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;159&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+             &lt;/DimensionLayout&gt;
+@@ -464,7 +464,7 @@
+                               &lt;Component id=&quot;headerTwoLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;headerTwoField&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+-                          &lt;EmptySpace pref=&quot;44&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;45&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                 &lt;/DimensionLayout&gt;
+@@ -502,6 +502,91 @@
+             &lt;/Container&gt;
+           &lt;/SubComponents&gt;
+         &lt;/Container&gt;
++        &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel7&quot;&gt;
++          &lt;Constraints&gt;
++            &lt;Constraint layoutClass=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout&quot; value=&quot;org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription&quot;&gt;
++              &lt;JTabbedPaneConstraints tabName=&quot;General&quot;&gt;
++                &lt;Property name=&quot;tabTitle&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.i18n.form.FormI18nStringEditor&quot;&gt;
++                  &lt;ResourceString bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.GeneralTab&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                &lt;/Property&gt;
++              &lt;/JTabbedPaneConstraints&gt;
++            &lt;/Constraint&gt;
++          &lt;/Constraints&gt;
++
++          &lt;Layout&gt;
++            &lt;DimensionLayout dim=&quot;0&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel8&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++            &lt;DimensionLayout dim=&quot;1&quot;&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jPanel8&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;159&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++              &lt;/Group&gt;
++            &lt;/DimensionLayout&gt;
++          &lt;/Layout&gt;
++          &lt;SubComponents&gt;
++            &lt;Container class=&quot;javax.swing.JPanel&quot; name=&quot;jPanel8&quot;&gt;
++              &lt;Properties&gt;
++                &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++                  &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.TitledBorderInfo&quot;&gt;
++                    &lt;TitledBorder title=&quot;Overview&quot;&gt;
++                      &lt;ResourceString PropertyName=&quot;titleX&quot; bundle=&quot;net/sf/plantlore/l10n/Plantlore.properties&quot; key=&quot;Settings.General.OverviewPanel&quot; replaceFormat=&quot;L10n.getString(&quot;{key}&quot;)&quot;/&gt;
++                    &lt;/TitledBorder&gt;
++                  &lt;/Border&gt;
++                &lt;/Property&gt;
++              &lt;/Properties&gt;
++
++              &lt;Layout&gt;
++                &lt;DimensionLayout dim=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;dynamicPageCheckBox&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;481&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                &lt;/DimensionLayout&gt;
++                &lt;DimensionLayout dim=&quot;1&quot;&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Component id=&quot;dynamicPageCheckBox&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;EmptySpace pref=&quot;73&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;/Group&gt;
++                  &lt;/Group&gt;
++                &lt;/DimensionLayout&gt;
++              &lt;/Layout&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JCheckBox&quot; name=&quot;dynamicPageCheckBox&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jCheckBox1&quot;/&gt;
++                    &lt;Property name=&quot;border&quot; type=&quot;javax.swing.border.Border&quot; editor=&quot;org.netbeans.modules.form.editors2.BorderEditor&quot;&gt;
++                      &lt;Border info=&quot;org.netbeans.modules.form.compat2.border.EmptyBorderInfo&quot;&gt;
++                        &lt;EmptyBorder bottom=&quot;0&quot; left=&quot;0&quot; right=&quot;0&quot; top=&quot;0&quot;/&gt;
++                      &lt;/Border&gt;
++                    &lt;/Property&gt;
++                    &lt;Property name=&quot;margin&quot; type=&quot;java.awt.Insets&quot; editor=&quot;org.netbeans.beaninfo.editors.InsetsEditor&quot;&gt;
++                      &lt;Insets value=&quot;[0, 0, 0, 0]&quot;/&gt;
++                    &lt;/Property&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_InitCodePost&quot; type=&quot;java.lang.String&quot; value=&quot;dynamicPageCheckBox.setActionCommand(&quot;DYNAMIC_PAGE_LOADING&quot;);&quot;/&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancelButton&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/SettingsView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/SettingsView.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/SettingsView.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -68,6 +68,9 @@
+         //--- SCHEDA TAB
+         headerOneField.setText(model.getHeaderOne());
+         headerTwoField.setText(model.getHeaderTwo());
++        
++        //--- GENERAL TAB
++        dynamicPageCheckBox.setSelected(model.isDynamicPageLoading());
+     }
+     
+     
+@@ -96,6 +99,8 @@
+         
+         headerOneLabel.setText(L10n.getString(&quot;Settings.HeaderOne&quot;));
+         headerTwoLabel.setText(L10n.getString(&quot;Settings.HeaderTwo&quot;));
++        
++        dynamicPageCheckBox.setText(L10n.getString(&quot;Settings.General.DynamicPageLoading&quot;));
+     }
+     
+     /** This method is called from within the constructor to
+@@ -130,6 +135,9 @@
+         headerOneLabel = new javax.swing.JLabel();
+         headerTwoLabel = new javax.swing.JLabel();
+         headerTwoField = new javax.swing.JTextField();
++        jPanel7 = new javax.swing.JPanel();
++        jPanel8 = new javax.swing.JPanel();
++        dynamicPageCheckBox = new javax.swing.JCheckBox();
+         cancelButton = new javax.swing.JButton();
+         okButton = new javax.swing.JButton();
+         helpButton = new javax.swing.JButton();
+@@ -174,7 +182,7 @@
+                 .add(czechRadioButton)
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(defaultRadioButton)
+-                .addContainerGap(48, Short.MAX_VALUE))
++                .addContainerGap(49, Short.MAX_VALUE))
+         );
+ 
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+@@ -191,7 +199,7 @@
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel2, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(145, Short.MAX_VALUE))
++                .addContainerGap(144, Short.MAX_VALUE))
+         );
+         jTabbedPane1.addTab(L10n.getString(&quot;Settings.LanguagesTab&quot;), jPanel1);
+ 
+@@ -333,7 +341,7 @@
+                 .add(jPanel6Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                     .add(headerTwoLabel)
+                     .add(headerTwoField, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                .addContainerGap(44, Short.MAX_VALUE))
++                .addContainerGap(45, Short.MAX_VALUE))
+         );
+ 
+         org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
+@@ -350,10 +358,51 @@
+             .add(jPanel5Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel6, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(160, Short.MAX_VALUE))
++                .addContainerGap(159, Short.MAX_VALUE))
+         );
+         jTabbedPane1.addTab(L10n.getString(&quot;Settings.SchedaTab&quot;), jPanel5);
+ 
++        jPanel8.setBorder(javax.swing.BorderFactory.createTitledBorder(L10n.getString(&quot;Settings.General.OverviewPanel&quot;)));
++        dynamicPageCheckBox.setText(&quot;jCheckBox1&quot;);
++        dynamicPageCheckBox.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
++        dynamicPageCheckBox.setMargin(new java.awt.Insets(0, 0, 0, 0));
++        dynamicPageCheckBox.setActionCommand(&quot;DYNAMIC_PAGE_LOADING&quot;);
++
++        org.jdesktop.layout.GroupLayout jPanel8Layout = new org.jdesktop.layout.GroupLayout(jPanel8);
++        jPanel8.setLayout(jPanel8Layout);
++        jPanel8Layout.setHorizontalGroup(
++            jPanel8Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel8Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(dynamicPageCheckBox)
++                .addContainerGap(481, Short.MAX_VALUE))
++        );
++        jPanel8Layout.setVerticalGroup(
++            jPanel8Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel8Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(dynamicPageCheckBox)
++                .addContainerGap(73, Short.MAX_VALUE))
++        );
++
++        org.jdesktop.layout.GroupLayout jPanel7Layout = new org.jdesktop.layout.GroupLayout(jPanel7);
++        jPanel7.setLayout(jPanel7Layout);
++        jPanel7Layout.setHorizontalGroup(
++            jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel7Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel8, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                .addContainerGap())
++        );
++        jPanel7Layout.setVerticalGroup(
++            jPanel7Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(jPanel7Layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jPanel8, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                .addContainerGap(159, Short.MAX_VALUE))
++        );
++        jTabbedPane1.addTab(L10n.getString(&quot;Settings.GeneralTab&quot;), jPanel7);
++
+         cancelButton.setText(&quot;Cancel&quot;);
+         cancelButton.setActionCommand(&quot;CANCEL&quot;);
+ 
+@@ -375,7 +424,7 @@
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(okButton)
+                 .addContainerGap())
+-            .add(jTabbedPane1)
++            .add(jTabbedPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 622, Short.MAX_VALUE)
+         );
+ 
+         layout.linkSize(new java.awt.Component[] {cancelButton, helpButton, okButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
+@@ -420,6 +469,7 @@
+     protected javax.swing.JRadioButton czechRadioButton;
+     protected javax.swing.JRadioButton defaultRadioButton;
+     protected javax.swing.JButton downButton;
++    protected javax.swing.JCheckBox dynamicPageCheckBox;
+     protected javax.swing.JRadioButton englishRadioButton;
+     protected javax.swing.JTextField headerOneField;
+     protected javax.swing.JLabel headerOneLabel;
+@@ -432,6 +482,8 @@
+     private javax.swing.JPanel jPanel4;
+     private javax.swing.JPanel jPanel5;
+     private javax.swing.JPanel jPanel6;
++    private javax.swing.JPanel jPanel7;
++    private javax.swing.JPanel jPanel8;
+     private javax.swing.JScrollPane jScrollPane1;
+     private javax.swing.JScrollPane jScrollPane2;
+     private javax.swing.JTabbedPane jTabbedPane1;
+
+Modified: trunk/src/net/sf/plantlore/client/TableSorter.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/TableSorter.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/client/TableSorter.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -503,7 +503,7 @@
+         return tableModel.getPageSize();
+     }
+     
+-    public void setPageSize(int size) {
++    public void setPageSize(int size) throws RemoteException, DBLayerException {
+         tableModel.setPageSize(size);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/PlantloreConstants.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/common/PlantloreConstants.java	2006-06-05 22:26:44 UTC (rev 457)
+@@ -101,6 +101,10 @@
+     public static final int UPDATE                = 2;
+     public static final int DELETE                = 3;
+     
++    /** Constants used for Preferences keys */
++    public static final String PREF_DYNAMIC_PAGE_SIZE = &quot;Overview.dynamicPageSize&quot;;
++    
++    
+     /** Creates a new instance of PlantloreConstants */
+     public PlantloreConstants() {
+     }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-06-05 22:26:44 UTC (rev 457)
+@@ -1289,3 +1289,9 @@
+ Delete.InsufficientRights=You don't have sufficient rights to delete all the checked records.
+ 
+ Delete.InsufficientRightsTitle=Insufficient rights
++
++Settings.GeneralTab=General
++
++Settings.General.OverviewPanel=Overview
++
++Settings.General.DynamicPageLoading=Determine number of records per page dynamically
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-06-05 22:26:44 UTC (rev 457)
+@@ -842,6 +842,12 @@
+ 
+ Delete.InsufficientRightsTitle=Insufficient rights
+ 
++Settings.GeneralTab=Obecn\u00E9
++
++Settings.General.OverviewPanel=P\u0159ehled
++
++Settings.General.DynamicPageLoading=Ur\u010Di po\u010Det z\u00E1znam\u016F na str\u00E1nku dynamicky
++
+ Languages=Jazyky
+ 
+ Login.SelectDB=Volba datab\u00E1ze
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-05 20:58:47 UTC (rev 456)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-06-05 22:26:44 UTC (rev 457)
+@@ -910,6 +910,12 @@
+ 
+ Delete.InsufficientRightsTitle=Insufficient rights
+ 
++Settings.GeneralTab=General
++
++Settings.General.OverviewPanel=Overview
++
++Settings.General.DynamicPageLoading=Determine number of records per page dynamically
++
+ Overview.MenuHistory=&amp;History
+ 
+ Login.SelectDB=Select Database
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000587.html">[Plantlore-dev] [Bug #7768] Searching should be case insensitive where applicable
+</A></li>
+	<LI>Next message: <A HREF="000589.html">[Plantlore-dev] [Bug #7675] Improve GUI - load as much rows as it is possible to display
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#588">[ date ]</a>
+              <a href="thread.html#588">[ thread ]</a>
+              <a href="subject.html#588">[ subject ]</a>
+              <a href="author.html#588">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

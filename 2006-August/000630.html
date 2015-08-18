@@ -1,0 +1,287 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] Logout &amp; Database reconnect
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Logout%20%26%20Database%20reconnect&In-Reply-To=%3Cf4dc39b90608010815x47353f48q8dde91393eaedec7%40mail.gmail.com%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000629.html">
+   <LINK REL="Next"  HREF="000631.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] Logout &amp; Database reconnect</H1>
+    <B>L33t</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20Logout%20%26%20Database%20reconnect&In-Reply-To=%3Cf4dc39b90608010815x47353f48q8dde91393eaedec7%40mail.gmail.com%3E"
+       TITLE="[Plantlore-dev] Logout &amp; Database reconnect">discontinuum at gmail.com
+       </A><BR>
+    <I>Tue Aug  1 17:15:13 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000629.html">[Plantlore-dev] [Bug #8265] The overview throws an exception on the	last page
+</A></li>
+        <LI>Next message: <A HREF="000631.html">[Plantlore-dev] r483 - in trunk/src/net/sf/plantlore: client	client/history client/metadata common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#630">[ date ]</a>
+              <a href="thread.html#630">[ thread ]</a>
+              <a href="subject.html#630">[ subject ]</a>
+              <a href="author.html#630">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Nastin reseni Reconnectu, tj. opetovneho pripojeni k databazi po ztrate
+spojeni (zpusobeneho padem DB stroje nebo padem site). Pomoci naznaceneho
+mechanismu by sel pak i elegantne vyresit Logout.
+
+Soucasny stav:
+Login ma jako jediny v cele aplikaci k dispozici DBLayerFactory, ktera umi
+vyrabet DBLayers. Soucasne je taky jediny, kdo DBLayer muze korektne zrusit
+(k tomu ma metodu logout() ). V okamziku vytvoreni nove (prvni) DBLayer
+pouze informuje svoje observery, ze nova DBLayer je k disposici, at si ji
+stahnou. Momentalne jediny observer je trida AppCoreCtrl.DatabaseChange, coz
+je hodne pripadne jmeno. Ta ma za ukol nastavit novou DBLayer do hlavniho
+modelu aplikace - AppCore a jeste nekolika dalsim modelum, ktere jsou
+pripravene ihned po spusteni aplikace (add, edit, search, ...). Ostatni
+modely - pro dalsi ucely budu pouzivat treba Export - potom DBLayer dostanou
+pri svem prvnim vytvareni (u mnoha modelu je dynamicke, on-demand).
+
+Navrhovane reseni:
+Login si uklada posledni Login.ConnectionTask, tj. task, ktery obsahuje
+vsechny informace a postupy nutne k pripojeni k databazi a vytvoreni
+DBLayer. Tento task je momentalne presne takto pouzit k vytvoreni prvni
+DBLayer. Jakmile je tedy DBLayer uspesne vytvorena, probehnou operace
+popsane v soucasnem stavu. Kazdy model rozsirme o metodu
+setDBLayer()(nektere modely uz tuto metodu maji, ale pojmenovani neni
+jednotne -
+vetsinou bud setDatabase() nebo setDBLayer()). Mozna by se hodilo, aby byla
+soucasti nejakeho interface, rekneme DBLayerUpdatable (lepsi jmeno me
+nenapada, ale to je detail).
+
+Tj. mame
+
+interface DBLayerUpdatable {
+
+   void setDBLayer(DBLayer);
+
+}
+
+Kazdy model potom implementuje tento interface - je pak zaruceno, ze tuto
+metodu bude mit a ze se bude jmenovat vsude stejne (compile-time check).
+
+
+Trida AppCoreCtrl.DatabaseChange se upravi tak, aby vsem aktualne vytvorenym
+modelum zavolala tuto metodu. Momentalne to provadi jenom add-, edit-,
+search- a detailModelum. Kazdy model by si provedl potrebne zmeny (nahrazeni
+stare nefunknci DBLayer novou + pripadne dalsi akce s tim spojene, napr.
+restart nekterych dotazu apod). Tim by doslo k propagaci nove DBLayer ke
+vsem existujicim modelum.
+
+AppCoreCtrl by obsahoval akci ReconnectAction, ktera by mela vypadat zhruba
+takto:
+
+class ReconnectAction extends AbstractAction {
+
+  public void actionPerformed(...) {
+    Task t = login.getLastConnectionTask();
+    new DefaultProgressBarEx( t, ??view??, true );
+    t.start(); // restart connection tasku
+  }
+
+}
+
+Prakticky se jedna o restart connection tasku - ten by pak vyvolal update
+observeru (AppCoreCtrl.DatabaseChange) a ten pak redistribuoval DBLayer.
+
+
+Trochu jina varianta by byla, aby se kazdy model zaregistroval jako Observer
+loginu a pri notifikaci si DBLayer vyzvedl sam. Zamerne sem od ni odstoupil,
+protoze je otazka, v jakem poradi se &quot;Observery&quot; volaji. Prave kvuli tomu,
+ze nektery model muze byt zavisly na jinem (napr. Export na Search), bych
+nechal redistribuci na tride DatabaseChange, kde bude poradi volani
+zaruceno.
+
+
+V cem je problem. Navrhovane reseni ma 2 hacky.
+
+Scenar Prvni:
+Pokud dojde k vypadku site nebo databaze, prijde na to urcite nejaky z
+modelu, ne nutne AppCore. Reconnect lze (alespon podle toho, co jsem zatim
+napsal), zavolat jenom z hlavniho menu, ReconnectAction je obsazena v
+AppCoreCtrl, tj. mela by se vztahovat k hlavnimu oknu aplikace. V praxi by
+to znamenalo, ze napr. pri Exportu vyskoci chyba, ze doslo k vypadku
+databaze. Uzivatel by pak musel stornovat vsechna otevrena modalni okna, aby
+se dostal do hlavniho menu, kde by mohl zavolat reconnect.
+
+Nevyhody:
+Uzivatel musi zrusit vsechna otevrena okna (typicky modalni dialogy) a
+vratit se do menu, kde muze zkusit volat reconnect. Velmi uzivatelsky
+neprivetive.
+
+Vyhody:
+Programatorsky nenarocne. Predikovatelne chovani (viz nize).
+
+
+Scenar Druhy:
+Kazdy View nebo Ctrl by dostal &quot;referenci na ReconnectAction&quot;. Pokud by
+doslo k chybe spojene s vypadkem pripojeni k databazi nebo sitoveho
+pripojeni, mohl by se zobrazit dialog s hlasenim chyby a s tlacitkem &quot;Obnovit
+pripojeni&quot;. Uzivatel by pak mohl kliknout na toto tlacitko, ktere by rovnou
+zavolalo ReconnectAction. Tento dialog by mohl byt snadno spolecny vsem
+view, jeho spusteni by bylo vyreseno nasledovne:
+
+class MyController {
+
+  try {
+    .... your code goes here...
+  }
+  catch ( RemoteException e ) { // HA! Connection is lost!
+    DefaultRemoteErrorDialog.show( e );  // this shared dialog would contain
+
+                                         // a button with the
+ReconnectAction
+  }
+  catch ( DBLayerException e ) {
+    if( e souvisi s problemem s databazovym spojenim )
+      DefaultRemoteErrorDialog.show( e );
+    else {
+      ....your own exception handler...
+    }
+  }
+  catch ( SomeOtherException e ) {
+    ....your own exception handler...
+  }
+
+Z prikladu je videt, ze by vlastne ani nemusel dostavat referenci na
+reconnect action, tu by mela trida DefaultRemoteErrorDialog, ktera by
+obsahovala teda popis chyby + tlacitko umoznujici reconnect. Tato trida by
+se chovala hodne podobne jako JOptionPane.showMessageWindow();
+
+Vyhody:
+Uzivatelsky privetive.
+
+Nevyhody:
+Nevyzpytatelne. Je to proto, ze po reconnectu se vola setDBlayer(), ktere
+ovsem ?muze? provadet dalsi operace (restart dotazu - napr. aby v overview
+bylo to, co predtim, apod). Pokud by ale doslo k padu spojeni znova, behem
+te Reconnect action, tj. vlastne pred jejim ukoncenim, tak se ta Reconnect
+action muze volat znova - uzivateli vybehne nova hlaska, ze teda spojeni
+spadlo, jestli chce zkusit reconnect. Otazka je, jak by se s tim vyrovnala
+ta puvodni Reconnect Action.
+Dalsi otazka je, jak by na to reagoval ten model (ve kterem se prislo na to,
+ze spojeni spadlo) ~ jestli by zvladl nejake navazani preruseny cinnosti
+(treba Export - dokonceni zbytku exportu), nebo by byl zapotrebi kompletni
+restart, tj. uzivatel by to stejnak musel stornovat a pustit znova.
+
+V tom predeslym pripade (Scenar Prvni) to nebyl az takovej problem, protoze
+se stejne muselo teda vsechno zrusit a volat reconnect z hlavniho menu.
+
+Jenom pokud ja vim, tak treba Export by se s tim mozna dokazal vyrovnat,
+otazka je, jak to udelat programatorsky. V podstate jde o to, jak
+restartovat provadenou operaci, na ktere to spadlo.
+
+Neco jako:
+
+class MyModel {
+
+  void myOperation(...) {
+    doThis();
+    doThat();
+    try {
+      ....do something involving the DBLayer....
+    }
+    catch ( RemoteException e ) {
+      ...do something (like log the error etc)...
+      throw e; // rethrow the exception
+               // so that the view or controller is updated as well
+               // and can react accordingly
+    }
+ }
+
+kdyz predtim bylo:
+
+class MyController {
+
+  class MyAction extends AbstractAction { // for instance: add a user,
+delete a record, ...
+
+    void actionPerformed() {
+      try {
+        myModel.myOperation(...);
+      }
+      catch ( RemoteException e ) {
+        DefaultRemoteErrorDialog.show( e ); // Offer the possibility to
+Reconnect..
+
+        ?? How to restart the operation automatically ??
+        ?? And, is it desirable ??
+      }
+
+    }
+  }
+}
+
+Tady by mozna asi ani nevadilo &quot;pstrosi reseni&quot;, tj. strcit hlavu do pisku a
+at si uzivatel klikne na to tlacitko, co vyvolalo onu MyAction (pridani
+uzivatele, smazani zaznamu, ...) znova. Imo by to vubec nebolelo.
+
+
+Jediny problem tedy porad je, jak se vyporadat s opakovanym spadnutim ( ~
+jakysi kaskadovy reconnect).
+
+
+
+Jak pomoci Reconnectu vyresit Logout?
+Krom toho, ze stejne neni moc co resit, protoze jedina nutna vec, ktera je
+potreba pri logoutu udelat, je zavolat loginModel.logout() &amp; prohodit stav
+vsech polozek menu (povolit kliknuti na Prihlasit a naopak zakazat vsechno
+ostatni :), by bylo mozny pri logoutu zavolat update dblayer s tim, ze se
+posle null a vsechny modely by se podle toho mohly zaridit. Je to ale
+zbytecny, protoze zasedenim polozek v menu se k nim stejne nikdo nedostane a
+po pripadnem uspesnem loginu k jiny databazi  se redistribuuje nova (platna)
+DBLayer.
+
+
+
+
+
+Cili to byl zhruba navrh, jak by se dal vyresit logout a reconnect; jeste to
+neni uplne dotazeny, ale imo by se to melo dat nejak rozumne dotahnout. Po
+vas bych chtel, abyste se zamysleli, jaky problemy by vasim modelum prineslo
+obnovovani DBLayer pres metodu setDBLayer(). Co by to znamenalo pro Search,
+Overview, Edit, UserManager? Pamatujte, ze s novou DBLayer jsou neplatny
+vsechny predchozi SelectQuery, ResultIdenfitikatory, ... treba se nakonec
+ukaze, ze zadny zavazny zmeny v te metode setDBLayer delat nemusite, a tudiz
+by ty problemy spojeny s kaskadovym reconnectem nemusely bejt zas az tak
+zhavy.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: &lt;<A HREF="https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060801/e1bff653/attachment.html">https://lists.berlios.de/pipermail/plantlore-dev/attachments/20060801/e1bff653/attachment.html</A>&gt;
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000629.html">[Plantlore-dev] [Bug #8265] The overview throws an exception on the	last page
+</A></li>
+	<LI>Next message: <A HREF="000631.html">[Plantlore-dev] r483 - in trunk/src/net/sf/plantlore: client	client/history client/metadata common l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#630">[ date ]</a>
+              <a href="thread.html#630">[ thread ]</a>
+              <a href="subject.html#630">[ subject ]</a>
+              <a href="author.html#630">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,306 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r220 - trunk/src/net/sf/plantlore/client/export
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r220%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605061051.k46ApjV5006226%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000256.html">
+   <LINK REL="Next"  HREF="000258.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r220 - trunk/src/net/sf/plantlore/client/export</H1>
+    <B>krater at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r220%20-%20trunk/src/net/sf/plantlore/client/export&In-Reply-To=%3C200605061051.k46ApjV5006226%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r220 - trunk/src/net/sf/plantlore/client/export">krater at berlios.de
+       </A><BR>
+    <I>Sat May  6 12:51:45 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000256.html">[Plantlore-dev] r219 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+        <LI>Next message: <A HREF="000258.html">[Plantlore-dev] r221 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#257">[ date ]</a>
+              <a href="thread.html#257">[ thread ]</a>
+              <a href="subject.html#257">[ subject ]</a>
+              <a href="author.html#257">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: krater
+Date: 2006-05-06 12:51:42 +0200 (Sat, 06 May 2006)
+New Revision: 220
+
+Modified:
+   trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+   trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+   trunk/src/net/sf/plantlore/client/export/Template.java
+Log:
+Update of the Export framework.
+
+Modified: trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-05-06 10:48:31 UTC (rev 219)
++++ trunk/src/net/sf/plantlore/client/export/AbstractBuilder.java	2006-05-06 10:51:42 UTC (rev 220)
+@@ -1,11 +1,8 @@
+ package net.sf.plantlore.client.export;
+ 
+ import java.io.IOException;
+-import java.lang.reflect.InvocationTargetException;
+-import java.lang.reflect.Method;
+-import java.util.ArrayList;
+-import java.util.Hashtable;
+ 
++
+ import net.sf.plantlore.common.record.Record;
+ 
+ /**
+@@ -28,9 +25,6 @@
+ 	
+ 	protected Template template;
+ 	
+-	/** A list of getters of selected columns for every table. */
+-	protected Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt; properties = 
+-		new Hashtable&lt;Class, ArrayList&lt;Method&gt;&gt;(20);
+ 	
+ 	/**
+ 	 * Create a new DefaultBuilder.
+@@ -49,22 +43,6 @@
+ 	 */
+ 	public void setTemplate(Template template) {
+ 		this.template = template.clone();
+-		
+-		// Store all getters of all selected columns.
+-		for( Class table : Template.BASIC_TABLES)
+-			try {
+-				// Get the list of all properties.
+-				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getProperties();
+-				// Create a list of getters of those properties.
+-				ArrayList&lt;Method&gt; methods = new ArrayList&lt;Method&gt;( columns.size() );
+-				properties.put(table, methods);
+-				// Check if these properties (columns) are set to be exported. 
+-				for(String column : columns)  
+-					if( template.isSet(table, column) )
+-						methods.add( Template.getMethod( table, column ) );
+-			} 
+-			catch(IllegalAccessException e) { /*e.printStackTrace();*/ }
+-			catch(InstantiationException e) { /*e.printStackTrace();*/ }
+ 	}
+ 	
+ 	/**
+@@ -93,15 +71,8 @@
+ 	public void part(Record record) throws IOException {
+ 		if(record == null) return;
+ 		Class table = record.getClass();
+-		ArrayList&lt;Method&gt; methods = properties.get( table );
+-		for(Method getter : methods) 
+-			try {
+-				// Invoke the getter.
+-				Object value = getter.invoke( record, NO_PARAMETERS );
+-				output( table, getter.getName().substring(3), value );
+-			} 
+-			catch(IllegalAccessException e) { /*e.printStackTrace();*/ }
+-			catch(InvocationTargetException e) { /*e.printStackTrace();*/ }
++		for( String property : record.getProperties() ) 
++				output( table, property, record.getValue(property) );
+ 	}
+ 
+ 	/**
+
+Modified: trunk/src/net/sf/plantlore/client/export/DefaultDirector.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-06 10:48:31 UTC (rev 219)
++++ trunk/src/net/sf/plantlore/client/export/DefaultDirector.java	2006-05-06 10:51:42 UTC (rev 220)
+@@ -1,8 +1,6 @@
+ package net.sf.plantlore.client.export;
+ 
+ import java.io.IOException;
+-import java.lang.reflect.InvocationTargetException;
+-import java.lang.reflect.Method;
+ import java.rmi.RemoteException;
+ import java.util.Observable;
+ 
+@@ -94,7 +92,7 @@
+ 	protected void setDatabase(DBLayer db) 
+ 	throws ExportException {
+ 		if(db == null) {
+-			logger.warn(&quot;The database layer is null!&quot;);
++			logger.error(&quot;The database layer is null!&quot;);
+ 			throw new ExportException(&quot;The database layer cannot be null!&quot;);
+ 		}
+ 		this.database = db;
+@@ -119,8 +117,6 @@
+ 	}
+ 	
+ 	
+-	private static Object[] NO_PARAM = new Object[0];
+-	
+ 	/**
+ 	 * The whole record is returned in a tree structure.
+ 	 * We must traverse this structure.
+@@ -136,13 +132,8 @@
+ 		build.part(record);
+ 		// Now look at all children of this record.
+ 		for(String key : record.getForeignKeys()) {
+-			Method getter = Template.getMethod(record.getClass(), key);
+-			try {
+-				// And build'em too.
+-				buildParts( (Record) getter.invoke( record, NO_PARAM ) );
+-			}
+-			catch(IllegalAccessException e) { /*e.printStackTrace();*/ }
+-			catch(InvocationTargetException e) { /*e.printStackTrace();*/ }
++			// And build'em too.
++			buildParts( (Record) record.getValue(key) );
+ 		}
+ 	}
+ 	
+
+Modified: trunk/src/net/sf/plantlore/client/export/Template.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-06 10:48:31 UTC (rev 219)
++++ trunk/src/net/sf/plantlore/client/export/Template.java	2006-05-06 10:51:42 UTC (rev 220)
+@@ -1,10 +1,8 @@
+ package net.sf.plantlore.client.export;
+ 
+-import java.lang.reflect.Method;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
+-import java.util.Hashtable;
+ 
+ import net.sf.plantlore.common.record.*;
+ 
+@@ -35,22 +33,7 @@
+ 	/** The list of all pairs Table.Column that are set. */
+ 	private Collection&lt;String&gt; columns = new HashSet&lt;String&gt;(100);
+ 	
+-	/** 
+-	 * The list of &quot;basic tables&quot; i.e. tables related directly to the Occurence data.
+-	 * The other tables are database specific and are used by our System only
+-	 * (concerns History, LastUpdate, User, AccessRights, and possibly more).
+-	 */
+-	public final static Class[] BASIC_TABLES = new Class[] { 
+-		Author.class, AuthorOccurrence.class, Habitat.class,
+-		Metadata.class, Occurrence.class, Phytochorion.class,
+-		Plant.class, Publication.class, Territory.class,
+-		Village.class 
+-	};
+ 	
+-	/**
+-	 * A set of tables that cannot be changed.
+-	 */
+-	public final static HashSet&lt;Class&gt; IMMUTABLE = new HashSet( 10 );
+ 
+ 	
+ 	/** Create a new template. */
+@@ -67,68 +50,7 @@
+ 		return new Template(this);
+ 	}
+ 	
+-		
+-	/** The list of all getters (of all properties of all tables). */
+-	private static Hashtable&lt;String,Method&gt; getters = new Hashtable&lt;String, Method&gt;(100);
+ 	
+-	/**
+-	 * Return the getter of this Table.Column property.
+-	 * &lt;br/&gt;
+-	 * This method is fast because all getters are pre-loaded.
+-	 * 
+-	 * @param table	The class identifying the table.
+-	 * @param column The name of the column.
+-	 * @return The getter of table.column
+-	 */
+-	public static Method getMethod(Class table, String column) {
+-		return getters.get(table+&quot;.&quot;+column);
+-	}
+-	
+-	
+-	public static Object get(Record record, String column) {
+-		try {
+-			return getMethod(record.getClass(), column).invoke(record, new Object[0]);
+-		} catch (Exception e) { return null; }
+-	}
+-		
+-	/** Pre-load all getters. */
+-	static {
+-		
+-		IMMUTABLE.add(Plant.class);
+-		IMMUTABLE.add(Territory.class);
+-		IMMUTABLE.add(Village.class);
+-		IMMUTABLE.add(Phytochorion.class);
+-		
+-		// Take all basic tables.
+-		for( Class table : Template.BASIC_TABLES)
+-			try {
+-				// Take all their columns.
+-				ArrayList&lt;String&gt; columns = ((Record) table.newInstance()).getColumns();
+-				for(String column : columns)
+-					// And store their getters. 
+-					getters.put(table+&quot;.&quot;+column, getter(table, column));
+-			} 
+-			catch(IllegalAccessException e) {}
+-			catch(InstantiationException e) {}
+-	}
+-	
+-	/**
+-	 * Return the method that corresponds with the getter of &lt;code&gt;table.column&lt;/code&gt;.  
+-	 * 
+-	 * @return The getter of &lt;code&gt;table.column&lt;/code&gt;. 
+-	 */
+-	private static Method getter(Class table, String column) {
+-		try {
+-			// Create the name of the getter.
+-			StringBuilder s = new StringBuilder(&quot;get&quot; + column); 
+-			s.setCharAt(3, Character.toUpperCase(s.charAt(3)));
+-			// Take it. 
+-			return table.getMethod( s.toString(), new Class[0] );
+-		} catch(NoSuchMethodException e) {}
+-		return null;
+-	}
+-	
+-			
+ 	/** Select the &lt;code&gt;table.column&lt;/code&gt;. */
+ 	public void set(Class table, String column) { 
+ 		columns.add(table.getSimpleName()+ (column == null ? &quot;&quot; : &quot;.&quot;+column));
+@@ -153,7 +75,7 @@
+ 	
+ 	/** Select all columns (properties) of all tables. */
+ 	public void setEverything() {
+-		for(Class table : BASIC_TABLES)
++		for(Class table : Record.BASIC_TABLES)
+ 			setAllProperties(table);
+ 	}
+ 	
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000256.html">[Plantlore-dev] r219 - trunk/src/net/sf/plantlore/common/record
+</A></li>
+	<LI>Next message: <A HREF="000258.html">[Plantlore-dev] r221 - trunk/src/net/sf/plantlore/client/imports
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#257">[ date ]</a>
+              <a href="thread.html#257">[ thread ]</a>
+              <a href="subject.html#257">[ subject ]</a>
+              <a href="author.html#257">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

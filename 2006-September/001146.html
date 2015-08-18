@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r834 - trunk/src/net/sf/plantlore/client/overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r834%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200609182356.k8INusZd002590%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001145.html">
+   <LINK REL="Next"  HREF="001147.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r834 - trunk/src/net/sf/plantlore/client/overview</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r834%20-%20trunk/src/net/sf/plantlore/client/overview&In-Reply-To=%3C200609182356.k8INusZd002590%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r834 - trunk/src/net/sf/plantlore/client/overview">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep 19 01:56:54 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001145.html">[Plantlore-dev] r833 - trunk/src/net/sf/plantlore/help/en/html
+</A></li>
+        <LI>Next message: <A HREF="001147.html">[Plantlore-dev] r835 - in trunk/src/net/sf/plantlore: l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1146">[ date ]</a>
+              <a href="thread.html#1146">[ thread ]</a>
+              <a href="subject.html#1146">[ subject ]</a>
+              <a href="author.html#1146">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-19 01:56:51 +0200 (Tue, 19 Sep 2006)
+New Revision: 834
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+Log:
+Edit now should work correctly also in cases when one author appears more times
+in different roles.
+
+Wrong key was chosen for a hash map in the AddEdit. It used sole author id
+instead of the whole authorId,role couple.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-18 22:07:09 UTC (rev 833)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-09-18 23:56:51 UTC (rev 834)
+@@ -96,7 +96,8 @@
+     
+     //list of AuthorOccurrence objects that correspond to our Occurrence object, we need it for update
+     //set by &lt;code&gt;getAuthorsOf()&lt;/code&gt; method
+-    private HashMap&lt;Integer,AuthorOccurrence&gt; authorOccurrences;
++    //the key is of form role+AuthorId, for example it could be &quot;4collected&quot; or &quot;2identified&quot;
++    private HashMap&lt;String,AuthorOccurrence&gt; authorOccurrences;
+     private Pair&lt;String,Integer&gt; village;
+     
+     private ArrayList&lt;String&gt; taxonList;
+@@ -1033,10 +1034,10 @@
+                                 database.executeUpdateInTransaction(o);
+                                 habitatToCheck = o.getHabitat(); //we'll maybe have to delete this habitat
+                                 logger.debug(&quot;Occurrence id &quot;+o.getId()+&quot; &quot;+o.getPlant().getTaxon()+&quot; deleted.&quot;);
+-                                Set&lt;Map.Entry&lt;Integer,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
++                                Set&lt;Map.Entry&lt;String,AuthorOccurrence&gt;&gt; aoSet = authorOccurrences.entrySet();
+                                 Iterator it = aoSet.iterator();
+                                 while (it.hasNext()) {
+-                                    Map.Entry&lt;Integer, AuthorOccurrence&gt; entry = (Entry&lt;Integer, AuthorOccurrence&gt;) it.next();
++                                    Map.Entry&lt;String, AuthorOccurrence&gt; entry = (Entry&lt;String, AuthorOccurrence&gt;) it.next();
+                                     AuthorOccurrence tmp = entry.getValue();
+                                     tmp.setDeleted(2);
+                                     database.executeUpdateInTransactionHistory(tmp);
+@@ -1067,7 +1068,7 @@
+                                     }
+                                 }
+                                 if (!originalSurvived) {
+-                                    aoTmp = authorOccurrences.get(auth.getFirst());
++                                    aoTmp = authorOccurrences.get(auth.getSecond()+auth.getFirst());
+                                     aoTmp.setDeleted(1);
+                                     database.executeUpdateInTransaction(aoTmp);
+                                     logger.debug(&quot;AuthorOccurrence id=&quot;+aoTmp.getId()+&quot; &quot;+aoTmp.getAuthor().getWholeName()+&quot; deleted.&quot;);
+@@ -1084,7 +1085,7 @@
+                                         new Pair&lt;Integer,String&gt;(pTmp.getFirst().getSecond(),role) )
+                                     ) {
+                                     logger.info(&quot;Updating authorOccurrence properties for &quot;+pTmp.getFirst().getFirst());
+-                                    AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getFirst().getSecond());
++                                    AuthorOccurrence aoTmp = authorOccurrences.get(pTmp.getSecond()+pTmp.getFirst().getSecond());
+                                     aoTmp.setRole(pTmp.getSecond());
+                                     aoTmp.setNote(resultRevision.get(j));
+                                     database.executeUpdateInTransaction(aoTmp);
+@@ -1454,7 +1455,7 @@
+      */
+     private ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; getAuthorsOf(Occurrence o) throws RemoteException, DBLayerException {
+         ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt; authorResults = new ArrayList&lt;Pair&lt;Pair&lt;String,Integer&gt;,String&gt;&gt;();
+-        authorOccurrences = new HashMap&lt;Integer,AuthorOccurrence&gt;();
++        authorOccurrences = new HashMap&lt;String,AuthorOccurrence&gt;();
+         resultRevision = new ArrayList();
+ 
+         //Pair&lt;Pair&lt;String,Integer&gt;,Pair&lt;String,Integer&gt;&gt; p;
+@@ -1478,7 +1479,7 @@
+                         */
+             authorResults.add(new Pair&lt;Pair&lt;String,Integer&gt;,String&gt;(
+                     new Pair&lt;String,Integer&gt;(a.getWholeName(),a.getId()),role ) );
+-            authorOccurrences.put(a.getId(),ao);
++            authorOccurrences.put(role+a.getId(),ao);
+             resultRevision.add(ao.getNote());
+         }
+         database.closeQuery(sq);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001145.html">[Plantlore-dev] r833 - trunk/src/net/sf/plantlore/help/en/html
+</A></li>
+	<LI>Next message: <A HREF="001147.html">[Plantlore-dev] r835 - in trunk/src/net/sf/plantlore: l10n server
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1146">[ date ]</a>
+              <a href="thread.html#1146">[ thread ]</a>
+              <a href="subject.html#1146">[ subject ]</a>
+              <a href="author.html#1146">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

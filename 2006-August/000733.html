@@ -1,0 +1,344 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r535 - in	trunk/src/net/sf/plantlore/client/overview: . tree
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r535%20-%20in%0A%09trunk/src/net/sf/plantlore/client/overview%3A%20.%20tree&In-Reply-To=%3C200608201737.k7KHbo7t011226%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000732.html">
+   <LINK REL="Next"  HREF="000734.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r535 - in	trunk/src/net/sf/plantlore/client/overview: . tree</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r535%20-%20in%0A%09trunk/src/net/sf/plantlore/client/overview%3A%20.%20tree&In-Reply-To=%3C200608201737.k7KHbo7t011226%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r535 - in	trunk/src/net/sf/plantlore/client/overview: . tree">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 20 19:37:50 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000732.html">[Plantlore-dev] r534 - in trunk/src/net/sf/plantlore: client	client/imports client/imports/parsers client/occurrenceimport	client/occurrenceimport/parsers client/resources common/exception
+</A></li>
+        <LI>Next message: <A HREF="000734.html">[Plantlore-dev] r536 - in trunk/src/net/sf/plantlore/client: .	overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#733">[ date ]</a>
+              <a href="thread.html#733">[ thread ]</a>
+              <a href="subject.html#733">[ subject ]</a>
+              <a href="author.html#733">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-20 19:37:46 +0200 (Sun, 20 Aug 2006)
+New Revision: 535
+
+Modified:
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java
+Log:
+Add is now possible from the habitat tree. Implemented preloading of habitat data into the add dialog.
+Fixed some exception handling in AddEdit.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-20 17:37:46 UTC (rev 535)
+@@ -124,6 +124,9 @@
+      *
+      * @param ao Assumes it is from database and therefore assumes WGS84 coordinate system.
+      *
++     * @throws DBLayerException
++     * @throws RemoteException
++     *
+      * @return &gt;=0 if everything was OK
+      * @return -1 if the Occurrence table overflew
+      */
+@@ -184,7 +187,40 @@
+         else
+             return 0;
+     }
++    
++    /** Preloads habitat data. Used in add mode when adding into a habitat (using the habitat tree).
++     *
++     * @throws DBLayerException
++     * @throws RemoteException
++     *
++     * @return &gt;=0 if everything was OK
++     * @return -1 if the Occurrence table overflew
++     */
++    public int setHabitat(Integer habitatId) throws DBLayerException, RemoteException {
++        logger.debug(&quot;Loading AddEdit habitat data for habitat id &quot;+habitatId);
++        
++        DBLayerUtils dlu = new DBLayerUtils(database);
++        Habitat h = (Habitat) dlu.getObjectFor(habitatId, Habitat.class);
++                
++        village = new Pair(h.getNearestVillage().getName(), h.getNearestVillage().getId());                
++        habitatDescription = h.getDescription();
++        habitatNote = h.getNote();
++        territoryName = new Pair(h.getTerritory().getName(),h.getTerritory().getId());
++        phytName = new Pair(h.getPhytochorion().getName(), h.getPhytochorion().getId());
++        phytCode = new Pair(h.getPhytochorion().getCode(), h.getPhytochorion().getId());
++        phytCountry = h.getCountry();
++        quadrant = h.getQuadrant();
++        altitude = h.getAltitude();
++        longitude = h.getLongitude();
++        latitude = h.getLatitude();
+ 
++        int result = occurrenceTableModel.load(h.getId());
++        if (result &lt; 0)
++            return -1;
++        else
++            return 0;        
++    }//setHabitat
++
+     public Pair&lt;String, Integer&gt; getAuthor(int i) {
+         return ((Pair&lt;Pair&lt;String,Integer&gt;,String&gt;)authorList.get(i)).getFirst();
+     }
+@@ -218,6 +254,9 @@
+     }
+ 
+     public String getTaxon(int i) {
++        if (taxonList == null)
++            return &quot;&quot;;
++        
+         return (String) taxonList.get(i);
+     }
+ 
+@@ -1008,35 +1047,28 @@
+         return new Pair&lt;Boolean,String&gt;(true,&quot;&quot;);
+     }
+     
+-    private void loadHabitatSharingOccurrences() {
++    private void loadHabitatSharingOccurrences() throws DBLayerException, RemoteException {
+         Habitat h = o.getHabitat();
+-        //FIXME:
+-        try {
+-            SelectQuery sq = database.createQuery(Occurrence.class);        
+-            sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
+-            int resultid = database.executeQuery(sq);
+-            int resultCount = database.getNumRows(resultid);
+-            habitatSharingOccurrences = new Occurrence[resultCount];
+-            
+-            Object[] results = database.more(resultid, 0, resultCount-1);
+-            Object[] tmp;
+-            Occurrence occurrence;
+-            for (int i = 0; i &lt; resultCount; i++) {
+-                tmp = (Object[]) results[i];
+-                occurrence = (Occurrence)tmp[0];
+-                habitatSharingOccurrences[i] = occurrence;
+-            }
+-            database.closeQuery(sq);
+-        } catch (DBLayerException ex) {
+-            ex.printStackTrace();
+-        } catch (RemoteException ex) {
+-            ex.printStackTrace();
++        SelectQuery sq = database.createQuery(Occurrence.class);        
++        sq.addRestriction(PlantloreConstants.RESTR_EQ,Occurrence.HABITAT,null,h,null);
++        int resultid = database.executeQuery(sq);
++        int resultCount = database.getNumRows(resultid);
++        habitatSharingOccurrences = new Occurrence[resultCount];
++
++        Object[] results = database.more(resultid, 0, resultCount-1);
++        Object[] tmp;
++        Occurrence occurrence;
++        for (int i = 0; i &lt; resultCount; i++) {
++            tmp = (Object[]) results[i];
++            occurrence = (Occurrence)tmp[0];
++            habitatSharingOccurrences[i] = occurrence;
+         }
++        database.closeQuery(sq);
+     }
+     
+     /** returns all occurrences sharing the habitat - that means including the current working occurrence
+      */
+-    public  Occurrence[] getHabitatSharingOccurrences() {
++    public  Occurrence[] getHabitatSharingOccurrences() throws DBLayerException, RemoteException {
+         //sdili je? mozna s kym
+             //ano - zmena u vsech? ... zmenime to normalne - to co mame
+             //ne  - zmena jen u naseho zaznamu, tj. new Habitat h, insert(h), o.setHabitat(h), update(o) 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-20 17:37:46 UTC (rev 535)
+@@ -49,6 +49,7 @@
+ import net.sf.plantlore.client.checklist.ChecklistView;
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.exception.DBLayerException;
+@@ -499,11 +500,11 @@
+             } catch (RemoteException ex) {
+                 logger.error(&quot;Remote problem: &quot;+ex);
+                 ex.printStackTrace();
+-                JOptionPane.showMessageDialog(view,&quot;RemoteException: &quot;+ex);
++                DefaultReconnectDialog.show(view,ex);
+             } catch (DBLayerException ex) {
+                 logger.error(&quot;Database problem: &quot;+ex);
+                 ex.printStackTrace();
+-                JOptionPane.showMessageDialog(view,&quot;DBLayerException: &quot;+ex);
++                DefaultReconnectDialog.show(view,ex);
+             }
+         }//mouseClicked
+             
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-08-20 17:37:46 UTC (rev 535)
+@@ -19,6 +19,7 @@
+ import javax.swing.tree.DefaultMutableTreeNode;
+ import javax.swing.tree.DefaultTreeModel;
+ import net.sf.plantlore.common.DBLayerUtils;
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.exception.DBLayerException;
+ import net.sf.plantlore.common.record.Habitat;
+@@ -182,7 +183,7 @@
+     public void search() {
+         if (selectedNode != null) {
+             setChanged();
+-            notifyObservers((NodeInfo)selectedNode.getUserObject());
++            notifyObservers(new Pair&lt;String,NodeInfo&gt;(&quot;SEARCH&quot;,(NodeInfo)selectedNode.getUserObject()));
+         }
+     }
+     
+@@ -196,6 +197,16 @@
+         loadData();
+     }
+     
++    /** Invokes the Add dialog on given habitat.
++     *
++     */
++    public void add() {
++        if (selectedNode != null) {
++            setChanged();
++            notifyObservers(new Pair&lt;String,NodeInfo&gt;(&quot;ADD&quot;,(NodeInfo)selectedNode.getUserObject()));
++        }
++    }
++    
+     public DefaultTreeModel getTreeModel() {
+         return treeModel;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-08-20 17:37:46 UTC (rev 535)
+@@ -52,6 +52,7 @@
+         view.searchMenuItem.setAction(new SearchItemAction());
+         view.refreshButton.setAction(new RefreshAction());
+         view.refreshMenuItem.setAction(new RefreshItemAction());
++        view.addMenuItem.setAction(new AddItemAction());
+     }
+ 
+     /** Expansion event handler.
+@@ -200,6 +201,17 @@
+                 }
+             }
+     }//RefreshAction
++    
++    class AddItemAction extends AbstractAction {
++        public AddItemAction() {
++            putValue(NAME, L10n.getString(&quot;Overview.Tree.Add&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;Overview.Tree.AddTT&quot;));            
++        }
++        
++        public void actionPerformed(ActionEvent ae) {
++            model.add();
++        }
++    }//AddItemAction
+ 
+     class PopupMouseAdapter extends MouseAdapter {
+          public void mousePressed(MouseEvent e) {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.form	2006-08-20 17:37:46 UTC (rev 535)
+@@ -23,6 +23,14 @@
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/MenuItem&gt;
++        &lt;MenuItem class=&quot;javax.swing.JMenuItem&quot; name=&quot;addMenuItem&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Item&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/MenuItem&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Menu&gt;
+   &lt;/NonVisualComponents&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java	2006-08-20 14:32:46 UTC (rev 534)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeView.java	2006-08-20 17:37:46 UTC (rev 535)
+@@ -39,6 +39,7 @@
+         popupMenu = new javax.swing.JPopupMenu();
+         searchMenuItem = new javax.swing.JMenuItem();
+         refreshMenuItem = new javax.swing.JMenuItem();
++        addMenuItem = new javax.swing.JMenuItem();
+         jScrollPane1 = new javax.swing.JScrollPane();
+         habitatTree = new JTree(model.getTreeModel());
+         jPanel1 = new javax.swing.JPanel();
+@@ -51,6 +52,9 @@
+         refreshMenuItem.setText(&quot;Refresh&quot;);
+         popupMenu.add(refreshMenuItem);
+ 
++        addMenuItem.setText(&quot;Item&quot;);
++        popupMenu.add(addMenuItem);
++
+         jScrollPane1.setViewportView(habitatTree);
+ 
+         searchButton.setText(&quot;jButton1&quot;);
+@@ -110,6 +114,7 @@
+     }
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JMenuItem addMenuItem;
+     protected javax.swing.JTree habitatTree;
+     private javax.swing.JPanel jPanel1;
+     private javax.swing.JScrollPane jScrollPane1;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000732.html">[Plantlore-dev] r534 - in trunk/src/net/sf/plantlore: client	client/imports client/imports/parsers client/occurrenceimport	client/occurrenceimport/parsers client/resources common/exception
+</A></li>
+	<LI>Next message: <A HREF="000734.html">[Plantlore-dev] r536 - in trunk/src/net/sf/plantlore/client: .	overview
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#733">[ date ]</a>
+              <a href="thread.html#733">[ thread ]</a>
+              <a href="subject.html#733">[ subject ]</a>
+              <a href="author.html#733">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,1750 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r567 - in trunk: . src/net/sf/plantlore/client	src/net/sf/plantlore/client/overview src/net/sf/plantlore/l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r567%20-%20in%20trunk%3A%20.%20src/net/sf/plantlore/client%0A%09src/net/sf/plantlore/client/overview%20src/net/sf/plantlore/l10n&In-Reply-To=%3C200608251032.k7PAWFXY000382%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000770.html">
+   <LINK REL="Next"  HREF="000772.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r567 - in trunk: . src/net/sf/plantlore/client	src/net/sf/plantlore/client/overview src/net/sf/plantlore/l10n</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r567%20-%20in%20trunk%3A%20.%20src/net/sf/plantlore/client%0A%09src/net/sf/plantlore/client/overview%20src/net/sf/plantlore/l10n&In-Reply-To=%3C200608251032.k7PAWFXY000382%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r567 - in trunk: . src/net/sf/plantlore/client	src/net/sf/plantlore/client/overview src/net/sf/plantlore/l10n">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 25 12:32:15 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000770.html">[Plantlore-dev] r566 - trunk/src/net/sf/plantlore/common
+</A></li>
+        <LI>Next message: <A HREF="000772.html">[Plantlore-dev] Import zaznamu - naposled.
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#771">[ date ]</a>
+              <a href="thread.html#771">[ thread ]</a>
+              <a href="subject.html#771">[ subject ]</a>
+              <a href="author.html#771">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-25 12:32:00 +0200 (Fri, 25 Aug 2006)
+New Revision: 567
+
+Added:
+   trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.form
+   trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.java
+Modified:
+   trunk/
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditor.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+AppCore now checks for null values in data loaded from columns that are nullable and leaves these values out.
+DefaultReconnect used for AddEdit exceptions in AppCoreCtrl.
+
+Many many changes and improvements in AddEdit dialogs:
+        - improved altitude, longitude and latitude number handling (esp. warning about invalid values)
+        - similar improvement for day and time values
+        - implemented setting date from a calendar
+        - all fields now limit length of the entered data! (including the revision dialog)
+        - implemented new revision note editing
+        - various smaller tweaks
+
+
+
+
+Property changes on: trunk
+___________________________________________________________________
+Name: svn:ignore
+   + svn-commit.tmp~
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -538,6 +538,16 @@
+         return phytCodes;
+     }
+     
++    /** Loads countries from the database.
++     *
++     * Leaves out null values. Notifies about the begining and end of loading.
++     *
++     * @throws DBLayerException
++     * @throws RemoteException
++     *
++     * @return array of Strings with the countries
++     *
++     */
+     public String[] loadCountries() throws DBLayerException, RemoteException {
+         SelectQuery sq;
+         int resultid;
+@@ -554,18 +564,35 @@
+         resultsCount = database.getNumRows(resultid);
+         records = database.more(resultid, 0, resultsCount-1);
+         database.closeQuery(sq);
+-        countries = new String[resultsCount];
++        
++        ArrayList&lt;String&gt; al = new ArrayList&lt;String&gt;();
+         for (int i = 0; i &lt; resultsCount; i++)
+         {
+-            country = (String)((Object[])records[i])[0];
+-            countries[i] = country;
++            String tmp = (String)((Object[])records[i])[0];
++            if (tmp == null)
++                continue;
++            al.add(tmp);
+         }
+ 
++        countries = new String[al.size()];
++        countries = al.toArray(countries);
++        
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; countries.&quot;);
+         setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return countries;
+     }
+     
++    
++    /** Loads sources from the database.
++     *
++     * Leaves out null values.  Notifies about the begining and end of loading.
++     *
++     * @throws DBLayerException
++     * @throws RemoteException
++     *
++     * @return array of Strings with the sources
++     *
++     */
+     public String[] loadSources() throws DBLayerException, RemoteException {
+         SelectQuery sq;
+         int resultid;
+@@ -580,15 +607,33 @@
+         resultsCount = database.getNumRows(resultid);
+         records = database.more(resultid, 0, resultsCount-1);
+         database.closeQuery(sq);
+-        sources = new String[resultsCount];
+-        for (int i = 0; i &lt; resultsCount; i++)
+-            sources[i] = (String)((Object[])records[i])[0];
+-
++        String tmp;
++        ArrayList&lt;String&gt; al = new ArrayList&lt;String&gt;();
++        for (int i = 0; i &lt; resultsCount; i++) {
++            tmp = (String)((Object[])records[i])[0];
++            if (tmp == null)
++                continue;
++            al.add(tmp);
++        }
++        
++        sources = new String[al.size()];
++        sources = (String[]) al.toArray(sources);
++        
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; sources.&quot;);
+         setChanged(); notifyObservers(&quot;LOADED&quot;);
+         return sources;
+     }
+     
++    /** Loads publications from the database.
++     *
++     * Leaves out null values.  Notifies about the begining and end of loading.
++     *
++     * @throws DBLayerException
++     * @throws RemoteException
++     *
++     * @return array of Pairs with the publications.
++     *
++     */
+     public Pair&lt;String, Integer&gt;[] loadPublications() throws DBLayerException, RemoteException {
+         SelectQuery sq;
+         int resultid;
+@@ -607,13 +652,18 @@
+         resultsCount = database.getNumRows(resultid);
+         records = database.more(resultid, 0, resultsCount-1);
+         database.closeQuery(sq);
+-        publications = new Pair[resultsCount+1];
+-        publications[0] = new Pair&lt;String,Integer&gt;(&quot;&quot;,-1); //allow the user to enter a null value
++
++        ArrayList&lt;Pair&gt; al = new ArrayList&lt;Pair&gt;();
+         for (int i = 0; i &lt; resultsCount; i++)
+         {
+             row = (Object[])records[i];
+-            publications[i] = new Pair(row[0], row[1]);
++            if (row == null)
++                continue;
++            al.add(new Pair(row[0], row[1]));
+         }
++        
++        publications = new Pair[al.size()];
++        publications = (Pair[])al.toArray(publications);
+ 
+         logger.info(&quot;Loaded: &quot;+resultsCount+&quot; publications.&quot;);
+         setChanged(); notifyObservers(&quot;LOADED&quot;);
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -360,12 +360,14 @@
+ 	private void constructDialogs() {
+ 		// --- Add ---
+ 		addModel = new AddEdit(model.getDatabase(), false);
++                addModel.addObserver(managerBridge);
+ 		addView = new AddEditView(view, true, addModel, false);
+ 		addView.setTitle(L10n.getString(&quot;AddEdit.AddDialogTitle&quot;));
+ 		addCtrl = new AddEditCtrl(addModel, addView, false);
+ 
+ 		// --- Edit ---
+ 		editModel = new AddEdit(model.getDatabase(), true);
++                editModel.addObserver(managerBridge);
+ 		editView = new AddEditView(view, true, editModel, true);
+ 		editView.setTitle(L10n.getString(&quot;AddEdit.EditDialogTitle&quot;));
+ 		editCtrl = new AddEditCtrl(editModel, editView, true);
+@@ -1609,15 +1611,15 @@
+ 				try {
+ 					model.setDatabase(dblayer);
+ 				} catch (RemoteException ex) {
+-					JOptionPane.showMessageDialog(view, &quot;Remote problem&quot;,
+-							&quot;Some remote problem occurred:\n&quot; + ex,
+-							JOptionPane.WARNING_MESSAGE);
+-					return;
++                                    logger.error(&quot;Caught an error in AppCoreCtrl update(): &quot;+ex.getMessage());
++                                    ex.printStackTrace();
++                                    DefaultReconnectDialog.show(view,ex);
++                                    return;
+ 				} catch (DBLayerException ex) {
+-					JOptionPane.showMessageDialog(view, &quot;Database problem&quot;,
+-							&quot;Some database problem occurred:\n&quot; + ex,
+-							JOptionPane.WARNING_MESSAGE);
+-					return;
++                                    logger.error(&quot;Caught an error in AppCoreCtrl update(): &quot;+ex.getMessage());
++                                    ex.printStackTrace();
++                                    DefaultReconnectDialog.show(view,ex);
++                                    return;
+ 				}
+ 				// distribute database to dialogs
+ 				addModel.setDatabase(dblayer);
+@@ -1744,8 +1746,18 @@
+ 							searchModel.setProjects(model.getProjects());
+ 							break;
+ 						case OCCURRENCE:
+-							refreshAction.actionPerformed(null);
+-							break;
++                                                    model.loadSources();
++                                                    addModel.setSources(model.getSources());
++                                                    editModel.setSources(model.getSources());
++                                                    searchModel.setSources(model.getSources());
++                                                    refreshAction.actionPerformed(null);
++                                                    break;
++                                                case HABITAT:
++                                                        model.loadCountries();
++                                                        addModel.setCountries(model.getCountries());
++                                                        editModel.setCountries(model.getCountries());
++                                                        searchModel.setCountries(model.getCountries());
++                                                        break;
+ 						case PHYTOCHORION:
+ 							model.loadPhytCodes();
+ 							model.loadPhytNames();
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -90,9 +90,16 @@
+     private Pair&lt;String,Integer&gt; project;
+     private Integer month = null;
+     private Integer day = null;
+-    private Date time = null;
++    private Date time = null;    
+     private Occurrence[] habitatSharingOccurrences = null;
+     
++    private boolean dayValid = true;
++    private boolean timeValid = true;
++    
++    private boolean altitudeValid = true;
++    private boolean latitudeValid = true;
++    private boolean longitudeValid = true;
++    
+     private Pair&lt;String, Integer&gt;[] plants = null;
+     private Pair&lt;String, Integer&gt;[] authors = null;
+     private String[] authorRoles = null;
+@@ -401,8 +408,17 @@
+     public void setAltitude(Double altitude) {
+         this.altitude = altitude;
+         logger.debug(&quot;Altitude set to &quot;+altitude);
++        altitudeValid = true;
+     }
+ 
++    public void setAltitudeValid(boolean valid) {
++        altitudeValid = valid;
++        if (valid)
++            logger.debug(&quot;Altitude set VALID&quot;);
++        else
++            logger.debug(&quot;Altitude set INVALID&quot;);
++    }
++    
+     public Double getLongitude() {
+         return longitude;
+     }
+@@ -410,8 +426,17 @@
+     public void setLongitude(Double longitude) {
+         this.longitude = longitude;
+         logger.debug(&quot;Longitude set to &quot;+longitude);
++        longitudeValid = true;
+     }
+ 
++    public void setLongitudeValid(boolean valid) {
++        longitudeValid = valid;
++        if (valid)
++            logger.debug(&quot;Longitude set VALID&quot;);
++        else
++            logger.debug(&quot;Longitude set INVALID&quot;);
++    }
++    
+     public Double getLatitude() {
+         return latitude;
+     }
+@@ -419,8 +444,17 @@
+     public void setLatitude(Double latitude) {
+         this.latitude = latitude;
+         logger.debug(&quot;Latitude set to &quot;+latitude);
++        latitudeValid = true;
+     }
+ 
++    public void setLatitudeValid(boolean valid) {
++        latitudeValid = valid;
++        if (valid)
++            logger.debug(&quot;Latitude set VALID&quot;);
++        else
++            logger.debug(&quot;Latitude set INVALID&quot;);
++    }
++    
+     public String getSource() {
+         return source;
+     }
+@@ -473,20 +507,44 @@
+         return day;
+     }
+ 
++    /** Sets the model's day variable and sets &lt;code&gt;dayValid&lt;/code&gt; to true
++     *
++     */
+     public void setDay(Integer day) {
+         this.day = day;
+         logger.debug(&quot;Day set to &quot;+day);
++        setDayValid(true);
+     }
++    
++    public void setDayValid(boolean valid) {
++        if (valid)
++            logger.debug(&quot;Day set VALID.&quot;);
++        else
++            logger.debug(&quot;Day set INVALID.&quot;);                    
++        dayValid = valid;
++    }
+ 
+     public Date getTime() {
+         return time;
+     }
+ 
++    /** Sets the model's time variable and sets &lt;code&gt;timeValid&lt;/code&gt; to true
++     *
++     */
+     public void setTime(Date time) {
+         this.time = time;
+         logger.debug(&quot;Time set to &quot;+time);
++        setTimeValid(true);
+     }
+     
++    public void setTimeValid(boolean valid) {
++        if (valid)
++            logger.debug(&quot;Time set VALID.&quot;);
++        else
++            logger.debug(&quot;Time set INVALID.&quot;);                    
++        timeValid = valid;
++    }
++    
+     public DBLayer getDatabase() {
+         return database;
+     }
+@@ -606,6 +664,7 @@
+         if (occurrenceNote != null) occ.setNote(occurrenceNote);
+         occ.setPlant(plant);
+         occ.setYearCollected(year);
++        occ.setDataSource(source);        
+         
+         occ.setDeleted(0);
+         
+@@ -707,7 +766,8 @@
+         o.setPlant(plant);
+         o.setPublication(publ);
+         o.setTimeCollected(time);
+-        o.setYearCollected(year);        
++        o.setYearCollected(year);     
++        o.setDataSource(source);
+     }
+     
+     /** Creates a clone of the AddEdit's occurrence o.
+@@ -973,15 +1033,59 @@
+                     database.commitTransaction();
+                     occurrenceTableModel.load(h.getId());
+                 }//add mode
+-                
+         } catch (DBLayerException ex) {
+             database.rollbackTransaction();
+             DBLayerException dbex = new DBLayerException(&quot;Add/Edit was rolled back. Some database problem occurred during processing: &quot;+ex);
+             dbex.setStackTrace(ex.getStackTrace());
+             throw dbex;
+         }        
+-    }//createRecord()
++        
++        checkAndPropagateChanges();
++    }//storeRecord()
+ 
++    /** Checks whether the user created a new country or data source.
++     *
++     * If yes then notifies the rest of the application about that change.
++     *
++     */
++    private void checkAndPropagateChanges() {
++        int i = 0;
++        
++        boolean isCountryNew = true;
++        for (String country : countries)
++            if (country.equals(phytCountry)) {
++                isCountryNew = false;
++                break;
++            }
++        if (isCountryNew)
++            i++;
++        
++        boolean isSourceNew = true;
++        for (String s : sources)
++            if (s.equals(source)) {
++                isSourceNew = false;
++                break;
++            }
++        if (isSourceNew)
++            i++;
++            
++        if (i &gt; 0) { //there's been some change we must report
++            System.out.println(&quot;REPORTING CHANGE!&quot;);
++            PlantloreConstants.Table[] changedTables = new PlantloreConstants.Table[i];
++            if (isCountryNew) {
++                i--;
++                changedTables[i] = PlantloreConstants.Table.HABITAT;
++            }
++            if (isSourceNew) {
++                i--;
++                changedTables[i] = PlantloreConstants.Table.OCCURRENCE;
++            }
++            
++            setChanged();
++            notifyObservers(changedTables);
++        }
++    }
++    
+     public boolean isNotEmpty(String s) {
+         if (s != null &amp;&amp; !s.equals(&quot;&quot;))
+             return true;
+@@ -1010,17 +1114,21 @@
+             return false;
+     }
+     
++    /** Checks that user entered all compulsory data and that it is correct.
++     *
++     * @return Pair&lt;Boolean,String&gt; where the Boolean is true if the data is fine, otherwise it is false in which case the String contains a message for the user
++     */
+     public Pair&lt;Boolean,String&gt; checkData() throws RemoteException {
+         if (authorList.size() &lt; 1)
+-            return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one author!&quot;);
++            return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.AtLeastOneAuthor&quot;));
+         else {
+             for (Pair&lt;Pair&lt;String,Integer&gt;,String&gt; author : authorList) {
+                 if (author.getFirst().getFirst().equals(&quot;&quot;))
+-                    return new Pair&lt;Boolean,String&gt;(false, &quot;Some of the authors is empty. Enter it or remove it please.&quot;);
++                    return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.EmptyAuthor&quot;));
+             }
+         }
+         if (taxonList == null || taxonList.size() &lt; 1)
+-            return new Pair&lt;Boolean,String&gt;(false, &quot;You have to add at least one taxon!&quot;);
++            return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.AtLeastOneTaxon&quot;));
+         
+         if (editMode &amp;&amp; taxonList.size() &gt; 1 &amp;&amp; database.getUserRights().getAdd() != 1 &amp;&amp; database.getUserRights().getAdministrator() != 1) { //the user is not allowed to add new records
+             return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.InsufficientAddRights&quot;));
+@@ -1040,27 +1148,61 @@
+                 Integer ajId = aj.getFirst().getSecond();
+                 String ajRole = aj.getSecond();
+                 if (aiId.equals(ajId) &amp;&amp; aiRole.equals(ajRole)) {
+-                    return new Pair&lt;Boolean,String&gt;(false, &quot;Author can appear only once in each role. Please modify &quot;+ai.getFirst().getFirst());
++                    return new Pair&lt;Boolean,String&gt;(false, L10n.getString(&quot;AddEdit.CheckMessage.OneRolePerAuthor&quot;)+ai.getFirst().getFirst());
+                 }
+             }
+         }
+         
+         if (!isNotEmpty(village)) {
+-            return new Pair&lt;Boolean,String&gt;(false,&quot;You have to enter all requested data. Please fill in the nearest village.&quot;);
++            return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.CompulsoryNearestVillage&quot;));
+         }
+         
+         if (!isNotEmpty(territoryName)) {
+-            return new Pair&lt;Boolean,String&gt;(false,&quot;You have to enter all requested data. Please fill in the territory name.&quot;);            
++            return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.CompulsoryTerritory&quot;));            
+         }
+         
+         if (!isNotEmpty(phytCode)) {
+-            return new Pair&lt;Boolean,String&gt;(false,&quot;You have to enter all requested data. Please fill in the phytochoria code or name.&quot;);            
++            return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.CompulsoryPhytochorion&quot;));            
+         }
+ 
+         if (!isNotEmpty(project)) {
+-            return new Pair&lt;Boolean,String&gt;(false,&quot;You have to enter all requested data. Please fill in the project.&quot;);            
++            return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.CompulsoryProject&quot;));            
+         }
+ 
++        if (day != null &amp;&amp; month != null) //it is not possible to set the year null in the form
++        {
++            try {
++            Calendar cal = Calendar.getInstance();
++            cal.setLenient(false);
++            cal.set(Calendar.YEAR, year);
++            cal.set(Calendar.MONTH, month);
++            cal.set(Calendar.DAY_OF_MONTH, day);           
++            cal.getTime();  //throws an exception if the date is invalid          
++            } catch(Exception ex) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidDate&quot;));
++            }
++        }
++        
++        if (!dayValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidDay&quot;));            
++        }
++        
++        if (!timeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidTime&quot;));                        
++        }
++        
++        if (!altitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidAltitude&quot;));            
++        }
++        
++        if (!longitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidLongitude&quot;));            
++        }
++        
++        if (!latitudeValid) {
++                return new Pair&lt;Boolean,String&gt;(false,L10n.getString(&quot;AddEdit.CheckMessage.InvalidLatitude&quot;));            
++        }
++        
+         return new Pair&lt;Boolean,String&gt;(true,&quot;&quot;);
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -9,6 +9,8 @@
+ 
+ package net.sf.plantlore.client.overview;
+ 
++import java.awt.BorderLayout;
++import java.awt.Color;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+@@ -34,6 +36,7 @@
+ import javax.swing.JButton;
+ import javax.swing.JCheckBox;
+ import javax.swing.JComboBox;
++import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
+ import javax.swing.JSpinner;
+@@ -41,13 +44,17 @@
+ import javax.swing.JTextField;
+ import javax.swing.event.ChangeEvent;
+ import javax.swing.event.ChangeListener;
++import javax.swing.event.DocumentEvent;
++import javax.swing.event.DocumentListener;
+ import javax.swing.table.TableColumn;
+ import javax.swing.text.BadLocationException;
++import com.toedter.calendar.JCalendar;
+ import net.sf.plantlore.client.*;
+ 
+ import net.sf.plantlore.client.checklist.ChecklistCtrl;
+ import net.sf.plantlore.client.checklist.ChecklistView;
+ import net.sf.plantlore.common.AutoComboBox;
++import net.sf.plantlore.common.AutoComboBoxNG3;
+ import net.sf.plantlore.common.AutoTextArea;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Pair;
+@@ -67,6 +74,9 @@
+     private boolean inAddMode = true;
+     private AddEdit model;
+     private AddEditView view;
++    private final static int MAXIMUM_FRACTION_DIGITS = 5;
++    private final static int MAXIMUM_INTEGER_DIGITS = 4;
++    private final static Color COLOR_INVALID = Color.RED;
+     
+     //--------------MODELS AND VIEWS THIS CONTROLLER CREATES-----------------
+     private ChecklistView checklistView;
+@@ -93,9 +103,9 @@
+         //------- TextFields --------        
+         view.herbariumTextField.addFocusListener(new HerbariumListener());
+         view.quadrantTextField.addFocusListener(new QuadrantListener());
+-        view.altitudeTextField.addFocusListener(new AltitudeListener());
+-        view.longitudeTextField.addFocusListener(new LongitudeListener());
+-        view.latitudeTextField.addFocusListener(new LatitudeListener());
++        view.altitudeTextField.getDocument().addDocumentListener(new AltitudeListener());
++        view.longitudeTextField.getDocument().addDocumentListener(new LongitudeListener());
++        view.latitudeTextField.getDocument().addDocumentListener(new LatitudeListener());
+         
+         //------- TextAreas --------        
+         view.taxonTextArea.addPropertyChangeListener(AutoTextArea.UPDATE_LIST_OF_PLANTS, new TaxonAreaListener());
+@@ -106,21 +116,22 @@
+         //------- Spinners --------
+         view.yearSpinner.addChangeListener(new YearListener());
+         view.monthChooser.addPropertyChangeListener(&quot;month&quot;, new MonthChangeListener());
+-        view.timeTextField.addFocusListener(new TimeListener());
+-        
++        view.dayTextField.getDocument().addDocumentListener(new DayListener());
++        view.timeTextField.getDocument().addDocumentListener(new TimeListener());
++                
+         //------- RadioButtons --------
+ //        view.WGS84Button.addActionListener(new CoordinateSystemListener());
+ //        view.S42Button.addActionListener(new CoordinateSystemListener());
+ //        view.SJTSKButton.addActionListener(new CoordinateSystemListener());
+         
+         //------- Buttons --------
+-        view.extendedButton.addMouseListener(new ExtendedButtonListener());
+         view.okButton.addMouseListener(new OkButtonListener());
+         view.cancelButton.addMouseListener(new CancelButtonListener());
+         view.checklistButton.setAction(new ChecklistAction());
+         
+         view.clearLocationButton.setAction(new ClearLocationAction());
+         view.clearOccurrenceButton.setAction(new ClearOccurrenceAction());
++        view.calendarButton.setAction(new CalendarAction());
+         
+ //        view.preloadAuthorsCheckBox.addActionListener(new PreloadCheckBox());
+     }
+@@ -171,11 +182,11 @@
+                 //System.out.println(&quot;c.getSelectedItem(): &quot;+c.getSelectedItem());
+                 model.setPhytCode((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+            
+-            if (command.equals(&quot;phytCountryCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof String))
+-                model.setPhytCountry((String) c.getSelectedItem());
++            if (command.equals(&quot;phytCountryCombo&quot;) &amp;&amp; (((AutoComboBoxNG3)c).getValue() instanceof String))
++                model.setPhytCountry((String) ((AutoComboBoxNG3)c).getValue());
+ 
+-            if (command.equals(&quot;sourceCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof String))
+-                model.setSource((String) c.getSelectedItem());
++            if (command.equals(&quot;sourceCombo&quot;) &amp;&amp; (((AutoComboBoxNG3)c).getValue() instanceof String))
++                model.setSource((String) ((AutoComboBoxNG3)c).getValue());
+            
+             if (command.equals(&quot;publicationCombo&quot;) &amp;&amp; (c.getSelectedItem() instanceof Pair))
+                 model.setPublication((Pair&lt;String, Integer&gt;) c.getSelectedItem());
+@@ -265,19 +276,6 @@
+         }
+     }//QuadrantListener
+     
+-    class MonthListener implements ChangeListener {
+-        public void stateChanged(ChangeEvent e) {
+-            JSpinner s = (JSpinner) e.getSource();
+-            model.setMonth((Integer)s.getValue());
+-        }
+-    }//MonthListener
+-    class DayListener implements ChangeListener {
+-        public void stateChanged(ChangeEvent e) {
+-            JSpinner s = (JSpinner) e.getSource();
+-            model.setDay((Integer)s.getValue());
+-        }
+-    }//DayListener
+-    
+     class YearListener implements ChangeListener {
+         public void stateChanged(ChangeEvent e) {
+             JSpinner s = (JSpinner) e.getSource();
+@@ -285,144 +283,275 @@
+         }
+     }//YearListener
+ 
+-    class AltitudeListener implements FocusListener {
++    class AltitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        Color oldColor;
+ 
+-        public void focusGained(FocusEvent e) {
++        public AltitudeListener() {
++            oldColor = view.altitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
+                 model.setAltitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;AltitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setAltitude(null);
++                return;
++            }
++
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setAltitude(value);
++                view.altitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    model.setAltitude(value);
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                } catch (ParseException ex2) {
+-                    if (model.getAltitude() != null) {
+-                        tf.setText(&quot;&quot;+nf.format(model.getAltitude()));
+-                    } else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                    view.altitudeTextField.setForeground(COLOR_INVALID);
++                    model.setAltitudeValid(false);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//AltitudeListener
+ 
+-    class LatitudeListener implements FocusListener {
++    class LatitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
++        Color oldColor;
+ 
+-        public void focusGained(FocusEvent e) {
++        public LatitudeListener() {
++            oldColor = view.latitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            System.out.println(&quot;LATITUDE old COLOR = &quot;+oldColor);
++            if (e.getDocument().getLength() == 0) {
+                 model.setLatitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;LatitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setLatitude(null);
++                return;
++            }
++            
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setLatitude(value);
++                view.latitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                    model.setLatitude(value);                    
+-                } catch (ParseException ex2) {
+-                    if (model.getLatitude() != null)
+-                        tf.setText(&quot;&quot;+model.getLatitude());
+-                    else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                view.latitudeTextField.setForeground(COLOR_INVALID);
++                model.setLatitudeValid(false);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//LatitudeListener
+ 
+-    class LongitudeListener implements FocusListener {
++    class LongitudeListener implements DocumentListener {
+         NumberFormat nf = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
+-        NumberFormat nfUS = NumberFormat.getNumberInstance( Locale.US );
+-        
+-        public void focusGained(FocusEvent e) {
++        Color oldColor;
++
++        public LongitudeListener() {
++            oldColor = view.longitudeTextField.getForeground();
++            nf.setMaximumFractionDigits(MAXIMUM_FRACTION_DIGITS);
++            nf.setMaximumIntegerDigits(MAXIMUM_INTEGER_DIGITS);
+         }
+ 
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
+                 model.setLongitude(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;LongitudeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setLongitude(null);
++                return;
++            }
++            
+             Double value;
+             try {
+-                value = nf.parse(tf.getText()).doubleValue();
++                value = nf.parse(text).doubleValue();
+                 String s = nf.format(value);
+-                if (!s.equals(tf.getText().trim()))
++                if (!s.equals(text.trim()))
+                     throw new ParseException(&quot;Parsing could stop at decimal point. Take a closer look.&quot;,0);
+                 model.setLongitude(value);
++                view.longitudeTextField.setForeground(oldColor);
+             } catch (ParseException ex) {
+-                try {
+-                    value = nfUS.parse(tf.getText()).doubleValue();
+-                    tf.setText(nf.format(value)); //print the number using proper decimal point
+-                    model.setLongitude(value);                    
+-                } catch (ParseException ex2) {
+-                    if (model.getLongitude() != null)
+-                        tf.setText(&quot;&quot;+model.getLongitude());
+-                    else
+-                        tf.setText(&quot;&quot;);
+-                    return;
+-                }
++                model.setLongitudeValid(false);
++                view.longitudeTextField.setForeground(COLOR_INVALID);
+             }
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//LongitudeListener
+     
+-    class TimeListener implements FocusListener {
++    class DayListener implements DocumentListener {
++        Color oldColor;
++        public DayListener() {
++            oldColor = view.dayTextField.getForeground();
++        }
++        
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
++                model.setDay(null);
++                return;
++            }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;DayChangeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
++            
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setDay(null);
++                return;
++            }
++
++            int day;
++            try {
++                day = Integer.parseInt(text);
++            } catch (Exception ex) {
++                model.setDayValid(false);
++                view.dayTextField.setForeground(COLOR_INVALID);
++                return;
++            }
++            
++            //we can do date validation only after the whole date has been set
++            //that means we should do it in AddEdit.storeRecord()
++            if (day &gt; 0 &amp;&amp; day &lt;= 31) {
++                model.setDay(day);
++            } else {
++                view.dayTextField.setForeground(COLOR_INVALID);
++                model.setDayValid(false);
++                return;                
++            }
++            view.dayTextField.setForeground(oldColor);
++        }//DayListener
++        
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }        
++    }
++    
++    class TimeListener implements DocumentListener {
++        Color oldColor;
+         DateFormat df = DateFormat.getTimeInstance(DateFormat.SHORT);
+         Calendar c = Calendar.getInstance();
+         
+-        public void focusGained(FocusEvent e) {
++        public TimeListener() {
++            oldColor = view.timeTextField.getForeground();
+         }
+-
+-        public void focusLost(FocusEvent e) {
+-            JTextField tf = (JTextField) e.getSource();
+-            if (tf.getText().trim().equals(&quot;&quot;)) {
++        
++        public void processEvent(DocumentEvent e) {
++            if (e.getDocument().getLength() == 0) {
+                 model.setTime(null);
+                 return;
+             }
++            String text = null;
++            try { text = e.getDocument().getText(0, e.getDocument().getLength()); } 
++            catch (BadLocationException ex) { 
++                logger.warn(&quot;DayChangeListener in AddEditCtrl: unexpected BadLocationException: &quot;+ex); 
++                return;//shouldn't happen, just ignore it }
++            }
+             
++            if (text.trim().equals(&quot;&quot;)) {
++                model.setTime(null);
++                return;
++            }
++            
+             Date value;
+             try {
+-                value = df.parse(tf.getText());
++                value = df.parse(text);
+                 model.setTime(value);
+             } catch (ParseException ex) {
+-                if (model.getTime() != null) {
+-                    c.setTime(model.getTime());
+-                    tf.setText(&quot;&quot;+c.get(Calendar.HOUR_OF_DAY)+&quot;:&quot;+Calendar.MINUTE);
+-                } else
+-                    tf.setText(&quot;&quot;);
++                model.setTimeValid(false);
++                view.timeTextField.setForeground(COLOR_INVALID);
+                 return;
+             }
++            view.timeTextField.setForeground(oldColor);
+         }
++
++        public void insertUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void removeUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
++
++        public void changedUpdate(DocumentEvent e) {
++            processEvent(e);
++        }
+     }//TimeListener
+     
+     class MonthChangeListener implements PropertyChangeListener {
+@@ -438,17 +567,31 @@
+         } 
+     }
+     
+-    class DayChangeListener implements PropertyChangeListener {
++    class CalendarDayChangeListener implements PropertyChangeListener {
+         public void propertyChange(PropertyChangeEvent evt) {
+-            model.setDay((Integer) evt.getNewValue());
++            Integer i = (Integer) evt.getNewValue();
++            //model.setDay(i);
++            view.dayTextField.setText(&quot;&quot;+i);
+         } 
+     }
++
++    class CalendarMonthChangeListener implements PropertyChangeListener {
++        public void propertyChange(PropertyChangeEvent evt) {
++            Integer i = (Integer) evt.getNewValue();
++            //model.setDay(i);
++            if (i != null)
++                view.monthChooser.setMonth(i);
++        } 
++    }
+     
+-    class ExtendedButtonListener extends MouseAdapter {
+-        public void mouseClicked(MouseEvent e) {
+-            view.switchExtended();
+-        }
+-    }//ExtendedButtonListener
++    class CalendarYearChangeListener implements PropertyChangeListener {
++        public void propertyChange(PropertyChangeEvent evt) {
++            Integer i = (Integer) evt.getNewValue();
++            //model.setYear(i);
++            if (i != null)
++                view.yearSpinner.setValue(i);
++        } 
++    }
+     
+     class OkButtonListener extends MouseAdapter {
+         private String ALL = L10n.getString(&quot;AddEdit.All&quot;);
+@@ -461,7 +604,7 @@
+             try {
+                 Pair&lt;Boolean,String&gt; check = model.checkData();
+                 if (!check.getFirst()) {
+-                    JOptionPane.showMessageDialog(view,check.getSecond());
++                    JOptionPane.showMessageDialog(view,check.getSecond(),L10n.getString(&quot;AddEdit.CheckFailedTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
+                     return;
+                 } 
+                 if (inEditMode) {
+@@ -496,7 +639,6 @@
+                             model.storeRecord(true);
+                             view.setVisible(false);                    
+                     }
+-                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;AddEdit.EditConfirmation&quot;),L10n.getString(&quot;AddEdit.EditConfirmationTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
+                 } else {//inAddMode
+                     model.storeRecord(true);
+                     JOptionPane.showMessageDialog(view,L10n.getString(&quot;AddEdit.AddConfirmation&quot;),L10n.getString(&quot;AddEdit.AddConfirmationTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
+@@ -550,5 +692,33 @@
+             model.setPreloadAuthorsEnabled(cb.isSelected());
+         }        
+     }
++    
++    /**
++     *
++     */
++    class CalendarAction extends AbstractAction {
++        JDialog calendarDialog;
++        public CalendarAction() {
++            putValue(NAME, L10n.getString(&quot;AddEdit.Calendar&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.CalendarTT&quot;));   
++            calendarDialog = new JDialog(view);
++            BorderLayout bl = new BorderLayout();
++            calendarDialog.setLayout(bl);            
++            JCalendar calendar = new JCalendar();
++            calendarDialog.add(calendar,BorderLayout.CENTER);
++            calendarDialog.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++            calendarDialog.pack();
++            calendarDialog.setLocationRelativeTo(view);
++            
++            calendar.getYearChooser().addPropertyChangeListener(&quot;year&quot;,new CalendarYearChangeListener());
++            calendar.getMonthChooser().addPropertyChangeListener(&quot;month&quot;,new CalendarMonthChangeListener());
++            calendar.getDayChooser().addPropertyChangeListener(&quot;day&quot;,new CalendarDayChangeListener());
++        }
++        public void actionPerformed(ActionEvent e) {
++            calendarDialog.setVisible(true);
++        }
++    }//CalendarAction
+ }
+ 
++
++
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-25 10:32:00 UTC (rev 567)
+@@ -4,18 +4,6 @@
+   &lt;NonVisualComponents&gt;
+     &lt;Component class=&quot;javax.swing.ButtonGroup&quot; name=&quot;convertCoordinatesGroup&quot;&gt;
+     &lt;/Component&gt;
+-    &lt;Component class=&quot;javax.swing.JToggleButton&quot; name=&quot;extendedButton&quot;&gt;
+-      &lt;Properties&gt;
+-        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Extended&quot;/&gt;
+-      &lt;/Properties&gt;
+-      &lt;Events&gt;
+-        &lt;EventHandler event=&quot;actionPerformed&quot; listener=&quot;java.awt.event.ActionListener&quot; parameters=&quot;java.awt.event.ActionEvent&quot; handler=&quot;extendedButtonActionPerformed&quot;/&gt;
+-        &lt;EventHandler event=&quot;mouseClicked&quot; listener=&quot;java.awt.event.MouseListener&quot; parameters=&quot;java.awt.event.MouseEvent&quot; handler=&quot;extendedButtonMouseClicked&quot;/&gt;
+-      &lt;/Events&gt;
+-      &lt;AuxValues&gt;
+-        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-      &lt;/AuxValues&gt;
+-    &lt;/Component&gt;
+   &lt;/NonVisualComponents&gt;
+   &lt;Properties&gt;
+     &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
+@@ -852,6 +840,9 @@
+                           &lt;/AuxValues&gt;
+                         &lt;/Component&gt;
+                         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;dayTextField&quot;&gt;
++                          &lt;AuxValues&gt;
++                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                          &lt;/AuxValues&gt;
+                         &lt;/Component&gt;
+                         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;yearLabel&quot;&gt;
+                           &lt;Properties&gt;
+@@ -876,6 +867,9 @@
+                           &lt;Properties&gt;
+                             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Calendar&quot;/&gt;
+                           &lt;/Properties&gt;
++                          &lt;AuxValues&gt;
++                            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                          &lt;/AuxValues&gt;
+                         &lt;/Component&gt;
+                       &lt;/SubComponents&gt;
+                     &lt;/Container&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -24,19 +24,24 @@
+ import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JPanel;
++import javax.swing.JTextField;
+ import javax.swing.ListSelectionModel;
+ import javax.swing.SpinnerDateModel;
+ import javax.swing.SpinnerNumberModel;
+ import javax.swing.table.AbstractTableModel;
+ import javax.swing.table.TableColumn;
++import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.*;
+ import net.sf.plantlore.common.AutoComboBox;
+ import net.sf.plantlore.common.AutoComboBoxNG3;
+ import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.DocumentSizeFilter;
+ import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.common.record.AuthorOccurrence;
++import net.sf.plantlore.common.record.Habitat;
++import net.sf.plantlore.common.record.Occurrence;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+@@ -47,13 +52,15 @@
+ public class AddEditView extends javax.swing.JDialog implements Observer {
+     private Logger logger;
+     private static final int DIALOG_WIDTH = 1000;
++    private static final int MAX_GPS_SYMBOL_LENGTH = 20;
+     private static final String REQUIRED_STRING  = &quot;(*)&quot;;
+     private boolean visible=true;
+     private AddEdit model;
+     private boolean inEditMode = false;
+     private boolean inAddMode = true;
+     protected AuthorTableModel tableModel;
+-    
++    private NumberFormat numberFormat = NumberFormat.getNumberInstance( L10n.getCurrentLocale() );
++
+     /** Creates new form AddEdit2 */
+     public AddEditView(java.awt.Frame parent, boolean modal, AddEdit model, boolean edit) {
+         super(parent, modal);
+@@ -74,24 +81,13 @@
+         
+         setLabels();
+         
++        setSizeRestrictions();
++        
+         occurrenceTable.setModel(model.getOccurrenceTableModel());
+         occurrenceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+         //occurrenceTable.setRowSelectionAllowed(false);
+-        //if (inEditMode)
+-        //    loadComponentData();
+         
+-        /*if (inEditMode)
+-            preloadAuthorsCheckBox.setVisible(false);
+-        else
+-            preloadAuthorsCheckBox.setVisible(true);
+-        */
+-        
+-        extendedButton.setVisible(false); //the button is of no use
+         extendedPanel.setVisible(visible);
+-        /*basicPanel.setPreferredSize(new Dimension(DIALOG_WIDTH,740));
+-        extendedPanel.setPreferredSize(new Dimension(DIALOG_WIDTH,130));
+-        buttonPanel.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+-         */
+         this.pack();        
+     }
+     
+@@ -104,7 +100,6 @@
+     // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
+     private void initComponents() {
+         convertCoordinatesGroup = new javax.swing.ButtonGroup();
+-        extendedButton = new javax.swing.JToggleButton();
+         jScrollPane8 = new javax.swing.JScrollPane();
+         topPanel = new javax.swing.JPanel();
+         basicPanel = new javax.swing.JPanel();
+@@ -181,18 +176,6 @@
+         jScrollPane6 = new javax.swing.JScrollPane();
+         occurrenceTable = new javax.swing.JTable();
+ 
+-        extendedButton.setText(&quot;Extended&quot;);
+-        extendedButton.addActionListener(new java.awt.event.ActionListener() {
+-            public void actionPerformed(java.awt.event.ActionEvent evt) {
+-                extendedButtonActionPerformed(evt);
+-            }
+-        });
+-        extendedButton.addMouseListener(new java.awt.event.MouseAdapter() {
+-            public void mouseClicked(java.awt.event.MouseEvent evt) {
+-                extendedButtonMouseClicked(evt);
+-            }
+-        });
+-
+         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+         jScrollPane8.setPreferredSize(new java.awt.Dimension(920, 685));
+         topPanel.setLayout(new java.awt.BorderLayout());
+@@ -780,14 +763,6 @@
+     private void helpButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_helpButtonActionPerformed
+ // TODO add your handling code here:
+     }//GEN-LAST:event_helpButtonActionPerformed
+-
+-    private void extendedButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_extendedButtonActionPerformed
+-// TODO add your handling code here:
+-    }//GEN-LAST:event_extendedButtonActionPerformed
+-
+-    private void extendedButtonMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_extendedButtonMouseClicked
+-// TODO add your handling code here:
+-    }//GEN-LAST:event_extendedButtonMouseClicked
+     
+     
+     //musn't delete contents of tableModel, because it's also called to update the table's user interface unfortunately...
+@@ -887,11 +862,11 @@
+             phytCountryCombo.setSelectedIndex(0);
+         quadrantTextField.setText(model.getQuadrant());
+         
+-        if (model.getAltitude() != null) altitudeTextField.setText(&quot;&quot;+model.getAltitude());
++        if (model.getAltitude() != null) altitudeTextField.setText(&quot;&quot;+numberFormat.format(model.getAltitude()));
+             else altitudeTextField.setText(&quot;&quot;);
+-        if (model.getLongitude() != null) longitudeTextField.setText(&quot;&quot;+model.getLongitude());
++        if (model.getLongitude() != null) longitudeTextField.setText(&quot;&quot;+numberFormat.format(model.getLongitude()));
+             else longitudeTextField.setText(&quot;&quot;);
+-        if (model.getLatitude() != null) latitudeTextField.setText(&quot;&quot;+model.getLatitude());
++        if (model.getLatitude() != null) latitudeTextField.setText(&quot;&quot;+numberFormat.format(model.getLatitude()));
+             else latitudeTextField.setText(&quot;&quot;);
+         
+         if (model.getSource() != null) 
+@@ -983,18 +958,30 @@
+         requiredInfoLabel.setText(L10n.getFormattedString(&quot;AddEdit.RequiredInfoLabel&quot;,arg));
+     }
+     
+-    public void switchExtended() {
+-        visible = !visible;
+-        double height = topPanel.getSize().getHeight();
+-        double width = topPanel.getSize().getWidth();
+-        extendedPanel.setVisible(visible);
+-        basicPanel.setPreferredSize(new Dimension(DIALOG_WIDTH,740));
+-        buttonPanel.setPreferredSize(new Dimension(DIALOG_WIDTH,50));
+-        height = !visible ? height + 150 : height - 150;
+-        topPanel.setPreferredSize(new Dimension((int)width,(int)height));
+-        this.pack();        
++    private void setSizeRestrictions() {
++        PlainDocument pd = (PlainDocument) herbariumTextField.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(20));
++
++        pd = (PlainDocument) quadrantTextField.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(10));
++        
++        ((AutoComboBoxNG3)phytCountryCombo).setCapacity(Habitat.getColumnSize(Habitat.COUNTRY));
++        
++        pd = (PlainDocument) descriptionArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.DESCRIPTION)));
++        
++        pd = (PlainDocument) locationNoteArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Habitat.getColumnSize(Habitat.NOTE)));
++        
++        pd = (PlainDocument) gpsSymbolTextField.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(MAX_GPS_SYMBOL_LENGTH));
++
++        ((AutoComboBoxNG3)sourceCombo).setCapacity(Occurrence.getColumnSize(Occurrence.DATASOURCE));
++
++        pd = (PlainDocument) occurrenceNoteArea.getDocument();
++        pd.setDocumentFilter(new DocumentSizeFilter(Occurrence.getColumnSize(Occurrence.NOTE)));
+     }
+-    
++        
+     /**
+      * @param args the command line arguments
+      */
+@@ -1142,7 +1129,7 @@
+             }
+             
+         }
+-    }
++    }//update
+         
+     
+     // Variables declaration - do not modify//GEN-BEGIN:variables
+@@ -1151,7 +1138,7 @@
+     protected javax.swing.JTable authorTable;
+     protected javax.swing.JPanel basicPanel;
+     private javax.swing.JPanel buttonPanel;
+-    private javax.swing.JButton calendarButton;
++    protected javax.swing.JButton calendarButton;
+     protected javax.swing.JButton cancelButton;
+     protected javax.swing.JButton checklistButton;
+     protected javax.swing.JButton clearLocationButton;
+@@ -1160,9 +1147,8 @@
+     private javax.swing.JLabel coordinateSystemLabel;
+     protected javax.swing.JLabel countryLabel;
+     protected javax.swing.JLabel dayLabel;
+-    private javax.swing.JTextField dayTextField;
++    protected javax.swing.JTextField dayTextField;
+     protected javax.swing.JTextArea descriptionArea;
+-    protected javax.swing.JToggleButton extendedButton;
+     private javax.swing.JPanel extendedPanel;
+     private javax.swing.JButton gpsChangeButton;
+     private javax.swing.JButton gpsLoadButton;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditor.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditor.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/AuthorRevisionEditor.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -11,20 +11,26 @@
+ 
+ import java.awt.Component;
+ import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import javax.swing.AbstractAction;
+ import javax.swing.AbstractCellEditor;
+ import javax.swing.JButton;
++import javax.swing.JDialog;
+ import javax.swing.JOptionPane;
+ import javax.swing.JTable;
+ import javax.swing.table.TableCellEditor;
+ import javax.swing.table.TableModel;
++import javax.swing.text.PlainDocument;
+ import net.sf.plantlore.client.*;
++import net.sf.plantlore.common.DocumentSizeFilter;
++import net.sf.plantlore.common.record.AuthorOccurrence;
+ import net.sf.plantlore.l10n.L10n;
+ 
+-/**
+- *
++/** Handles clicks into the revision column of author table.
++ * 
++ * 
+  * @author fraktalek
+  */
+ public class AuthorRevisionEditor extends AbstractCellEditor implements TableCellEditor {
+@@ -33,20 +39,54 @@
+     AddEdit aemodel;
+     String value = &quot;&quot;;
+     
++    /** Handles the actual revision text editing and value passing back to the cell editor and &lt;code&gt;AddEdit&lt;/code&gt; model.
++     *
++     */
+     class RevisionAction extends AbstractAction {
++        RoleEditDialog red;
++        
++        /** Sets the button's name and tooltip. Creates a new &lt;code&gt;RoleEditDialog&lt;/code&gt; for later use for the text editing.
++         *
++         * Configures the RoleEditDialog - sets ActionListeners to the buttons, sets their titles, installs a &lt;code&gt;DocumentSizeFilter&lt;/code&gt;
++         * to the dialog's &lt;code&gt;JTextArea&lt;/code&gt; to limit the length of user inputted text.
++         */
+         public RevisionAction() {
+             putValue(NAME, L10n.getString(&quot;AddEdit.Revision&quot;));
+             putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.RevisionTT&quot;));
+             putValue(MNEMONIC_KEY, L10n.getMnemonic(&quot;AddEdit.Revision&quot;));            
++            
++            red = new RoleEditDialog(null,true);
++            red.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
++            red.okButton.addActionListener(new ActionListener() {
++                public void actionPerformed(ActionEvent e) {
++                    value = red.roleArea.getText();
++                    red.setVisible(false);
++                }  });
++            red.okButton.setText(L10n.getString(&quot;Common.Ok&quot;));
++            red.cancelButton.addActionListener(new ActionListener() {
++                public void actionPerformed(ActionEvent e) {
++                    value = null;
++                    red.setVisible(false);
++                }                
++             }); 
++            red.cancelButton.setText(L10n.getString(&quot;Common.Cancel&quot;));
++            ((PlainDocument)red.roleArea.getDocument()).setDocumentFilter(new DocumentSizeFilter(AuthorOccurrence.getColumnSize(AuthorOccurrence.NOTE)));                
++            red.setTitle(L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;));
+         } 
+ 
++        /** The actual revision button click handler.
++         * 
++         * Initializes the dialog's text and shows the dialog. Then stores the new value into the &lt;code&gt;AddEdit&lt;/code&gt; model.
++         */
+         public void actionPerformed(ActionEvent e) {
+             JButton button = (JButton)e.getSource();
+             int row = buttonMapInverted.get(button);
+-            String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
+-            value = s;
+-            if (s != null) {
+-                aemodel.setResultRevision(row,s);
++//            String s = (String)JOptionPane.showInputDialog(null,L10n.getString(&quot;AddEdit.RevisionDialogMessage&quot;),L10n.getString(&quot;AddEdit.RevisionDialogTitle&quot;),JOptionPane.QUESTION_MESSAGE,null,null,e.getActionCommand());
++            //value = s;
++            red.roleArea.setText(e.getActionCommand());
++            red.setVisible(true);
++            if (value != null) {
++                aemodel.setResultRevision(row,value);
+             } else { // user pressed cancel
+                 value = e.getActionCommand();
+             }
+@@ -59,7 +99,12 @@
+         this.aemodel = aemodel;
+     }
+ 
+-
++    /** Returns the right button with proper action command set.
++     * The action command is the value to be edited. It is a kinda hack, but it works...
++     * Creates the button if it doesn't exist. Creates and adds to it a new action listener &lt;code&gt;RevisionAction&lt;/code&gt;.
++     *
++     * @return &lt;code&gt;JButton&lt;/code&gt; for the given row
++     */
+     public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+         if (!buttonMap.containsKey(row)) {
+             JButton button = new JButton();
+@@ -74,6 +119,9 @@
+         return button;
+     }
+ 
++    /** Returns the current editor value.
++     *
++     */
+     public Object getCellEditorValue() {
+         return value;
+     }
+
+Added: trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.form	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.form	2006-08-25 10:32:00 UTC (rev 567)
+@@ -0,0 +1,88 @@
++&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
++
++&lt;Form version=&quot;1.3&quot; type=&quot;org.netbeans.modules.form.forminfo.JDialogFormInfo&quot;&gt;
++  &lt;Properties&gt;
++    &lt;Property name=&quot;defaultCloseOperation&quot; type=&quot;int&quot; value=&quot;2&quot;/&gt;
++  &lt;/Properties&gt;
++  &lt;SyntheticProperties&gt;
++    &lt;SyntheticProperty name=&quot;formSizePolicy&quot; type=&quot;int&quot; value=&quot;1&quot;/&gt;
++  &lt;/SyntheticProperties&gt;
++  &lt;AuxValues&gt;
++    &lt;AuxValue name=&quot;FormSettings_generateMnemonicsCode&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_layoutCodeTarget&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_listenerGenerationStyle&quot; type=&quot;java.lang.Integer&quot; value=&quot;0&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesLocal&quot; type=&quot;java.lang.Boolean&quot; value=&quot;false&quot;/&gt;
++    &lt;AuxValue name=&quot;FormSettings_variablesModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;2&quot;/&gt;
++  &lt;/AuxValues&gt;
++
++  &lt;Layout&gt;
++    &lt;DimensionLayout dim=&quot;0&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;cancelButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;166&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;okButton&quot; linkSize=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;1&quot; pref=&quot;342&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++    &lt;DimensionLayout dim=&quot;1&quot;&gt;
++      &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;jScrollPane1&quot; pref=&quot;129&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Component id=&quot;cancelButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;okButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;/Group&gt;
++      &lt;/Group&gt;
++    &lt;/DimensionLayout&gt;
++  &lt;/Layout&gt;
++  &lt;SubComponents&gt;
++    &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane1&quot;&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++      &lt;/AuxValues&gt;
++
++      &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++      &lt;SubComponents&gt;
++        &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;roleArea&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++            &lt;Property name=&quot;lineWrap&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++            &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++            &lt;Property name=&quot;wrapStyleWord&quot; type=&quot;boolean&quot; value=&quot;true&quot;/&gt;
++          &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
++        &lt;/Component&gt;
++      &lt;/SubComponents&gt;
++    &lt;/Container&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;okButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jButton1&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;cancelButton&quot;&gt;
++      &lt;Properties&gt;
++        &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;jButton2&quot;/&gt;
++      &lt;/Properties&gt;
++      &lt;AuxValues&gt;
++        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++      &lt;/AuxValues&gt;
++    &lt;/Component&gt;
++  &lt;/SubComponents&gt;
++&lt;/Form&gt;
+
+Added: trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.java	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/client/overview/RoleEditDialog.java	2006-08-25 10:32:00 UTC (rev 567)
+@@ -0,0 +1,94 @@
++/*
++ * RoleEditDialog.java
++ *
++ * Created on 25. srpen 2006, 9:37
++ */
++
++package net.sf.plantlore.client.overview;
++
++/**
++ *
++ * @author  fraktalek
++ */
++public class RoleEditDialog extends javax.swing.JDialog {
++    
++    /** Creates new form RoleEditDialog */
++    public RoleEditDialog(java.awt.Frame parent, boolean modal) {
++        super(parent, modal);
++        initComponents();
++        setLocationRelativeTo(parent);
++    }
++    
++    /** This method is called from within the constructor to
++     * initialize the form.
++     * WARNING: Do NOT modify this code. The content of this method is
++     * always regenerated by the Form Editor.
++     */
++    // &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot; Generated Code &quot;&gt;//GEN-BEGIN:initComponents
++    private void initComponents() {
++        jScrollPane1 = new javax.swing.JScrollPane();
++        roleArea = new javax.swing.JTextArea();
++        okButton = new javax.swing.JButton();
++        cancelButton = new javax.swing.JButton();
++
++        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
++        roleArea.setColumns(20);
++        roleArea.setLineWrap(true);
++        roleArea.setRows(5);
++        roleArea.setWrapStyleWord(true);
++        jScrollPane1.setViewportView(roleArea);
++
++        okButton.setText(&quot;jButton1&quot;);
++
++        cancelButton.setText(&quot;jButton2&quot;);
++
++        org.jdesktop.layout.GroupLayout layout = new org.jdesktop.layout.GroupLayout(getContentPane());
++        getContentPane().setLayout(layout);
++        layout.setHorizontalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(layout.createSequentialGroup()
++                .addContainerGap()
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(layout.createSequentialGroup()
++                        .add(cancelButton)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 166, Short.MAX_VALUE)
++                        .add(okButton))
++                    .add(org.jdesktop.layout.GroupLayout.TRAILING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 342, Short.MAX_VALUE))
++                .addContainerGap())
++        );
++
++        layout.linkSize(new java.awt.Component[] {cancelButton, okButton}, org.jdesktop.layout.GroupLayout.HORIZONTAL);
++
++        layout.setVerticalGroup(
++            layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
++                .addContainerGap()
++                .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 129, Short.MAX_VALUE)
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(cancelButton)
++                    .add(okButton))
++                .addContainerGap())
++        );
++        pack();
++    }// &lt;/editor-fold&gt;//GEN-END:initComponents
++    
++    /**
++     * @param args the command line arguments
++     */
++    public static void main(String args[]) {
++        java.awt.EventQueue.invokeLater(new Runnable() {
++            public void run() {
++                new RoleEditDialog(new javax.swing.JFrame(), true).setVisible(true);
++            }
++        });
++    }
++    
++    // Variables declaration - do not modify//GEN-BEGIN:variables
++    protected javax.swing.JButton cancelButton;
++    private javax.swing.JScrollPane jScrollPane1;
++    protected javax.swing.JButton okButton;
++    protected javax.swing.JTextArea roleArea;
++    // End of variables declaration//GEN-END:variables
++    
++}
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-08-25 10:32:00 UTC (rev 567)
+@@ -1293,3 +1293,11 @@
+ AddEdit.CheckMessage.InvalidTime=The time is invalid\!
+ 
+ AddEdit.CheckMessage.InvalidDay=The day is invalid\!
++
++AddEdit.CheckMessage.InvalidAltitude=The altitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLongitude=The longitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLatitude=The latitude is invalid\!
++
++AddEdit.CheckFailedTitle=Wrong value
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-08-25 10:32:00 UTC (rev 567)
+@@ -1471,3 +1471,11 @@
+ AddEdit.CheckMessage.InvalidTime=The time is invalid\!
+ 
+ AddEdit.CheckMessage.InvalidDay=The day is invalid\!
++
++AddEdit.CheckMessage.InvalidAltitude=The altitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLongitude=The longitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLatitude=The latitude is invalid\!
++
++AddEdit.CheckFailedTitle=Wrong value
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-25 10:22:27 UTC (rev 566)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-08-25 10:32:00 UTC (rev 567)
+@@ -1009,3 +1009,11 @@
+ AddEdit.CheckMessage.InvalidTime=The time is invalid\!
+ 
+ AddEdit.CheckMessage.InvalidDay=The day is invalid\!
++
++AddEdit.CheckMessage.InvalidAltitude=The altitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLongitude=The longitude is invalid\!
++
++AddEdit.CheckMessage.InvalidLatitude=The latitude is invalid\!
++
++AddEdit.CheckFailedTitle=Wrong value
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000770.html">[Plantlore-dev] r566 - trunk/src/net/sf/plantlore/common
+</A></li>
+	<LI>Next message: <A HREF="000772.html">[Plantlore-dev] Import zaznamu - naposled.
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#771">[ date ]</a>
+              <a href="thread.html#771">[ thread ]</a>
+              <a href="subject.html#771">[ subject ]</a>
+              <a href="author.html#771">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,296 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r692 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree	client/print common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r692%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20client/overview/tree%0A%09client/print%20common&In-Reply-To=%3C200609051818.k85IId1q030750%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000953.html">
+   <LINK REL="Next"  HREF="000955.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r692 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree	client/print common</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r692%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20client/overview/tree%0A%09client/print%20common&In-Reply-To=%3C200609051818.k85IId1q030750%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r692 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree	client/print common">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 20:18:39 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000953.html">[Plantlore-dev] CreateDB iface
+</A></li>
+        <LI>Next message: <A HREF="000955.html">[Plantlore-dev] r693 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#954">[ date ]</a>
+              <a href="thread.html#954">[ thread ]</a>
+              <a href="subject.html#954">[ subject ]</a>
+              <a href="author.html#954">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-05 20:18:12 +0200 (Tue, 05 Sep 2006)
+New Revision: 692
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/JasperDataSource.java
+   trunk/src/net/sf/plantlore/client/overview/search/Search.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+   trunk/src/net/sf/plantlore/client/print/Print.java
+   trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+Log:
+Now closing queries even on exception.
+Better exception propagation from JasperReports (Scheda and Print).
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -1122,7 +1122,7 @@
+ 				Task task = new Task() {
+ 					JasperPrint jasperPrint;
+ 
+-					public Object task() throws DBLayerException {
++					public Object task() throws DBLayerException, RemoteException {
+                                                 setStatusMessage(L10n.getString(&quot;Overview.Scheda.Generating&quot;));
+                                                 try {
+                                                     jasperPrint = JasperFillManager.fillReport(
+@@ -1130,7 +1130,14 @@
+ 								new JasperDataSource(model.getDatabase(), model
+ 										.getTableModel().getSelection()));
+                                                 } catch (JRException jrException) {
+-                                                    throw new DBLayerException(L10n.getString(&quot;Print.Message.BrokenReport&quot;),jrException);
++                                                    Throwable t = jrException.getCause();
++                                                    if (t != null) {
++                                                        if (t instanceof RemoteException)
++                                                            throw (RemoteException)t;
++                                                        if (t instanceof DBLayerException)
++                                                            throw (DBLayerException)t;
++                                                    }
++                                                    throw new DBLayerException(L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot; &quot;+jrException.getMessage(),jrException);
+                                                 }
+ 						//fireStopped(jasperPrint);
+                                                 setStatusMessage(L10n.getString(&quot;Common.Done&quot;));
+@@ -1842,11 +1849,16 @@
+ 	private Task refreshOverview(boolean createTask) {
+ 		if (createTask) {
+ 			Task task = new Task() {
+-				public Object task() throws DBLayerException, RemoteException {
++				public Object task() throws DBLayerException, RemoteException, Exception {
+                                     //refreshAction.setEnabled(false);
+                                     setStatusMessage(L10n.getString(&quot;Overview.Message.LoadingOccurrences&quot;));
+ 					searchModel.clear();
+-					searchModel.constructQuery();
++                                        try {
++                                            searchModel.constructQuery();
++                                        } catch (Exception ex) {
++                                            searchModel.closeQuery();
++                                            throw ex;
++                                        }
+ 					fireStopped(null);
+ 					return &quot;Ahoj, uz koncim&quot;;
+ 				}
+
+Modified: trunk/src/net/sf/plantlore/client/overview/JasperDataSource.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/JasperDataSource.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/client/overview/JasperDataSource.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -35,6 +35,7 @@
+ import net.sf.plantlore.common.record.Territory;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.NearestVillage;
++import net.sf.plantlore.l10n.L10n;
+ import net.sf.plantlore.middleware.DBLayer;
+ import org.apache.log4j.Logger;
+ 
+@@ -70,9 +71,9 @@
+             try {
+                 occurrence = (Occurrence) dlu.getObjectFor(it.next(), Occurrence.class);
+             } catch (RemoteException ex) {
+-                throw new JRException(ex);
++                throw new JRException(ex.getMessage(),ex);
+             } catch (DBLayerException ex) {
+-                throw new JRException(ex);
++                throw new JRException(ex.getMessage(),ex);
+             }
+             return true;
+         } else
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -634,7 +634,6 @@
+         restrictions = new ArrayList&lt;Restriction&gt;(20);
+         Object arg;
+         String habitatAlias = Record.alias(Habitat.class) +&quot;.&quot;;
+-        
+             // Create subquery first
+             SelectQuery subQuery = database.createSubQuery(AuthorOccurrence.class, &quot;ao&quot;);
+             // In the subquery select authors for the given occurrence (occurrence comes from the main query)
+@@ -907,9 +906,9 @@
+                 sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;occ.&quot;+Occurrence.MONTHCOLLECTED,null,month,null);
+                 restrictions.add(new Restriction(RESTR_EQ, Occurrence.MONTHCOLLECTED, month));
+             }
++            this.newSelectQuery = sq;
+             int resultId = database.executeQuery(sq);
+             this.newResultId = resultId;
+-            this.newSelectQuery = sq;
+             logger.debug(&quot;Created new query. Number of results: &quot;+database.getNumRows(resultId));
+             //let the SearchBridge in AppCoreCtrl know that new result is there
+             setChanged(); 
+@@ -917,6 +916,15 @@
+         return sq;
+     }
+     
++    /** To be used in exceptional states to close the query.
++     * Otherwise the query is closed in {@link OverviewTableModel.setResultId() }.
++     */
++    public void closeQuery() throws RemoteException, DBLayerException {
++        if (newSelectQuery == null)
++            return;
++        database.closeQuery(newSelectQuery);
++    }
++    
+     public void clearAndNotify() {
+         clear();
+         setChanged(); notifyObservers(&quot;CLEAR&quot;);
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTree.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -69,9 +69,17 @@
+ 
+                 SelectQuery query = dblayer.createQuery(Territory.class);
+                 query.addRestriction(PlantloreConstants.SUBQUERY_IN,Territory.ID,null,subQuery,null);
+-
+-                int resultid = dblayer.executeQuery(query);
+-                int resultsCount = dblayer.getNumRows(resultid);
++                
++                int resultid;
++                int resultsCount;
++                try {
++                    resultid = dblayer.executeQuery(query);
++                    resultsCount = dblayer.getNumRows(resultid);
++                } catch(DBLayerException ex) {
++                    if (query != null)
++                        dblayer.closeQuery(query);
++                    throw ex;
++                }
+                 if (resultsCount &lt;= 0) {
+                     dblayer.closeQuery(query);
+                     return null;
+
+Modified: trunk/src/net/sf/plantlore/client/print/Print.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/print/Print.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/client/print/Print.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -18,6 +18,7 @@
+ import java.io.ObjectInputStream;
+ import java.io.ObjectOutputStream;
+ import java.io.Serializable;
++import java.rmi.RemoteException;
+ import java.util.HashMap;
+ import java.util.Observable;
+ import java.util.prefs.Preferences;
+@@ -107,7 +108,7 @@
+         final JasperReport report = this.jasperReport;
+         
+         Task task = new Task() {
+-            public Object task() throws DBLayerException {
++            public Object task() throws DBLayerException, RemoteException {
+                 JasperReport jasperReport;
+                 switch (reportToUse) {
+                     case SCHEDA:
+@@ -135,7 +136,14 @@
+                         jasperPrint = JasperFillManager.fillReport(
+                               jasperReport, params, new JasperDataSource(database, selection)  );    
+                     } catch (JRException jrException) {
+-                        throw new DBLayerException(L10n.getString(&quot;Print.Message.BrokenReport&quot;),jrException);
++                        Throwable t = jrException.getCause();
++                        if (t != null) {
++                            if (t instanceof RemoteException)
++                                throw (RemoteException) t;
++                            if (t instanceof DBLayerException)
++                                throw (DBLayerException) t;
++                        }
++                        throw new DBLayerException(L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot; &quot;+jrException.getMessage(),jrException);
+                     }
+                     reportChanged = false;
+                 }
+
+Modified: trunk/src/net/sf/plantlore/common/DBLayerUtils.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-09-05 18:01:29 UTC (rev 691)
++++ trunk/src/net/sf/plantlore/common/DBLayerUtils.java	2006-09-05 18:18:12 UTC (rev 692)
+@@ -153,17 +153,23 @@
+      * @return null in case an exception is thrown or no row with that id exists
+      */
+     public Record getObjectFor(int id, Class c) throws DBLayerException, RemoteException {
+-        logger.debug(&quot;Looking up &quot;+c.getName()+&quot; object in the database for id &quot;+id);
+-        SelectQuery sq = db.createQuery(c);
+-        sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;id&quot;,null,id,null);
+-        int resultid = db.executeQuery(sq);
+-        int resultCount = db.getNumRows(resultid);
+-        if (resultCount == 0)
+-            return null;
+-        Object[] results = db.more(resultid, 0, 0);
+-        Object[] tmp = (Object[]) results[0];
+-        db.closeQuery(sq);
+-        return (Record)tmp[0];
++            SelectQuery sq = db.createQuery(c);
++            logger.debug(&quot;Looking up &quot;+c.getName()+&quot; object in the database for id &quot;+id);
++            try {
++                sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;id&quot;,null,id,null);
++                int resultid = db.executeQuery(sq);
++                int resultCount = db.getNumRows(resultid);
++                if (resultCount == 0)
++                    return null;
++                Object[] results = db.more(resultid, 0, 0);
++                Object[] tmp = (Object[]) results[0];
++                db.closeQuery(sq);
++                return (Record)tmp[0];
++            } catch(DBLayerException ex) {
++                if (sq != null) //clean up and propagate
++                    db.closeQuery(sq);
++                throw ex;
++            }
+     }
+ 
+     /**
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000953.html">[Plantlore-dev] CreateDB iface
+</A></li>
+	<LI>Next message: <A HREF="000955.html">[Plantlore-dev] r693 - in trunk/src/net/sf/plantlore/client: . login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#954">[ date ]</a>
+              <a href="thread.html#954">[ thread ]</a>
+              <a href="subject.html#954">[ subject ]</a>
+              <a href="author.html#954">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,537 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r680 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree common
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-September/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r680%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20client/overview/tree%20common&In-Reply-To=%3C200609051207.k85C7DUJ002033%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000939.html">
+   <LINK REL="Next"  HREF="000941.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r680 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree common</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r680%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%0A%09client/overview%20client/overview/search%20client/overview/tree%20common&In-Reply-To=%3C200609051207.k85C7DUJ002033%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r680 - in trunk/src/net/sf/plantlore: client	client/overview client/overview/search client/overview/tree common">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  5 14:07:13 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000939.html">[Plantlore-dev] r679 - in trunk/src/net/sf/plantlore:	client/checklist client/occurrenceimport client/tableimport	client/tableimport/parsers middleware server
+</A></li>
+        <LI>Next message: <A HREF="000941.html">[Plantlore-dev] r681 - trunk/src/net/sf/plantlore/client/tableimport
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#940">[ date ]</a>
+              <a href="thread.html#940">[ thread ]</a>
+              <a href="subject.html#940">[ subject ]</a>
+              <a href="author.html#940">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-09-05 14:07:06 +0200 (Tue, 05 Sep 2006)
+New Revision: 680
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/AppCoreView.form
+   trunk/src/net/sf/plantlore/client/AppCoreView.java
+   trunk/src/net/sf/plantlore/client/MainConfig.java
+   trunk/src/net/sf/plantlore/client/Plantlore.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/search/Search.java
+   trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+   trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+   trunk/src/net/sf/plantlore/common/Dispatcher.java
+   trunk/src/net/sf/plantlore/common/Task.java
+Log:
+Fixed a few FIXMEs and TODOs.
+Better exception handling and propagation.
+
+Finished fix of Bug #008588     Author table breaks sometimes for Search dialog.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -268,14 +268,9 @@
+         }
+     }
+     
+-    public int getResultsCount() {
+-        //FIXME
++    public int getResultsCount() throws RemoteException {
+         if (tableSorter != null) {        
+-        	try {
+-                return database.getNumRows(this.getTableModel().getResultId());
+-            } catch (RemoteException e) {
+-                //
+-            }
++            return database.getNumRows(this.getTableModel().getResultId());
+         }
+         return 0;
+     }
+@@ -911,8 +906,8 @@
+                         setStatusMessage(L10n.getFormattedString(&quot;Delete.Message.ProgressInfo&quot;,deleted,toBeDeleted.size()));
+                     }
+                 } catch (DBLayerException ex) {
+-                    database.rollbackTransaction();//FIXME:
+-                    DBLayerException dbex = new DBLayerException(&quot;Delete rolled back. Some database problem occurred: &quot;+ex);
++                    database.rollbackTransaction();
++                    DBLayerException dbex = new DBLayerException(L10n.getString(&quot;DBLayer.Error.Transaction&quot;),DBLayerException.ERROR_TRANSACTION,ex);
+                     dbex.setStackTrace(ex.getStackTrace());
+                     throw dbex;
+                 }
+@@ -948,8 +943,8 @@
+             int resId = database.executeQuery(sq);
+             int resCount = database.getNumRows(resId);
+             assert resCount == 1;
+-            if (resCount == 0) //FIXME
+-                throw new DBLayerException(&quot;The record is no longer in the database.&quot;);
++            if (resCount == 0)
++                throw new DBLayerException(L10n.getString(&quot;Error.RecordNoLongerInDatabase&quot;));
+             Object[] obj = database.more(resId, 0, 0);
+             Object[] res = (Object[])obj[0];
+             String userId = &quot;&quot;+res[0];            
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -11,6 +11,7 @@
+ import java.awt.Cursor;
+ import java.awt.Dimension;
+ import java.awt.EventQueue;
++import java.awt.HeadlessException;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.ComponentEvent;
+@@ -727,9 +728,17 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {                    
+-                    if (model.getResultsCount() == 0) {
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Overview.NothingToEdit&quot;),L10n.getString(&quot;Overview.NothingToEditTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    try {
++                        if (model.getResultsCount() == 0) {
++                            JOptionPane.showMessageDialog(view,L10n.getString(&quot;Overview.NothingToEdit&quot;),L10n.getString(&quot;Overview.NothingToEditTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                            return;
++                        }
++                    } catch (HeadlessException ex) {
++                        DefaultExceptionHandler.handle(view,ex);  
+                         return;
++                    } catch (RemoteException ex) {
++                        DefaultExceptionHandler.handle(view,ex);  
++                        return;
+                     }
+                         
+                     final Object[] row = model.getSelectedRow();
+@@ -869,8 +878,13 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {
+-			if (model.getResultsCount() &gt; 0)
+-				model.selectAll();
++                        try {
++                            if (model.getResultsCount() &gt; 0)
++                                    model.selectAll();
++                        } catch (RemoteException ex) {
++                            DefaultExceptionHandler.handle(view,ex);  
++                            return;
++                        }
+ 		}
+ 	}
+ 
+@@ -884,8 +898,13 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {
+-			if (model.getResultsCount() &gt; 0)
+-				model.selectNone();
++                        try {
++                            if (model.getResultsCount() &gt; 0)
++                                    model.selectNone();
++                        } catch (RemoteException ex) {
++                            DefaultExceptionHandler.handle(view,ex);  
++                            return;
++                        }
+ 		}
+ 	}
+ 
+@@ -900,8 +919,13 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent actionEvent) {
+-			if (model.getResultsCount() &gt; 0)
+-				model.invertSelected();
++                    try {
++                        if (model.getResultsCount() &gt; 0)
++                                model.invertSelected();
++                    } catch (RemoteException ex) {
++                        DefaultExceptionHandler.handle(view,ex);  
++                        return;
++                    }
+ 		}
+ 	}
+ 
+@@ -1302,11 +1326,19 @@
+ 		}
+ 
+ 		public void actionPerformed(ActionEvent e) {
+-			logger.debug(&quot;Showing history of record: &quot;+ model.getSelectedOccurrence());	
+-			
+-                        if (model.getResultsCount() == 0) {
+-                            JOptionPane.showMessageDialog(view,L10n.getString(&quot;Overview.NoOccurrence&quot;),L10n.getString(&quot;Overview.NoOccurrenceTitle&quot;),JOptionPane.INFORMATION_MESSAGE);                            
++			logger.debug(&quot;Showing history of record: &quot;+ model.getSelectedOccurrence());
++                        try {
++
++                            if (model.getResultsCount() == 0) {
++                                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Overview.NoOccurrence&quot;),L10n.getString(&quot;Overview.NoOccurrenceTitle&quot;),JOptionPane.INFORMATION_MESSAGE);                            
++                                return;
++                            }
++                        } catch (HeadlessException ex) {
++                            DefaultExceptionHandler.handle(view,ex);  
+                             return;
++                        } catch (RemoteException ex) {
++                            DefaultExceptionHandler.handle(view,ex);  
++                            return;
+                         }
+                         
+ 			if (historyModel == null) {
+@@ -1730,8 +1762,6 @@
+                                 logger.debug(&quot;Database layer retrieval.&quot;);
+                                 DBLayer dblayer = loginModel.getDBLayer();
+ 
+-                                // FIXME: neni potreba zresetovat stav treba loginModelu, pokdu
+-                                // neco takhle selze? pripadne stav jinyho objektu?
+                                 try {
+                                         model.setDatabase(dblayer);
+                                 } catch (RemoteException ex) {
+@@ -1771,7 +1801,6 @@
+                                 view.initOverview();
+                                 view.setCursor(Cursor.getDefaultCursor());
+                                 setDatabaseDependentCommandsEnabled(true);
+-                                logger.debug(&quot;======= rows: &quot;+model.getResultsCount());
+                                 //this can't be done earlier. must be done after the query is created
+                                 //otherwise this listener would give the overview table model commands to load data
+                                 //for a query that doesn't exist yet
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.form	2006-09-05 12:07:06 UTC (rev 680)
+@@ -537,7 +537,7 @@
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;403&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Component id=&quot;overviewScrollPane&quot; alignment=&quot;0&quot; pref=&quot;367&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+       &lt;/Layout&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/AppCoreView.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -9,6 +9,7 @@
+ import java.awt.Dimension;
+ import java.awt.event.ActionListener;
+ import java.beans.PropertyChangeListener;
++import java.rmi.RemoteException;
+ import java.util.Observable;
+ import java.util.Observer;
+ import java.util.prefs.Preferences;
+@@ -19,6 +20,7 @@
+ import javax.swing.event.ListSelectionListener;
+ import javax.swing.table.TableColumn;
+ import net.sf.plantlore.client.overview.*;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.StatusBarManager;
+ import net.sf.plantlore.l10n.L10n;
+@@ -446,9 +448,14 @@
+                 if (object != null &amp;&amp; object instanceof String) {
+                     String arg = (String) object;
+                     if (arg.equals(&quot;PAGE_CHANGED&quot;)||arg.equals(&quot;RECORDS_PER_PAGE&quot;)) {
+-                        recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                        try {
++                            recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                        } catch (RemoteException ex) {
++                            DefaultExceptionHandler.handle(this, ex);
++                            return;
++                        }
+                         pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount());
+-                        //FIXME: change selection only if really required
++                        //TODO: change selection only if really required
+                         overview.changeSelection(model.getSelectedRowNumber(),0,false,false);
+                         return;
+                     }
+@@ -456,7 +463,12 @@
+                         //setPreferredColumnSizes();
+                         overview.setEnabled(true);
+                         overview.setVisible(true);
+-                        recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                        try {
++                            recordsCount.setText(&quot;&quot;+model.getResultsCount());
++                        } catch (RemoteException ex) {
++                            DefaultExceptionHandler.handle(this, ex);
++                            return;
++                        }
+                         pageStatus.setText(&quot;&quot;+model.getCurrentPage()+&quot;/&quot;+model.getPagesCount()); 
+                         overview.getSelectionModel().setSelectionInterval(0,0);
+                         return;
+@@ -494,7 +506,6 @@
+         OverviewTableModel otm = model.getTableModel();
+         TableSorter tableSorter = model.getTableSorter();
+ 
+-        //FIXME: what if otm == null ????????????
+         overview.setModel(tableSorter);
+         tableSorter.setTableHeader(overview.getTableHeader());
+         overview.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+Modified: trunk/src/net/sf/plantlore/client/MainConfig.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/MainConfig.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/MainConfig.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -93,7 +93,7 @@
+             }
+             if (c != null) {
+                 Number preferredSize = n.numberValueOf(&quot;@preferredSize&quot;);
+-                if (!preferredSize.toString().equals(&quot;NaN&quot;)) //FIXME: better way to recognize a NaN?
++                if (!preferredSize.toString().equals(&quot;NaN&quot;)) //TODO: better way to recognize a NaN?
+                     c.setPreferredSize(preferredSize.intValue());
+                 columns.add(c);
+             }
+
+Modified: trunk/src/net/sf/plantlore/client/Plantlore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/Plantlore.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/Plantlore.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -59,11 +59,10 @@
+         ClassLoader cl = this.getClass().getClassLoader();
+         InputStream is = cl.getResourceAsStream(LOGGER_PROPS);
+         Properties props = new Properties();
+-        //FIXME:
+         try {
+             props.load(is);
+         } catch (IOException ex) {
+-            ex.printStackTrace();
++            JOptionPane.showMessageDialog(null, L10n.getString(&quot;Message.CorruptedJarMissingResource&quot;),L10n.getString(&quot;Message.CorruptedJarMissingResourceTitle&quot;),JOptionPane.ERROR_MESSAGE);
+         }
+         //maybe CHANGE to configureAndWatch()
+         PropertyConfigurator.configure(props);
+@@ -94,7 +93,7 @@
+         try {
+             PlantloreHelp.initialize();
+         } catch (PlantloreException e) {
+-            // TODO: Display error message
++            JOptionPane.showMessageDialog(null, L10n.getString(&quot;Message.HelpInitProblem&quot;),L10n.getString(&quot;Message.HelpInitProblemTitle&quot;),JOptionPane.ERROR_MESSAGE);
+         }
+         
+         plantlore.run();
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -39,6 +39,7 @@
+ import javax.swing.event.DocumentListener;
+ import javax.swing.text.BadLocationException;
+ import com.toedter.calendar.JCalendar;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.Dispatcher;
+ import net.sf.plantlore.common.PostTaskAction;
+ import net.sf.plantlore.common.Task;
+@@ -684,12 +685,12 @@
+                 }
+             } catch (RemoteException ex) {
+                 logger.error(&quot;Remote problem: &quot;+ex);
+-                ex.printStackTrace();
+-                DefaultReconnectDialog.show(view,ex);
++                DefaultExceptionHandler.handle(view, ex);
++                return;
+             } catch (DBLayerException ex) {
+                 logger.error(&quot;Database problem: &quot;+ex);
+-                ex.printStackTrace();
+-                DefaultReconnectDialog.show(view,ex);
++                DefaultExceptionHandler.handle(view, ex);
++                return;
+             }
+         }//mouseClicked
+             
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/Search.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/overview/search/Search.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -454,7 +454,6 @@
+     }
+     
+     public Pair&lt;Boolean,String&gt; checkData() {
+-        //TODO: check that the author set contains reasonable (not null) values
+         boolean allNull = true;
+         for (int i = 0; i &lt; authorList.size(); i++) {
+             Pair&lt;Pair&lt;String,Integer&gt;,String&gt; p = authorList.get(i);
+@@ -862,7 +861,7 @@
+             }
+ 
+             if (isNotEmpty(publication)) {
+-                //FIXME: mozna pridat addOrRestriction na vsechny relevantni sloupky Publication
++                //TODO: mozna pridat addOrRestriction na vsechny relevantni sloupky Publication
+                     arg = dlu.getObjectFor(publication.getSecond(),Publication.class);
+                 sq.addRestriction(PlantloreConstants.RESTR_EQ,&quot;occ.&quot;+Occurrence.PUBLICATION,null,arg,null);
+                 restrictions.add(new Restriction(RESTR_EQ, Occurrence.PUBLICATION, arg));
+
+Modified: trunk/src/net/sf/plantlore/client/overview/search/SearchView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/overview/search/SearchView.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -716,18 +716,18 @@
+ 
+         JComboBox cb;
+         if (model.getAuthors() == null) 
+-            cb = new AutoComboBoxNG3();
++            cb = new JComboBox();
+         else
+-            cb = new AutoComboBoxNG3(model.getAuthors());
++            cb = new JComboBox(model.getAuthors());
+         
+         //Fix of Bug #008588	Author table breaks sometimes
+         PopupListener pl = new PopupListener(); cb.addPopupMenuListener(pl); DefaultCellEditor dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
+         tc1.setCellEditor(dce);  
+ 
+         if (model.getAuthorRoles() == null) 
+-            cb = new AutoComboBoxNG3();
++            cb = new JComboBox();
+         else
+-            cb = new AutoComboBoxNG3(model.getAuthorRoles());
++            cb = new JComboBox(model.getAuthorRoles());
+ 
+         //Fix of Bug #008588	Author table breaks sometimes
+         pl = new PopupListener(); cb.addPopupMenuListener(pl); dce = new DefaultCellEditor(cb); pl.setCellEditor(dce);
+@@ -900,9 +900,9 @@
+                         JComboBox cb;
+ 
+                         if (model.getAuthors() == null) 
+-                            cb = new AutoComboBoxNG3();
++                            cb = new JComboBox();
+                         else
+-                            cb = new AutoComboBoxNG3(model.getAuthors());
++                            cb = new JComboBox(model.getAuthors());
+ 
+                         TableColumn tc1 = authorTable.getColumnModel().getColumn(0);
+ 
+@@ -916,9 +916,9 @@
+                         JComboBox cb;
+ 
+                         if (model.getAuthorRoles() == null)
+-                            cb = new AutoComboBoxNG3();
++                            cb = new JComboBox();
+                         else
+-                            cb = new AutoComboBoxNG3(model.getAuthorRoles());
++                            cb = new JComboBox(model.getAuthorRoles());
+ 
+                         TableColumn tc2 = authorTable.getColumnModel().getColumn(1);
+ 
+
+Modified: trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/client/overview/tree/HabitatTreeCtrl.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -23,6 +23,7 @@
+ import javax.swing.tree.DefaultMutableTreeNode;
+ import javax.swing.tree.TreePath;
+ import net.sf.plantlore.client.resources.Resource;
++import net.sf.plantlore.common.DefaultExceptionHandler;
+ import net.sf.plantlore.common.DefaultProgressBar;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.Dispatcher;
+@@ -173,10 +174,8 @@
+                 try {
+                     model.reload();
+                 } catch (Exception ex) {
+-                    if (ex instanceof DBLayerException || ex instanceof RemoteException)
+-                        DefaultReconnectDialog.show(view,ex);
+-                    else
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.General&quot;));//FIXME
++                    DefaultExceptionHandler.handle(view, ex);
++                    return;
+                 }
+             }
+     }//RefreshAction
+@@ -204,10 +203,7 @@
+                 try {
+                     model.reload();
+                 } catch (Exception ex) {
+-                    if (ex instanceof DBLayerException || ex instanceof RemoteException)
+-                        DefaultReconnectDialog.show(view,ex);
+-                    else
+-                        JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.General&quot;));//FIXME
++                    DefaultExceptionHandler.handle(view,ex);
+                 }
+             }
+     }//RefreshAction
+
+Modified: trunk/src/net/sf/plantlore/common/Dispatcher.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/common/Dispatcher.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -101,7 +101,7 @@
+     }    
+     
+     public static Dispatcher getDispatcher() {
+-        if (pbm == null) //FIXME: think of a better kind of exception
++        if (pbm == null) //TODO: think of a better kind of exception
+             throw new IllegalArgumentException(&quot;You have to call Dispatcher.initialize() first!&quot;);
+         
+         return dispatcher;
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-09-05 11:54:20 UTC (rev 679)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-09-05 12:07:06 UTC (rev 680)
+@@ -194,8 +194,6 @@
+                         action.afterStopped(value);
+                     }
+                 } catch (Exception ex) {
+-                    //FIXME:
+-                    ex.printStackTrace();
+                     setChanged();
+                     notifyObservers(ex);
+                 }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000939.html">[Plantlore-dev] r679 - in trunk/src/net/sf/plantlore:	client/checklist client/occurrenceimport client/tableimport	client/tableimport/parsers middleware server
+</A></li>
+	<LI>Next message: <A HREF="000941.html">[Plantlore-dev] r681 - trunk/src/net/sf/plantlore/client/tableimport
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#940">[ date ]</a>
+              <a href="thread.html#940">[ thread ]</a>
+              <a href="subject.html#940">[ subject ]</a>
+              <a href="author.html#940">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

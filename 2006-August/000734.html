@@ -1,0 +1,491 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r536 - in trunk/src/net/sf/plantlore/client: .	overview
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-August/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r536%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview&In-Reply-To=%3C200608201912.k7KJCRAI007194%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000733.html">
+   <LINK REL="Next"  HREF="000735.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r536 - in trunk/src/net/sf/plantlore/client: .	overview</H1>
+    <B>fraktalek at mail.berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r536%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%0A%09overview&In-Reply-To=%3C200608201912.k7KJCRAI007194%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r536 - in trunk/src/net/sf/plantlore/client: .	overview">fraktalek at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 20 21:12:27 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000733.html">[Plantlore-dev] r535 - in	trunk/src/net/sf/plantlore/client/overview: . tree
+</A></li>
+        <LI>Next message: <A HREF="000735.html">[Plantlore-dev] r537 - in trunk/analysis/database: . Old DB model
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#734">[ date ]</a>
+              <a href="thread.html#734">[ thread ]</a>
+              <a href="subject.html#734">[ subject ]</a>
+              <a href="author.html#734">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-08-20 21:12:23 +0200 (Sun, 20 Aug 2006)
+New Revision: 536
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+   trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+   trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java
+Log:
+The two new Clear buttons in AddEdit dialogs now work.
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-08-20 19:12:23 UTC (rev 536)
+@@ -87,6 +87,7 @@
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
+ import net.sf.plantlore.common.DefaultReconnectDialog;
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.ProgressBar;
+ import net.sf.plantlore.common.Selection;
+@@ -1052,14 +1053,45 @@
+         
+         class HabitatTreeBridge implements Observer {
+             public void update(Observable o, Object arg) {
+-                if (arg != null &amp;&amp; arg instanceof NodeInfo) {                    
+-                    NodeInfo nodeInfo = (NodeInfo)arg;
+-                    switch (nodeInfo.getType()) {
+-                        case HABITAT:
+-                            searchModel.clear();
+-                            searchModel.setHabitatId(nodeInfo.getId());
+-                            searchModel.constructQuery();
+-                    }//switch
++                if (arg != null &amp;&amp; arg instanceof Pair) {                    
++                    Pair&lt;String,NodeInfo&gt; pair = (Pair&lt;String,NodeInfo&gt;) arg;
++                    String message = pair.getFirst();
++                    NodeInfo nodeInfo = pair.getSecond();
++                    
++                    if (message.equals(&quot;SEARCH&quot;)) {
++                        switch (nodeInfo.getType()) {
++                            case HABITAT:
++                                searchModel.clear();
++                                searchModel.setHabitatId(nodeInfo.getId());
++                                searchModel.constructQuery();
++                        }//switch
++                    }//if search
++                    
++                    if (message.equals(&quot;ADD&quot;)) {
++			try {
++				if (model.getDatabase().getUserRights().getAdd() != 1) {
++					JOptionPane.showMessageDialog(view, L10n
++							.getString(&quot;AddEdit.InsufficientAddRights&quot;), L10n
++							.getString(&quot;AddEdit.InsufficientRightsTitle&quot;),
++							JOptionPane.INFORMATION_MESSAGE);
++					return;
++				}
++			} catch (RemoteException ex) {
++                            DefaultReconnectDialog.show(view,ex);
++                            logger.error(ex);
++			}
++			addModel.clear();
++                        try {
++                            addModel.setHabitat(nodeInfo.getId());
++                        } catch (RemoteException ex) {
++                            DefaultReconnectDialog.show(view,ex);
++                        } catch (DBLayerException ex) {
++                            DefaultReconnectDialog.show(view,ex);
++                        }
++                        addView.loadComponentData();
++			addView.setVisible(true);         
++//                        habitatTreeView.setVisible(false);
++                    }//if ADD
+                 }//if
+             }//update
+         }//class HabitatTreeBridge
+@@ -1741,6 +1773,7 @@
+ 		}
+ 	}
+ 
++
+ 	private Task refreshOverview(boolean createTask) {
+ 		if (createTask) {
+ 			Task task = new Task() {
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEdit.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/overview/AddEdit.java	2006-08-20 19:12:23 UTC (rev 536)
+@@ -1317,7 +1317,48 @@
+         setChanged();
+         notifyObservers(&quot;CLEAR&quot;);
+     }
++    
++    public void clearLocation() {
++        logger.debug(&quot;Clearing Location part of add model&quot;);
++        
++        village = null;
++        habitatDescription = null;
++        habitatNote = null;
++        phytCountry = null;
++        phytCode = null;
++        phytName = null;
++        territoryName = null;
++        quadrant = null;
++        altitude = null;
++        longitude = null;
++        latitude = null;
++
++        occurrenceTableModel.clear();
++
++        setChanged();
++        notifyObservers(&quot;CLEAR_LOCATION&quot;);        
++    }
+  
++    public void clearOccurrence() {
++        logger.debug(&quot;Clearing Occurrence part of add model&quot;);
++        
++        clearAuthors();
++        year = Calendar.getInstance().get(Calendar.YEAR);
++        occurrenceNote = null;
++        source = null;
++        publication = null;//new Pair&lt;String,Integer&gt;(&quot;&quot;,-1);
++        herbarium = null;
++        
++        month = Calendar.getInstance().get(Calendar.MONTH);
++        day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
++        time = null;
++        
++        taxonList = null;
++        
++        setChanged();
++        notifyObservers(&quot;CLEAR_OCCURRENCE&quot;);
++    }
++
+     public void setPreloadAuthorsEnabled(boolean preloadAuthors) {
+         this.preloadAuthors = preloadAuthors;
+     }
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditCtrl.java	2006-08-20 19:12:23 UTC (rev 536)
+@@ -119,6 +119,9 @@
+         view.cancelButton.addMouseListener(new CancelButtonListener());
+         view.checklistButton.setAction(new ChecklistAction());
+         
++        view.clearLocationButton.setAction(new ClearLocationAction());
++        view.clearOccurrenceButton.setAction(new ClearOccurrenceAction());
++        
+ //        view.preloadAuthorsCheckBox.addActionListener(new PreloadCheckBox());
+     }
+     
+@@ -517,6 +520,28 @@
+         }
+     }//CancelButtonListener
+     
++    class ClearLocationAction extends AbstractAction {
++        public ClearLocationAction() {
++            putValue(NAME, L10n.getString(&quot;AddEdit.ClearLocation&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.ClearLocationTT&quot;));                        
++        }
++
++        public void actionPerformed(ActionEvent e) {
++            model.clearLocation();
++        }
++    }
++    
++    class ClearOccurrenceAction extends AbstractAction {
++        public ClearOccurrenceAction() {
++            putValue(NAME, L10n.getString(&quot;AddEdit.ClearOccurrence&quot;));
++            putValue(SHORT_DESCRIPTION, L10n.getString(&quot;AddEdit.ClearOccurrenceTT&quot;));                        
++        }
++
++        public void actionPerformed(ActionEvent e) {
++            model.clearOccurrence();
++        }
++    }
++    
+     class PreloadCheckBox implements ActionListener {
+         public void actionPerformed(ActionEvent e) {
+             JCheckBox cb = (JCheckBox) e.getSource();
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.form	2006-08-20 19:12:23 UTC (rev 536)
+@@ -188,7 +188,7 @@
+                                                       &lt;EmptySpace pref=&quot;135&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                                                   &lt;/Group&gt;
+                                                   &lt;Component id=&quot;jScrollPane4&quot; alignment=&quot;0&quot; pref=&quot;223&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                                                  &lt;Component id=&quot;jButton4&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                                  &lt;Component id=&quot;clearLocationButton&quot; alignment=&quot;1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                               &lt;/Group&gt;
+                                           &lt;/Group&gt;
+                                       &lt;/Group&gt;
+@@ -230,7 +230,7 @@
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+-                                  &lt;Component id=&quot;jButton4&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;Component id=&quot;clearLocationButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+                               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+@@ -555,10 +555,13 @@
+                         &lt;/Component&gt;
+                       &lt;/SubComponents&gt;
+                     &lt;/Container&gt;
+-                    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;jButton4&quot;&gt;
++                    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;clearLocationButton&quot;&gt;
+                       &lt;Properties&gt;
+                         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Vyma&amp;#x17e;&quot;/&gt;
+                       &lt;/Properties&gt;
++                      &lt;AuxValues&gt;
++                        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                      &lt;/AuxValues&gt;
+                     &lt;/Component&gt;
+                   &lt;/SubComponents&gt;
+                 &lt;/Container&gt;
+@@ -617,7 +620,7 @@
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;jButton5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;clearOccurrenceButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                               &lt;/Group&gt;
+@@ -671,7 +674,7 @@
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;Component id=&quot;jScrollPane5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                       &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;jButton5&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                                      &lt;Component id=&quot;clearOccurrenceButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;/Group&gt;
+                                   &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;131&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;/Group&gt;
+@@ -984,10 +987,13 @@
+                         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Occurrence note:&quot;/&gt;
+                       &lt;/Properties&gt;
+                     &lt;/Component&gt;
+-                    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;jButton5&quot;&gt;
++                    &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;clearOccurrenceButton&quot;&gt;
+                       &lt;Properties&gt;
+                         &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; value=&quot;Vyma&amp;#x17e;&quot;/&gt;
+                       &lt;/Properties&gt;
++                      &lt;AuxValues&gt;
++                        &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                      &lt;/AuxValues&gt;
+                     &lt;/Component&gt;
+                   &lt;/SubComponents&gt;
+                 &lt;/Container&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/AddEditView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/overview/AddEditView.java	2006-08-20 19:12:23 UTC (rev 536)
+@@ -140,7 +140,7 @@
+         locationNoteLabel = new javax.swing.JLabel();
+         jScrollPane4 = new javax.swing.JScrollPane();
+         locationNoteArea = new javax.swing.JTextArea();
+-        jButton4 = new javax.swing.JButton();
++        clearLocationButton = new javax.swing.JButton();
+         jPanel7 = new javax.swing.JPanel();
+         jScrollPane3 = new javax.swing.JScrollPane();
+ 
+@@ -170,7 +170,7 @@
+         jScrollPane1 = new javax.swing.JScrollPane();
+         authorTable = new javax.swing.JTable();
+         jLabel1 = new javax.swing.JLabel();
+-        jButton5 = new javax.swing.JButton();
++        clearOccurrenceButton = new javax.swing.JButton();
+         requiredInfoLabel = new javax.swing.JLabel();
+         buttonPanel = new javax.swing.JPanel();
+         cancelButton = new javax.swing.JButton();
+@@ -332,7 +332,7 @@
+         new TabTransfersFocus(locationNoteArea);
+         jScrollPane4.setViewportView(locationNoteArea);
+ 
+-        jButton4.setText(&quot;Vyma\u017e&quot;);
++        clearLocationButton.setText(&quot;Vyma\u017e&quot;);
+ 
+         org.jdesktop.layout.GroupLayout jPanel5Layout = new org.jdesktop.layout.GroupLayout(jPanel5);
+         jPanel5.setLayout(jPanel5Layout);
+@@ -379,7 +379,7 @@
+                                         .add(locationNoteLabel)
+                                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 135, Short.MAX_VALUE))
+                                     .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 223, Short.MAX_VALUE)
+-                                    .add(jButton4))))
++                                    .add(clearLocationButton))))
+                         .addContainerGap())))
+         );
+ 
+@@ -413,7 +413,7 @@
+                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                 .add(jPanel5Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                     .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                    .add(jButton4))
++                    .add(clearLocationButton))
+                 .addContainerGap())
+         );
+ 
+@@ -536,7 +536,7 @@
+ 
+         jLabel1.setText(&quot;Occurrence note:&quot;);
+ 
+-        jButton5.setText(&quot;Vyma\u017e&quot;);
++        clearOccurrenceButton.setText(&quot;Vyma\u017e&quot;);
+ 
+         org.jdesktop.layout.GroupLayout jPanel7Layout = new org.jdesktop.layout.GroupLayout(jPanel7);
+         jPanel7.setLayout(jPanel7Layout);
+@@ -576,7 +576,7 @@
+                         .add(jScrollPane5, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 290, Short.MAX_VALUE)
+                         .addContainerGap())
+                     .add(jPanel7Layout.createSequentialGroup()
+-                        .add(jButton5)
++                        .add(clearOccurrenceButton)
+                         .addContainerGap())))
+         );
+         jPanel7Layout.setVerticalGroup(
+@@ -617,7 +617,7 @@
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jScrollPane5, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jButton5))
++                        .add(clearOccurrenceButton))
+                     .add(jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 131, Short.MAX_VALUE))
+                 .addContainerGap())
+         );
+@@ -849,7 +849,11 @@
+         resetAuthorModel();
+         initAuthorTable();
+         
+-        townComboBox.setSelectedItem(model.getVillage());
++        if (model.getVillage() != null)
++            townComboBox.setSelectedItem(model.getVillage());
++        else
++            townComboBox.setSelectedIndex(0);
++        
+         taxonTextArea.setText(model.getTaxon(0));
+         descriptionArea.setText(model.getHabitatDescription());
+         yearSpinner.setValue(model.getYear());
+@@ -865,8 +869,12 @@
+         quadrantTextField.setText(model.getQuadrant());
+         
+         if (model.getAltitude() != null) altitudeTextField.setText(&quot;&quot;+model.getAltitude());
++            else altitudeTextField.setText(&quot;&quot;);
+         if (model.getLongitude() != null) longitudeTextField.setText(&quot;&quot;+model.getLongitude());
++            else longitudeTextField.setText(&quot;&quot;);
+         if (model.getLatitude() != null) latitudeTextField.setText(&quot;&quot;+model.getLatitude());
++            else latitudeTextField.setText(&quot;&quot;);
++        
+         if (model.getSource() != null) 
+             sourceCombo.setSelectedItem(model.getSource());
+         else
+@@ -876,13 +884,21 @@
+         else
+             publicationCombo.setSelectedIndex(0);
+         
+-        projectCombo.setSelectedItem(model.getProject());
++        if (model.getProject() != null)
++            projectCombo.setSelectedItem(model.getProject());
++        else
++            projectCombo.setSelectedIndex(0);
+         herbariumTextField.setText(model.getHerbarium());
+         
+         if (model.getMonth() != null) {
+             monthChooser.setMonth(model.getMonth());
+         } else
+             ((JComboBox)monthChooser.getComboBox()).setSelectedIndex(12);
++        
++        if (model.getDay() != null)
++            dayTextField.setText(&quot;&quot;+model.getDay());
++        else
++            dayTextField.setText(&quot;&quot;);
+     }//loadComponentData
+     
+     public void clearComponentData() {
+@@ -997,6 +1013,12 @@
+             if (s.equals(&quot;CLEAR&quot;))
+                 clearComponentData();
+             
++            if (s.equals(&quot;CLEAR_LOCATION&quot;))
++                loadComponentData();
++            
++            if (s.equals(&quot;CLEAR_OCCURRENCE&quot;))
++                loadComponentData();
++
+             if (s.equals(&quot;PLANTS_CHANGED&quot;)) {
+                 logger.debug(&quot;Updating plant area&quot;);
+                 if (model.getPlants() == null) {
+@@ -1112,6 +1134,8 @@
+     private javax.swing.JButton calendarButton;
+     protected javax.swing.JButton cancelButton;
+     protected javax.swing.JButton checklistButton;
++    protected javax.swing.JButton clearLocationButton;
++    protected javax.swing.JButton clearOccurrenceButton;
+     private javax.swing.ButtonGroup convertCoordinatesGroup;
+     private javax.swing.JLabel coordinateSystemLabel;
+     protected javax.swing.JLabel countryLabel;
+@@ -1130,8 +1154,6 @@
+     protected javax.swing.JLabel herbariumLabel;
+     protected javax.swing.JTextField herbariumTextField;
+     private javax.swing.JButton jButton1;
+-    private javax.swing.JButton jButton4;
+-    private javax.swing.JButton jButton5;
+     private javax.swing.JLabel jLabel1;
+     protected javax.swing.JPanel jPanel1;
+     protected javax.swing.JPanel jPanel4;
+
+Modified: trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java	2006-08-20 17:37:46 UTC (rev 535)
++++ trunk/src/net/sf/plantlore/client/overview/OccurrenceTableModel.java	2006-08-20 19:12:23 UTC (rev 536)
+@@ -76,6 +76,7 @@
+      */
+     public void clear() {
+         data = null;
++        fireTableDataChanged();
+     }
+     
+     /** Loads data for given habitat.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000733.html">[Plantlore-dev] r535 - in	trunk/src/net/sf/plantlore/client/overview: . tree
+</A></li>
+	<LI>Next message: <A HREF="000735.html">[Plantlore-dev] r537 - in trunk/analysis/database: . Old DB model
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#734">[ date ]</a>
+              <a href="thread.html#734">[ thread ]</a>
+              <a href="subject.html#734">[ subject ]</a>
+              <a href="author.html#734">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

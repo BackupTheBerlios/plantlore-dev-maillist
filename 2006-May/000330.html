@@ -1,0 +1,1646 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r278 - in trunk/src/net/sf/plantlore/client: . history metadata publication user
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r278%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20history%20metadata%20publication%20user&In-Reply-To=%3C200605151316.k4FDG2jB019209%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000329.html">
+   <LINK REL="Next"  HREF="000331.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r278 - in trunk/src/net/sf/plantlore/client: . history metadata publication user</H1>
+    <B>lada at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r278%20-%20in%20trunk/src/net/sf/plantlore/client%3A%20.%20history%20metadata%20publication%20user&In-Reply-To=%3C200605151316.k4FDG2jB019209%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r278 - in trunk/src/net/sf/plantlore/client: . history metadata publication user">lada at berlios.de
+       </A><BR>
+    <I>Mon May 15 15:16:02 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000329.html">[Plantlore-dev]Fwd:databaze jihoceske pobocky CBS
+</A></li>
+        <LI>Next message: <A HREF="000331.html">[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#330">[ date ]</a>
+              <a href="thread.html#330">[ thread ]</a>
+              <a href="subject.html#330">[ subject ]</a>
+              <a href="author.html#330">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: lada
+Date: 2006-05-15 15:15:57 +0200 (Mon, 15 May 2006)
+New Revision: 278
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/history/History.java
+   trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form
+   trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+   trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java
+   trunk/src/net/sf/plantlore/client/publication/PublicationManagerCtrl.java
+   trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+   trunk/src/net/sf/plantlore/client/user/AddEditUserView.form
+   trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+   trunk/src/net/sf/plantlore/client/user/UserManager.java
+   trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+Log:
+Details and other changes in manager, history (help, autoTextarea, tabulator...)
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -579,7 +579,7 @@
+             //o vybranem zaznamu predame informace, ktere chceme o nem v historii zobrazit
+             //jmeno rosliny, jmeno autora a lokaci a idOccurrences
+                                    
+-            historyModel = new History(model.getDatabase(),&quot;Adis Abeba&quot;, &quot;Lada&quot;, &quot;Praha v&#253;chod&quot;, 1);
++            historyModel = new History(model.getDatabase(), model.getSelectedOccurrence());
+             historyView = new HistoryView(historyModel, view, true);
+             historyCtrl = new HistoryCtrl(historyModel, historyView);
+             historyView.setVisible(true);                         
+
+Modified: trunk/src/net/sf/plantlore/client/history/History.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/History.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/history/History.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -145,82 +145,44 @@
+     /**  
+      *  Creates a new instance of History - history of specific occurrence 
+      *  @param database Instance of a database management object
+-     *  @param namePlant Name of plant for specified occurrence
+-     *  @param nameAuthor Name of author for specified occurrence
+-     *  @param location Informaciton about location for specified occurrence
++     *  @param idOcc
+      * */
+-    public History(DBLayer database, String namePlant, String nameAuthor, String location, int idOcc)
++    public History(DBLayer database, int idOcc)
+     {
+        logger = Logger.getLogger(this.getClass().getPackage().getName());	 
+        this.database = database;       
+        
+- /*
+-  *  v konstruktoru se bude predavat reference na OCCURRENCE pro ktery je vyvolana
+-  *  histori, takze nasledujici cast kodu nebude potreba. 
+-  */             
+-       // Create new Select query
+        SelectQuery query = null;
++       int resultId = 0;
++       Object[] objectOccurrence = null;
++       Object[] objHis = null;
++       
+        try {
+        	    query = database.createQuery(Occurrence.class);
+-       	    query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, idOcc, null);
++       	    query.addRestriction(PlantloreConstants.RESTR_EQ, Occurrence.ID, null, 1, null);            
++            resultId = database.executeQuery(query);
++            objectOccurrence = database.more(resultId, 0, 0);       
++            objHis = (Object[])objectOccurrence[0];                            
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException - History(), createQuery&quot;);       	  
+        } catch(DBLayerException e) {
+        	    System.err.println(&quot;DBLayerException - History(), createQuery&quot;);       	  
+-       }
+-             
+-       
+-       int resultId = 0;
+-       try {
+-           // Execute query                    
+-           resultId = database.executeQuery(query);        
+-       } catch (DBLayerException e) {
+-           // Log and set an error                   
+-           logger.error(&quot;Searching occurence failed.&quot;);          
+-       } catch (RemoteException e) {
+-    	   System.err.println(&quot;RemoteException- History(), executeQuery&quot;);
+-	   } 
+-       
+-	   Object[] objectOccurrence = null;
+-	   Object[] objHis = null;
+-       try {
+-       	 // Retrieve selected row interval         	
+-        	try {
+-        		objectOccurrence = database.more(resultId, 0, 0);  
+-        	} catch(RemoteException e) {            	  
+-            	return;
+-            }   
+-        	objHis = (Object[])objectOccurrence[0];                            
+-       } catch (DBLayerException e) {
+-           // Log and set error in case of an exception
+-           logger.error(&quot;Processing search occurrence results failed: &quot;+e.toString());            
+-       } 
+-              
++            logger.error(&quot;Processing search occurrence results failed: &quot;+e.toString());            
++       }                                          
++
++       //zjiskani zaznamu, pro ktery chceme historii
+        occurrence = ((Occurrence)objHis[0]);
+        
+-       setNamePlant(namePlant);
+-       setNameAuthor(nameAuthor);
+-       setLocation(location);
+-       try {
++       //FIXME: bude nutno dovyhledavat autory
++       setNameAuthor(&quot;Lada&quot;);
++       setNamePlant(occurrence.getPlant().getTaxon());       
++       setLocation(occurrence.getHabitat().getNearestVillage().getName());
++       
++       try {           
+             database.closeQuery(query);
+        } catch(RemoteException e) {
+        	    System.err.println(&quot;RemoteException&quot;);
+-       }
+-
+-/*
+- * konec casti kodu, ktera bude dobudoucna nahrazena.
+- * 
+- * Konstruktor History(DBLayer database,Occurrence occurrenceRec, String[] nameAuthors)
+- * 
+- *     this.ocurrence = occurrenceRec;
+- *     setNamePlant(occurrence.getPlant().getTaxon());       
+- *     setLocation(occurrence.getHabitat().getNearestVillage().getName()); 
+- *
+- * 	   setNameAuthor(nameAuthors);	  
+- *     ...musit to byt retezec autoru - muze jich byt vice
+- *     ...v historii se editace autoru zaznamenavat nebude 
+- */       
+-        
++       }           
+        
+        //Searching for information about data entries concerned with specified occurrence
+        searchInsertInfo();
+
+Modified: trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/history/HistoryCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -6,6 +6,7 @@
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.util.ArrayList;
++import net.sf.plantlore.common.PlantloreHelp;
+ 
+ 
+ 
+@@ -69,7 +70,8 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {    	  
+     	   // Display help viewer            
+-    	   System.out.println(&quot;Tady se bude volat Help!&quot;);           
++    	   System.out.println(&quot;Tady se bude volat Help!&quot;);     
++           PlantloreHelp.showHelp(PlantloreHelp.HISTORY_MANAGER); 
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/history/WholeHistoryCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -13,6 +13,7 @@
+ import java.awt.event.ActionListener;
+ import java.text.DateFormat;
+ import java.util.Date;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.l10n.L10n;
+ import org.apache.log4j.Logger;
+ 
+@@ -76,6 +77,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.HISTORY_MANAGER); 
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/AddEditMetadataCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -12,6 +12,7 @@
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.util.Date;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Metadata;
+ import org.apache.log4j.Logger;
+ 
+@@ -57,6 +58,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.METDATA_ADD); 
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManager.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -29,7 +29,7 @@
+     /** Instance of a database management object */
+     private DBLayer database;   
+     /** Constant with default number of rows to display */
+-    private static final int DEFAULT_DISPLAY_ROWS = 6;    
++    public static final int DEFAULT_DISPLAY_ROWS = 6;    
+     /** Actual number of rows to display */
+     private int displayRows = DEFAULT_DISPLAY_ROWS;   
+     /** Index of the first record shown in the table */
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -13,6 +13,7 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Metadata;
+ import org.apache.log4j.Logger;
+ 
+@@ -67,6 +68,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.METDATA_MANAGER); 
+        }
+    }
+    
+@@ -186,7 +188,7 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {    
+-               view.messageSelection();
++               view.selectRowMessage();
+            } else {
+                //v modelu nastavim informaci o tom, ze jde o EDIT
+                model.setOperation(&quot;EDIT&quot;);
+@@ -236,7 +238,7 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {    
+-               view.messageSelection();
++               view.selectRowMessage();
+            } else {
+                //v modelu nastavim informaci o tom, ze jde o DETAILS
+                 model.setOperation(&quot;DETAILS&quot;);
+@@ -279,7 +281,7 @@
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+            if (view.tableMetadataList.getSelectedRow() &lt; 0) {    
+-               view.messageSelection();
++               view.selectRowMessage();
+            } else {
+                //smazani zaznamu
+                int resultNumber = view.tableMetadataList.getSelectedRow() + model.getCurrentFirstRow()-1; 
+@@ -300,7 +302,26 @@
+        {
+            model.setSourceInstitutionId(view.sourceInstitutionIdText.getText());           
+            model.setSourceId(view.sourceIdText.getText());
+-           //FIXME: dopsat
++           model.setDataSetTitle(view.dataSetTitleText.getText());
++            if (!(view.checkNonEmpty(&quot;sourceInstitutionId&quot;) || view.checkNonEmpty(&quot;sourceId&quot;) ||
++               view.checkNonEmpty(&quot;dataSetTitle&quot;))) {
++               view.showSearchErrorMessage();
++           } else {           
++               //opet funkci pro vyzadani si dat postupne
++               model.searchMetadata();
++               //pokud je pocet radku pro zobrazeni roven 0, tak se nastavi defaultni hodnota
++               if (model.getDisplayRows() &lt;= 0) {
++                   model.setDisplayRows(MetadataManager.DEFAULT_DISPLAY_ROWS);
++               }
++               if (model.getResultRows() &lt; 1) {
++                   view.showSearchInfoMessage();
++               }
++               model.processResult(1, model.getDisplayRows());
++               view.tableMetadataList.setModel(new MetadataManagerTableModel(model));                      
++               view.displayedValueLabel.setText(model.getCurrentDisplayRows());  
++               view.totalResultValueLabel.setText(((Integer)model.getResultRows()).toString());
++           }
++           
+        }
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerTableModel.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -9,7 +9,9 @@
+ 
+ package net.sf.plantlore.client.metadata;
+ 
++import java.text.DateFormat;
+ import java.util.ArrayList;
++import java.util.Date;
+ import javax.swing.table.AbstractTableModel;
+ import net.sf.plantlore.common.record.Metadata;
+ import net.sf.plantlore.l10n.L10n;
+@@ -84,8 +86,10 @@
+             metadataData[ii][2] = ((Metadata)metadataDataList.get(i)).getDataSetTitle();
+             metadataData[ii][3] = ((Metadata)metadataDataList.get(i)).getTechnicalContactName();    	    
+             metadataData[ii][4] = ((Metadata)metadataDataList.get(i)).getContentContactName();                                 
+-            metadataData[ii][5] = ((Metadata)metadataDataList.get(i)).getDateCreate();
+-            metadataData[ii][6] = ((Metadata)metadataDataList.get(i)).getDateModified();            
++            Date dateCreate = ((Metadata)metadataDataList.get(i)).getDateCreate();
++            metadataData[ii][5] = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(dateCreate);     	                               
++            Date dateModified = ((Metadata)metadataDataList.get(i)).getDateModified();            
++            metadataData[ii][5] = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(dateModified);
+     	    ii++;
+     	}      	    	
+     	this.data = metadataData;    	
+@@ -127,4 +131,22 @@
+     public String getColumnName(int column){
+         return columnNames[column];
+     }
++    
++      /**
++     * Gets right Class - Date Object in the DATECREATE, DATEMODIFIED column and String Object in other columns. 
++     * @param column index of column
++     * @return the Class for Object instances in the specified column.
++     */
++    public Class getColumnClass(int column) {
++    	switch (column) {                        
++            case 0: return String.class;
++            case 1: return String.class;
++            case 2: return String.class;
++            case 3: return String.class;
++            case 4: return String.class;
++            case 5: return DateFormat.class;
++            case 6: return DateFormat.class;
++            default: return String.class;
++        }
++    }
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.form	2006-05-15 13:15:57 UTC (rev 278)
+@@ -28,7 +28,7 @@
+                   &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                       &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;EmptySpace pref=&quot;757&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace pref=&quot;775&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+               &lt;/Group&gt;
+@@ -68,12 +68,12 @@
+               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;919&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; pref=&quot;937&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+                                   &lt;Component id=&quot;previousButton&quot; min=&quot;-2&quot; pref=&quot;107&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace pref=&quot;154&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                                  &lt;EmptySpace pref=&quot;172&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;totalResultLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                                   &lt;Component id=&quot;totalResultValueLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -230,6 +230,9 @@
+               &lt;Connection code=&quot;((Integer)model.getResultRows()).toString()&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;toDisplayedLabel&quot;&gt;
+           &lt;Properties&gt;
+@@ -320,7 +323,7 @@
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;jTextField4&quot; alignment=&quot;0&quot; pref=&quot;203&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                              &lt;Component id=&quot;jTextField3&quot; alignment=&quot;0&quot; pref=&quot;203&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;dataSetTitleText&quot; alignment=&quot;0&quot; pref=&quot;203&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;/Group&gt;
+                       &lt;/Group&gt;
+                       &lt;Component id=&quot;searchButton&quot; min=&quot;-2&quot; pref=&quot;118&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+@@ -340,7 +343,7 @@
+                           &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+                               &lt;Component id=&quot;sourceInstitutionIdLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;dataSetTitleLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jTextField3&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;dataSetTitleText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                               &lt;Component id=&quot;sourceInstitutionIdText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                           &lt;/Group&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+@@ -486,7 +489,10 @@
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;jTextField3&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;dataSetTitleText&quot;&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;jLabel4&quot;&gt;
+           &lt;Properties&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/metadata/MetadataManagerView.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -71,11 +71,51 @@
+             return 1;
+         }
+     }
++     
++         /**
++     *  Check whether the given field is emty or not. This is used for validating user input when searching
++     *  user.
++     *
++     *  @param field field we want to check
++     *  @return true if the field is empty, false otherwise
++     */
++    public boolean checkNonEmpty(String field) {
++        if (field.equals(&quot;sourceInstitutionId&quot;) &amp;&amp; (sourceInstitutionIdText.getText().length() == 0)) {
++            return false;
++        }
++        if (field.equals(&quot;sourceId&quot;) &amp;&amp; (sourceIdText.getText().length() == 0)) {
++            return false;
++        }
++        if (field.equals(&quot;dataSetTitle&quot;) &amp;&amp; (dataSetTitleText.getText().length() == 0)) {
++            return false;
++        }              
++        return true;
++    }
+     
+-    public void messageSelection() {
+-    	JOptionPane.showMessageDialog(this, &quot;No row was selected.&quot;, &quot;Information about selected row&quot;, JOptionPane.ERROR_MESSAGE);               
+-    } 
++      /**
++     * Display error message saying that no row of table has been selected.
++     */
++    public void selectRowMessage() {
++    	JOptionPane.showMessageDialog(this, &quot;Please select one metadata from the list&quot;, &quot;Select metadata&quot;, JOptionPane.WARNING_MESSAGE);               
++    }             
+     
++     public int messageDelete(String message) {
++    	int okCancle = JOptionPane.showConfirmDialog(this, &quot;Access for metadata &quot;+message+ &quot; will be prohibit.&quot;, &quot;Drop metadata&quot;, JOptionPane.OK_CANCEL_OPTION);
++    	return okCancle;
++    }          
++    
++     /**
++     *  Display error message saying that no search field has been filled in.
++     */
++    public void showSearchErrorMessage() {
++        JOptionPane.showMessageDialog(this, &quot;Please fill in at least one search field&quot;, &quot;Missing search data&quot;, JOptionPane.ERROR_MESSAGE);       
++    }
++    
++    public void showSearchInfoMessage() {
++        JOptionPane.showMessageDialog(this, &quot;No metadata with the given attributes were found. Please modify search criteria.&quot;,
++                                      &quot;No search results&quot;, JOptionPane.INFORMATION_MESSAGE);                
++    }
++    
+     /** This method is called from within the constructor to
+      * initialize the form.
+      * WARNING: Do NOT modify this code. The content of this method is
+@@ -112,7 +152,7 @@
+         dataSortLabel = new javax.swing.JLabel();
+         jComboBox1 = new javax.swing.JComboBox();
+         dataSetTitleLabel = new javax.swing.JLabel();
+-        jTextField3 = new javax.swing.JTextField();
++        dataSetTitleText = new javax.swing.JTextField();
+         jLabel4 = new javax.swing.JLabel();
+         jTextField4 = new javax.swing.JTextField();
+         searchButton = new javax.swing.JButton();
+@@ -163,12 +203,12 @@
+             .add(org.jdesktop.layout.GroupLayout.TRAILING, jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+-                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 919, Short.MAX_VALUE)
++                    .add(org.jdesktop.layout.GroupLayout.LEADING, jScrollPane1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 937, Short.MAX_VALUE)
+                     .add(jPanel1Layout.createSequentialGroup()
+                         .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
+                             .add(jPanel1Layout.createSequentialGroup()
+                                 .add(previousButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 107, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 154, Short.MAX_VALUE)
++                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 172, Short.MAX_VALUE)
+                                 .add(totalResultLabel)
+                                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                                 .add(totalResultValueLabel)
+@@ -295,7 +335,7 @@
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+                             .add(jTextField4, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 203, Short.MAX_VALUE)
+-                            .add(jTextField3, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 203, Short.MAX_VALUE)))
++                            .add(dataSetTitleText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 203, Short.MAX_VALUE)))
+                     .add(searchButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 118, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                 .add(60, 60, 60)
+                 .add(jPanel3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+@@ -310,7 +350,7 @@
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                             .add(sourceInstitutionIdLabel)
+                             .add(dataSetTitleLabel)
+-                            .add(jTextField3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                            .add(dataSetTitleText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                             .add(sourceInstitutionIdText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                         .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                         .add(jPanel2Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+@@ -335,7 +375,7 @@
+                     .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                     .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                         .add(helpButton)
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 757, Short.MAX_VALUE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, 775, Short.MAX_VALUE)
+                         .add(closeButton)))
+                 .addContainerGap())
+         );
+@@ -369,6 +409,7 @@
+     protected javax.swing.JButton addButtons;
+     protected javax.swing.JButton closeButton;
+     private javax.swing.JLabel dataSetTitleLabel;
++    protected javax.swing.JTextField dataSetTitleText;
+     private javax.swing.JLabel dataSortLabel;
+     protected javax.swing.JButton deleteButton;
+     protected javax.swing.JButton detailsButton;
+@@ -382,7 +423,6 @@
+     private javax.swing.JPanel jPanel2;
+     private javax.swing.JPanel jPanel3;
+     private javax.swing.JScrollPane jScrollPane1;
+-    private javax.swing.JTextField jTextField3;
+     private javax.swing.JTextField jTextField4;
+     protected javax.swing.JButton nextButton;
+     protected javax.swing.JButton previousButton;
+@@ -398,7 +438,7 @@
+     protected javax.swing.JTextField toDisplayValueTextField;
+     private javax.swing.JLabel toDisplayedLabel;
+     private javax.swing.JLabel totalResultLabel;
+-    private javax.swing.JLabel totalResultValueLabel;
++    protected javax.swing.JLabel totalResultValueLabel;
+     // End of variables declaration//GEN-END:variables
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/publication/AddEditPublicationCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -12,6 +12,7 @@
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.util.Date;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Publication;
+ import org.apache.log4j.Logger;
+ 
+@@ -59,6 +60,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.PUBLICATION_ADD); 
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/publication/PublicationManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/publication/PublicationManagerCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/publication/PublicationManagerCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -13,6 +13,7 @@
+ import java.awt.event.ActionListener;
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Publication;
+ import org.apache.log4j.Logger;
+ 
+@@ -70,6 +71,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.PUBLICATION_MANAGER); 
+        }
+    }
+    
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -11,7 +11,12 @@
+ 
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.FocusEvent;
++import java.awt.event.FocusListener;
++import java.util.ArrayList;
+ import java.util.Date;
++import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.common.record.Right;
+ import org.apache.log4j.Logger;
+@@ -35,16 +40,17 @@
+         this.model = model;
+         this.view = view;
+         
+-        view.closeButton.addActionListener(new closeButtonListener());
+-        view.helpButton.addActionListener(new helpButtonListener());
+-        view.operationButton.addActionListener(new operationButtonListener());
++        view.closeButton.addActionListener(new CloseButtonListener());
++        view.helpButton.addActionListener(new HelpButtonListener());
++        view.operationButton.addActionListener(new OperationButtonListener());
++        view.editGroupTextArea.addFocusListener(new UserAreaListener());
+     }
+     
+    /**
+     * On Cancel just hides the view.
+     *
+     */
+-   class closeButtonListener implements ActionListener {
++   class CloseButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {
+     	   view.close();
+@@ -55,18 +61,19 @@
+     * On Help should call help.
+     *
+     */
+-   class helpButtonListener implements ActionListener {
++   class HelpButtonListener implements ActionListener {
+        public void actionPerformed(ActionEvent actionEvent)
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.USER_RIGHTS); 
+        }
+    }
+    
+    /*
+     *
+     */
+-   class operationButtonListener implements ActionListener {
++   class OperationButtonListener implements ActionListener {
+         public void actionPerformed(ActionEvent actionEvent)
+        {    	  
+     	   // zeptame se modelu, co je treba provest za akci DETEIL, ADD, EDIT
+@@ -91,8 +98,9 @@
+                    //Right
+                    Right right = new Right();
+                    user.setRight(right);
+-                   right.setEditGroup(view.editGroupText.getText());
+-                   right.setSeeColumns(view.seeColumnText.getText());
++                   //FIXME:ulozeni dat EDITGROUP
++                   right.setEditGroup(model.getEditGroupID());
++                   //right.setEditGroup(view.editGroupTextArea.getText());                 
+                    if (view.administratorCheckBox.isSelected()) {
+                        right.setAdministrator(1);
+                    } else {
+@@ -110,8 +118,8 @@
+                        right.setAdd(1);
+                    } else {
+                        right.setAdd(0);
+-                   }
+-                    
++                   }                                       
++                   
+                     //mela by se tu vypsat nejaka informace pro uzivatele
+                     //pridani zaznamu do tabulky User
+                    
+@@ -134,8 +142,8 @@
+                    model.getSelectedRecord().setNote(view.noteText.getText());
+                    //Right
+                    Right right = model.getSelectedRecord().getRight();
+-                   right.setEditGroup(view.editGroupText.getText());
+-                   right.setSeeColumns(view.seeColumnText.getText());
++                   //FIXME: ulozeni EDITGROUP
++                   right.setEditGroup(view.editGroupTextArea.getText());                   
+                    if (view.administratorCheckBox.isSelected()) {
+                        right.setAdministrator(1);
+                    } else {
+@@ -165,5 +173,22 @@
+            }           
+         }
+    }
++   
++    class UserAreaListener implements FocusListener {
++        public void focusGained(FocusEvent e) {
++        }
++
++        public void focusLost(FocusEvent e) {
++            ArrayList&lt;String&gt; userList = new ArrayList&lt;String&gt;();
++            AutoTextArea ta = (AutoTextArea) e.getSource();
++            int lineCount = ta.getLineCount();
++            for (int i=0; i &lt; lineCount; i++) {
++                String tmp = ta.getLine(i);
++                if (tmp.length() &gt; 1) //omit empty lines
++                    userList.add(tmp);
++            }
++            model.setEditGroup(userList);
++        }
++    }//taxonAreaListener
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserView.form
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserView.form	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserView.form	2006-05-15 13:15:57 UTC (rev 278)
+@@ -18,33 +18,32 @@
+     &lt;DimensionLayout dim=&quot;0&quot;&gt;
+       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+           &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;200&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Component id=&quot;operationButton&quot; min=&quot;-2&quot; pref=&quot;110&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;21&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; pref=&quot;101&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;14&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; pref=&quot;109&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace pref=&quot;198&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-          &lt;/Group&gt;
+-          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;Component id=&quot;jPanel1&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;72&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                  &lt;Group type=&quot;102&quot; attributes=&quot;1&quot;&gt;
++                      &lt;Component id=&quot;helpButton&quot; min=&quot;-2&quot; pref=&quot;109&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;operationButton&quot; min=&quot;-2&quot; pref=&quot;110&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;EmptySpace min=&quot;-2&quot; pref=&quot;15&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;closeButton&quot; min=&quot;-2&quot; pref=&quot;101&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;Component id=&quot;jPanel1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;/Group&gt;
++              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+     &lt;DimensionLayout dim=&quot;1&quot;&gt;
+       &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-          &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++          &lt;Group type=&quot;102&quot; alignment=&quot;1&quot; attributes=&quot;0&quot;&gt;
+               &lt;Component id=&quot;jPanel1&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;100&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace min=&quot;-2&quot; pref=&quot;20&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Component id=&quot;operationButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Component id=&quot;closeButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Component id=&quot;helpButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;closeButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Component id=&quot;operationButton&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+-              &lt;EmptySpace max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
++              &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+           &lt;/Group&gt;
+       &lt;/Group&gt;
+     &lt;/DimensionLayout&gt;
+@@ -65,124 +64,103 @@
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+                   &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;createWhenuser&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dropWhenLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;loginLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;addressLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;emailLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;surnameLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;firstNameLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;jLabel2&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;createWhenuser&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;dropWhenLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                       &lt;Component id=&quot;noteLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;70&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;jScrollPane1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;addressText&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;emailText&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;surnameText&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;firstNameText&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;loginText&quot; alignment=&quot;0&quot; pref=&quot;261&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;passwordtext&quot; alignment=&quot;1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;createWhenText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                      &lt;Component id=&quot;dropWhenText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+-                  &lt;/Group&gt;
+-                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;27&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;34&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Component id=&quot;administratorCheckBox&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;rightUserLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;editAllCheckBox&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;editGroupLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;editGroupText&quot; alignment=&quot;0&quot; pref=&quot;211&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;seeColumnLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;seeColumnText&quot; pref=&quot;211&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;Component id=&quot;addRightCheckBox&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;jScrollPane1&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;addressText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;surnameText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;firstNameText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;passwordtext&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;loginText&quot; alignment=&quot;0&quot; pref=&quot;280&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                              &lt;Component id=&quot;emailText&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
++                          &lt;/Group&gt;
++                          &lt;EmptySpace min=&quot;41&quot; pref=&quot;41&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                              &lt;Component id=&quot;rightUserLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;editGroupLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;addRightCheckBox&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;editAllCheckBox&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;administratorCheckBox&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                              &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;180&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                          &lt;/Group&gt;
++                      &lt;/Group&gt;
++                      &lt;Component id=&quot;dropWhenValueLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;createWhenValueLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;EmptySpace pref=&quot;19&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+         &lt;DimensionLayout dim=&quot;1&quot;&gt;
+           &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+               &lt;Group type=&quot;102&quot; attributes=&quot;0&quot;&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;loginLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;loginText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;rightUserLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;passwordtext&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;administratorCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;firstNameText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;firstNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;editAllCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;surnameText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;surnameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;addRightCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;emailText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;emailLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;19&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;editGroupLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;editGroupText&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;addressText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;addressLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;/Group&gt;
+-                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                                      &lt;Component id=&quot;createWhenuser&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                      &lt;Component id=&quot;createWhenText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;/Group&gt;
+-                              &lt;/Group&gt;
+-                          &lt;/Group&gt;
+-                      &lt;/Group&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;188&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;dropWhenLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Component id=&quot;dropWhenText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;/Group&gt;
+-                      &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;loginLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;loginText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;rightUserLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+                   &lt;/Group&gt;
+-                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;jLabel2&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;passwordtext&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;administratorCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;firstNameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;firstNameText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;editAllCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;surnameLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;surnameText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;addRightCheckBox&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;emailLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;emailText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;addressLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;addressText&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;editGroupLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace min=&quot;-2&quot; pref=&quot;6&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; max=&quot;-2&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;noteLabel&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; max=&quot;32767&quot; attributes=&quot;1&quot;/&gt;
+                       &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                          &lt;EmptySpace min=&quot;-2&quot; pref=&quot;14&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Component id=&quot;noteLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                      &lt;/Group&gt;
+-                      &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
++                          &lt;Component id=&quot;jScrollPane3&quot; min=&quot;-2&quot; pref=&quot;73&quot; max=&quot;-2&quot; attributes=&quot;1&quot;/&gt;
+                           &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                          &lt;Group type=&quot;103&quot; groupAlignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                              &lt;Component id=&quot;jScrollPane1&quot; alignment=&quot;0&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;Group type=&quot;102&quot; alignment=&quot;0&quot; attributes=&quot;0&quot;&gt;
+-                                  &lt;Component id=&quot;seeColumnLabel&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                                  &lt;Component id=&quot;seeColumnText&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
+-                              &lt;/Group&gt;
+-                          &lt;/Group&gt;
+                       &lt;/Group&gt;
+                   &lt;/Group&gt;
+                   &lt;EmptySpace min=&quot;-2&quot; pref=&quot;31&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;createWhenValueLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;createWhenuser&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;Group type=&quot;103&quot; groupAlignment=&quot;3&quot; attributes=&quot;0&quot;&gt;
++                      &lt;Component id=&quot;dropWhenValueLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                      &lt;Component id=&quot;dropWhenLabel&quot; alignment=&quot;3&quot; min=&quot;-2&quot; max=&quot;-2&quot; attributes=&quot;0&quot;/&gt;
++                  &lt;/Group&gt;
++                  &lt;EmptySpace pref=&quot;30&quot; max=&quot;32767&quot; attributes=&quot;0&quot;/&gt;
+               &lt;/Group&gt;
+           &lt;/Group&gt;
+         &lt;/DimensionLayout&gt;
+@@ -229,6 +207,9 @@
+               &lt;Connection code=&quot;L10n.getString(&quot;user.createWhen&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;loginText&quot;&gt;
+           &lt;AuxValues&gt;
+@@ -286,6 +267,9 @@
+               &lt;Connection code=&quot;L10n.getString(&quot;user.dropWhen&quot;)&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
++          &lt;AuxValues&gt;
++            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++          &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+         &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;passwordtext&quot;&gt;
+           &lt;AuxValues&gt;
+@@ -370,35 +354,49 @@
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;editGroupText&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;createWhenValueLabel&quot;&gt;
++          &lt;Properties&gt;
++            &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
++              &lt;Connection code=&quot;&quot;&quot;&quot; type=&quot;code&quot;/&gt;
++            &lt;/Property&gt;
++          &lt;/Properties&gt;
+           &lt;AuxValues&gt;
+             &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+           &lt;/AuxValues&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;seeColumnLabel&quot;&gt;
++        &lt;Component class=&quot;javax.swing.JLabel&quot; name=&quot;dropWhenValueLabel&quot;&gt;
+           &lt;Properties&gt;
+             &lt;Property name=&quot;text&quot; type=&quot;java.lang.String&quot; editor=&quot;org.netbeans.modules.form.RADConnectionPropertyEditor&quot;&gt;
+-              &lt;Connection code=&quot;L10n.getString(&quot;right.seeColumn&quot;)&quot; type=&quot;code&quot;/&gt;
++              &lt;Connection code=&quot;&quot;&quot;&quot; type=&quot;code&quot;/&gt;
+             &lt;/Property&gt;
+           &lt;/Properties&gt;
+         &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JTextField&quot; name=&quot;seeColumnText&quot;&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;createWhenText&quot;&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale())); &quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
+-        &lt;Component class=&quot;javax.swing.JFormattedTextField&quot; name=&quot;dropWhenText&quot;&gt;
+-          &lt;AuxValues&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new JFormattedTextField(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale())); &quot;/&gt;
+-            &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
+-          &lt;/AuxValues&gt;
+-        &lt;/Component&gt;
++        &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane3&quot;&gt;
++
++          &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++          &lt;SubComponents&gt;
++            &lt;Container class=&quot;javax.swing.JScrollPane&quot; name=&quot;jScrollPane2&quot;&gt;
++              &lt;AuxValues&gt;
++                &lt;AuxValue name=&quot;autoScrollPane&quot; type=&quot;java.lang.Boolean&quot; value=&quot;true&quot;/&gt;
++              &lt;/AuxValues&gt;
++
++              &lt;Layout class=&quot;org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout&quot;/&gt;
++              &lt;SubComponents&gt;
++                &lt;Component class=&quot;javax.swing.JTextArea&quot; name=&quot;editGroupTextArea&quot;&gt;
++                  &lt;Properties&gt;
++                    &lt;Property name=&quot;columns&quot; type=&quot;int&quot; value=&quot;20&quot;/&gt;
++                    &lt;Property name=&quot;rows&quot; type=&quot;int&quot; value=&quot;5&quot;/&gt;
++                  &lt;/Properties&gt;
++                  &lt;AuxValues&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodeCustom&quot; type=&quot;java.lang.String&quot; value=&quot;new AutoTextArea(choices, this);&quot;/&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_CreateCodePre&quot; type=&quot;java.lang.String&quot; value=&quot;Pair&lt;String, Integer&gt;[] users = model.getUsers();&amp;#xa;String[] choices = new String[users.length];&amp;#xa;for (int i = 0; i &lt; users.length; i++) &amp;#xa;    choices[i] = users[i].getFirst();&quot;/&gt;
++                    &lt;AuxValue name=&quot;JavaCodeGenerator_VariableModifier&quot; type=&quot;java.lang.Integer&quot; value=&quot;4&quot;/&gt;
++                  &lt;/AuxValues&gt;
++                &lt;/Component&gt;
++              &lt;/SubComponents&gt;
++            &lt;/Container&gt;
++          &lt;/SubComponents&gt;
++        &lt;/Container&gt;
+       &lt;/SubComponents&gt;
+     &lt;/Container&gt;
+     &lt;Component class=&quot;javax.swing.JButton&quot; name=&quot;operationButton&quot;&gt;
+
+Modified: trunk/src/net/sf/plantlore/client/user/AddEditUserView.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/user/AddEditUserView.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -12,6 +12,9 @@
+ import javax.swing.JDialog;
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
++import net.sf.plantlore.common.AutoTextArea;
++import net.sf.plantlore.common.Pair;
++import net.sf.plantlore.common.TabTransfersFocus;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+ import net.sf.plantlore.l10n.L10n;
+@@ -31,7 +34,9 @@
+     public AddEditUserView(UserManager model, javax.swing.JDialog parent, boolean modal) {
+         super(parent, modal);
+         this.model = model;
+-        initComponents();        
++        initComponents(); 
++        new TabTransfersFocus(noteText);
++        new TabTransfersFocus(editGroupTextArea);
+     }
+     
+      public void update(Observable observable, Object object)
+@@ -43,7 +48,8 @@
+       */
+      public void setAddForm() {
+          operationButton.setText(&quot;Add&quot;);
+-         
++         createWhenuser.setText(&quot;&quot;);
++         dropWhenLabel.setText(&quot;&quot;);
+      }
+      
+       public void setEditForm() {
+@@ -59,13 +65,10 @@
+        this.surnameText.setEditable(false);
+        this.emailText.setEditable(false);
+        this.addressText.setEditable(false);
+-       this.createWhenText.setEditable(false);
+-       this.dropWhenText.setEditable(false);
+        this.administratorCheckBox.setEnabled(false);
+        this.editAllCheckBox.setEnabled(false);       
+        this.addRightCheckBox.setEnabled(false);
+-       this.editGroupText.setEditable(false);
+-       this.seeColumnText.setEditable(false);
++       this.editGroupTextArea.setEditable(false);
+        this.noteText.setEditable(false);
+      }
+      
+@@ -80,14 +83,17 @@
+            firstNameText.setText(user.getFirstName());
+            surnameText.setText(user.getSurname());
+            emailText.setText(user.getEmail());
+-           addressText.setText(user.getAddress());
+-           createWhenText.setValue(user.getCreateWhen());
+-           dropWhenText.setValue(user.getDropWhen());               
++           addressText.setText(user.getAddress());                        
+            noteText.setText(user.getNote());
++           createWhenValueLabel.setText(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(user.getCreateWhen()));
++           if (user.getDropWhen() == null || user.getDropWhen().equals(&quot;&quot;)) {
++                dropWhenValueLabel.setText(&quot;---&quot;);
++           } else {
++                dropWhenValueLabel.setText(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()).format(user.getDropWhen()));
++           }
+            //Right
+            Right right = user.getRight();
+-           editGroupText.setText(right.getEditGroup());
+-           seeColumnText.setText(right.getSeeColumns());
++           editGroupTextArea.setText(right.getEditGroup());           
+            if (right.getAdministrator() == 1) {
+                administratorCheckBox.setSelected(true);
+            } else {
+@@ -154,11 +160,15 @@
+         editAllCheckBox = new javax.swing.JCheckBox();
+         addRightCheckBox = new javax.swing.JCheckBox();
+         editGroupLabel = new javax.swing.JLabel();
+-        editGroupText = new javax.swing.JTextField();
+-        seeColumnLabel = new javax.swing.JLabel();
+-        seeColumnText = new javax.swing.JTextField();
+-        createWhenText = new JFormattedTextField(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()));
+-        dropWhenText = new JFormattedTextField(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,L10n.getCurrentLocale()));
++        createWhenValueLabel = new javax.swing.JLabel();
++        dropWhenValueLabel = new javax.swing.JLabel();
++        jScrollPane3 = new javax.swing.JScrollPane();
++        jScrollPane2 = new javax.swing.JScrollPane();
++        Pair&lt;String, Integer&gt;[] users = model.getUsers();
++        String[] choices = new String[users.length];
++        for (int i = 0; i &lt; users.length; i++)
++        choices[i] = users[i].getFirst();
++        editGroupTextArea = new AutoTextArea(choices, this);
+         operationButton = new javax.swing.JButton();
+         closeButton = new javax.swing.JButton();
+         helpButton = new javax.swing.JButton();
+@@ -204,8 +214,16 @@
+ 
+         editGroupLabel.setText(L10n.getString(&quot;right.editGroup&quot;));
+ 
+-        seeColumnLabel.setText(L10n.getString(&quot;right.seeColumn&quot;));
++        createWhenValueLabel.setText(&quot;&quot;);
+ 
++        dropWhenValueLabel.setText(&quot;&quot;);
++
++        editGroupTextArea.setColumns(20);
++        editGroupTextArea.setRows(5);
++        jScrollPane2.setViewportView(editGroupTextArea);
++
++        jScrollPane3.setViewportView(jScrollPane2);
++
+         org.jdesktop.layout.GroupLayout jPanel1Layout = new org.jdesktop.layout.GroupLayout(jPanel1);
+         jPanel1.setLayout(jPanel1Layout);
+         jPanel1Layout.setHorizontalGroup(
+@@ -213,100 +231,86 @@
+             .add(jPanel1Layout.createSequentialGroup()
+                 .addContainerGap()
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                    .add(createWhenuser)
++                    .add(dropWhenLabel)
+                     .add(loginLabel)
+                     .add(addressLabel)
+                     .add(emailLabel)
+                     .add(surnameLabel)
+                     .add(firstNameLabel)
+                     .add(jLabel2)
+-                    .add(createWhenuser)
+-                    .add(dropWhenLabel)
+                     .add(noteLabel))
+-                .add(70, 70, 70)
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
+-                    .add(jScrollPane1)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, addressText)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, emailText)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, surnameText)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, firstNameText)
+-                    .add(loginText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 261, Short.MAX_VALUE)
+-                    .add(org.jdesktop.layout.GroupLayout.TRAILING, passwordtext)
+-                    .add(createWhenText)
+-                    .add(dropWhenText))
+-                .add(27, 27, 27)
++                .add(34, 34, 34)
+                 .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(administratorCheckBox)
+-                    .add(rightUserLabel)
+-                    .add(editAllCheckBox)
+-                    .add(editGroupLabel)
+-                    .add(editGroupText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 211, Short.MAX_VALUE)
+-                    .add(seeColumnLabel)
+-                    .add(seeColumnText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 211, Short.MAX_VALUE)
+-                    .add(addRightCheckBox))
+-                .addContainerGap())
++                    .add(jPanel1Layout.createSequentialGroup()
++                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                            .add(jScrollPane1)
++                            .add(addressText)
++                            .add(surnameText)
++                            .add(firstNameText)
++                            .add(passwordtext)
++                            .add(loginText, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 280, Short.MAX_VALUE)
++                            .add(emailText))
++                        .add(41, 41, 41)
++                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                            .add(rightUserLabel)
++                            .add(editGroupLabel)
++                            .add(addRightCheckBox)
++                            .add(editAllCheckBox)
++                            .add(administratorCheckBox)
++                            .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 180, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))
++                    .add(dropWhenValueLabel)
++                    .add(createWhenValueLabel))
++                .addContainerGap(19, Short.MAX_VALUE))
+         );
+         jPanel1Layout.setVerticalGroup(
+             jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(jPanel1Layout.createSequentialGroup()
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
++                .addContainerGap()
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(loginLabel)
++                    .add(loginText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(rightUserLabel))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(jLabel2)
++                    .add(passwordtext, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(administratorCheckBox))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(firstNameLabel)
++                    .add(firstNameText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(editAllCheckBox))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(surnameLabel)
++                    .add(surnameText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(addRightCheckBox))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(emailLabel)
++                    .add(emailText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(addressLabel)
++                    .add(addressText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                    .add(editGroupLabel))
++                .add(6, 6, 6)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(noteLabel)
++                    .add(jScrollPane1)
+                     .add(jPanel1Layout.createSequentialGroup()
+-                        .addContainerGap()
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(loginLabel)
+-                            .add(loginText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(rightUserLabel))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(passwordtext, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jLabel2)
+-                            .add(administratorCheckBox))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(firstNameText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(firstNameLabel)
+-                            .add(editAllCheckBox))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(surnameText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(surnameLabel)
+-                            .add(addRightCheckBox))
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(emailText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(emailLabel))
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jPanel1Layout.createSequentialGroup()
+-                                .add(19, 19, 19)
+-                                .add(editGroupLabel)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(editGroupText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+-                            .add(jPanel1Layout.createSequentialGroup()
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                    .add(addressText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                                    .add(addressLabel))
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                                    .add(createWhenuser)
+-                                    .add(createWhenText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))))
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(188, 188, 188)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                            .add(dropWhenLabel)
+-                            .add(dropWhenText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))))
+-                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .add(14, 14, 14)
+-                        .add(noteLabel))
+-                    .add(jPanel1Layout.createSequentialGroup()
+-                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                        .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-                            .add(jScrollPane1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                            .add(jPanel1Layout.createSequentialGroup()
+-                                .add(seeColumnLabel)
+-                                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+-                                .add(seeColumnText, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)))))
+-                .add(31, 31, 31))
++                        .add(jScrollPane3, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 73, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)))
++                .add(31, 31, 31)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(createWhenValueLabel)
++                    .add(createWhenuser))
++                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
++                .add(jPanel1Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
++                    .add(dropWhenValueLabel)
++                    .add(dropWhenLabel))
++                .addContainerGap(30, Short.MAX_VALUE))
+         );
+ 
+         operationButton.setText(&quot;Add&quot;);
+@@ -320,29 +324,27 @@
+         layout.setHorizontalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+             .add(layout.createSequentialGroup()
+-                .add(200, 200, 200)
+-                .add(operationButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 110, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .add(21, 21, 21)
+-                .add(closeButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 101, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .add(14, 14, 14)
+-                .add(helpButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 109, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .addContainerGap(198, Short.MAX_VALUE))
+-            .add(layout.createSequentialGroup()
+                 .addContainerGap()
+-                .add(jPanel1, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+-                .add(72, 72, 72))
++                .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING, false)
++                    .add(layout.createSequentialGroup()
++                        .add(helpButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 109, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
++                        .add(operationButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 110, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
++                        .add(15, 15, 15)
++                        .add(closeButton, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 101, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                    .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
++                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+         );
+         layout.setVerticalGroup(
+             layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
+-            .add(layout.createSequentialGroup()
+-                .addContainerGap()
++            .add(org.jdesktop.layout.GroupLayout.TRAILING, layout.createSequentialGroup()
+                 .add(jPanel1, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+-                .add(100, 100, 100)
++                .add(20, 20, 20)
+                 .add(layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+-                    .add(operationButton)
++                    .add(helpButton)
+                     .add(closeButton)
+-                    .add(helpButton))
+-                .addContainerGap(org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
++                    .add(operationButton))
++                .addContainerGap())
+         );
+         pack();
+     }// &lt;/editor-fold&gt;//GEN-END:initComponents
+@@ -364,13 +366,13 @@
+     protected javax.swing.JTextField addressText;
+     protected javax.swing.JCheckBox administratorCheckBox;
+     protected javax.swing.JButton closeButton;
+-    protected javax.swing.JFormattedTextField createWhenText;
+-    private javax.swing.JLabel createWhenuser;
+-    private javax.swing.JLabel dropWhenLabel;
+-    protected javax.swing.JFormattedTextField dropWhenText;
++    protected javax.swing.JLabel createWhenValueLabel;
++    protected javax.swing.JLabel createWhenuser;
++    protected javax.swing.JLabel dropWhenLabel;
++    private javax.swing.JLabel dropWhenValueLabel;
+     protected javax.swing.JCheckBox editAllCheckBox;
+     private javax.swing.JLabel editGroupLabel;
+-    protected javax.swing.JTextField editGroupText;
++    protected javax.swing.JTextArea editGroupTextArea;
+     private javax.swing.JLabel emailLabel;
+     protected javax.swing.JTextField emailText;
+     private javax.swing.JLabel firstNameLabel;
+@@ -379,6 +381,8 @@
+     private javax.swing.JLabel jLabel2;
+     private javax.swing.JPanel jPanel1;
+     private javax.swing.JScrollPane jScrollPane1;
++    private javax.swing.JScrollPane jScrollPane2;
++    private javax.swing.JScrollPane jScrollPane3;
+     private javax.swing.JLabel loginLabel;
+     protected javax.swing.JTextField loginText;
+     private javax.swing.JLabel noteLabel;
+@@ -386,8 +390,6 @@
+     protected javax.swing.JButton operationButton;
+     protected javax.swing.JTextField passwordtext;
+     private javax.swing.JLabel rightUserLabel;
+-    private javax.swing.JLabel seeColumnLabel;
+-    protected javax.swing.JTextField seeColumnText;
+     private javax.swing.JLabel surnameLabel;
+     protected javax.swing.JTextField surnameText;
+     // End of variables declaration//GEN-END:variables
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManager.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/user/UserManager.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -12,6 +12,7 @@
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+ import java.util.Date;
++import net.sf.plantlore.common.Pair;
+ import net.sf.plantlore.common.PlantloreConstants;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+@@ -71,7 +72,11 @@
+     private Date dropWhen;
+     private Right right;
+     private String note;
++    private ArrayList&lt;String&gt; editGroup;
+     
++    /** list of all users - for dialog add, edit*/
++    private Pair&lt;String, Integer&gt;[] users = null;
++    
+     /** Constants used for identification of fields for sorting */
+     public static final int SORT_LOGIN = 1;
+     public static final int SORT_FIRST_NAME = 2;
+@@ -144,6 +149,7 @@
+                 } else {
+                         query.addOrder(PlantloreConstants.DIRECT_DESC, field);
+                 }
++                                
+         } catch (RemoteException e) {
+             System.err.println(&quot;RemoteException - searchUserData(), createQuery&quot;);
+         } catch (DBLayerException e) {
+@@ -249,12 +255,85 @@
+             ex.printStackTrace();
+         }
+     }      
+-           
++        
++    
++    /**nacteni vsech seznamu uzivatelu pro autoTextArea 
++     *
++     */
++    public Pair&lt;String, Integer&gt;[] getUsers() {
++        if (users == null)
++        {  
++            SelectQuery sq;
++            int resultid;
++            int resultsCount;
++            Object[] records;
++            Object[] row;
++            
++            //vyhledani vsech uzivatelu pro autoTextArea
++            try {
++                sq = database.createQuery(User.class);
++                sq.addOrder(PlantloreConstants.DIRECT_ASC, User.WHOLENAME);
++                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, User.WHOLENAME);
++                sq.addProjection(PlantloreConstants.PROJ_PROPERTY, User.ID);
++                resultid = database.executeQuery(sq);
++                resultsCount = database.getNumRows(resultid);
++                System.out.println(&quot;getUsers(): we got &quot;+resultsCount+&quot; results.&quot;);
++                records = database.more(resultid, 0, resultsCount-1);
++                users = new Pair[resultsCount];
++                for (int i = 0; i &lt; resultsCount; i++)
++                {
++                    row = (Object[])records[i];
++                    users[i] = new Pair((String)row[0], (Integer)row[1]);
++                }
++            } catch (RemoteException ex) {
++                ex.printStackTrace();
++            } catch (DBLayerException ex) {
++                ex.printStackTrace();
++            }            
++            return users;
++        } else
++            return users;
++     }
++    
+     //****************************//
+     //****Get and set metods*****//
+     //**************************//
+     
++    // seznam jmen uzivatelu, kteri smeji editovat nalezy vybraneho uzivatele
++    public void setEditGroup(ArrayList userList) {       
++        this.userList = userList;
++    }
+     
++    // podle seznamu id je nutne vygenerovat seznam jmen jednotlivych uzivatelu
++    public String getEditGroup(String editGroupId) {
++        
++        return &quot;&quot;;
++    }
++    
++    //funkce vezme userList a users a vygeneruje String id1;id2;id3 pro ulozeni do databaze
++    //ohlidaji se i duplicity
++    public String getEditGroupID() {
++        ArrayList&lt;Integer&gt; tmpUserId = new ArrayList&lt;Integer&gt;();
++        for (int i=0 ; i &lt; userList.size() ; i++) {
++            for (int j=0; j &lt; users.length; j++) {
++                if (users[j].getFirst().equals(userList.get(i))) {
++                    Integer userId = users[j].getSecond();
++                    if (!tmpUserId.contains(userId)) {
++                        tmpUserId.add(userId);
++                    }
++                }
++            }
++        }
++        
++        String editGroupId=&quot;&quot;;
++        for (int i=0; i &lt; tmpUserId.size(); i++) {
++            editGroupId = editGroupId + tmpUserId.get(i).toString() + &quot;,&quot;;
++        }
++        logger.debug(&quot;EDITGROUPID: &quot;+ editGroupId);
++        //vrati string pro ulozeni do databaze
++        return editGroupId;
++    }
++    
+     //id vysledku po vyhledavani v db
+     public void setResultId(int resultId) {
+         this.resultId = resultId;
+
+Modified: trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-05-14 21:34:31 UTC (rev 277)
++++ trunk/src/net/sf/plantlore/client/user/UserManagerCtrl.java	2006-05-15 13:15:57 UTC (rev 278)
+@@ -14,6 +14,7 @@
+ import java.awt.event.FocusEvent;
+ import java.awt.event.FocusListener;
+ import java.util.Date;
++import net.sf.plantlore.common.PlantloreHelp;
+ import net.sf.plantlore.common.record.Right;
+ import net.sf.plantlore.common.record.User;
+ import org.apache.log4j.Logger;
+@@ -74,6 +75,7 @@
+        {    	  
+     	   // Display help viewer            
+     	   System.out.println(&quot;Tady se bude volat Help!&quot;);
++           PlantloreHelp.showHelp(PlantloreHelp.USER_MANAGER); 
+        }
+    }
+    
+@@ -172,7 +174,7 @@
+            //pozor: pri add se musi ohlidat, zda byly vyplneny povinne polozky
+            AddEditUserView addView = new AddEditUserView(model, view,true);
+            AddEditUserCtrl addCtrl = new AddEditUserCtrl(addView, model);
+-           addView.setAddForm();
++//           addView.setAddForm();
+            addView.setVisible(true);           
+            //nacteni            
+            model.searchUser();
+@@ -288,6 +290,7 @@
+            } else {           
+                //opet funkci pro vyzadani si dat postupne
+                model.searchUser();
++               //pokud je pocet radku pro zobrazeni roven 0, tak se nastavi defaultni hodnota
+                if (model.getDisplayRows() &lt;= 0) {
+                    model.setDisplayRows(UserManager.DEFAULT_DISPLAY_ROWS);
+                }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000329.html">[Plantlore-dev]Fwd:databaze jihoceske pobocky CBS
+</A></li>
+	<LI>Next message: <A HREF="000331.html">[Plantlore-dev] r279 - trunk/src/net/sf/plantlore/client/export
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#330">[ date ]</a>
+              <a href="thread.html#330">[ thread ]</a>
+              <a href="subject.html#330">[ subject ]</a>
+              <a href="author.html#330">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>

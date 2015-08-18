@@ -1,0 +1,517 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Plantlore-dev] r390 - in trunk/src/net/sf/plantlore: client common l10n
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/plantlore-dev/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r390%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605292342.k4TNg8QP013360%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000446.html">
+   <LINK REL="Next"  HREF="000448.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Plantlore-dev] r390 - in trunk/src/net/sf/plantlore: client common l10n</H1>
+    <B>fraktalek at berlios.de</B> 
+    <A HREF="mailto:plantlore-dev%40lists.berlios.de?Subject=Re%3A%20%5BPlantlore-dev%5D%20r390%20-%20in%20trunk/src/net/sf/plantlore%3A%20client%20common%20l10n&In-Reply-To=%3C200605292342.k4TNg8QP013360%40sheep.berlios.de%3E"
+       TITLE="[Plantlore-dev] r390 - in trunk/src/net/sf/plantlore: client common l10n">fraktalek at berlios.de
+       </A><BR>
+    <I>Tue May 30 01:42:08 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000446.html">[Plantlore-dev] r389 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+        <LI>Next message: <A HREF="000448.html">[Plantlore-dev] r391 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#447">[ date ]</a>
+              <a href="thread.html#447">[ thread ]</a>
+              <a href="subject.html#447">[ subject ]</a>
+              <a href="author.html#447">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: fraktalek
+Date: 2006-05-30 01:41:59 +0200 (Tue, 30 May 2006)
+New Revision: 390
+
+Modified:
+   trunk/src/net/sf/plantlore/client/AppCore.java
+   trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+   trunk/src/net/sf/plantlore/client/PrintCtrl.java
+   trunk/src/net/sf/plantlore/common/ProgressBar.java
+   trunk/src/net/sf/plantlore/common/Task.java
+   trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+   trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+Log:
+Fixed viewing scheda from overview and added a progress bar for scheda construction.
+
+Fixed Task and ProgressBar so that the task's result value propagation works.
+
+
+
+
+Modified: trunk/src/net/sf/plantlore/client/AppCore.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/client/AppCore.java	2006-05-29 23:41:59 UTC (rev 390)
+@@ -737,7 +737,7 @@
+                 }
+ 
+                 getTableModel().clearSelection();
+-                fireStopped();
++                fireStopped(null);
+                 return null;
+             }
+         };//task
+
+Modified: trunk/src/net/sf/plantlore/client/AppCoreCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/client/AppCoreCtrl.java	2006-05-29 23:41:59 UTC (rev 390)
+@@ -20,8 +20,10 @@
+ import java.awt.event.WindowEvent;
+ import java.beans.PropertyChangeEvent;
+ import java.beans.PropertyChangeListener;
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.io.ObjectInputStream;
+ import java.lang.Integer;
+ import java.rmi.RemoteException;
+ import java.util.ArrayList;
+@@ -34,6 +36,7 @@
+ import javax.swing.JFormattedTextField;
+ import javax.swing.JOptionPane;
+ import javax.swing.ListSelectionModel;
++import javax.swing.SwingUtilities;
+ import javax.swing.event.ListSelectionEvent;
+ import javax.swing.event.ListSelectionListener;
+ import javax.swing.table.TableCellRenderer;
+@@ -628,7 +631,7 @@
+                             logger.error(ex);                            
+                         }              
+                         
+-                        public void afterStopped() {
++                        public void afterStopped(Object value) {
+                             refreshOverview(false); //false -&gt; do not create task, refresh the overview directly in this thread
+                         }
+                     };
+@@ -750,29 +753,68 @@
+                     JOptionPane.showMessageDialog(view, &quot;Check at least one occurrence, please.&quot;);
+                     return;
+                 }
+-                    
+-                
+-                ClassLoader cl = this.getClass().getClassLoader();
+-                InputStream is = cl.getResourceAsStream(&quot;net/sf/plantlore/client/resourcesSchedaA6.jasper&quot;);
+ 
+-    //          JasperReport jasperReport = JasperCompileManager.compileReport(
+-    //              &quot;Scheda.jrxml&quot;);
+-                JasperReport jasperReport = JasperCompileManager.compileReport(is);
++                final JasperReport schedaReport;
++                InputStream schedaIs = this.getClass().getClassLoader().getResourceAsStream(&quot;net/sf/plantlore/client/resources/SchedaA6.jasper&quot;);
+ 
++                try {
++                    ObjectInputStream schedaOis = new ObjectInputStream(schedaIs);
++                    schedaReport = (JasperReport) schedaOis.readObject();
++                } catch (FileNotFoundException ex) {
++                    logger.error(&quot;Problem loading jasper report resource: &quot;+ex);
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.InternalProblem&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Error.InternalProblemTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    return;                    
++                } catch (IOException ex) {                    
++                    logger.error(&quot;Problem loading jasper report resource: &quot;+ex);
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.InternalProblem&quot;)+ex.getMessage(),L10n.getString(&quot;Error.InternalProblemTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    return;
++                } catch (ClassNotFoundException ex) {
++                    logger.error(&quot;Problem loading jasper report resource: &quot;+ex);
++                    JOptionPane.showMessageDialog(view,L10n.getString(&quot;Error.InternalProblem&quot;)+ex.getMessage(),L10n.getString(&quot;Error.InternalProblemTitle&quot;),JOptionPane.INFORMATION_MESSAGE);
++                    return;                    
++                }
++                                
+                 prefs = Preferences.userNodeForPackage(AppCoreCtrl.class);
+                 String h1 = prefs.get(&quot;HEADER_ONE&quot;,&quot;Set the first header in settings, please.&quot;);
+                 String h2 = prefs.get(&quot;HEADER_TWO&quot;,&quot;Set the second header in settings, please.&quot;);
+-                HashMap params = new HashMap();
++                final HashMap params = new HashMap();
+                 params.put(&quot;HEADER_ONE&quot;,h1);
+                 params.put(&quot;HEADER_TWO&quot;,h2);
+-                JasperPrint jasperPrint = JasperFillManager.fillReport(
+-                      jasperReport, params, new JasperDataSource(
+-                                            model.getDatabase(), model.getTableModel().getSelection() )
+-                                            );
+-              new SchedaView(view, true, jasperPrint).setVisible(true);  
+-            } catch(JRException e) {
+-                e.printStackTrace();
+-                JOptionPane.showMessageDialog(view, &quot;Sorry, can't display scheda, the jasper form is perhaps broken:\n&quot;+e.getMessage());
++                
++                Task task = new Task() {
++                    JasperPrint jasperPrint;
++                    public Object task() throws JRException {
++                        jasperPrint = JasperFillManager.fillReport(
++                              schedaReport, params, new JasperDataSource(
++                                                    model.getDatabase(), model.getTableModel().getSelection() )
++                                                    );
++                        fireStopped(jasperPrint);
++                        return jasperPrint;
++                    }
++                };
++                
++                ProgressBar pb = new ProgressBar(task, view, true) {
++                    public void exceptionHandler(final Exception ex) {
++                        logger.error(&quot;Error while filling jasper report in SchedaAction: &quot;+ex);
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);            
++                            }
++                        });
++                    }                    
++                    public void afterStopped(final Object value) {
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                new SchedaView(view, true, (JasperPrint)value).setVisible(true);  
++                            }                            
++                        });
++                    }
++                };
++                
++                task.start();
++            } catch(JRException ex) {
++                logger.error(&quot;Broken report: &quot;+ex);
++                JOptionPane.showMessageDialog(view,L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);
+             }
+         }
+     }
+@@ -1065,9 +1107,7 @@
+                 public Object task() {
+                     searchModel.clear();
+                     searchModel.constructQuery();
+-                    logger.debug(&quot;before fireStopped&quot;);
+-                    fireStopped();
+-                    logger.debug(&quot;after fireStopped&quot;);
++                    fireStopped(null);
+                     return null;
+                 }
+             };
+
+Modified: trunk/src/net/sf/plantlore/client/PrintCtrl.java
+===================================================================
+--- trunk/src/net/sf/plantlore/client/PrintCtrl.java	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/client/PrintCtrl.java	2006-05-29 23:41:59 UTC (rev 390)
+@@ -112,15 +112,17 @@
+             try {
+                 model.createJasperPrint();
+             } catch (JRException ex) {
+-                logger.warn(&quot;Broken report: &quot;+ex);
++                logger.error(&quot;Broken report: &quot;+ex);
+                 JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);            
++                return;
+             }
+             
+             try {
+                 JasperPrintManager.printReport(model.getJasperPrint(), true);
+             } catch (JRException ex) {
+-                logger.warn(&quot;Problem while trying to print: &quot;+ex);
++                logger.error(&quot;Problem while trying to print: &quot;+ex);
+                 JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.PrintProblem&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.PrintingProblemTitle&quot;),JOptionPane.WARNING_MESSAGE);
++                return;
+             }
+         }
+         
+@@ -157,8 +159,9 @@
+             try {
+                 model.createJasperPrint();
+             } catch (JRException ex) {
+-                logger.warn(&quot;Broken report: &quot;+ex);
++                logger.error(&quot;Broken report: &quot;+ex);
+                 JOptionPane.showMessageDialog(view.getParent(), L10n.getString(&quot;Print.Message.BrokenReport&quot;)+&quot;\n&quot;+ex.getMessage(),L10n.getString(&quot;Print.Message.BrokenReport&quot;),JOptionPane.WARNING_MESSAGE);                            
++                return;
+             }
+             new SchedaView((Frame) view.getParent(), true, model.getJasperPrint()).setVisible(true);
+         }
+
+Modified: trunk/src/net/sf/plantlore/common/ProgressBar.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/common/ProgressBar.java	2006-05-29 23:41:59 UTC (rev 390)
+@@ -146,57 +146,64 @@
+      */
+     public void update(Observable o, Object arg) {
+         final ProgressBar pb = this;
+-        if (arg instanceof Task.Message) {
+-            Task.Message msg = (Task.Message)arg;
+-            logger.debug(&quot;Received message: &quot;+msg);
+-            switch (msg) {
+-                case STARTING:
+-                    SwingUtilities.invokeLater(new Runnable() {
+-                        public void run() {
+-                            setLocationRelativeTo(parent);
+-                            setVisible(true);
+-                            logger.debug(&quot;Progress bar visible&quot;);
++        if (arg instanceof Pair) {
++            Pair p = (Pair)arg;
++            Object first = p.getFirst();
++            if (first instanceof Task.Message) {
++                Task.Message msg = (Task.Message)first;
++                Object value = p.getSecond();
++                logger.debug(&quot;Received message: &quot;+msg);
++                switch (msg) {
++                    case STARTING:
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                setLocationRelativeTo(parent);
++                                setVisible(true);
++                                logger.debug(&quot;Progress bar visible&quot;);
++                            }
++                        });
++                        break;
++                    case POSITION_CHANGED:
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                progressBar.setValue(task.getPosition());
++                            }
++                        });
++                        break;
++                    case MESSAGE_CHANGED:
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                String text = task.getStatusMessage();
++                                statusField.setText(text);
++                                progressBar.setString(text);
++                                int curWidth = statusField.getWidth();
++                                if (text.length() &gt; (curWidth/charSizeApprox)) {
++                                    int newWidth = new Double(text.length()*charSizeApprox).intValue();
++                                    pb.setSize(pb.getWidth()+(newWidth-curWidth),pb.getHeight());
++                                }
++                            }
++                        });
++                        break;
++                    case LENGTH_CHANGED:
++                        if (progressBar.isIndeterminate()) {
++                            progressBar.setIndeterminate(false);
+                         }
+-                    });
+-                    break;
+-                case POSITION_CHANGED:
+-                    SwingUtilities.invokeLater(new Runnable() {
+-                        public void run() {
+-                            progressBar.setValue(task.getPosition());
+-                        }
+-                    });
+-                    break;
+-                case MESSAGE_CHANGED:
+-                    SwingUtilities.invokeLater(new Runnable() {
+-                        public void run() {
+-                            String text = task.getStatusMessage();
+-                            statusField.setText(text);
+-                            progressBar.setString(text);
+-                            int curWidth = statusField.getWidth();
+-                            if (text.length() &gt; (curWidth/charSizeApprox)) {
+-                                int newWidth = new Double(text.length()*charSizeApprox).intValue();
+-                                pb.setSize(pb.getWidth()+(newWidth-curWidth),pb.getHeight());
++                        SwingUtilities.invokeLater(new Runnable() {
++                            public void run() {
++                                progressBar.setMaximum(task.getLength());
+                             }
+-                        }
+-                    });
+-                    break;
+-                case LENGTH_CHANGED:
+-                    if (progressBar.isIndeterminate()) {
+-                        progressBar.setIndeterminate(false);
+-                    }
+-                    SwingUtilities.invokeLater(new Runnable() {
+-                        public void run() {
+-                            progressBar.setMaximum(task.getLength());
+-                        }
+-                    });
+-                    break;
+-                case STOPPED:
+-                    afterStopped();
+-                    setVisible(false);
+-                    dispose();
+-                    break;                    
+-            }
+-        }
++                        });
++                        break;
++                    case STOPPING:
++                        setVisible(false);
++                        dispose();                    
++                        break;
++                    case STOPPED:
++                        afterStopped(value);
++                        break;                    
++                }//switch
++            }//instanceof Message
++        }//instanceof Pair
+         
+         if (arg instanceof Exception) {
+             exceptionHandler((Exception)arg);
+@@ -210,8 +217,11 @@
+      */
+     public abstract void exceptionHandler(Exception ex);
+     
++    public Task getTask() {
++        return task;
++    }
+     
+-    public void afterStopped() {
++    public void afterStopped(Object value) {
+         
+     }
+     
+
+Modified: trunk/src/net/sf/plantlore/common/Task.java
+===================================================================
+--- trunk/src/net/sf/plantlore/common/Task.java	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/common/Task.java	2006-05-29 23:41:59 UTC (rev 390)
+@@ -58,7 +58,7 @@
+         this.length = length;
+         determinate = false;
+         setChanged();
+-        notifyObservers(Message.LENGTH_CHANGED);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.LENGTH_CHANGED, null));
+     }
+     
+     /** Returns current state of the task's computation.
+@@ -79,7 +79,7 @@
+         }
+         
+         setChanged();
+-        notifyObservers(Message.POSITION_CHANGED);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.POSITION_CHANGED,null));
+     }
+     
+     /** Sets the status message and informs observers about this change.
+@@ -88,7 +88,7 @@
+     public void setStatusMessage(String message) {
+         this.statusMessage = message;
+         setChanged();
+-        notifyObservers(Message.MESSAGE_CHANGED);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.MESSAGE_CHANGED,null));
+     }
+     
+     /** Informs whether this task is determinate, which means that the tak's length is known.
+@@ -165,8 +165,10 @@
+                 
+                 try {
+                     setChanged();
+-                    notifyObservers(Message.STARTING);
++                    notifyObservers(new Pair&lt;Message,Object&gt;(Message.STARTING,null));
+                     value = task();
++                    setChanged();
++                    notifyObservers(new Pair&lt;Message,Object&gt;(Message.STOPPING,null));
+                 } catch (Exception ex) {
+                     setChanged();
+                     notifyObservers(ex);
+@@ -193,7 +195,7 @@
+                 
+                 try {
+                     setChanged();
+-                    notifyObservers(Message.PROCEEDING);
++                    notifyObservers(new Pair&lt;Message,Object&gt;(Message.PROCEEDING,null));
+                     value = task();
+                 } catch (Exception ex) {
+                     setChanged();
+@@ -209,9 +211,9 @@
+     /** Informs observers that the computation stopped.
+      *
+      */
+-    public void fireStopped() {
++    public void fireStopped(Object value) {
+         setChanged();
+-        notifyObservers(Message.STOPPED);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.STOPPED,value));
+     }
+     
+     /** Informs observers that the computation has started (and is no longer beginning).
+@@ -219,7 +221,7 @@
+      */
+     public void fireStarted() {
+         setChanged();
+-        notifyObservers(Message.STARTED);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.STARTED,null));
+     }
+     
+     /** Stops (cancels) the task.
+@@ -230,7 +232,7 @@
+     public void stop() {
+         canceled = true;
+         setChanged();
+-        notifyObservers(Message.STOPPING);
++        notifyObservers(new Pair&lt;Message,Object&gt;(Message.STOPPING,null));
+     }
+     
+ }
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore.properties	2006-05-29 23:41:59 UTC (rev 390)
+@@ -1051,3 +1051,7 @@
+ Delete.Message.ProgressInfo={0} records out of {1} deleted.
+ 
+ Message.DeleteRecordsTitle=Warning
++
++Error.InternalProblem=Sorry, can't complete the requested action because some internal problem has just occurred.
++
++Error.InternalProblemTitle=Internal error
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_cs_CZ.properties	2006-05-29 23:41:59 UTC (rev 390)
+@@ -714,4 +714,8 @@
+ 
+ Delete.Message.ProgressInfo=Smaz\u00e1no {0} z\u00e1znam\u016f z {1}.
+ 
+-Message.DeleteRecordsTitle=Upozorn\u011bn\u00ed
++Message.DeleteRecordsTitle=Upozorn\u011Bn\u00ED
++
++Error.InternalProblem=Bohu\u017Eel nen\u00ED mo\u017En\u00E9 dokon\u010Dit po\u017Eadovanou akci, proto\u017Ee do\u0161lo k neo\u010Dek\u00E1van\u00E9mu vnit\u0159n\u00EDmu probl\u00E9mu.
++
++Error.InternalProblemTitle=Vnit\u0159n\u00ED chyba
+
+Modified: trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties
+===================================================================
+--- trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-29 22:31:09 UTC (rev 389)
++++ trunk/src/net/sf/plantlore/l10n/Plantlore_en.properties	2006-05-29 23:41:59 UTC (rev 390)
+@@ -787,3 +787,7 @@
+ Delete.Message.ProgressInfo={0} records out of {1} deleted.
+ 
+ Message.DeleteRecordsTitle=Warning
++
++Error.InternalProblem=Sorry, can't complete the requested action because some internal problem has just occurred.
++
++Error.InternalProblemTitle=Internal problem
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000446.html">[Plantlore-dev] r389 - in trunk/src/net/sf/plantlore: client/history l10n
+</A></li>
+	<LI>Next message: <A HREF="000448.html">[Plantlore-dev] r391 - in trunk/src/net/sf/plantlore: client l10n
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#447">[ date ]</a>
+              <a href="thread.html#447">[ thread ]</a>
+              <a href="subject.html#447">[ subject ]</a>
+              <a href="author.html#447">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/plantlore-dev">More information about the Plantlore-dev
+mailing list</a><br>
+</body></html>
